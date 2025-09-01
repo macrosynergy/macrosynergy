@@ -321,7 +321,7 @@ class DataQueryOAuth(JPMorganOAuth):
         )
 
 
-class CertAuth(object):
+class DataQueryCertAuth(object):
     """
     Class for handling certificate based authentication for the DataQuery API.
 
@@ -589,7 +589,7 @@ class DataQueryInterface(object):
             if not isinstance(varx, typex) and varx is not None:
                 raise TypeError(f"{namex} must be a {typex} and not {type(varx)}.")
 
-        self.auth: Optional[Union[CertAuth, DataQueryOAuth]] = None
+        self.auth: Optional[Union[DataQueryCertAuth, DataQueryOAuth]] = None
         if oauth and not all([client_id, client_secret]):
             warnings.warn(
                 "OAuth authentication requested but client ID and/or client secret "
@@ -620,7 +620,7 @@ class DataQueryInterface(object):
             if base_url == OAUTH_BASE_URL:
                 base_url: str = CERT_BASE_URL
 
-            self.auth: CertAuth = CertAuth(
+            self.auth: DataQueryCertAuth = DataQueryCertAuth(
                 username=username,
                 password=password,
                 crt=crt,
