@@ -13,7 +13,7 @@ from macrosynergy.download.jpmaqs import JPMaQSDownload, construct_expressions
 from macrosynergy.download.dataquery import (
     DataQueryInterface,
     DataQueryOAuth,
-    CertAuth,
+    DataQueryCertAuth,
     request_wrapper,
     validate_response,
     validate_download_args,
@@ -211,7 +211,7 @@ class TestCertAuth(unittest.TestCase):
             with mock.patch(
                 "os.path.isfile", side_effect=lambda x: self.mock_isfile(x)
             ):
-                certauth: CertAuth = CertAuth(**self.good_args())
+                certauth: DataQueryCertAuth = DataQueryCertAuth(**self.good_args())
 
                 expctd_auth: str = base64.b64encode(
                     bytes(
@@ -231,18 +231,18 @@ class TestCertAuth(unittest.TestCase):
                 bad_args: Dict[str, str] = self.good_args().copy()
                 bad_args[key] = 1
                 with self.assertRaises(TypeError):
-                    CertAuth(**bad_args)
+                    DataQueryCertAuth(**bad_args)
 
         with mock.patch("os.path.isfile", side_effect=lambda x: self.mock_isfile(x)):
             for key in ["crt", "key"]:
                 bad_args: Dict[str, str] = self.good_args().copy()
                 bad_args[key] = "path/invalid_path"
                 with self.assertRaises(FileNotFoundError):
-                    CertAuth(**bad_args)
+                    DataQueryCertAuth(**bad_args)
 
     def test_get_auth(self):
         with mock.patch("os.path.isfile", side_effect=lambda x: self.mock_isfile(x)):
-            certauth: CertAuth = CertAuth(**self.good_args())
+            certauth: DataQueryCertAuth = DataQueryCertAuth(**self.good_args())
 
             expctd_auth: str = base64.b64encode(
                 bytes(
@@ -269,7 +269,7 @@ class TestCertAuth(unittest.TestCase):
             dq_interface: DataQueryInterface = DataQueryInterface(**cfg, oauth=False)
 
             # assert that dq_interface.auth is CertAuth type
-            self.assertIsInstance(dq_interface.auth, CertAuth)
+            self.assertIsInstance(dq_interface.auth, DataQueryCertAuth)
             # check that the base_url is cert_base url
             self.assertEqual(dq_interface.base_url, CERT_BASE_URL)
 
