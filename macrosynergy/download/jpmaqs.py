@@ -93,9 +93,10 @@ def deconstruct_expression(
             if len(result) != 3:
                 raise ValueError(f"{exprx} is not a valid JPMaQS expression.")
             return ticker.split("_", 1) + [metric]
-        except Exception as e:
+        except Exception as exc:
             warnings.warn(
-                f"Failed to deconstruct expression `{expression}`: assuming it is a non-JPMaQS expression.",
+                f"Failed to deconstruct expression `{expression}`: assuming it is a non-JPMaQS expression."
+                f" Exception: {exc}",
                 UserWarning,
             )
             # fail safely, return list where cid = xcat = expression,
@@ -143,7 +144,7 @@ def check_attributes_in_sync(ts_list) -> bool:
             last_valid_item = time_series[0]
 
         expression = attributes[0].get("expression")
-        if not "JPMAQS" in expression:
+        if "JPMAQS" not in expression:
             continue
         if not expression:
             last_valid_item = ["No data", 0]
@@ -498,10 +499,6 @@ def validate_downloaded_df(
         "The expressions in the downloaded data are not a subset of the expected expressions."
         " Missing expressions: {missing_exprs}"
     )
-    err_statement = (
-        "The expressions in the downloaded data are not a subset of the "
-        "expected expressions."
-    )
     check_exprs = set()
     if isinstance(data_df, QuantamentalDataFrame):
         found_metrics = list(
@@ -586,7 +583,7 @@ def get_expressions_from_file(
     if not as_dataframe:
         return _get_expressions_from_json(file_path)
 
-    if not dataframe_format in ["qdf", "wide"]:
+    if dataframe_format not in ["qdf", "wide"]:
         raise ValueError("`dataframe_format` must be one of 'qdf' or 'wide'.")
 
     if dataframe_format == "qdf":
@@ -1404,7 +1401,9 @@ class JPMaQSDownload(DataQueryInterface):
         self.suppress_warning = suppress_warning
         self.debug = debug
 
-        vartolist = lambda x: [x] if isinstance(x, str) else x
+        def vartolist(x):
+            return [x] if isinstance(x, str) else x
+
         tickers = vartolist(tickers)
         cids = vartolist(cids)
         xcats = vartolist(xcats)
