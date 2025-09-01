@@ -195,7 +195,8 @@ class TestFusionOAuth(unittest.TestCase):
     def test_is_valid_token_true_when_not_expired(self):
         oauth = FusionOAuth(**self.creds)
         oauth._stored_token = {
-            "created_at": datetime.datetime.now() - datetime.timedelta(seconds=10),
+            "created_at": datetime.datetime.now(datetime.timezone.utc)
+            - datetime.timedelta(seconds=10),
             "expires_in": 100,
             "access_token": "tok",
         }
@@ -204,7 +205,8 @@ class TestFusionOAuth(unittest.TestCase):
     def test_is_valid_token_false_when_expired(self):
         oauth = FusionOAuth(**self.creds)
         oauth._stored_token = {
-            "created_at": datetime.datetime.now() - datetime.timedelta(seconds=200),
+            "created_at": datetime.datetime.now(datetime.timezone.utc)
+            - datetime.timedelta(seconds=200),
             "expires_in": 100,
             "access_token": "tok",
         }
@@ -1857,9 +1859,9 @@ class TestJPMaQSFusionClientDownload(unittest.TestCase):
                     expected_dataset, action = local_seq[call_idx["i"]]
                     call_idx["i"] += 1
                     if expected_dataset is not None:
-                        assert dataset == expected_dataset, (
-                            f"Expected {expected_dataset}, got {dataset}"
-                        )
+                        assert (
+                            dataset == expected_dataset
+                        ), f"Expected {expected_dataset}, got {dataset}"
                     return _resolve_action(
                         action,
                         dataset,
