@@ -28,6 +28,7 @@ from macrosynergy.download.exceptions import (
     NoContentError,
     KNOWN_EXCEPTIONS,
 )
+from macrosynergy.download.jpm_oauth import JPMorganOAuth
 from macrosynergy.management.utils import (
     is_valid_iso_date,
     form_full_url,
@@ -296,152 +297,28 @@ def request_wrapper(
     raise DownloadError(e_str)
 
 
-class OAuth(object):
-    """
-    Class for handling OAuth authentication for the DataQuery API.
-
-    Parameters
-    ----------
-    client_id : str
-        client ID for the OAuth application.
-    client_secret : str
-        client secret for the OAuth application.
-    proxy : dict
-        proxy to use for requests. Defaults to None.
-    token_url : str
-        URL for getting OAuth tokens.
-    dq_resource_id : str
-        resource ID for the JPMaQS Application.
-
-    Raises
-    ------
-    ValueError
-        if any of the parameters are semantically incorrect.
-    TypeError
-        if any of the parameters are of the wrong type.
-    Exception
-        other exceptions may be raised by underlying functions.
-    """
-
+class OAuth(JPMorganOAuth):
     def __init__(
         self,
         client_id: str,
         client_secret: str,
         proxy: Optional[dict] = None,
         token_url: str = OAUTH_TOKEN_URL,
+        dq_base_url: str = OAUTH_BASE_URL,
         dq_resource_id: str = OAUTH_DQ_RESOURCE_ID,
+        application_name: str = "DataQueryHttpAPI",
         **kwargs,
     ):
-        logger.debug("Instantiate OAuth pathway to DataQuery")
-        vars_types_zip: zip = zip(
-            [client_id, client_secret, token_url, dq_resource_id],
-            [
-                "client_id",
-                "client_secret",
-                "token_url",
-                "dq_resource_id",
-            ],
+        super().__init__(
+            client_id=client_id,
+            client_secret=client_secret,
+            auth_url=token_url,
+            root_url=dq_base_url,
+            resource=dq_resource_id,
+            proxies=proxy,
+            application_name=application_name,
+            **kwargs,
         )
-
-        for varx, namex in vars_types_zip:
-            if not isinstance(varx, str):
-                raise TypeError(f"{namex} must be a <str> and not {type(varx)}.")
-
-        if not isinstance(proxy, dict) and proxy is not None:
-            raise TypeError(f"proxy must be a <dict> and not {type(proxy)}.")
-
-        self.token_url: str = token_url
-        self.proxy: Optional[dict] = proxy
-
-        self._stored_token: Optional[dict] = None
-        self.token_data = {
-            "grant_type": "client_credentials",
-            "client_id": client_id,
-            "client_secret": client_secret,
-            "aud": dq_resource_id,
-        }
-
-        self.kwargs = kwargs
-
-    def _valid_token(self) -> bool:
-        """
-        Method to check if the stored token is valid.
-
-        Returns
-        -------
-        bool
-            True if the token is valid, False otherwise.
-        """
-
-        if self._stored_token is None:
-            logger.debug("No token stored")
-            return False
-
-        created: datetime = self._stored_token["created_at"]  # utc time of creation
-        expires: datetime = created + timedelta(
-            seconds=self._stored_token["expires_in"] * TOKEN_EXPIRY_BUFFER
-        )
-
-        utcnow = datetime.now(timezone.utc)
-        is_active: bool = expires > utcnow
-
-        logger.debug(
-            "Active token: %s, created: %s, expires: %s, now: %s",
-            is_active,
-            created,
-            expires,
-            utcnow,
-        )
-
-        return is_active
-
-    def _get_token(self) -> str:
-        """
-        Method to get a new OAuth token.
-
-        Returns
-        -------
-        str
-            OAuth token.
-        """
-
-        if not self._valid_token():
-            logger.debug("Request new OAuth token")
-            js = request_wrapper(
-                url=self.token_url,
-                data=self.token_data,
-                method="post",
-                proxy=self.proxy,
-                tracking_id=OAUTH_TRACKING_ID,
-                user_id=self._get_user_id(),
-                **self.kwargs,
-            )
-            # on failure, exception will be raised by request_wrapper
-
-            # NOTE : use UTC time for token expiry
-            self._stored_token: dict = {
-                "created_at": datetime.now(timezone.utc),
-                "access_token": js["access_token"],
-                "expires_in": js["expires_in"],
-            }
-
-        return self._stored_token["access_token"]
-
-    def _get_user_id(self) -> str:
-        return "OAuth_ClientID - " + self.token_data["client_id"]
-
-    def get_auth(self) -> Dict[str, Union[str, Optional[Tuple[str, str]]]]:
-        """
-        Returns a dictionary with the authentication information, in the same format as
-        the `macrosynergy.download.dataquery.CertAuth.get_auth()` method.
-        """
-
-        headers: Dict = {"Authorization": "Bearer " + self._get_token()}
-        return {
-            "headers": headers,
-            "cert": None,
-            "user_id": self._get_user_id(),
-        }
 
 
 class CertAuth(object):
@@ -496,6 +373,9 @@ class CertAuth(object):
         self.password: str = password
         self.proxy: Optional[dict] = proxy
 
+    def _get_user_id(self) -> str:
+        return "CertAuth_Username - " + self.username
+
     def get_auth(self) -> Dict[str, Union[str, Optional[Tuple[str, str]]]]:
         """
         Returns a dictionary with the authentication information, in the same format as
@@ -503,11 +383,9 @@ class CertAuth(object):
         """
 
         headers = {"Authorization": f"Basic {self.auth:s}"}
-        user_id = "CertAuth_Username - " + self.username
         return {
             "headers": headers,
             "cert": (self.crt, self.key),
-            "user_id": user_id,
         }
 
 
@@ -898,14 +776,14 @@ class DataQueryInterface(object):
                 ):
                     raise NoContentError(
                         f"Content was not found for the request: {response}\n"
-                        f"User ID: {self.auth.get_auth()['user_id']}\n"
+                        f"User ID: {self.auth._get_user_id()}\n"
                         f"URL: {form_full_url(url, params)}\n"
                         f"Timestamp (UTC): {datetime.now(timezone.utc).isoformat()}"
                     )
 
             raise InvalidResponseError(
                 f"Invalid response from DataQuery: {response}\n"
-                f"User ID: {self.auth.get_auth()['user_id']}\n"
+                f"User ID: {self.auth._get_user_id()}\n"
                 f"URL: {form_full_url(url, params)}"
                 f"Timestamp (UTC): {datetime.now(timezone.utc).isoformat()}"
             )
@@ -1299,7 +1177,7 @@ class DataQueryInterface(object):
                     HeartbeatError(
                         f"Heartbeat failed. Timestamp (UTC):"
                         f" {datetime.now(timezone.utc).isoformat()}\n"
-                        f"User ID: {self.auth.get_auth()['user_id']}\n"
+                        f"User ID: {self.auth._get_user_id()}\n"
                     )
                 )
             time.sleep(delay_param)
