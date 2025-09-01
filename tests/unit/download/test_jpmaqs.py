@@ -108,7 +108,7 @@ class TestJPMaQSDownload(unittest.TestCase):
                 raise ValueError("Env. variables are set; raising error to pass test")
 
     @mock.patch(
-        "macrosynergy.download.dataquery.OAuth._get_token",
+        "macrosynergy.download.dataquery.DataQueryOAuth._get_token",
         return_value=("SOME_TEST_TOKEN"),
     )
     @mock.patch(
