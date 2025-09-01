@@ -5,6 +5,7 @@ from typing import Optional
 import requests
 
 from macrosynergy import __version__ as ms_version_info
+from macrosynergy.download.exceptions import AuthenticationError
 
 
 class JPMorganOAuth(object):
@@ -139,6 +140,7 @@ class JPMorganOAuth(object):
                 -d "client_id=$CLIENT_ID" \\
                 -d "client_secret=$CLIENT_SECRET"
         """
+        err_str = "Error retrieving token: "
         try:
             response = requests.post(
                 self.auth_url,
@@ -153,8 +155,11 @@ class JPMorganOAuth(object):
                 "expires_in": token_data["expires_in"],
                 "access_token": token_data["access_token"],
             }
-        except requests.exceptions.RequestException as e:
-            raise Exception(f"Error retrieving token: {e}") from e
+        except requests.exceptions.RequestException as exc:
+            raise AuthenticationError(f"{err_str}{exc}") from exc
+        except requests.exceptions.HTTPError as exc:
+            if exc.response.status_code == 401:
+                raise AuthenticationError(f"{err_str}{exc}") from exc
 
     def _is_valid_token(self):
         if self._stored_token is None:
