@@ -12,7 +12,7 @@ import itertools
 from macrosynergy.download.jpmaqs import JPMaQSDownload, construct_expressions
 from macrosynergy.download.dataquery import (
     DataQueryInterface,
-    OAuth,
+    DataQueryOAuth,
     CertAuth,
     request_wrapper,
     validate_response,
@@ -288,7 +288,7 @@ class TestOAuth(unittest.TestCase):
         self.assertEqual(jpmaqs.base_url, OAUTH_BASE_URL)
 
         with self.assertRaises(TypeError):
-            OAuth(client_id="test-id", client_secret="SECRET", proxy="proxy")
+            DataQueryOAuth(client_id="test-id", client_secret="SECRET", proxy="proxy")
 
     def test_invalid_init_args(self):
         good_args: Dict[str, str] = {
@@ -302,10 +302,10 @@ class TestOAuth(unittest.TestCase):
             bad_args: Dict[str, str] = good_args.copy()
             bad_args[key] = 1
             with self.assertRaises(TypeError):
-                OAuth(**bad_args)
+                DataQueryOAuth(**bad_args)
 
         try:
-            oath_obj: OAuth = OAuth(**good_args)
+            oath_obj: DataQueryOAuth = DataQueryOAuth(**good_args)
 
             self.assertIsInstance(oath_obj.token_data, dict)
             expcted_token_data: Dict[str, str] = {
@@ -319,11 +319,11 @@ class TestOAuth(unittest.TestCase):
             self.fail(f"Unexpected exception raised: {e}")
 
     def test_valid_token(self):
-        oauth = OAuth(client_id="test-id", client_secret="SECRET")
+        oauth = DataQueryOAuth(client_id="test-id", client_secret="SECRET")
         self.assertFalse(oauth._is_valid_token())
 
     def test_get_token(self):
-        oauth = OAuth(client_id="test-id", client_secret="SECRET")
+        oauth = DataQueryOAuth(client_id="test-id", client_secret="SECRET")
 
         token_data: Dict[str, str] = {
             "access_token": "SOME_TOKEN",
@@ -335,7 +335,7 @@ class TestOAuth(unittest.TestCase):
             return_value=token_data,
         ):
             with mock.patch(
-                "macrosynergy.download.dataquery.OAuth._is_valid_token",
+                "macrosynergy.download.dataquery.DataQueryOAuth._is_valid_token",
                 return_value=False,
             ):
                 oauth._stored_token = token_data
@@ -410,7 +410,7 @@ class TestDataQueryInterface(unittest.TestCase):
                 )
 
     @mock.patch(
-        "macrosynergy.download.dataquery.OAuth._get_token",
+        "macrosynergy.download.dataquery.DataQueryOAuth._get_token",
         return_value=("SOME_TEST_TOKEN"),
     )
     @mock.patch(
@@ -451,7 +451,7 @@ class TestDataQueryInterface(unittest.TestCase):
                     dq.check_connection(raise_error=True)
 
     @mock.patch(
-        "macrosynergy.download.dataquery.OAuth._get_token",
+        "macrosynergy.download.dataquery.DataQueryOAuth._get_token",
         return_value=random_string(),
     )
     @mock.patch(
@@ -496,7 +496,7 @@ class TestDataQueryInterface(unittest.TestCase):
         # check that jpmaqs_download is a superclass of dataquery interface
         self.assertIsInstance(jpmaqs_download, DataQueryInterface)
 
-        self.assertIsInstance(jpmaqs_download.auth, OAuth)
+        self.assertIsInstance(jpmaqs_download.auth, DataQueryOAuth)
 
     def test_certauth_condition(self):
         # Second check is that the DataQuery instance is using an CertAuth Object if the
@@ -784,7 +784,7 @@ class TestDataQueryInterface(unittest.TestCase):
         }
 
         with mock.patch(
-            "macrosynergy.download.dataquery.OAuth.get_auth",
+            "macrosynergy.download.dataquery.DataQueryOAuth.get_auth",
             return_value={"headers": "headers", "cert": "cert"},
         ):
             with mock.patch(
@@ -942,7 +942,7 @@ class TestDataQueryInterface(unittest.TestCase):
             return_value=False,
         ):
             with mock.patch(
-                "macrosynergy.download.dataquery.OAuth.get_auth",
+                "macrosynergy.download.dataquery.DataQueryOAuth.get_auth",
                 return_value={"user_id": random_string()},
             ):
                 with self.assertRaises(ConnectionError):
