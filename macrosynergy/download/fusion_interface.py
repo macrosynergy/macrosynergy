@@ -357,7 +357,8 @@ def request_wrapper_stream_bytes_to_disk(
     data: Optional[Any] = None,
     json_payload: Optional[Dict[str, Any]] = None,
     proxies: Optional[Dict[str, str]] = None,
-    chunk_size: int = 8192,
+    chunk_size: int = None,
+    timeout: Optional[float] = None,
 ) -> None:
     """
     Stream a request's response bytes directly to disk, chunk by chunk.
@@ -399,6 +400,7 @@ def request_wrapper_stream_bytes_to_disk(
         json=json_payload,
         proxies=proxies,
         stream=True,
+        timeout=timeout,
     ) as response:
         response.raise_for_status()
         os.makedirs(os.path.dirname(filename), exist_ok=True)
@@ -2024,6 +2026,8 @@ if __name__ == "__main__":
     print(f"Time taken for notifications download: {time.time() - st:.2f} seconds")
 
     st = time.time()
+    ds = jpmaqs_client.list_datasets()
+    print(ds.head())
 
     df = jpmaqs_client.download(
         # folder="./data",
