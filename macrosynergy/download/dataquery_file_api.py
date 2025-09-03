@@ -8,7 +8,7 @@ from macrosynergy.download.fusion_interface import (
     request_wrapper_stream_bytes_to_disk,
     FusionOAuth,
 )
-
+import functools
 import time
 from pathlib import Path
 
@@ -16,6 +16,7 @@ DQ_FILE_API_BASE_URL: str = (
     "https://api-strm-gw01.jpmchase.com/research/dataquery-authe/api/v2"
 )
 DQ_FILE_API_SCOPE: str = "JPMC:URI:RS-06785-DataQueryExternalApi-PROD"
+DQ_FILE_API_TIMEOUT: float = 600.0
 
 
 class DataQueryFileAPIClient:
@@ -72,11 +73,50 @@ class DataQueryFileAPIClient:
         payload = self._get(endpoint, {"keywords": keywords})
         return pd.json_normalize(payload, record_path=["groups"])
 
-    def list_group_files(self, group_id: str) -> pd.DataFrame:
-        """List all files for a specific group."""
+    @functools.lru_cache(maxsize=1)
+    def list_group_files(
+        self,
+        group_id: str = JPMAQS_GROUP_ID,
+        include_full_snapshots: bool = True,
+        include_delta: bool = False,
+        include_metadata: bool = False,
+    ) -> pd.DataFrame:
+        """
+        List all files for a specific group.
+
+        Parameters
+        ----------
+        full_snapshot_only: bool
+            If True, only full snapshot files are returned.
+        delta_only: bool
+            If True, only delta files are returned.
+        """
+        if not any([include_full_snapshots, include_delta, include_metadata]):
+            raise ValueError(
+                "At least one of `include_full_snapshots`, `include_delta`, or "
+                "`include_metadata` must be True"
+            )
+
         endpoint = "/group/files"
         payload = self._get(endpoint, {"group-id": group_id})
-        return pd.json_normalize(payload, record_path=["file-group-ids"])
+        df = pd.json_normalize(payload, record_path=["file-group-ids"])
+
+        isdeltafile = df["file-group-id"].str.endswith("_DELTA")
+        ismetadata = df["file-group-id"].str.contains("_METADATA_")
+        isfullsnapshot = ~(isdeltafile | ismetadata)
+
+        mask = pd.Series(False, index=df.index)
+        if include_full_snapshots:
+            mask |= isfullsnapshot
+        if include_delta:
+            mask |= isdeltafile
+        if include_metadata:
+            mask |= ismetadata
+        df = df[mask]
+
+        df = df.sort_values(by=["item"]).reset_index(drop=True)
+
+        return df
 
     def list_available_files(
         self,
@@ -113,7 +153,7 @@ class DataQueryFileAPIClient:
         out_dir: str = "./download",
         filename: Optional[str] = None,
         chunk_size: Optional[int] = None,
-        timeout: Optional[float] = 500.0,
+        timeout: Optional[float] = DQ_FILE_API_TIMEOUT,
     ) -> str:
         """
         Stream a Parquet file directly to disk using request_wrapper_stream_bytes_to_disk.
