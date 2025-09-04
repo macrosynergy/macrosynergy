@@ -186,6 +186,44 @@ class DataQueryFileAPIClient:
 
         return df
 
+    def list_available_files_for_file_groups(
+        self,
+        group_id: str = JPMAQS_GROUP_ID,
+        start_date: str = JPMAQS_START_DATE,
+        end_date: str = None,
+        include_full_snapshots: bool = True,
+        include_delta: bool = True,
+        include_metadata: bool = True,
+    ) -> pd.DataFrame:
+        files_groups = self.list_group_files(
+            include_full_snapshots=include_full_snapshots,
+            include_delta=include_delta,
+            include_metadata=include_metadata,
+        )["file-group-id"].tolist()
+        results = []
+        with cf.ThreadPoolExecutor() as executor:
+            futures = {}
+            for file_group_id in tqdm(files_groups):
+                futures[
+                    executor.submit(
+                        self.list_available_files,
+                        group_id=group_id,
+                        file_group_id=file_group_id,
+                        start_date=start_date,
+                        end_date=end_date,
+                    )
+                ] = file_group_id
+                time.sleep(DQ_FILE_API_DELAY_PARAM)
+
+            for future in tqdm(cf.as_completed(futures), total=len(files_groups)):
+                available_files = future.result()
+                results.append(available_files)
+
+        files_df = pd.concat(results).reset_index(drop=True)
+        files_df["file-datetime"] = pd.to_datetime(
+            files_df["file-datetime"], format="mixed"
+        )
+        return files_df
 
     def check_file_availability(
         self, file_group_id: str, file_datetime: str
