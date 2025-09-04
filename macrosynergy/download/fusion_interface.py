@@ -278,6 +278,7 @@ def request_wrapper(
     as_bytes: Optional[bool] = None,
     as_text: Optional[bool] = None,
     api_delay: float = FUSION_API_DELAY,
+    timeout: Optional[float] = None,
 ) -> Union[Dict[str, Any], str, bytes]:
     """
     A wrapper function for making API requests to the JPMorgan Fusion API.
@@ -306,6 +307,7 @@ def request_wrapper(
             data=data,
             json=json_payload,
             proxies=proxies,
+            timeout=timeout,
         )
         raw_response = response
         response.raise_for_status()
@@ -366,6 +368,7 @@ def request_wrapper_stream_bytes_to_disk(
     json_payload: Optional[Dict[str, Any]] = None,
     proxies: Optional[Dict[str, str]] = None,
     chunk_size: int = None,
+    api_delay: float = FUSION_API_DELAY,
     timeout: Optional[float] = None,
 ) -> None:
     """
@@ -391,6 +394,10 @@ def request_wrapper_stream_bytes_to_disk(
         Proxies to use for the request.
     chunk_size : int
         Size of each chunk to write (default 8192).
+    api_delay : float
+        Delay between API calls (defaults to 1.0 seconds).
+    timeout : float, optional
+        Timeout for the request (defaults to None).
     """
     if not isinstance(method, str):
         raise TypeError("Method must be a string.")
@@ -398,7 +405,7 @@ def request_wrapper_stream_bytes_to_disk(
         raise ValueError(
             f"Invalid method: {method}. Must be 'GET' for streaming to disk."
         )
-    _wait_for_api_call()
+    _wait_for_api_call(api_delay=api_delay)
     with requests.request(
         method=method.upper(),
         url=url,
