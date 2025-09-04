@@ -226,12 +226,20 @@ class DataQueryFileAPIClient:
         return files_df
 
     def check_file_availability(
-        self, file_group_id: str, file_datetime: str
-    ) -> Dict[str, Any]:
+        self,
+        file_group_id: str = None,
+        file_datetime: str = None,
+        filename: Optional[str] = None,
+    ) -> pd.DataFrame:
         """Check the availability of a specific file in a group."""
+        if not ((bool(file_group_id) and bool(file_datetime)) ^ bool(filename)):
+            raise ValueError(
+                "One of `file_group_id` & `file_datetime`, or `filename` must be provided."
+            )
         endpoint = "/group/file/availability"
         params = {"file-group-id": file_group_id, "file-datetime": file_datetime}
-        return self._get(endpoint, params)
+        payload = self._get(endpoint, params)
+        return pd.json_normalize(payload)
 
     def download_parquet_file(
         self,
