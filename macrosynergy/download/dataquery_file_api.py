@@ -406,14 +406,22 @@ if __name__ == "__main__":
     end = time.time()
     print(f"Call completed in {end - start:.2f} seconds")
 
-    available_files = dq.list_available_files(file_group_id="JPMAQS_MACROECONOMIC_TRENDS_DELTA")
+    available_files = dq.list_available_files(
+        file_group_id="JPMAQS_MACROECONOMIC_TRENDS_DELTA"
+    )
+    pd.to_datetime(
+        available_files[available_files["is-available"]]["file-datetime"],
+        format="mixed",
+    ).max()
+    c = dq.check_file_availability(
+        file_group_id="JPMAQS_MACROECONOMIC_TRENDS_DELTA",
+        file_datetime="20250828T040348",
+    )
 
-    
-    
-    
     print("Starting download")
     dq.download_full_snapshot(
         out_dir="./data/dqfiles/test/",
+        since_datetime=pd.Timestamp.now().strftime("%Y%m%d"),
     )
 
     # print("Starting download")
