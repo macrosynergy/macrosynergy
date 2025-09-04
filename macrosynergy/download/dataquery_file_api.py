@@ -6,8 +6,8 @@ import time
 from pathlib import Path
 
 import concurrent.futures as cf
-
-from typing import Dict, Any, Optional
+import logging
+from typing import Dict, Any, Optional, List
 
 from tqdm import tqdm
 
@@ -18,13 +18,32 @@ from macrosynergy.download.fusion_interface import (
     FusionOAuth,
 )
 
+from macrosynergy.download.exceptions import DownloadError, InvalidResponseError
+
 DQ_FILE_API_BASE_URL: str = (
     "https://api-strm-gw01.jpmchase.com/research/dataquery-authe/api/v2"
 )
 DQ_FILE_API_SCOPE: str = "JPMC:URI:RS-06785-DataQueryExternalApi-PROD"
 DQ_FILE_API_TIMEOUT: float = 600.0
-DQ_FILE_API_DELAY_PARAM: float = 0.1  # =1/25 ; 25 transactions per second
+DQ_FILE_API_DELAY_PARAM: float = 0.04  # =1/25 ; 25 transactions per second
 JPMAQS_START_DATE = "20200101"
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+
+
+def validate_dq_timestamp(
+    ts: str, var_name: str = None, raise_error: bool = True
+) -> bool:
+    try:
+        pd.Timestamp(ts)
+        return True
+    except ValueError:
+        if raise_error:
+            vn = f"`{var_name}`" if var_name else "Timestamp"
+            raise ValueError(f"Invalid {vn} format. Use YYYYMMDD or YYYYMMDDTHHMMSS")
+        else:
+            return False
 
 
 class DataQueryFileAPIClient:
@@ -67,6 +86,7 @@ class DataQueryFileAPIClient:
             params=params or {},
             proxies=self.proxies,
             as_json=True,
+            api_delay=DQ_FILE_API_DELAY_PARAM,
         )
 
     def list_groups(self) -> pd.DataFrame:
