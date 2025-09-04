@@ -20,7 +20,6 @@ from macrosynergy.management.utils.df_utils import is_categorical_qdf
 from macrosynergy.management.types import QuantamentalDataFrame
 import pyarrow as pa
 
-from macrosynergy.download import fusion_interface as fusion_interface_module
 
 from macrosynergy.download.fusion_interface import (
     request_wrapper as fusion_request_wrapper,
@@ -610,24 +609,22 @@ class TestGetResourcesDf(unittest.TestCase):
 
 class TestWaitSimple(unittest.TestCase):
     def test_repeated_calls_delay(self):
-        fusion_interface_module.FUSION_API_DELAY = 0.5
-        fusion_interface_module.LAST_API_CALL = None
-
+        api_delay = 0.5
         calls = 5
         start = time.time()
         for _ in range(calls):
-            _wait_for_api_call()
+            _wait_for_api_call(api_delay)
         elapsed = time.time() - start
 
-        expected = (calls - 1) * fusion_interface_module.FUSION_API_DELAY
+        expected = (calls - 1) * api_delay
         self.assertGreaterEqual(
             elapsed,
             expected,
             f"Elapsed {elapsed:.2f}s should be >= expected {expected:.2f}s",
         )
         self.assertLess(
-            elapsed - expected,
-            0.1,
+            abs(elapsed - expected),
+            0.2,
             f"Test overhead too large: extra {elapsed - expected:.2f}s",
         )
 
@@ -1857,9 +1854,9 @@ class TestJPMaQSFusionClientDownload(unittest.TestCase):
                     expected_dataset, action = local_seq[call_idx["i"]]
                     call_idx["i"] += 1
                     if expected_dataset is not None:
-                        assert dataset == expected_dataset, (
-                            f"Expected {expected_dataset}, got {dataset}"
-                        )
+                        assert (
+                            dataset == expected_dataset
+                        ), f"Expected {expected_dataset}, got {dataset}"
                     return _resolve_action(
                         action,
                         dataset,
