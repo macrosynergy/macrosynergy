@@ -354,6 +354,7 @@ class DataQueryFileAPIClient:
     def download_full_snapshot(
         self,
         out_dir: str = "./download",
+        since_datetime: Optional[str] = None,
         file_datetime: Optional[str] = None,
         chunk_size: Optional[int] = None,
         timeout: Optional[float] = DQ_FILE_API_TIMEOUT,
@@ -362,39 +363,36 @@ class DataQueryFileAPIClient:
         include_metadata: bool = True,
     ) -> None:
         Path(out_dir).mkdir(parents=True, exist_ok=True)
-        if file_datetime is None:
-            file_datetime = pd.Timestamp.now().strftime("%Y%m%d")
 
-        files = dq.list_group_files(
+        if file_datetime is None and since_datetime is None:
+            since_datetime = pd.Timestamp.now().strftime("%Y%m%d")
+
+        effective_ts = file_datetime or since_datetime
+
+        validate_dq_timestamp(
+            effective_ts,
+            var_name="file_datetime" if file_datetime else "since_datetime",
+        )
+
+        filter_ts = pd.Timestamp(effective_ts)
+        if "T" not in effective_ts:
+            filter_ts = filter_ts.normalize()
+
+        files_df = self.list_available_files_for_file_groups(
             include_full_snapshots=include_full_snapshots,
             include_delta=include_delta,
             include_metadata=include_metadata,
-        )["file-group-id"].tolist()
-
-        # list_available_files
-        results = []
-        with cf.ThreadPoolExecutor() as executor:
-            futures = {}
-            for file_group_id in tqdm(files):
-                futures[
-                    executor.submit(
-                        dq.list_available_files, file_group_id=file_group_id
-                    )
-                ] = file_group_id
-                time.sleep(DQ_FILE_API_DELAY_PARAM)
-
-            for future in tqdm(cf.as_completed(futures), total=len(files)):
-                available_files = future.result()
-                results.append(available_files)
-
-        files_df = pd.concat(results).reset_index(drop=True)
-        files_df["file-datetime"] = pd.to_datetime(files_df["file-datetime"], format='mixed')
-        filter_ts = pd.Timestamp(file_datetime)
-        if "T" not in file_datetime:
-            filter_ts = pd.Timestamp(file_datetime).normalize()
+        )
 
         files_df = files_df[files_df["file-datetime"] >= filter_ts]
-        files_df
+        files_df = files_df[files_df["is-available"]]
+
+        return self.download_multiple_parquet_files(
+            filenames=sorted(files_df["file-name"].tolist()),
+            out_dir=out_dir,
+            chunk_size=chunk_size,
+            timeout=timeout,
+        )
 
 
 if __name__ == "__main__":
