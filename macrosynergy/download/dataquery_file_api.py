@@ -172,7 +172,7 @@ class DataQueryFileAPIClient:
             raise InvalidResponseError(
                 f'Missing "file-datetime" in response from {endpoint} with params {params}'
             )
-
+        df = df[df["is-available"]]
         df["file-datetime"] = df["file-datetime"].astype(str)
 
         # Sort by real timestamp while leaving the column as string
@@ -409,13 +409,12 @@ if __name__ == "__main__":
     available_files = dq.list_available_files(
         file_group_id="JPMAQS_MACROECONOMIC_TRENDS_DELTA"
     )
-    pd.to_datetime(
-        available_files[available_files["is-available"]]["file-datetime"],
-        format="mixed",
-    ).max()
-    c = dq.check_file_availability(
-        file_group_id="JPMAQS_MACROECONOMIC_TRENDS_DELTA",
-        file_datetime="20250828T040348",
+    latest_file_timestamp = available_files["file-datetime"].iloc[0]
+    print(
+        dq.check_file_availability(
+            file_group_id="JPMAQS_MACROECONOMIC_TRENDS_DELTA",
+            file_datetime=latest_file_timestamp,
+        )
     )
 
     print("Starting download")
