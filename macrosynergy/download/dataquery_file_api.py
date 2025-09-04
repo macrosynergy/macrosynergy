@@ -291,6 +291,66 @@ class DataQueryFileAPIClient:
         )
         return file_path
 
+    def download_multiple_parquet_files(
+        self,
+        filenames: List[str],
+        out_dir: str = "./download",
+        max_retries: int = 3,
+        n_jobs: int = None,
+        chunk_size: Optional[int] = None,
+        timeout: Optional[float] = DQ_FILE_API_TIMEOUT,
+    ) -> None:
+        Path(out_dir).mkdir(parents=True, exist_ok=True)
+        failed_files = []
+        if n_jobs == -1:
+            n_jobs = None
+        with cf.ThreadPoolExecutor(max_workers=n_jobs) as executor:
+            futures = {}
+            for filename in tqdm(filenames, desc="Requesting Parquet files"):
+                futures[
+                    executor.submit(
+                        self.download_parquet_file,
+                        filename=filename,
+                        out_dir=out_dir,
+                        chunk_size=chunk_size,
+                        timeout=timeout,
+                    )
+                ] = filename
+                time.sleep(DQ_FILE_API_DELAY_PARAM)
+
+            for future in tqdm(
+                cf.as_completed(futures),
+                total=len(futures),
+                desc="Downloading Parquet files",
+            ):
+                fname = futures[future]
+                try:
+                    future.result()
+                except Exception as e:
+                    logger.error(f"Failed to download {fname}: {e}")
+                    failed_files.append(fname)
+
+        if not failed_files:
+            return  # All downloads scuccessful
+
+        log_msg = f"Failed to download {len(failed_files)} files"
+        if max_retries > 0:
+            log_msg += f"; retrying {max_retries} more times"
+        else:
+            log_msg += "; no retries left"
+        logger.warning(log_msg)
+        if max_retries == 0:
+            logger.error(f"Files failed after retries: {failed_files}")
+            raise DownloadError(f"Files failed after retries: {failed_files}")
+
+        return self.download_multiple_parquet_files(
+            filenames=failed_files,
+            max_retries=max_retries - 1,
+            n_jobs=n_jobs,
+            chunk_size=chunk_size,
+            timeout=timeout,
+        )
+
     def download_full_snapshot(
         self,
         out_dir: str = "./download",
