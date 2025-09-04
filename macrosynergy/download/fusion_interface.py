@@ -327,22 +327,24 @@ def request_wrapper(
             if hasattr(e_http, "response") and e_http.response
             else url
         )
-
-        error_details: str = (
-            f"API HTTP error for {actual_method} {actual_url}: {e_http}"
-        )
+        error_details = f"API HTTP error for {actual_method} {actual_url}: {e_http}"
+        error_details += f"\nTimestamp (UTC): {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
         if hasattr(e_http, "response") and e_http.response is not None:
             error_details += f"\nStatus Code: {e_http.response.status_code}\nResponse: {e_http.response.text[:500]}"
         raise Exception(error_details) from e_http
 
     except requests.exceptions.RequestException as e_req:
         error_details = f"API request failed for {method} {url}: {e_req}"
+        error_details += f"\nTimestamp (UTC): {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+
         if hasattr(e_req, "response") and e_req.response is not None:
             error_details += f"\nStatus Code: {e_req.response.status_code}\nResponse: {e_req.response.text[:500]}"
         raise Exception(error_details) from e_req
 
     except json.JSONDecodeError as e_json:
         error_details = f"Failed to decode JSON response from {method} {url}: {e_json}"
+        error_details += f"\nTimestamp (UTC): {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+
         if raw_response:
             error_details += f"\nResponse text: {raw_response.text[:500]}"
         raise Exception(error_details) from e_json
