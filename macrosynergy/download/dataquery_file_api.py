@@ -166,7 +166,26 @@ class DataQueryFileAPIClient:
             "end-date": end_date,
         }
         payload = self._get(endpoint, params)
-        return pd.json_normalize(payload, record_path=["available-files"])
+        df = pd.json_normalize(payload, record_path=["available-files"])
+
+        if "file-datetime" not in df.columns:
+            raise InvalidResponseError(
+                f'Missing "file-datetime" in response from {endpoint} with params {params}'
+            )
+
+        df["file-datetime"] = df["file-datetime"].astype(str)
+
+        # Sort by real timestamp while leaving the column as string
+        df["_ts"] = pd.to_datetime(df["file-datetime"], format="mixed", errors="coerce")
+        # mergesort keeps order stable for equal timestamps
+        df = (
+            df.sort_values("_ts", ascending=False, kind="mergesort")
+            .drop(columns="_ts")
+            .reset_index(drop=True)
+        )
+
+        return df
+
 
     def check_file_availability(
         self, file_group_id: str, file_datetime: str
