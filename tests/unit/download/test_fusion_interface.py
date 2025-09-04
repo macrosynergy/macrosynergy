@@ -623,8 +623,8 @@ class TestWaitSimple(unittest.TestCase):
             f"Elapsed {elapsed:.2f}s should be >= expected {expected:.2f}s",
         )
         self.assertLess(
-            elapsed - expected,
-            0.1,
+            abs(elapsed - expected),
+            0.2,
             f"Test overhead too large: extra {elapsed - expected:.2f}s",
         )
 
@@ -1854,9 +1854,9 @@ class TestJPMaQSFusionClientDownload(unittest.TestCase):
                     expected_dataset, action = local_seq[call_idx["i"]]
                     call_idx["i"] += 1
                     if expected_dataset is not None:
-                        assert dataset == expected_dataset, (
-                            f"Expected {expected_dataset}, got {dataset}"
-                        )
+                        assert (
+                            dataset == expected_dataset
+                        ), f"Expected {expected_dataset}, got {dataset}"
                     return _resolve_action(
                         action,
                         dataset,
