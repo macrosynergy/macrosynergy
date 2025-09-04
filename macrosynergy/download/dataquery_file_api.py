@@ -1,6 +1,15 @@
 import os
 import pandas as pd
+
+import functools
+import time
+from pathlib import Path
+
+import concurrent.futures as cf
+
 from typing import Dict, Any, Optional
+
+from tqdm import tqdm
 
 from macrosynergy.download.dataquery import JPMAQS_GROUP_ID
 from macrosynergy.download.fusion_interface import (
@@ -8,15 +17,14 @@ from macrosynergy.download.fusion_interface import (
     request_wrapper_stream_bytes_to_disk,
     FusionOAuth,
 )
-import functools
-import time
-from pathlib import Path
 
 DQ_FILE_API_BASE_URL: str = (
     "https://api-strm-gw01.jpmchase.com/research/dataquery-authe/api/v2"
 )
 DQ_FILE_API_SCOPE: str = "JPMC:URI:RS-06785-DataQueryExternalApi-PROD"
 DQ_FILE_API_TIMEOUT: float = 600.0
+DQ_FILE_API_DELAY_PARAM: float = 0.1  # =1/25 ; 25 transactions per second
+JPMAQS_START_DATE = "20200101"
 
 
 class DataQueryFileAPIClient:
@@ -73,13 +81,13 @@ class DataQueryFileAPIClient:
         payload = self._get(endpoint, {"keywords": keywords})
         return pd.json_normalize(payload, record_path=["groups"])
 
-    @functools.lru_cache(maxsize=1)
+    @functools.lru_cache(maxsize=None)
     def list_group_files(
         self,
         group_id: str = JPMAQS_GROUP_ID,
         include_full_snapshots: bool = True,
-        include_delta: bool = False,
-        include_metadata: bool = False,
+        include_delta: bool = True,
+        include_metadata: bool = True,
     ) -> pd.DataFrame:
         """
         List all files for a specific group.
@@ -120,14 +128,16 @@ class DataQueryFileAPIClient:
 
     def list_available_files(
         self,
-        group_id: str,
         file_group_id: str,
-        start_date: str,
-        end_date: str,
+        group_id: str = JPMAQS_GROUP_ID,
+        start_date: str = JPMAQS_START_DATE,
+        end_date: str = None,
     ) -> pd.DataFrame:
         """
         List all available files for a specific file in a group within a date range.
         """
+        if end_date is None:
+            end_date = pd.Timestamp.now().strftime("%Y%m%d")
         endpoint = "/group/files/available-files"
         params = {
             "group-id": group_id,
@@ -184,26 +194,81 @@ class DataQueryFileAPIClient:
         print(f"File downloaded successfully and saved as {file_path}")
         return file_path
 
+    def download_full_snapshot(
+        self,
+        out_dir: str = "./download",
+        file_datetime: Optional[str] = None,
+        chunk_size: Optional[int] = None,
+        timeout: Optional[float] = DQ_FILE_API_TIMEOUT,
+        include_full_snapshots: bool = True,
+        include_delta: bool = True,
+        include_metadata: bool = True,
+    ) -> None:
+        Path(out_dir).mkdir(parents=True, exist_ok=True)
+        if file_datetime is None:
+            file_datetime = pd.Timestamp.now().strftime("%Y%m%d")
+
+        files = dq.list_group_files(
+            include_full_snapshots=include_full_snapshots,
+            include_delta=include_delta,
+            include_metadata=include_metadata,
+        )["file-group-id"].tolist()
+
+        # list_available_files
+        results = []
+        with cf.ThreadPoolExecutor() as executor:
+            futures = {}
+            for file_group_id in tqdm(files):
+                futures[
+                    executor.submit(
+                        dq.list_available_files, file_group_id=file_group_id
+                    )
+                ] = file_group_id
+                time.sleep(DQ_FILE_API_DELAY_PARAM)
+
+            for future in tqdm(cf.as_completed(futures), total=len(files)):
+                available_files = future.result()
+                results.append(available_files)
+
+        files_df = pd.concat(results).reset_index(drop=True)
+        files_df["file-datetime"] = pd.to_datetime(files_df["file-datetime"], format='mixed')
+        filter_ts = pd.Timestamp(file_datetime)
+        if "T" not in file_datetime:
+            filter_ts = pd.Timestamp(file_datetime).normalize()
+
+        files_df = files_df[files_df["file-datetime"] >= filter_ts]
+        files_df
+
 
 if __name__ == "__main__":
     dq = DataQueryFileAPIClient()
 
     print("Current time:", pd.Timestamp.now().isoformat())
-    print("Token acquired")
 
     print("Calling `/group/files`")
     start = time.time()
-    print(dq.list_group_files(JPMAQS_GROUP_ID))
+    # print(dq.list_group_files())
     end = time.time()
     print(f"Call completed in {end - start:.2f} seconds")
 
+    available_files = dq.list_available_files(file_group_id="JPMAQS_MACROECONOMIC_TRENDS_DELTA")
+
+    
+    
+    
     print("Starting download")
-    print("Current time:", pd.Timestamp.now().isoformat())
-    start = time.time()
-    dq.download_parquet_file(
-        file_group_id="JPMAQS_GENERIC_RETURNS",
-        file_datetime="20250819",
-        out_dir="./data/dqfiles/",
+    dq.download_full_snapshot(
+        out_dir="./data/dqfiles/test/",
     )
-    end = time.time()
-    print(f"Download completed in {end - start:.2f} seconds")
+
+    # print("Starting download")
+    # print("Current time:", pd.Timestamp.now().isoformat())
+    # start = time.time()
+    # dq.download_parquet_file(
+    #     file_group_id="JPMAQS_GENERIC_RETURNS",
+    #     # file_datetime="20250819",
+    #     file_datetime=pd.Timestamp.now().strftime("%Y%m%d"),
+    #     out_dir="./data/dqfiles/",
+    # )
+    # end = time.time()
+    # print(f"Download completed in {end - start:.2f} seconds")
