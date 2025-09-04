@@ -243,10 +243,10 @@ class DataQueryFileAPIClient:
 
     def download_parquet_file(
         self,
-        file_group_id: str,
-        file_datetime: str,
-        out_dir: str = "./download",
+        file_group_id: str = None,
+        file_datetime: str = None,
         filename: Optional[str] = None,
+        out_dir: str = "./download",
         chunk_size: Optional[int] = None,
         timeout: Optional[float] = DQ_FILE_API_TIMEOUT,
     ) -> str:
@@ -254,7 +254,16 @@ class DataQueryFileAPIClient:
         Stream a Parquet file directly to disk using request_wrapper_stream_bytes_to_disk.
         Returns the full file path on success.
         """
-
+        if not ((bool(file_group_id) and bool(file_datetime)) ^ bool(filename)):
+            raise ValueError(
+                "One of `file_group_id` & `file_datetime`, or `filename` must be provided."
+            )
+        if not file_group_id:
+            try:
+                file_group_id, file_datetime_with_ext = filename.rsplit("_", 1)
+                file_datetime = file_datetime_with_ext.split(".")[0]
+            except ValueError:
+                raise ValueError(f"Invalid filename format: {filename}")
         endpoint = "/group/file/download"
         url = f"{self.base_url}{endpoint}"
         headers = self.oauth.get_auth()
@@ -274,9 +283,12 @@ class DataQueryFileAPIClient:
             proxies=self.proxies,
             chunk_size=chunk_size,
             timeout=timeout,
+            api_delay=DQ_FILE_API_DELAY_PARAM,
         )
-        print(f"Data complete: {time.time() - start:.2f} seconds")
-        print(f"File downloaded successfully and saved as {file_path}")
+        time_taken = time.time() - start
+        logger.info(
+            f"Downloaded {file_name} in {time_taken:.2f} seconds to {file_path}"
+        )
         return file_path
 
     def download_full_snapshot(
