@@ -7,10 +7,13 @@ from pathlib import Path
 
 import concurrent.futures as cf
 import logging
-from typing import Dict, Any, Optional, List
-
+from typing import Dict, Any, Optional, List, Tuple
+import re
+import shutil
 from tqdm import tqdm
-
+import asyncio
+from threading import Thread
+import aiohttp
 from macrosynergy.download.dataquery import JPMAQS_GROUP_ID
 from macrosynergy.download.fusion_interface import (
     request_wrapper,
@@ -46,6 +49,125 @@ def validate_dq_timestamp(
             return False
 
 
+def get_client_id_secret() -> Optional[Tuple[str, str]]:
+    pairs = [
+        ("DQ_CLIENT_ID", "DQ_CLIENT_SECRET"),
+        ("DATAQUERY_CLIENT_ID", "DATAQUERY_CLIENT_SECRET"),
+    ]
+    for client_id_env, client_secret_env in pairs:
+        client_id = os.getenv(client_id_env)
+        client_secret = os.getenv(client_secret_env)
+        if client_id and client_secret:
+            logger.info(
+                f"Using {client_id_env} and {client_secret_env} from environment"
+            )
+            return client_id, client_secret
+
+    return None, None
+
+
+def request_wrapper_stream_bytes_to_disk_async(
+    filename,
+    url,
+    method="GET",
+    headers=None,
+    params=None,
+    data=None,
+    json_payload=None,
+    proxies=None,
+    chunk_size=None,
+    api_delay=0.0,
+    timeout=None,
+) -> None:
+    """
+    Stream a request's response bytes directly to disk (aiohttp under the hood).
+    - Temp file is <target_dir>/<target_name>.part, then atomically moved.
+    - Synchronous API for callers (no `await`), async I/O internally.
+    - Raises on HTTP/I/O error.
+    """
+    if method.upper() != "GET":
+        raise ValueError("Only GET is supported for streaming to disk.")
+
+    # Resolve and ensure the correct subfolder exists
+    file_path = Path(filename).expanduser()
+    file_path.parent.mkdir(parents=True, exist_ok=True)
+    # Always place temp file in the SAME directory as the target file
+    tmp_path = (file_path.parent / (file_path.name + ".part")).resolve()
+    file_path = file_path.resolve()
+
+    size = 8192 if not chunk_size or chunk_size <= 0 else int(chunk_size)
+
+    # Normalize proxy for aiohttp
+    proxy_url = None
+    if isinstance(proxies, dict):
+        proxy_url = proxies.get("https") or proxies.get("http")
+    elif isinstance(proxies, str):
+        proxy_url = proxies
+
+    async def _run():
+        if api_delay and api_delay > 0:
+            await asyncio.sleep(api_delay)
+
+        timeout_obj = aiohttp.ClientTimeout(total=timeout) if timeout else None
+        async with aiohttp.ClientSession(timeout=timeout_obj) as session:
+            async with session.get(
+                url,
+                headers=headers,
+                params=params,
+                data=data,
+                json=json_payload,
+                proxy=proxy_url,
+            ) as resp:
+                resp.raise_for_status()
+                # Write chunks into the temp file *in the correct subfolder*
+                with open(tmp_path, "wb") as f:
+                    async for chunk in resp.content.iter_chunked(size):
+                        if chunk:
+                            f.write(chunk)
+        os.replace(tmp_path, file_path)
+
+    def _cleanup():
+        try:
+            if tmp_path.exists():
+                tmp_path.unlink()
+        except Exception:
+            pass
+
+    # Run without exposing `await`
+    try:
+        asyncio.get_running_loop()  # will raise RuntimeError if no loop
+        exc = {}
+
+        def _runner():
+            try:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                loop.run_until_complete(_run())
+            except BaseException as e:
+                exc["e"] = e
+            finally:
+                try:
+                    loop.close()
+                except Exception:
+                    pass
+
+        t = Thread(target=_runner, daemon=True)
+        t.start()
+        t.join()
+        if "e" in exc:
+            raise exc["e"]
+    except RuntimeError:
+        # No running loop; safe to use asyncio.run
+        try:
+            asyncio.run(_run())
+        except Exception:
+            _cleanup()
+            raise
+    except Exception:
+        _cleanup()
+        raise
+
+
 class DataQueryFileAPIClient:
     def __init__(
         self,
@@ -58,10 +180,18 @@ class DataQueryFileAPIClient:
         """
         Client for JPM DataQuery File APIs using request_wrapper utilities.
         """
-        self.client_id = client_id or os.getenv("DQ_CLIENT_ID")
-        self.client_secret = client_secret or os.getenv("DQ_CLIENT_SECRET")
-        if not self.client_id or not self.client_secret:
-            raise ValueError("Missing DQ_CLIENT_ID or DQ_CLIENT_SECRET")
+        if not (bool(client_id) and bool(client_secret)):
+            client_id, client_secret = get_client_id_secret()
+
+        if not (bool(client_id) and bool(client_secret)):
+            raise ValueError(
+                "Client ID and Client Secret must be provided either as arguments or "
+                "via environment variables DQ_CLIENT_ID & DQ_CLIENT_SECRET or "
+                "DATAQUERY_CLIENT_ID & DATAQUERY_CLIENT_SECRET"
+            )
+
+        self.client_id = client_id
+        self.client_secret = client_secret
 
         self.base_url = base_url.rstrip("/")
         self.scope = scope
@@ -186,7 +316,7 @@ class DataQueryFileAPIClient:
 
         return df
 
-    def list_available_files_for_file_groups(
+    def list_available_files_for_all_file_groups(
         self,
         group_id: str = JPMAQS_GROUP_ID,
         start_date: str = JPMAQS_START_DATE,
@@ -203,7 +333,7 @@ class DataQueryFileAPIClient:
         results = []
         with cf.ThreadPoolExecutor() as executor:
             futures = {}
-            for file_group_id in tqdm(files_groups):
+            for file_group_id in files_groups:
                 futures[
                     executor.submit(
                         self.list_available_files,
@@ -215,7 +345,7 @@ class DataQueryFileAPIClient:
                 ] = file_group_id
                 time.sleep(DQ_FILE_API_DELAY_PARAM)
 
-            for future in tqdm(cf.as_completed(futures), total=len(files_groups)):
+            for future in cf.as_completed(futures):
                 available_files = future.result()
                 results.append(available_files)
 
@@ -272,9 +402,12 @@ class DataQueryFileAPIClient:
         Path(out_dir).mkdir(parents=True, exist_ok=True)
         file_name = filename or f"{file_group_id}_{file_datetime}.parquet"
         file_path = Path(out_dir) / Path(file_name)
-
+        if file_path.exists():
+            logger.warning(f"File {file_path} already exists. It will be overwritten.")
+            file_path.unlink()
         start = time.time()
-        request_wrapper_stream_bytes_to_disk(
+        # request_wrapper_stream_bytes_to_disk(
+        request_wrapper_stream_bytes_to_disk_async(
             filename=file_path,
             url=url,
             method="GET",
@@ -296,7 +429,7 @@ class DataQueryFileAPIClient:
         filenames: List[str],
         out_dir: str = "./download",
         max_retries: int = 3,
-        n_jobs: int = None,
+        n_jobs: int = 4,
         chunk_size: Optional[int] = None,
         timeout: Optional[float] = DQ_FILE_API_TIMEOUT,
     ) -> None:
@@ -378,7 +511,7 @@ class DataQueryFileAPIClient:
         if "T" not in effective_ts:
             filter_ts = filter_ts.normalize()
 
-        files_df = self.list_available_files_for_file_groups(
+        files_df = self.list_available_files_for_all_file_groups(
             include_full_snapshots=include_full_snapshots,
             include_delta=include_delta,
             include_metadata=include_metadata,
@@ -413,15 +546,22 @@ if __name__ == "__main__":
     print(
         dq.check_file_availability(
             file_group_id="JPMAQS_MACROECONOMIC_TRENDS_DELTA",
-            file_datetime=latest_file_timestamp,
+            file_datetime="20250905T084751",
         )
     )
 
     print("Starting download")
+    start = time.time()
+    dq = DataQueryFileAPIClient()
+
     dq.download_full_snapshot(
         out_dir="./data/dqfiles/test/",
-        since_datetime=pd.Timestamp.now().strftime("%Y%m%d"),
+        # since_datetime=pd.Timestamp.now().strftime("%Y%m%d"),
+        # since_datetime='20250828',
+        # chunk_size=1024 * 1024 * 3,  # 3 MB
     )
+    end = time.time()
+    print(f"Download completed in {end - start:.2f} seconds")
 
     # print("Starting download")
     # print("Current time:", pd.Timestamp.now().isoformat())
