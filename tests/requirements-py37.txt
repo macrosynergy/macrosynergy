@@ -16,3 +16,4 @@ flake8>=4.0.1
 parameterized>=0.9.0
 linearmodels==4.24
 pyarrow==11.0.0
+aiohttp==3.7.4.post0
