@@ -11,7 +11,7 @@ import functools
 import operator
 import concurrent.futures as cf
 from typing import Dict, Optional, TypeVar, Any, List, Union, Callable
-
+import threading
 import pandas as pd
 
 import pyarrow as pa  # noqa: F401
@@ -30,8 +30,11 @@ FUSION_AUTH_URL: str = "https://authe.jpmorgan.com/as/token.oauth2"
 FUSION_ROOT_URL: str = "https://fusion.jpmorgan.com/api/v1"
 FUSION_RESOURCE_ID: str = "JPMC:URI:RS-93742-Fusion-PROD"
 FUSION_API_DELAY = 1.0  # seconds
-CACHE_TTL = 60  # seconds
 LAST_API_CALL: Optional[datetime.datetime] = None
+lock = threading.Lock()
+LAST_API_CALL = None
+CACHE_TTL = 60  # seconds
+
 
 logger = logging.getLogger(__name__)
 
@@ -106,7 +109,7 @@ def cache_decorator(
     return decorator
 
 
-def _wait_for_api_call() -> bool:
+def _wait_for_api_call(api_delay: float = FUSION_API_DELAY) -> bool:
     """
     Wait for the appropriate time before making an API call to avoid hitting the rate
     limit. This function checks the time since the last API call and sleeps if necessary
@@ -114,15 +117,17 @@ def _wait_for_api_call() -> bool:
     Uses a global variable `LAST_API_CALL` to track the last call time.
     """
     global LAST_API_CALL
-    if LAST_API_CALL is None:
+    with lock:
+        now = datetime.datetime.now()
+        if LAST_API_CALL is None:
+            LAST_API_CALL = now
+            return True
+        diff = (now - LAST_API_CALL).total_seconds()
+        sleep_for = api_delay - diff
+        if sleep_for > 0:
+            logger.info(f"Sleeping for {sleep_for:.2f} seconds for API rate limit.")
+            time.sleep(sleep_for)
         LAST_API_CALL = datetime.datetime.now()
-        return True
-    diff = datetime.datetime.now() - LAST_API_CALL
-    sleep_for = FUSION_API_DELAY - diff.total_seconds()
-    if sleep_for > 0:
-        logger.info(f"Sleeping for {sleep_for:.2f} seconds to avoid API rate limit.")
-        time.sleep(sleep_for)
-    LAST_API_CALL = datetime.datetime.now()
     return True
 
 
@@ -137,6 +142,8 @@ def request_wrapper(
     as_json: Optional[bool] = None,
     as_bytes: Optional[bool] = None,
     as_text: Optional[bool] = None,
+    api_delay: float = FUSION_API_DELAY,
+    timeout: Optional[float] = None,
 ) -> Union[Dict[str, Any], str, bytes]:
     """
     A wrapper function for making API requests to the JPMorgan Fusion API.
@@ -156,7 +163,7 @@ def request_wrapper(
         as_json = True
     raw_response: Optional[requests.Response] = None
     try:
-        _wait_for_api_call()
+        _wait_for_api_call(api_delay=api_delay)
         response = requests.request(
             method=method.upper(),
             url=url,
@@ -165,6 +172,7 @@ def request_wrapper(
             data=data,
             json=json_payload,
             proxies=proxies,
+            timeout=timeout,
         )
         raw_response = response
         response.raise_for_status()
@@ -192,22 +200,24 @@ def request_wrapper(
             if hasattr(e_http, "response") and e_http.response
             else url
         )
-
-        error_details: str = (
-            f"API HTTP error for {actual_method} {actual_url}: {e_http}"
-        )
+        error_details = f"API HTTP error for {actual_method} {actual_url}: {e_http}"
+        error_details += f"\nTimestamp (UTC): {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
         if hasattr(e_http, "response") and e_http.response is not None:
             error_details += f"\nStatus Code: {e_http.response.status_code}\nResponse: {e_http.response.text[:500]}"
         raise Exception(error_details) from e_http
 
     except requests.exceptions.RequestException as e_req:
         error_details = f"API request failed for {method} {url}: {e_req}"
+        error_details += f"\nTimestamp (UTC): {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+
         if hasattr(e_req, "response") and e_req.response is not None:
             error_details += f"\nStatus Code: {e_req.response.status_code}\nResponse: {e_req.response.text[:500]}"
         raise Exception(error_details) from e_req
 
     except json.JSONDecodeError as e_json:
         error_details = f"Failed to decode JSON response from {method} {url}: {e_json}"
+        error_details += f"\nTimestamp (UTC): {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+
         if raw_response:
             error_details += f"\nResponse text: {raw_response.text[:500]}"
         raise Exception(error_details) from e_json
@@ -223,6 +233,7 @@ def request_wrapper_stream_bytes_to_disk(
     json_payload: Optional[Dict[str, Any]] = None,
     proxies: Optional[Dict[str, str]] = None,
     chunk_size: int = None,
+    api_delay: float = FUSION_API_DELAY,
     timeout: Optional[float] = None,
 ) -> None:
     """
@@ -248,6 +259,10 @@ def request_wrapper_stream_bytes_to_disk(
         Proxies to use for the request.
     chunk_size : int
         Size of each chunk to write (default 8192).
+    api_delay : float
+        Delay between API calls (defaults to 1.0 seconds).
+    timeout : float, optional
+        Timeout for the request (defaults to None).
     """
     if not isinstance(method, str):
         raise TypeError("Method must be a string.")
@@ -255,7 +270,7 @@ def request_wrapper_stream_bytes_to_disk(
         raise ValueError(
             f"Invalid method: {method}. Must be 'GET' for streaming to disk."
         )
-    _wait_for_api_call()
+    _wait_for_api_call(api_delay=api_delay)
     with requests.request(
         method=method.upper(),
         url=url,
