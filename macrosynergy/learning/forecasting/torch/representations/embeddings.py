@@ -8,7 +8,7 @@ import copy
 
 from sklearn.base import BaseEstimator, TransformerMixin
 
-class EncoderDecoder(nn.Module):
+class LinearEncoderDecoder(nn.Module):
     def __init__(self, init_dim, hidden_dim, valid_cids = None):
         super().__init__()
         self.init_dim = init_dim
