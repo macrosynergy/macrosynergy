@@ -135,7 +135,7 @@ if __name__ == "__main__":
     df_xcats.loc["GROWTH"] = ["2012-01-01", "2020-12-31", 1, 2, 0.9, 1]
     df_xcats.loc["INFL"] = ["2015-01-01", "2020-12-31", -0.1, 2, 0.8, 0.3]
 
-    dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
+    dfd = make_qdf(df_cids, df_xcats, back_ar=0.75, seed=42)
     dfd["grading"] = np.ones(dfd.shape[0])
     black = {
         "GBP": (
