@@ -195,14 +195,13 @@ class DataQueryFileAPIClient:
             raise InvalidResponseError(
                 f'Missing "file-datetime" in response from {endpoint} with params {params}'
             )
-        df = df[df["is-available"]]
+        df = df[df["is-available"]].copy()
         df["file-datetime"] = df["file-datetime"].astype(str)
 
         # Sort by real timestamp while leaving the column as string
         df["_ts"] = pd.to_datetime(df["file-datetime"], format="mixed", errors="coerce")
-        # mergesort keeps order stable for equal timestamps
         df = (
-            df.sort_values("_ts", ascending=False, kind="mergesort")
+            df.sort_values("_ts", ascending=False)
             .drop(columns="_ts")
             .reset_index(drop=True)
         )
