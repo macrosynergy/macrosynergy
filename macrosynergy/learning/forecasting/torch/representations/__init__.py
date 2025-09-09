@@ -1,4 +1,4 @@
-from embeddings import LinearEncoderDecoder, TorchEmbedding
+from .embeddings import LinearEncoderDecoder, TorchEmbedding
 
 __all__ = [
     "LinearEncoderDecoder",
