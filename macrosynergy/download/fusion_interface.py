@@ -125,7 +125,8 @@ def _wait_for_api_call(api_delay: float = FUSION_API_DELAY) -> bool:
         diff = (now - LAST_API_CALL).total_seconds()
         sleep_for = api_delay - diff
         if sleep_for > 0:
-            logger.info(f"Sleeping for {sleep_for:.2f} seconds for API rate limit.")
+            if sleep_for > 1:
+                logger.info(f"Sleeping for {sleep_for:.2f} seconds for API rate limit.")
             time.sleep(sleep_for)
         LAST_API_CALL = datetime.datetime.now()
     return True
@@ -286,7 +287,7 @@ def request_wrapper_stream_bytes_to_disk(
         proxies=proxies,
         stream=True,
         timeout=timeout,
-        verify=verify_ssl
+        verify=verify_ssl,
     ) as response:
         response.raise_for_status()
         os.makedirs(os.path.dirname(filename), exist_ok=True)
