@@ -30,6 +30,11 @@ from .ensemble import (
     VotingRegressor,
 )
 
+from .torch import (
+    TorchEmbedding,
+    LinearFactorLearning,
+)
+
 __all__ = [
     "LADRegressor",
     "KNNClassifier",
@@ -52,4 +57,6 @@ __all__ = [
     "DataFrameTransformer",
     "GlobalLocalRegression",
     "CountryByCountryRegression",
+    "TorchEmbedding",
+    "LinearFactorLearning",
 ]
