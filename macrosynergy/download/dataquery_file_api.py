@@ -71,6 +71,7 @@ class DataQueryFileAPIOauth(JPMorganOAuth):
         root_url: str = DQ_FILE_API_BASE_URL,
         application_name: str = "DataQueryFileAPI",
         proxies: Optional[Dict[str, str]] = None,
+        verify: bool = True,
         **kwargs,
     ):
         super().__init__(
@@ -81,6 +82,7 @@ class DataQueryFileAPIOauth(JPMorganOAuth):
             auth_url=auth_url,
             root_url=root_url,
             proxies=proxies,
+            verify=verify,
             **kwargs,
         )
 
@@ -93,6 +95,7 @@ class DataQueryFileAPIClient:
         base_url: str = DQ_FILE_API_BASE_URL,
         scope: str = DQ_FILE_API_SCOPE,
         proxies: Optional[Dict[str, str]] = None,
+        verify_ssl: bool = True,
     ):
         """
         Client for JPM DataQuery File APIs using request_wrapper utilities.
@@ -113,11 +116,13 @@ class DataQueryFileAPIClient:
         self.base_url = base_url.rstrip("/")
         self.scope = scope
         self.proxies = proxies
+        self.verify_ssl = verify_ssl
 
         self.oauth = DataQueryFileAPIOauth(
             client_id=self.client_id,
             client_secret=self.client_secret,
             resource=self.scope,
+            verify=self.verify_ssl,
         )
 
     def _get(
@@ -134,6 +139,7 @@ class DataQueryFileAPIClient:
             proxies=self.proxies,
             as_json=True,
             api_delay=DQ_FILE_API_DELAY_PARAM,
+            verify=self.verify_ssl,
         )
 
     def list_groups(self) -> pd.DataFrame:
