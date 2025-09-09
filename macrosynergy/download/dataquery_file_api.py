@@ -7,12 +7,18 @@ from pathlib import Path
 
 import concurrent.futures as cf
 import logging
+import shutil
+import uuid
 from typing import Dict, Any, Optional, List, Tuple
 from tqdm import tqdm
+
+import requests
+
 from macrosynergy.download.dataquery import JPMAQS_GROUP_ID
 from macrosynergy.download.fusion_interface import (
     request_wrapper,
     request_wrapper_stream_bytes_to_disk,
+    _wait_for_api_call,
 )
 from macrosynergy.download.dataquery import OAUTH_TOKEN_URL
 from macrosynergy.download.exceptions import DownloadError, InvalidResponseError
@@ -22,8 +28,13 @@ DQ_FILE_API_BASE_URL: str = (
     "https://api-strm-gw01.jpmchase.com/research/dataquery-authe/api/v2"
 )
 DQ_FILE_API_SCOPE: str = "JPMC:URI:RS-06785-DataQueryExternalApi-PROD"
-DQ_FILE_API_TIMEOUT: float = 600.0
+DQ_FILE_API_TIMEOUT: float = 300.0
+DQ_FILE_API_HEADERS_TIMEOUT: float = DQ_FILE_API_TIMEOUT / 10.0
 DQ_FILE_API_DELAY_PARAM: float = 0.04  # =1/25 ; 25 transactions per second
+DQ_FILE_API_DELAY_MARGIN: float = 1.1  # 10% safety margin
+DQ_FILE_API_SEGMENT_SIZE_MB: float = 8.0  # 8 MB
+
+
 JPMAQS_START_DATE = "20200101"
 
 logger = logging.getLogger(__name__)
@@ -139,7 +150,7 @@ class DataQueryFileAPIClient:
             proxies=self.proxies,
             as_json=True,
             api_delay=DQ_FILE_API_DELAY_PARAM,
-            verify=self.verify_ssl,
+            verify_ssl=self.verify_ssl,
         )
 
     def list_groups(self) -> pd.DataFrame:
@@ -301,6 +312,7 @@ class DataQueryFileAPIClient:
         out_dir: str = "./download",
         chunk_size: Optional[int] = None,
         timeout: Optional[float] = DQ_FILE_API_TIMEOUT,
+        max_retries: int = 3,
     ) -> str:
         """
         Stream a Parquet file directly to disk using request_wrapper_stream_bytes_to_disk.
@@ -328,17 +340,30 @@ class DataQueryFileAPIClient:
             logger.warning(f"File {file_path} already exists. It will be overwritten.")
             file_path.unlink()
         start = time.time()
-        request_wrapper_stream_bytes_to_disk(
-            filename=file_path,
+
+        download_args = dict(
+            filename=str(file_path),
             url=url,
-            method="GET",
             headers=headers,
             params=params,
             proxies=self.proxies,
             chunk_size=chunk_size,
             timeout=timeout,
             api_delay=DQ_FILE_API_DELAY_PARAM,
+            verify_ssl=self.verify_ssl,
         )
+
+        is_small_file = any(x in file_group_id.lower() for x in ["delta", "metadata"])
+
+        if is_small_file:
+            request_wrapper_stream_bytes_to_disk(**download_args)
+        else:
+            SegmentedFileDownloader(
+                **download_args,
+                max_file_retries=max_retries,
+                start_download=True,
+            )
+
         time_taken = time.time() - start
         logger.info(
             f"Downloaded {file_name} in {time_taken:.2f} seconds to {file_path}"
@@ -350,7 +375,7 @@ class DataQueryFileAPIClient:
         filenames: List[str],
         out_dir: str = "./download",
         max_retries: int = 3,
-        n_jobs: int = 4,
+        n_jobs: int = None,
         chunk_size: Optional[int] = None,
         timeout: Optional[float] = DQ_FILE_API_TIMEOUT,
     ) -> None:
@@ -380,6 +405,8 @@ class DataQueryFileAPIClient:
                 fname = futures[future]
                 try:
                     future.result()
+                except KeyboardInterrupt:
+                    raise
                 except Exception as e:
                     logger.error(f"Failed to download {fname}: {e}")
                     failed_files.append(fname)
@@ -440,13 +467,205 @@ class DataQueryFileAPIClient:
 
         files_df = files_df[files_df["file-datetime"] >= filter_ts]
         files_df = files_df[files_df["is-available"]]
+        files_df = files_df.sort_values(by="file-datetime", ascending=True).reset_index(
+            drop=True
+        )
 
         return self.download_multiple_parquet_files(
-            filenames=sorted(files_df["file-name"].tolist()),
+            filenames=files_df["file-name"].tolist(),
             out_dir=out_dir,
             chunk_size=chunk_size,
             timeout=timeout,
         )
+
+
+class SegmentedFileDownloader:
+    """Manages the concurrent download of a single file."""
+
+    def __init__(
+        self,
+        filename: str,
+        url: str,
+        headers: Dict[str, str],
+        params: Dict[str, str],
+        proxies: Optional[Dict[str, str]] = None,
+        chunk_size: int = 8192,
+        segment_size_mb: int = DQ_FILE_API_SEGMENT_SIZE_MB,
+        timeout: int = DQ_FILE_API_TIMEOUT,
+        api_delay: float = DQ_FILE_API_DELAY_PARAM,
+        api_delay_margin: float = DQ_FILE_API_DELAY_MARGIN,
+        headers_timeout: int = DQ_FILE_API_HEADERS_TIMEOUT,
+        max_concurrent_downloads: int = None,
+        max_file_retries: int = 3,
+        verify_ssl: bool = True,
+        start_download: bool = False,
+    ):
+        self.filename = Path(filename)
+        self.url = url
+        self.headers = headers
+        self.params = params
+        self.file_id = params.get("file-group-id", self.filename.name)
+        self.proxies = proxies
+        self.out_dir = Path(self.filename.parent)
+        self.out_dir.mkdir(parents=True, exist_ok=True)
+        self.chunk_size = chunk_size
+        self.segment_size_mb = segment_size_mb
+        self.timeout = timeout
+        self.api_delay = api_delay * api_delay_margin
+        self.headers_timeout = headers_timeout
+        self.max_concurrent_downloads = max_concurrent_downloads
+        self.max_file_retries = max_file_retries
+        self.verify_ssl = verify_ssl
+        self.temp_dir = self.out_dir / f"_tmp_{self.filename.name}_{uuid.uuid4().hex}"
+
+        if start_download:
+            self.download()
+
+    def log(self, msg: str, part_num: int = None):
+        part_info = f"[part={part_num}]" if part_num is not None else ""
+        logger.info(f"[SegmentedFileDownloader][file={self.file_id}]{part_info} {msg}")
+
+    def download(self) -> Path:
+        """Orchestrates the file download process."""
+        last_exception = None
+        for attempt in range(self.max_file_retries + 1):
+            try:
+                self.log("Starting concurrent download...")
+                start_time = time.time()
+                if self.temp_dir.exists():
+                    shutil.rmtree(self.temp_dir)
+                self.temp_dir.mkdir(exist_ok=True, parents=True)
+
+                total_size = self._get_file_size()
+                self.log(f"File size: {total_size / (1024*1024):.2f} MB")
+
+                chunk_size = int(self.segment_size_mb * 1024 * 1024)
+                chunks = range(0, total_size, chunk_size)
+                self.log(f"Creating {len(chunks)} download tasks...")
+
+                self._download_chunks_concurrently(chunks, total_size)
+
+                final_path = Path(self.filename).resolve()
+                self._assemble_parts(final_path, len(chunks))
+
+                duration = time.time() - start_time
+                self.log(f"Download complete in {duration:.2f} seconds.")
+                self.log(f"Saved to: {final_path}")
+                return final_path
+            except KeyboardInterrupt:
+                raise
+            except Exception as e:
+                last_exception = e
+                self.log(f"Download failed. Error: {e}")
+                if attempt < self.max_file_retries:
+                    self.log(
+                        f"Retrying download (attempt {attempt + 2}/{self.max_file_retries + 1})..."
+                    )
+                if self.temp_dir.exists():
+                    shutil.rmtree(self.temp_dir)
+
+        raise last_exception
+
+    def _get_file_size(self) -> int:
+        """Fetches the total size of the file."""
+        self.log("Fetching file size...")
+        _wait_for_api_call(self.api_delay)
+        start_time = time.time()
+        response = requests.head(
+            self.url,
+            params=self.params,
+            headers=self.headers,
+            proxies=self.proxies,
+            verify=self.verify_ssl,
+        )
+        response.raise_for_status()
+        duration = time.time() - start_time
+        self.log(f"Received headers in {duration:.2f} seconds.")
+        cl_header = response.headers.get("Content-Length")
+        try:
+            content_length = int(cl_header)
+        except (ValueError, TypeError):
+            raise ValueError(
+                f"[SegmentedFileDownloader][file={self.file_id}] Invalid or missing Content-Length header: {cl_header}."
+            )
+        self.log(f"Content-Length: {content_length}")
+        return content_length
+
+    def _download_chunks_concurrently(self, chunks: range, total_size: int):
+        """Downloads all file chunks in parallel."""
+        with cf.ThreadPoolExecutor(
+            max_workers=self.max_concurrent_downloads
+        ) as executor:
+            futures = []
+            for i, start in enumerate(chunks):
+                # wait before next API call
+                _wait_for_api_call(self.api_delay)
+                future = executor.submit(
+                    self._download_chunk,
+                    i,
+                    start,
+                    min(start + chunks.step - 1, total_size - 1),
+                )
+                futures.append(future)
+            for future in cf.as_completed(futures):
+                if future.exception():
+                    executor.shutdown(wait=False, cancel_futures=True)
+                    raise future.exception()
+
+    def _download_chunk(self, part_num: int, start_byte: int, end_byte: int) -> None:
+        """Wrapper to start the recursive download of a single file chunk."""
+        self._download_chunk_retry(part_num, start_byte, end_byte, retries=1)
+
+    def _download_chunk_retry(
+        self, part_num: int, start_byte: int, end_byte: int, retries: int
+    ) -> None:
+        """Downloads a single file chunk with a recursive retry mechanism."""
+        self.log(f"Downloading bytes {start_byte}-{end_byte}...", part_num=part_num)
+        segment_headers = self.headers.copy()
+        segment_headers["Range"] = f"bytes={start_byte}-{end_byte}"
+        part_path = self.temp_dir / f"part_{part_num}"
+
+        try:
+            with requests.get(
+                headers=segment_headers,
+                url=self.url,
+                params=self.params,
+                proxies=self.proxies,
+                stream=True,
+                timeout=self.timeout,
+                verify=self.verify_ssl,
+            ) as response:
+                response.raise_for_status()
+                with open(part_path, "wb") as f:
+                    for chunk in response.iter_content(chunk_size=8192):
+                        f.write(chunk)
+            self.log("Finished download.", part_num=part_num)
+        except KeyboardInterrupt:
+            raise
+        except Exception as e:
+            if isinstance(e, requests.exceptions.HTTPError):
+                if hasattr(e, "response") and hasattr(e.response, "status_code"):
+                    if 400 <= e.response.status_code < 500:
+                        retries = 0
+                        raise e
+            self.log(f"FAILED download. Error: {e}", part_num=part_num)
+            if retries > 0:
+                self.log("Retrying download...", part_num=part_num)
+                _wait_for_api_call(self.api_delay)
+                self._download_chunk_retry(part_num, start_byte, end_byte, retries - 1)
+            else:
+                raise
+
+    def _assemble_parts(self, final_path: Path, num_parts: int):
+        """Assembles the downloaded chunks into a single file."""
+        self.log(f"Assembling {num_parts} parts...")
+        with open(final_path, "wb") as final_file:
+            for i in range(num_parts):
+                part_path = self.temp_dir / f"part_{i}"
+                with open(part_path, "rb") as part_file:
+                    shutil.copyfileobj(part_file, final_file)
+        shutil.rmtree(self.temp_dir)
+        self.log("Temporary files cleaned up.")
 
 
 if __name__ == "__main__":
@@ -477,9 +696,10 @@ if __name__ == "__main__":
 
     dq.download_full_snapshot(
         out_dir="./data/dqfiles/test/",
+        include_delta=False,
+        include_metadata=False,
         # since_datetime=pd.Timestamp.now().strftime("%Y%m%d"),
-        # since_datetime='20250828',
-        # chunk_size=1024 * 1024 * 3,  # 3 MB
+        since_datetime="20250809",
     )
     end = time.time()
     print(f"Download completed in {end - start:.2f} seconds")
