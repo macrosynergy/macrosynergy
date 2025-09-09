@@ -13,10 +13,10 @@ from macrosynergy.download.dataquery import JPMAQS_GROUP_ID
 from macrosynergy.download.fusion_interface import (
     request_wrapper,
     request_wrapper_stream_bytes_to_disk,
-    FusionOAuth,
 )
-
+from macrosynergy.download.dataquery import OAUTH_TOKEN_URL
 from macrosynergy.download.exceptions import DownloadError, InvalidResponseError
+from macrosynergy.download.jpm_oauth import JPMorganOAuth
 
 DQ_FILE_API_BASE_URL: str = (
     "https://api-strm-gw01.jpmchase.com/research/dataquery-authe/api/v2"
@@ -61,6 +61,30 @@ def get_client_id_secret() -> Optional[Tuple[str, str]]:
     return None, None
 
 
+class DataQueryFileAPIOauth(JPMorganOAuth):
+    def __init__(
+        self,
+        client_id: str,
+        client_secret: str,
+        resource: str = DQ_FILE_API_SCOPE,
+        auth_url: str = OAUTH_TOKEN_URL,
+        root_url: str = DQ_FILE_API_BASE_URL,
+        application_name: str = "DataQueryFileAPI",
+        proxies: Optional[Dict[str, str]] = None,
+        **kwargs,
+    ):
+        super().__init__(
+            client_id=client_id,
+            client_secret=client_secret,
+            resource=resource,
+            application_name=application_name,
+            auth_url=auth_url,
+            root_url=root_url,
+            proxies=proxies,
+            **kwargs,
+        )
+
+
 class DataQueryFileAPIClient:
     def __init__(
         self,
@@ -90,7 +114,7 @@ class DataQueryFileAPIClient:
         self.scope = scope
         self.proxies = proxies
 
-        self.oauth = FusionOAuth(
+        self.oauth = DataQueryFileAPIOauth(
             client_id=self.client_id,
             client_secret=self.client_secret,
             resource=self.scope,
