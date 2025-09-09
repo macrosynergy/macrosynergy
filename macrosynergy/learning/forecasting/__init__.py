@@ -30,10 +30,7 @@ from .ensemble import (
     VotingRegressor,
 )
 
-from .torch import (
-    TorchEmbedding,
-    LinearFactorLearning,
-)
+from .factor_models import LinearFactorLearning
 
 __all__ = [
     "LADRegressor",
@@ -57,6 +54,5 @@ __all__ = [
     "DataFrameTransformer",
     "GlobalLocalRegression",
     "CountryByCountryRegression",
-    "TorchEmbedding",
     "LinearFactorLearning",
 ]
