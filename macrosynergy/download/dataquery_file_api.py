@@ -8,12 +8,7 @@ from pathlib import Path
 import concurrent.futures as cf
 import logging
 from typing import Dict, Any, Optional, List, Tuple
-import re
-import shutil
 from tqdm import tqdm
-import asyncio
-from threading import Thread
-import aiohttp
 from macrosynergy.download.dataquery import JPMAQS_GROUP_ID
 from macrosynergy.download.fusion_interface import (
     request_wrapper,
@@ -64,108 +59,6 @@ def get_client_id_secret() -> Optional[Tuple[str, str]]:
             return client_id, client_secret
 
     return None, None
-
-
-def request_wrapper_stream_bytes_to_disk_async(
-    filename,
-    url,
-    method="GET",
-    headers=None,
-    params=None,
-    data=None,
-    json_payload=None,
-    proxies=None,
-    chunk_size=None,
-    api_delay=0.0,
-    timeout=None,
-) -> None:
-    """
-    Stream a request's response bytes directly to disk (aiohttp under the hood).
-    - Temp file is <target_dir>/<target_name>.part, then atomically moved.
-    - Synchronous API for callers (no `await`), async I/O internally.
-    - Raises on HTTP/I/O error.
-    """
-    if method.upper() != "GET":
-        raise ValueError("Only GET is supported for streaming to disk.")
-
-    # Resolve and ensure the correct subfolder exists
-    file_path = Path(filename).expanduser()
-    file_path.parent.mkdir(parents=True, exist_ok=True)
-    # Always place temp file in the SAME directory as the target file
-    tmp_path = (file_path.parent / (file_path.name + ".part")).resolve()
-    file_path = file_path.resolve()
-
-    size = 8192 if not chunk_size or chunk_size <= 0 else int(chunk_size)
-
-    # Normalize proxy for aiohttp
-    proxy_url = None
-    if isinstance(proxies, dict):
-        proxy_url = proxies.get("https") or proxies.get("http")
-    elif isinstance(proxies, str):
-        proxy_url = proxies
-
-    async def _run():
-        if api_delay and api_delay > 0:
-            await asyncio.sleep(api_delay)
-
-        timeout_obj = aiohttp.ClientTimeout(total=timeout) if timeout else None
-        async with aiohttp.ClientSession(timeout=timeout_obj) as session:
-            async with session.get(
-                url,
-                headers=headers,
-                params=params,
-                data=data,
-                json=json_payload,
-                proxy=proxy_url,
-            ) as resp:
-                resp.raise_for_status()
-                # Write chunks into the temp file *in the correct subfolder*
-                with open(tmp_path, "wb") as f:
-                    async for chunk in resp.content.iter_chunked(size):
-                        if chunk:
-                            f.write(chunk)
-        os.replace(tmp_path, file_path)
-
-    def _cleanup():
-        try:
-            if tmp_path.exists():
-                tmp_path.unlink()
-        except Exception:
-            pass
-
-    # Run without exposing `await`
-    try:
-        asyncio.get_running_loop()  # will raise RuntimeError if no loop
-        exc = {}
-
-        def _runner():
-            try:
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                loop.run_until_complete(_run())
-            except BaseException as e:
-                exc["e"] = e
-            finally:
-                try:
-                    loop.close()
-                except Exception:
-                    pass
-
-        t = Thread(target=_runner, daemon=True)
-        t.start()
-        t.join()
-        if "e" in exc:
-            raise exc["e"]
-    except RuntimeError:
-        # No running loop; safe to use asyncio.run
-        try:
-            asyncio.run(_run())
-        except Exception:
-            _cleanup()
-            raise
-    except Exception:
-        _cleanup()
-        raise
 
 
 class DataQueryFileAPIClient:
@@ -406,8 +299,7 @@ class DataQueryFileAPIClient:
             logger.warning(f"File {file_path} already exists. It will be overwritten.")
             file_path.unlink()
         start = time.time()
-        # request_wrapper_stream_bytes_to_disk(
-        request_wrapper_stream_bytes_to_disk_async(
+        request_wrapper_stream_bytes_to_disk(
             filename=file_path,
             url=url,
             method="GET",
