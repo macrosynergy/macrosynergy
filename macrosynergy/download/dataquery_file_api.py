@@ -607,10 +607,14 @@ class SegmentedFileDownloader:
                     min(start + chunks.step - 1, total_size - 1),
                 )
                 futures.append(future)
-            for future in cf.as_completed(futures):
-                if future.exception():
-                    executor.shutdown(wait=False, cancel_futures=True)
-                    raise future.exception()
+            try:
+                for future in cf.as_completed(futures):
+                    if future.exception():
+                        executor.shutdown(wait=False, cancel_futures=True)
+                        raise future.exception()
+            except KeyboardInterrupt:
+                executor.shutdown(wait=False, cancel_futures=True)
+                raise
 
     def _download_chunk(self, part_num: int, start_byte: int, end_byte: int) -> None:
         """Wrapper to start the recursive download of a single file chunk."""
