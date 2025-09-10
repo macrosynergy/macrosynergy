@@ -38,7 +38,6 @@ DQ_FILE_API_SEGMENT_SIZE_MB: float = 8.0  # 8 MB
 JPMAQS_START_DATE = "20200101"
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
 
 
 def validate_dq_timestamp(
@@ -513,7 +512,12 @@ class SegmentedFileDownloader:
         self.url = url
         self.headers = headers
         self.params = params
-        self.file_id = params.get("file-group-id", self.filename.name)
+        if not set(["file-group-id", "file-datetime"]).issubset(params):
+            raise ValueError(
+                "Missing required parameters: 'file-group-id' and 'file-datetime'"
+            )
+
+        self.file_id = params["file-group-id"] + "_" + params["file-datetime"]
         self.proxies = proxies
         self.out_dir = Path(self.filename.parent)
         self.out_dir.mkdir(parents=True, exist_ok=True)
@@ -539,7 +543,7 @@ class SegmentedFileDownloader:
         last_exception = None
         for attempt in range(self.max_file_retries + 1):
             try:
-                self.log("Starting concurrent download...")
+                self.log("Starting concurrent download")
                 start_time = time.time()
                 if self.temp_dir.exists():
                     shutil.rmtree(self.temp_dir)
@@ -550,7 +554,7 @@ class SegmentedFileDownloader:
 
                 chunk_size = int(self.segment_size_mb * 1024 * 1024)
                 chunks = range(0, total_size, chunk_size)
-                self.log(f"Creating {len(chunks)} download tasks...")
+                self.log(f"Creating {len(chunks)} download tasks")
 
                 self._download_chunks_concurrently(chunks, total_size)
 
@@ -633,7 +637,7 @@ class SegmentedFileDownloader:
         self, part_num: int, start_byte: int, end_byte: int, retries: int
     ) -> None:
         """Downloads a single file chunk with a recursive retry mechanism."""
-        self.log(f"Downloading bytes {start_byte}-{end_byte}...", part_num=part_num)
+        self.log(f"Downloading bytes [{start_byte}-{end_byte}]", part_num=part_num)
         segment_headers = self.headers.copy()
         segment_headers["Range"] = f"bytes={start_byte}-{end_byte}"
         part_path = self.temp_dir / f"part_{part_num}"
@@ -671,7 +675,7 @@ class SegmentedFileDownloader:
 
     def _assemble_parts(self, final_path: Path, num_parts: int):
         """Assembles the downloaded chunks into a single file."""
-        self.log(f"Assembling {num_parts} parts...")
+        self.log(f"Assembling {num_parts} parts")
         with open(final_path, "wb") as final_file:
             for i in range(num_parts):
                 part_path = self.temp_dir / f"part_{i}"
