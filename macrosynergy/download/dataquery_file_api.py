@@ -488,9 +488,9 @@ class DataQueryFileAPIClient:
         )
 
         filter_ts = pd.Timestamp(effective_ts)
+        filter_date = pd.Timestamp(effective_ts).normalize()
         if "T" not in effective_ts:
-            filter_ts = filter_ts.normalize()
-        filter_date = filter_ts.normalize()
+            filter_ts = filter_ts.normalize().tz_localize("UTC")
 
         files_df = self.list_available_files_for_all_file_groups(
             include_full_snapshots=include_full_snapshots,
@@ -513,7 +513,7 @@ class DataQueryFileAPIClient:
             return
 
         logger.info(f"Found {num_files_to_download} new files to download.")
-
+        
         self.download_multiple_parquet_files(
             filenames=files_df["file-name"].tolist(),
             out_dir=out_dir,
