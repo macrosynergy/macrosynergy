@@ -490,7 +490,8 @@ class DataQueryFileAPIClient:
         filter_ts = pd.Timestamp(effective_ts)
         filter_date = pd.Timestamp(effective_ts).normalize()
         if "T" not in effective_ts:
-            filter_ts = filter_ts.normalize().tz_localize("UTC")
+            filter_ts = filter_ts.normalize()
+        filter_ts = filter_ts.tz_localize("UTC")
 
         files_df = self.list_available_files_for_all_file_groups(
             include_full_snapshots=include_full_snapshots,
@@ -513,7 +514,7 @@ class DataQueryFileAPIClient:
             return
 
         logger.info(f"Found {num_files_to_download} new files to download.")
-        
+
         self.download_multiple_parquet_files(
             filenames=files_df["file-name"].tolist(),
             out_dir=out_dir,
@@ -728,24 +729,24 @@ class SegmentedFileDownloader:
 if __name__ == "__main__":
     dq = DataQueryFileAPIClient()
 
-    print("Current time:", pd.Timestamp.now().isoformat())
+    print("Current time UTC:", pd.Timestamp.utcnow().isoformat())
 
-    print("Calling `/group/files`")
-    start = time.time()
-    # print(dq.list_group_files())
-    end = time.time()
-    print(f"Call completed in {end - start:.2f} seconds")
+    # print("Calling `/group/files`")
+    # start = time.time()
+    # # print(dq.list_group_files())
+    # end = time.time()
+    # print(f"Call completed in {end - start:.2f} seconds")
 
-    available_files = dq.list_available_files(
-        file_group_id="JPMAQS_MACROECONOMIC_TRENDS_DELTA"
-    )
-    latest_file_timestamp = available_files["file-datetime"].iloc[0]
-    print(
-        dq.check_file_availability(
-            file_group_id="JPMAQS_MACROECONOMIC_TRENDS_DELTA",
-            file_datetime="20250905T084751",
-        )
-    )
+    # available_files = dq.list_available_files(
+    #     file_group_id="JPMAQS_MACROECONOMIC_TRENDS_DELTA"
+    # )
+    # latest_file_timestamp = available_files["file-datetime"].iloc[0]
+    # print(
+    #     dq.check_file_availability(
+    #         file_group_id="JPMAQS_MACROECONOMIC_TRENDS_DELTA",
+    #         file_datetime="20250905T084751",
+    #     )
+    # )
 
     print("Starting download")
     start = time.time()
@@ -753,8 +754,8 @@ if __name__ == "__main__":
 
     dq.download_full_snapshot(
         out_dir="./data/dqfiles/test/",
-        include_delta=False,
-        include_metadata=False,
+        # include_delta=False,
+        # include_metadata=False,
         # since_datetime=pd.Timestamp.now().strftime("%Y%m%d"),
         since_datetime="20250909",
     )
