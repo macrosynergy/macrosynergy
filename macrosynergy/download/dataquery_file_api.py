@@ -378,6 +378,7 @@ class DataQueryFileAPIClient:
         n_jobs: int = None,
         chunk_size: Optional[int] = None,
         timeout: Optional[float] = DQ_FILE_API_TIMEOUT,
+        show_progress: bool = True,
     ) -> None:
         Path(out_dir).mkdir(parents=True, exist_ok=True)
         failed_files = []
@@ -385,7 +386,11 @@ class DataQueryFileAPIClient:
             n_jobs = None
         with cf.ThreadPoolExecutor(max_workers=n_jobs) as executor:
             futures = {}
-            for filename in tqdm(filenames, desc="Requesting Parquet files"):
+            for filename in tqdm(
+                filenames,
+                desc="Requesting Parquet files",
+                disable=not show_progress,
+            ):
                 futures[
                     executor.submit(
                         self.download_parquet_file,
@@ -401,11 +406,13 @@ class DataQueryFileAPIClient:
                 cf.as_completed(futures),
                 total=len(futures),
                 desc="Downloading Parquet files",
+                disable=not show_progress,
             ):
                 fname = futures[future]
                 try:
                     future.result()
                 except KeyboardInterrupt:
+                    executor.shutdown(wait=False, cancel_futures=True)
                     raise
                 except Exception as e:
                     logger.error(f"Failed to download {fname}: {e}")
@@ -442,6 +449,7 @@ class DataQueryFileAPIClient:
         include_full_snapshots: bool = True,
         include_delta: bool = True,
         include_metadata: bool = True,
+        show_progress: bool = True,
     ) -> None:
         Path(out_dir).mkdir(parents=True, exist_ok=True)
 
@@ -476,6 +484,7 @@ class DataQueryFileAPIClient:
             out_dir=out_dir,
             chunk_size=chunk_size,
             timeout=timeout,
+            show_progress=show_progress,
         )
 
 
