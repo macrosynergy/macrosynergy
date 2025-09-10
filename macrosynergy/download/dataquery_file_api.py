@@ -612,7 +612,6 @@ class SegmentedFileDownloader:
             futures = []
             for i, start in enumerate(chunks):
                 # wait before next API call
-                _wait_for_api_call(self.api_delay)
                 future = executor.submit(
                     self._download_chunk,
                     i,
@@ -643,6 +642,7 @@ class SegmentedFileDownloader:
         part_path = self.temp_dir / f"part_{part_num}"
 
         try:
+            _wait_for_api_call(self.api_delay)
             with requests.get(
                 headers=segment_headers,
                 url=self.url,
@@ -668,7 +668,6 @@ class SegmentedFileDownloader:
             self.log(f"FAILED download. Error: {e}", part_num=part_num)
             if retries > 0:
                 self.log("Retrying download...", part_num=part_num)
-                _wait_for_api_call(self.api_delay)
                 self._download_chunk_retry(part_num, start_byte, end_byte, retries - 1)
             else:
                 raise
