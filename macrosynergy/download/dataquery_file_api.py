@@ -8,6 +8,7 @@ from pathlib import Path
 import concurrent.futures as cf
 import logging
 import shutil
+import traceback as tb
 import uuid
 from typing import Dict, Any, Optional, List, Tuple
 from tqdm import tqdm
@@ -134,6 +135,14 @@ class DataQueryFileAPIClient:
             resource=self.scope,
             verify=self.verify_ssl,
         )
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        if exc_type is not None:
+            logger.error(tb.format_exc())
+        return False
 
     def _get(
         self, endpoint: str, params: Optional[Dict[str, Any]] = None
@@ -335,9 +344,12 @@ class DataQueryFileAPIClient:
         Path(out_dir).mkdir(parents=True, exist_ok=True)
         file_name = filename or f"{file_group_id}_{file_datetime}.parquet"
         file_path = Path(out_dir) / Path(file_name)
+
         if file_path.exists():
             logger.warning(f"File {file_path} already exists. It will be overwritten.")
             file_path.unlink()
+
+        logger.info(f"Starting download of {file_name}...")
         start = time.time()
 
         download_args = dict(
@@ -380,6 +392,8 @@ class DataQueryFileAPIClient:
         show_progress: bool = True,
     ) -> None:
         Path(out_dir).mkdir(parents=True, exist_ok=True)
+        start_time = time.time()
+        logger.info(f"Starting download of {len(filenames)} files.")
         failed_files = []
         if n_jobs == -1:
             n_jobs = None
@@ -418,6 +432,10 @@ class DataQueryFileAPIClient:
                     failed_files.append(fname)
 
         if not failed_files:
+            total_time = time.time() - start_time
+            logger.info(
+                f"Successfully downloaded {len(filenames)} files in {total_time:.2f} seconds."
+            )
             return  # All downloads scuccessful
 
         log_msg = f"Failed to download {len(failed_files)} files"
@@ -451,11 +469,15 @@ class DataQueryFileAPIClient:
         show_progress: bool = True,
     ) -> None:
         Path(out_dir).mkdir(parents=True, exist_ok=True)
+        start_time = time.time()
 
         if file_datetime is None and since_datetime is None:
             since_datetime = pd.Timestamp.now().strftime("%Y%m%d")
 
         effective_ts = file_datetime or since_datetime
+        logger.info(
+            f"Starting snapshot download to '{out_dir}' for files since {effective_ts}."
+        )
 
         validate_dq_timestamp(
             effective_ts,
@@ -478,13 +500,23 @@ class DataQueryFileAPIClient:
             drop=True
         )
 
-        return self.download_multiple_parquet_files(
+        num_files_to_download = len(files_df["file-name"])
+        if not num_files_to_download:
+            logger.info("No new files to download.")
+            return
+
+        logger.info(f"Found {num_files_to_download} new files to download.")
+
+        self.download_multiple_parquet_files(
             filenames=files_df["file-name"].tolist(),
             out_dir=out_dir,
             chunk_size=chunk_size,
             timeout=timeout,
             show_progress=show_progress,
         )
+
+        total_time = time.time() - start_time
+        logger.info(f"Snapshot download completed in {total_time:.2f} seconds.")
 
 
 class SegmentedFileDownloader:
@@ -681,6 +713,8 @@ class SegmentedFileDownloader:
                 with open(part_path, "rb") as part_file:
                     shutil.copyfileobj(part_file, final_file)
         shutil.rmtree(self.temp_dir)
+        final_size = final_path.stat().st_size
+        self.log(f"Assembled file size: {final_size / (1024*1024):.2f} MB")
         self.log("Temporary files cleaned up.")
 
 
