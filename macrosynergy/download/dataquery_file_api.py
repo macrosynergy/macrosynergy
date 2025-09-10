@@ -265,6 +265,7 @@ class DataQueryFileAPIClient:
         include_full_snapshots: bool = True,
         include_delta: bool = True,
         include_metadata: bool = True,
+        convert_metadata_timestamps: bool = True,
     ) -> pd.DataFrame:
         files_groups = self.list_group_files(
             include_full_snapshots=include_full_snapshots,
@@ -291,9 +292,11 @@ class DataQueryFileAPIClient:
                 results.append(available_files)
 
         files_df = pd.concat(results).reset_index(drop=True)
-        files_df["file-datetime"] = pd.to_datetime(
-            files_df["file-datetime"], format="mixed"
-        )
+        if convert_metadata_timestamps:
+            for col in ["file-datetime", "last-modified"]:
+                if col not in files_df.columns:
+                    raise InvalidResponseError(f'Missing "{col}" in response')
+                files_df[col] = pd.to_datetime(files_df[col], format="mixed")
         return files_df
 
     def check_file_availability(
@@ -487,6 +490,7 @@ class DataQueryFileAPIClient:
         filter_ts = pd.Timestamp(effective_ts)
         if "T" not in effective_ts:
             filter_ts = filter_ts.normalize()
+        filter_date = filter_ts.normalize()
 
         files_df = self.list_available_files_for_all_file_groups(
             include_full_snapshots=include_full_snapshots,
@@ -494,11 +498,14 @@ class DataQueryFileAPIClient:
             include_metadata=include_metadata,
         )
 
-        files_df = files_df[files_df["file-datetime"] >= filter_ts]
         files_df = files_df[files_df["is-available"]]
-        files_df = files_df.sort_values(by="file-datetime", ascending=True).reset_index(
-            drop=True
-        )
+        files_df = files_df[files_df["file-datetime"] >= filter_date]
+        files_df = files_df[files_df["last-modified"] >= filter_ts]
+
+        files_df = files_df.sort_values(
+            by="file-datetime",
+            ascending=True,
+        ).reset_index(drop=True)
 
         num_files_to_download = len(files_df["file-name"])
         if not num_files_to_download:
@@ -749,7 +756,7 @@ if __name__ == "__main__":
         include_delta=False,
         include_metadata=False,
         # since_datetime=pd.Timestamp.now().strftime("%Y%m%d"),
-        since_datetime="20250809",
+        since_datetime="20250909",
     )
     end = time.time()
     print(f"Download completed in {end - start:.2f} seconds")
