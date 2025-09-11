@@ -323,6 +323,36 @@ class TestSegmentedFileDownloaderOrchestration(unittest.TestCase):
         # rmtree called at start + in cleanup for each of the 3 failed attempts
         self.assertEqual(mock_rmtree.call_count, 6)
 
+    @patch("time.sleep", MagicMock())
+    @patch(
+        "macrosynergy.download.dataquery_file_api.SegmentedFileDownloader._download_chunks_concurrently"
+    )
+    @patch(
+        "macrosynergy.download.dataquery_file_api.SegmentedFileDownloader._get_file_size"
+    )
+    @patch("pathlib.Path.exists", return_value=True)
+    def test_cleanup_on_concurrent_download_failure(
+        self, mock_exists, mock_get_size, mock_download_chunks, mock_mkdir, mock_rmtree
+    ):
+        """
+        Tests that temporary files are cleaned up if an error occurs during the chunk download phase.
+        """
+        # Setup: fake file size and a failure during chunk download
+        mock_get_size.return_value = 2048
+        error_to_raise = ConnectionError("Failed to connect")
+        mock_download_chunks.side_effect = error_to_raise
+
+        # call download - it should fail
+        with self.assertRaises(ConnectionError) as cm:
+            self.downloader.download()
+
+        # check that the correct error was raised
+        self.assertIs(cm.exception, error_to_raise)
+
+        ## count cleanup calls
+        self.assertEqual(mock_rmtree.call_count, 6)
+        mock_rmtree.assert_called_with(self.downloader.temp_dir)
+
 
 if __name__ == "__main__":
     unittest.main()
