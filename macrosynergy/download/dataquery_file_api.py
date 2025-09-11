@@ -202,7 +202,7 @@ class DataQueryFileAPIClient:
         df = pd.json_normalize(payload, record_path=["file-group-ids"])
 
         isdeltafile = df["file-group-id"].str.endswith("_DELTA")
-        ismetadata = df["file-group-id"].str.contains("_METADATA_")
+        ismetadata = df["file-group-id"].str.contains("_METADATA")
         isfullsnapshot = ~(isdeltafile | ismetadata)
 
         mask = pd.Series(False, index=df.index)
