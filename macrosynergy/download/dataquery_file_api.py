@@ -453,10 +453,12 @@ class DataQueryFileAPIClient:
 
         return self.download_multiple_parquet_files(
             filenames=failed_files,
+            out_dir=out_dir,
             max_retries=max_retries - 1,
             n_jobs=n_jobs,
             chunk_size=chunk_size,
             timeout=timeout,
+            show_progress=show_progress,
         )
 
     def download_full_snapshot(
@@ -785,9 +787,9 @@ if __name__ == "__main__":
 
     dq.download_full_snapshot(
         out_dir="./data/dqfiles/test/",
-        include_full_snapshots=False,
-        include_delta=True,
-        include_metadata=False,
+        # include_full_snapshots=False,
+        # include_delta=True,
+        # include_metadata=False,
         # since_datetime=pd.Timestamp.now().strftime("%Y%m%d"),
         since_datetime="20250909",
     )
