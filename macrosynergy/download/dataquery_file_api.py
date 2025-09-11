@@ -547,6 +547,7 @@ class SegmentedFileDownloader:
         max_file_retries: int = 3,
         verify_ssl: bool = True,
         start_download: bool = False,
+        debug: bool = False,
     ):
         self.filename = Path(filename)
         self.url = url
@@ -569,53 +570,76 @@ class SegmentedFileDownloader:
         self.max_concurrent_downloads = max_concurrent_downloads
         self.max_file_retries = max_file_retries
         self.verify_ssl = verify_ssl
+        self.debug = debug
         self.temp_dir = self.out_dir / f"_tmp_{self.filename.name}_{uuid.uuid4().hex}"
 
         if start_download:
-            self.download()
+            try:
+                self.download()
+            except Exception:
+                self.cleanup()
+                raise
 
-    def log(self, msg: str, part_num: int = None):
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        if exc_type is not None:
+            logger.error(tb.format_exc())
+        self.cleanup()
+        return False
+
+    def log(self, msg: str, part_num: int = None, level: int = logging.INFO):
         part_info = f"[part={part_num}]" if part_num is not None else ""
-        logger.info(f"[SegmentedFileDownloader][file={self.file_id}]{part_info} {msg}")
+        logger.log(
+            level, f"[SegmentedFileDownloader][file={self.file_id}]{part_info} {msg}"
+        )
 
-    def download(self) -> Path:
+    def download(self, retries: int = None) -> Path:
         """Orchestrates the file download process."""
         last_exception = None
-        for attempt in range(self.max_file_retries + 1):
-            try:
-                self.log("Starting concurrent download")
-                start_time = time.time()
-                if self.temp_dir.exists():
-                    shutil.rmtree(self.temp_dir)
-                self.temp_dir.mkdir(exist_ok=True, parents=True)
+        if retries is None:
+            retries = self.max_file_retries
 
-                total_size = self._get_file_size()
-                self.log(f"File size: {total_size / (1024*1024):.2f} MB")
+        try:
+            self.log("Starting segmented file download")
+            start_time = time.time()
+            if self.temp_dir.exists():
+                shutil.rmtree(self.temp_dir)
+            self.temp_dir.mkdir(exist_ok=True, parents=True)
 
-                chunk_size = int(self.segment_size_mb * 1024 * 1024)
-                chunks = range(0, total_size, chunk_size)
-                self.log(f"Creating {len(chunks)} download tasks")
+            total_size = self._get_file_size()
+            self.log(f"File size: {total_size / (1024*1024):.2f} MB")
 
-                self._download_chunks_concurrently(chunks, total_size)
+            chunk_size = int(self.segment_size_mb * 1024 * 1024)
+            chunks = range(0, total_size, chunk_size)
+            self.log(f"Creating {len(chunks)} download tasks")
 
-                final_path = Path(self.filename).resolve()
-                self._assemble_parts(final_path, len(chunks))
+            self._download_chunks_concurrently(chunks, total_size)
 
-                duration = time.time() - start_time
-                self.log(f"Download complete in {duration:.2f} seconds.")
-                self.log(f"Saved to: {final_path}")
-                return final_path
-            except KeyboardInterrupt:
-                raise
-            except Exception as e:
-                last_exception = e
-                self.log(f"Download failed. Error: {e}")
-                if attempt < self.max_file_retries:
-                    self.log(
-                        f"Retrying download (attempt {attempt + 2}/{self.max_file_retries + 1})..."
-                    )
-                if self.temp_dir.exists():
-                    shutil.rmtree(self.temp_dir)
+            final_path = Path(self.filename).resolve()
+            self._assemble_parts(final_path, len(chunks))
+
+            duration = time.time() - start_time
+            self.log(f"Download complete in {duration:.2f} seconds.")
+            self.log(f"Saved to: {final_path}")
+            return final_path
+        except KeyboardInterrupt:
+            raise
+        except Exception as e:
+            last_exception = e
+            self.log(f"Download failed. Error: {e}", level=logging.ERROR)
+            if self.debug:
+                raise e
+            if retries > 0:
+                self.log(
+                    f"Retrying download (attempt {self.max_file_retries - retries + 1}/{self.max_file_retries})..."
+                )
+                time.sleep(self.api_delay)
+                self.cleanup()
+                return self.download(retries=retries - 1)
+
+            self.cleanup()
 
         raise last_exception
 
@@ -694,7 +718,7 @@ class SegmentedFileDownloader:
             ) as response:
                 response.raise_for_status()
                 with open(part_path, "wb") as f:
-                    for chunk in response.iter_content(chunk_size=8192):
+                    for chunk in response.iter_content(chunk_size=self.chunk_size):
                         f.write(chunk)
             self.log("Finished download.", part_num=part_num)
         except KeyboardInterrupt:
@@ -705,7 +729,9 @@ class SegmentedFileDownloader:
                     if 400 <= e.response.status_code < 500:
                         retries = 0
                         raise e
-            self.log(f"FAILED download. Error: {e}", part_num=part_num)
+            self.log(
+                f"FAILED download. Error: {e}", part_num=part_num, level=logging.ERROR
+            )
             if retries > 0:
                 self.log("Retrying download...", part_num=part_num)
                 self._download_chunk_retry(part_num, start_byte, end_byte, retries - 1)
@@ -720,10 +746,15 @@ class SegmentedFileDownloader:
                 part_path = self.temp_dir / f"part_{i}"
                 with open(part_path, "rb") as part_file:
                     shutil.copyfileobj(part_file, final_file)
-        shutil.rmtree(self.temp_dir)
         final_size = final_path.stat().st_size
         self.log(f"Assembled file size: {final_size / (1024*1024):.2f} MB")
-        self.log("Temporary files cleaned up.")
+        self.cleanup()
+
+    def cleanup(self):
+        """Cleans up temporary files."""
+        if self.temp_dir.exists():
+            shutil.rmtree(self.temp_dir)
+            self.log("Cleaned up temporary files.")
 
 
 if __name__ == "__main__":
@@ -754,8 +785,9 @@ if __name__ == "__main__":
 
     dq.download_full_snapshot(
         out_dir="./data/dqfiles/test/",
-        # include_delta=False,
-        # include_metadata=False,
+        include_full_snapshots=False,
+        include_delta=True,
+        include_metadata=False,
         # since_datetime=pd.Timestamp.now().strftime("%Y%m%d"),
         since_datetime="20250909",
     )
