@@ -145,21 +145,29 @@ class DataQueryFileAPIClient:
         return False
 
     def _get(
-        self, endpoint: str, params: Optional[Dict[str, Any]] = None
+        self, endpoint: str, params: Optional[Dict[str, Any]] = None, retries: int = 3
     ) -> Dict[str, Any]:
         """Generic GET with request_wrapper."""
         url = f"{self.base_url}{endpoint}"
         headers = self.oauth.get_auth()
-        return request_wrapper(
-            method="GET",
-            url=url,
-            headers=headers,
-            params=params or {},
-            proxies=self.proxies,
-            as_json=True,
-            api_delay=DQ_FILE_API_DELAY_PARAM,
-            verify_ssl=self.verify_ssl,
-        )
+        for _ in range(retries):
+            try:
+                return request_wrapper(
+                    method="GET",
+                    url=url,
+                    headers=headers,
+                    params=params or {},
+                    proxies=self.proxies,
+                    as_json=True,
+                    api_delay=DQ_FILE_API_DELAY_PARAM,
+                    verify_ssl=self.verify_ssl,
+                )
+            except Exception as e:
+                logger.error(f"Error occurred during GET request: {e}")
+                if _ == retries - 1:
+                    raise
+                logger.info(f"Retrying... ({_ + 1}/{retries})")
+                time.sleep(2**_)
 
     def list_groups(self) -> pd.DataFrame:
         """List all groups (data providers)."""
@@ -224,12 +232,13 @@ class DataQueryFileAPIClient:
         group_id: str = JPMAQS_GROUP_ID,
         start_date: str = JPMAQS_START_DATE,
         end_date: str = None,
+        include_unavailable: bool = False,
     ) -> pd.DataFrame:
         """
         List all available files for a specific file in a group within a date range.
         """
         if end_date is None:
-            end_date = pd.Timestamp.now().strftime("%Y%m%d")
+            end_date = pd.Timestamp.utcnow().strftime("%Y%m%d")
         endpoint = "/group/files/available-files"
         params = {
             "group-id": group_id,
@@ -244,8 +253,9 @@ class DataQueryFileAPIClient:
             raise InvalidResponseError(
                 f'Missing "file-datetime" in response from {endpoint} with params {params}'
             )
-        df = df[df["is-available"]].copy()
-        df["file-datetime"] = df["file-datetime"].astype(str)
+        if not include_unavailable:
+            df = df[df["is-available"]].copy()
+        df.loc[:, "file-datetime"] = df["file-datetime"].astype(str)
 
         # Sort by real timestamp while leaving the column as string
         df["_ts"] = pd.to_datetime(df["file-datetime"], format="mixed", errors="coerce")
@@ -266,6 +276,7 @@ class DataQueryFileAPIClient:
         include_delta: bool = True,
         include_metadata: bool = True,
         convert_metadata_timestamps: bool = True,
+        include_unavailable: bool = False,
     ) -> pd.DataFrame:
         files_groups = self.list_group_files(
             include_full_snapshots=include_full_snapshots,
@@ -283,6 +294,7 @@ class DataQueryFileAPIClient:
                         file_group_id=file_group_id,
                         start_date=start_date,
                         end_date=end_date,
+                        include_unavailable=include_unavailable,
                     )
                 ] = file_group_id
                 time.sleep(DQ_FILE_API_DELAY_PARAM)
@@ -292,11 +304,57 @@ class DataQueryFileAPIClient:
                 results.append(available_files)
 
         files_df = pd.concat(results).reset_index(drop=True)
+
         if convert_metadata_timestamps:
             for col in ["file-datetime", "last-modified"]:
                 if col not in files_df.columns:
                     raise InvalidResponseError(f'Missing "{col}" in response')
                 files_df[col] = pd.to_datetime(files_df[col], format="mixed")
+        return files_df
+
+    def filter_available_files_by_datetime(
+        self,
+        since_datetime: Optional[str] = None,
+        to_datetime: Optional[str] = None,
+        include_full_snapshots: bool = True,
+        include_delta: bool = True,
+        include_metadata: bool = True,
+        include_unavailable: bool = False,
+    ) -> pd.DataFrame:
+        if since_datetime is None:
+            since_datetime = pd.Timestamp.utcnow().strftime("%Y%m%d")
+        if to_datetime is None:
+            to_datetime = pd.Timestamp.utcnow().strftime("%Y%m%dT%H%M%S")
+        validate_dq_timestamp(since_datetime, var_name="since_datetime")
+        validate_dq_timestamp(to_datetime, var_name="to_datetime")
+        since_ts = pd.Timestamp(since_datetime)
+        if "T" not in since_datetime:
+            since_ts = since_ts.normalize()
+        to_ts = pd.Timestamp(to_datetime)
+        if "T" not in to_datetime:
+            to_ts = to_ts.normalize()
+
+        # since_ts = since_ts.tz_localize("UTC")
+        # to_ts = to_ts.tz_localize("UTC")
+        if since_ts > to_ts:
+            logger.warning(
+                f"`since_datetime` ({since_ts}) is after `to_datetime` ({to_ts}). Swapping values."
+            )
+            since_ts, to_ts = to_ts, since_ts
+
+        files_df = self.list_available_files_for_all_file_groups(
+            include_full_snapshots=include_full_snapshots,
+            include_delta=include_delta,
+            include_metadata=include_metadata,
+            include_unavailable=include_unavailable,
+            start_date=since_ts.strftime("%Y%m%dT%H%M%S"),
+            end_date=to_ts.strftime("%Y%m%dT%H%M%S"),
+        )
+        files_df = files_df[files_df["file-datetime"].between(since_ts, to_ts)]
+        files_df = files_df.sort_values(
+            by=["file-datetime", "last-modified"],
+            ascending=[False, False],
+        ).reset_index(drop=True)
         return files_df
 
     def check_file_availability(
@@ -465,19 +523,21 @@ class DataQueryFileAPIClient:
         self,
         out_dir: str = "./download",
         since_datetime: Optional[str] = None,
+        to_datetime: Optional[str] = None,
         file_datetime: Optional[str] = None,
         chunk_size: Optional[int] = None,
         timeout: Optional[float] = DQ_FILE_API_TIMEOUT,
         include_full_snapshots: bool = True,
         include_delta: bool = True,
         include_metadata: bool = True,
+        file_group_ids: Optional[List[str]] = None,
         show_progress: bool = True,
     ) -> None:
         Path(out_dir).mkdir(parents=True, exist_ok=True)
         start_time = time.time()
 
         if file_datetime is None and since_datetime is None:
-            since_datetime = pd.Timestamp.now().strftime("%Y%m%d")
+            since_datetime = pd.Timestamp.utcnow().strftime("%Y%m%d")
 
         effective_ts = file_datetime or since_datetime
         logger.info(
@@ -489,26 +549,13 @@ class DataQueryFileAPIClient:
             var_name="file_datetime" if file_datetime else "since_datetime",
         )
 
-        filter_ts = pd.Timestamp(effective_ts)
-        filter_date = pd.Timestamp(effective_ts).normalize()
-        if "T" not in effective_ts:
-            filter_ts = filter_ts.normalize()
-        filter_ts = filter_ts.tz_localize("UTC")
-
-        files_df = self.list_available_files_for_all_file_groups(
+        files_df = self.filter_available_files_by_datetime(
+            since_datetime=since_datetime,
+            to_datetime=to_datetime,
             include_full_snapshots=include_full_snapshots,
             include_delta=include_delta,
             include_metadata=include_metadata,
         )
-
-        files_df = files_df[files_df["is-available"]]
-        files_df = files_df[files_df["file-datetime"] >= filter_date]
-        files_df = files_df[files_df["last-modified"] >= filter_ts]
-
-        files_df = files_df.sort_values(
-            by="file-datetime",
-            ascending=True,
-        ).reset_index(drop=True)
 
         num_files_to_download = len(files_df["file-name"])
         if not num_files_to_download:
@@ -516,9 +563,15 @@ class DataQueryFileAPIClient:
             return
 
         logger.info(f"Found {num_files_to_download} new files to download.")
+        download_order = files_df.sort_values(
+            by="file-name",
+            key=lambda s: s.str.lower().map(
+                lambda x: (3 if "_metadata" in x else (2 if "_delta" in x else 1), x)
+            ),
+        )["file-name"].tolist()
 
         self.download_multiple_parquet_files(
-            filenames=files_df["file-name"].tolist(),
+            filenames=download_order,
             out_dir=out_dir,
             chunk_size=chunk_size,
             timeout=timeout,
@@ -764,37 +817,53 @@ if __name__ == "__main__":
 
     print("Current time UTC:", pd.Timestamp.utcnow().isoformat())
 
-    # print("Calling `/group/files`")
-    # start = time.time()
-    # # print(dq.list_group_files())
-    # end = time.time()
-    # print(f"Call completed in {end - start:.2f} seconds")
+    print("Calling `/group/files`")
+    start = time.time()
+    print(dq.list_group_files())
+    end = time.time()
+    print(f"Call completed in {end - start:.2f} seconds")
 
-    # available_files = dq.list_available_files(
-    #     file_group_id="JPMAQS_MACROECONOMIC_TRENDS_DELTA"
-    # )
-    # latest_file_timestamp = available_files["file-datetime"].iloc[0]
-    # print(
-    #     dq.check_file_availability(
-    #         file_group_id="JPMAQS_MACROECONOMIC_TRENDS_DELTA",
-    #         file_datetime="20250905T084751",
-    #     )
-    # )
+    available_files = dq.list_available_files(
+        file_group_id="JPMAQS_MACROECONOMIC_TRENDS_DELTA"
+    )
+    latest_file_timestamp = available_files["file-datetime"].iloc[0]
+    print(
+        dq.check_file_availability(
+            file_group_id="JPMAQS_MACROECONOMIC_TRENDS_DELTA",
+            file_datetime=latest_file_timestamp,
+        )
+    )
 
     print("Starting download")
     start = time.time()
     dq = DataQueryFileAPIClient()
 
+    today_str = pd.Timestamp.now().strftime("%Y%m%d")
     dq.download_full_snapshot(
         out_dir="./data/dqfiles/test/",
-        # include_full_snapshots=False,
-        # include_delta=True,
-        # include_metadata=False,
-        # since_datetime=pd.Timestamp.now().strftime("%Y%m%d"),
-        since_datetime="20250909",
+        since_datetime=today_str,
     )
     end = time.time()
     print(f"Download completed in {end - start:.2f} seconds")
+
+    def check_and_download(interval_minutes: int = 5):
+        last_scan = pd.Timestamp.utcnow().strftime("%Y%m%d")
+        while True:
+            print("Checking for new delta files...")
+            curr_time = pd.Timestamp.utcnow().strftime("%Y%m%dT%H%M%S")
+            start = time.time()
+            dq.download_full_snapshot(
+                out_dir="./data/dqfiles/continuous/",
+                since_datetime=last_scan,
+                include_full_snapshots=False,
+                include_metadata=True,
+                include_delta=True,
+                show_progress=False,
+            )
+            end = time.time()
+            last_scan = curr_time
+            print(f"Scan completed in {end - start:.2f} seconds")
+            time.sleep(interval_minutes * 60)
 
     # print("Starting download")
     # print("Current time:", pd.Timestamp.now().isoformat())
