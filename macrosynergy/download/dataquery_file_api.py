@@ -46,12 +46,15 @@ def validate_dq_timestamp(
     ts: str, var_name: str = None, raise_error: bool = True
 ) -> bool:
     try:
-        pd.Timestamp(ts)
+        pd.to_datetime(ts, format="mixed", utc=True)
         return True
-    except ValueError:
+    except (ValueError, TypeError):
         if raise_error:
             vn = f"`{var_name}`" if var_name else "Timestamp"
-            raise ValueError(f"Invalid {vn} format. Use YYYYMMDD or YYYYMMDDTHHMMSS")
+            raise ValueError(
+                f"Invalid {vn} format. Use YYYYMMDD, YYYYMMDDTHHMMSS, or a "
+                "recognized timestamp format with timezone."
+            )
         else:
             return False
 
@@ -259,7 +262,9 @@ class DataQueryFileAPIClient:
         df.loc[:, "file-datetime"] = df["file-datetime"].astype(str)
 
         # Sort by real timestamp while leaving the column as string
-        df["_ts"] = pd.to_datetime(df["file-datetime"], format="mixed", errors="coerce")
+        df["_ts"] = pd.to_datetime(
+            df["file-datetime"], format="mixed", errors="coerce", utc=True
+        )
         df = (
             df.sort_values("_ts", ascending=False)
             .drop(columns="_ts")
@@ -310,7 +315,7 @@ class DataQueryFileAPIClient:
             for col in ["file-datetime", "last-modified"]:
                 if col not in files_df.columns:
                     raise InvalidResponseError(f'Missing "{col}" in response')
-                files_df[col] = pd.to_datetime(files_df[col], format="mixed")
+                files_df[col] = pd.to_datetime(files_df[col], format="mixed", utc=True)
         return files_df
 
     def filter_available_files_by_datetime(
@@ -328,15 +333,20 @@ class DataQueryFileAPIClient:
             to_datetime = pd.Timestamp.utcnow().strftime("%Y%m%dT%H%M%S")
         validate_dq_timestamp(since_datetime, var_name="since_datetime")
         validate_dq_timestamp(to_datetime, var_name="to_datetime")
-        since_ts = pd.Timestamp(since_datetime)
-        if "T" not in since_datetime:
+
+        since_ts = pd.to_datetime(since_datetime, utc=True)
+        to_ts = pd.to_datetime(to_datetime, utc=True)
+
+        if "T" not in str(since_datetime):
             since_ts = since_ts.normalize()
-        to_ts = pd.Timestamp(to_datetime)
-        if "T" not in to_datetime:
-            to_ts = to_ts.normalize()
+
+        if "T" not in str(to_datetime):
+            to_ts = (
+                to_ts.normalize() + pd.DateOffset(days=1) - pd.Timedelta(nanoseconds=1)
+            )
+
         filter_date = since_ts.normalize()
-        since_ts = since_ts.tz_localize("UTC")
-        to_ts = to_ts.tz_localize("UTC")
+
         if since_ts > to_ts:
             logger.warning(
                 f"`since_datetime` ({since_ts}) is after `to_datetime` ({to_ts}). Swapping values."
@@ -844,6 +854,7 @@ if __name__ == "__main__":
     dq.download_full_snapshot(
         out_dir="./data/dqfiles/test/",
         since_datetime=today_str,
+        to_datetime='20250913'
     )
     end = time.time()
     print(f"Download completed in {end - start:.2f} seconds")
