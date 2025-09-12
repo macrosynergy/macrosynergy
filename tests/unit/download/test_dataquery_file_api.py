@@ -139,7 +139,7 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
         client.list_group_files()
         mock_get.assert_called_once()
 
-    @patch("pandas.Timestamp.now")
+    @patch("pandas.Timestamp.utcnow")
     @patch.object(DataQueryFileAPIClient, "_get")
     def test_list_available_files(self, mock_get, mock_now):
         client = DataQueryFileAPIClient(client_id="id", client_secret="secret")
@@ -186,6 +186,32 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
         with self.assertRaisesRegex(InvalidResponseError, 'Missing "last-modified"'):
             # mssing 'last-modified'
             client.list_available_files_for_all_file_groups()
+
+    @patch.object(DataQueryFileAPIClient, "list_available_files_for_all_file_groups")
+    def test_filter_available_files_by_datetime(self, mock_list_all_files):
+        client = DataQueryFileAPIClient(client_id="id", client_secret="secret")
+        mock_list_all_files.return_value = pd.DataFrame(
+            {
+                "file-datetime": pd.to_datetime(
+                    ["2023-01-01", "2023-01-02", "2023-01-03", "2023-01-04"]
+                ),
+                "last-modified": pd.to_datetime(
+                    [
+                        "2023-01-01T12:00:00Z",
+                        "2023-01-02T12:00:00Z",
+                        "2023-01-03T12:00:00Z",
+                        "2023-01-04T12:00:00Z",
+                    ]
+                ),
+                "file-name": ["f1", "f2", "f3", "f4"],
+            }
+        )
+
+        filtered_df = client.filter_available_files_by_datetime(
+            since_datetime="20230102", to_datetime="20230103"
+        )
+        self.assertEqual(filtered_df["file-name"].tolist(), ["f3", "f2"])
+        mock_list_all_files.assert_called_once()
 
     @patch.object(DataQueryFileAPIClient, "_get")
     def test_check_file_availability(self, mock_get):
@@ -272,28 +298,32 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
 
     @patch("macrosynergy.download.dataquery_file_api.logger")
     @patch.object(DataQueryFileAPIClient, "download_multiple_parquet_files")
-    @patch.object(DataQueryFileAPIClient, "list_available_files_for_all_file_groups")
+    @patch.object(DataQueryFileAPIClient, "filter_available_files_by_datetime")
     def test_download_full_snapshot(
-        self, mock_list_all, mock_download_multi, mock_logger
+        self, mock_filter_files, mock_download_multi, mock_logger
     ):
         client = DataQueryFileAPIClient(client_id="id", client_secret="secret")
-        mock_list_all.return_value = pd.DataFrame(
+        mock_filter_files.return_value = pd.DataFrame(
             {
-                "is-available": [True, True, True],
-                "file-datetime": pd.to_datetime(
-                    ["2023-01-02", "2023-01-03", "2023-01-04"]
-                ),
-                "last-modified": pd.to_datetime(
-                    ["2023-01-02T12Z", "2023-01-03T12Z", "2023-01-05T12Z"]
-                ),
-                "file-name": ["f2.parquet", "f3.parquet", "f4.parquet"],
+                "file-name": [
+                    "C_delta.parquet",
+                    "A_metadata.parquet",
+                    "B_full.parquet",
+                ],
             }
         )
         client.download_full_snapshot(
             since_datetime="20230103T000000", show_progress=False
         )
+
+        expected_order = [
+            "B_full.parquet",
+            "C_delta.parquet",
+            "A_metadata.parquet",
+        ]
+
         mock_download_multi.assert_called_once_with(
-            filenames=["f3.parquet", "f4.parquet"],
+            filenames=expected_order,
             out_dir="./download",
             chunk_size=None,
             timeout=300.0,
@@ -302,19 +332,12 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
 
     @patch("macrosynergy.download.dataquery_file_api.logger")
     @patch.object(DataQueryFileAPIClient, "download_multiple_parquet_files")
-    @patch.object(DataQueryFileAPIClient, "list_available_files_for_all_file_groups")
+    @patch.object(DataQueryFileAPIClient, "filter_available_files_by_datetime")
     def test_download_full_snapshot_no_new_files(
-        self, mock_list_all, mock_download_multi, mock_logger
+        self, mock_filter_files, mock_download_multi, mock_logger
     ):
         client = DataQueryFileAPIClient(client_id="id", client_secret="secret")
-        mock_list_all.return_value = pd.DataFrame(
-            {
-                "is-available": [True],
-                "file-datetime": pd.to_datetime(["2023-01-01"]),
-                "last-modified": pd.to_datetime(["2023-01-01T12:00:00Z"]),
-                "file-name": ["old_file.parquet"],
-            }
-        )
+        mock_filter_files.return_value = pd.DataFrame(columns=["file-name"])
         client.download_full_snapshot(
             since_datetime="20230102T000000", show_progress=False
         )
