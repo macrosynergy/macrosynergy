@@ -34,6 +34,7 @@ DQ_FILE_API_HEADERS_TIMEOUT: float = DQ_FILE_API_TIMEOUT / 10.0
 DQ_FILE_API_DELAY_PARAM: float = 0.04  # =1/25 ; 25 transactions per second
 DQ_FILE_API_DELAY_MARGIN: float = 1.1  # 10% safety margin
 DQ_FILE_API_SEGMENT_SIZE_MB: float = 8.0  # 8 MB
+DQ_FILE_API_STREAM_CHUNK_SIZE: int = 8192  # 8 KB
 
 
 JPMAQS_START_DATE = "20200101"
@@ -593,7 +594,7 @@ class SegmentedFileDownloader:
         headers: Dict[str, str],
         params: Dict[str, str],
         proxies: Optional[Dict[str, str]] = None,
-        chunk_size: int = 8192,
+        chunk_size: int = DQ_FILE_API_STREAM_CHUNK_SIZE,
         segment_size_mb: int = DQ_FILE_API_SEGMENT_SIZE_MB,
         timeout: int = DQ_FILE_API_TIMEOUT,
         api_delay: float = DQ_FILE_API_DELAY_PARAM,
