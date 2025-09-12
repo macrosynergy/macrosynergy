@@ -11,7 +11,7 @@ import functools
 import operator
 import concurrent.futures as cf
 from typing import Dict, Optional, TypeVar, Any, List, Union, Callable
-
+import threading
 import pandas as pd
 
 import pyarrow as pa  # noqa: F401
@@ -24,82 +24,26 @@ from macrosynergy import __version__ as ms_version_info
 
 from macrosynergy.management.types import QuantamentalDataFrame
 from macrosynergy.download.exceptions import NoContentError
+from macrosynergy.download.jpm_oauth import JPMorganOAuth
 
 FUSION_AUTH_URL: str = "https://authe.jpmorgan.com/as/token.oauth2"
 FUSION_ROOT_URL: str = "https://fusion.jpmorgan.com/api/v1"
 FUSION_RESOURCE_ID: str = "JPMC:URI:RS-93742-Fusion-PROD"
 FUSION_API_DELAY = 1.0  # seconds
-CACHE_TTL = 60  # seconds
 LAST_API_CALL: Optional[datetime.datetime] = None
+lock = threading.Lock()
+LAST_API_CALL = None
+CACHE_TTL = 60  # seconds
+
 
 logger = logging.getLogger(__name__)
 
 
-class FusionOAuth(object):
+class FusionOAuth(JPMorganOAuth):
     """
     A class to handle OAuth authentication for the JPMorgan Fusion API.
-    This class retrieves and manages access tokens for API requests.
-    It supports loading credentials from a JSON file or a dictionary.
-
-    Parameters
-    ----------
-    client_id : str
-        The client ID for the OAuth application.
-    client_secret : str
-        The client secret for the OAuth application.
-    resource : str
-        The resource ID for the Fusion API. Default is the global constant
-        FUSION_RESOURCE_ID.
-    application_name : str
-        The name of the application using the Fusion API. Default is "fusion".
-    root_url : str
-        The root URL for the Fusion API. Default is the global constant
-        FUSION_ROOT_URL.
-    auth_url : str
-        The URL for the OAuth authentication endpoint. Default is the global constant
-        FUSION_AUTH_URL.
-    proxies : Optional[Dict[str, str]]
-        Optional proxies to use for the HTTP requests. Default is None.
+    Uses the JPMorganOAuth class as a base.
     """
-
-    @staticmethod
-    def from_credentials_json(credentials_json: str):
-        """
-        Load OAuth credentials from a JSON file and return an instance of FusionOAuth.
-
-        Parameters
-        ----------
-        credentials_json : str
-            Path to the JSON file containing the OAuth credentials. This file must
-            contain the keys 'client_id' and 'client_secret'.
-
-        Returns
-        -------
-        FusionOAuth
-            An instance of the FusionOAuth class initialized with the credentials from the
-            JSON file.
-        """
-        with open(credentials_json, "r") as f:
-            credentials = json.load(f)
-        return FusionOAuth.from_credentials(credentials)
-
-    @staticmethod
-    def from_credentials(credentials: dict):
-        """
-        Create an instance of FusionOAuth from a dictionary of credentials.
-
-        Parameters
-        ----------
-        credentials : dict
-            A dictionary containing the OAuth credentials. It must include the keys
-            'client_id' and 'client_secret'.
-
-        Returns
-        -------
-        FusionOAuth
-            An instance of the FusionOAuth class initialized with the provided credentials.
-        """
-        return FusionOAuth(**credentials)
 
     def __init__(
         self,
@@ -111,91 +55,15 @@ class FusionOAuth(object):
         auth_url: str = FUSION_AUTH_URL,
         proxies: Optional[dict] = None,
     ):
-        self.client_id = client_id
-        self.client_secret = client_secret
-        self.resource = resource
-        self.application_name = application_name
-        self.root_url = root_url
-        self.auth_url = auth_url
-
-        # none of the above can be None
-        for attr_name, attr_val in [
-            ("client_id", self.client_id),
-            ("client_secret", self.client_secret),
-            ("resource", self.resource),
-            ("application_name", self.application_name),
-            ("root_url", self.root_url),
-            ("auth_url", self.auth_url),
-        ]:
-            if attr_val is None:
-                raise ValueError(f"{attr_name} must be provided and cannot be None.")
-
-        self.proxies = proxies or None
-
-        self.token_data = {
-            "grant_type": "client_credentials",
-            "aud": resource,
-            "client_id": client_id,
-            "client_secret": client_secret,
-        }
-
-        self._stored_token = None
-
-    def retrieve_token(self):
-        """
-        Retrieve an access token from the OAuth server and store it in the instance.
-
-        Equivalent cURL request:
-
-        .. code-block:: bash
-
-            curl -X POST "https://authe.jpmorgan.com/as/token.oauth2" \\
-                -d "grant_type=<FUSION_RESOURCE_ID>&client_id=<CLIENT_ID>&client_secret=<CLIENT_SECRET>"
-        """
-        try:
-            response = requests.post(
-                self.auth_url,
-                data=self.token_data,
-                proxies=self.proxies,
-            )
-            response.raise_for_status()
-            token_data = response.json()
-            self._stored_token = {
-                "created_at": datetime.datetime.now(),
-                "expires_in": token_data["expires_in"],
-                "access_token": token_data["access_token"],
-            }
-        except requests.exceptions.RequestException as e:
-            raise Exception(f"Error retrieving token: {e}") from e
-
-    def _is_valid_token(self):
-        if self._stored_token is None:
-            return False
-        return (
-            self._stored_token["created_at"]
-            + datetime.timedelta(seconds=self._stored_token["expires_in"])
-            > datetime.datetime.now()
+        super().__init__(
+            client_id=client_id,
+            client_secret=client_secret,
+            resource=resource,
+            application_name=application_name,
+            root_url=root_url,
+            auth_url=auth_url,
+            proxies=proxies,
         )
-
-    def _get_token(self):
-        if not self._is_valid_token():
-            self.retrieve_token()
-        return self._stored_token["access_token"]
-
-    def get_auth(self) -> dict:
-        """
-        Get the authorization headers for API requests.
-
-        Returns
-        -------
-        dict
-            A dictionary containing the authorization headers with the access token.
-        """
-        headers = {
-            "Authorization": f"Bearer {self._get_token()}",
-            "User-Agent": f"MacrosynergyPackage/{ms_version_info}",
-        }
-        return headers
 
 
 CachedType = TypeVar("CachedType", bound=Callable[..., Any])
@@ -241,7 +109,7 @@ def cache_decorator(
     return decorator
 
 
-def _wait_for_api_call() -> bool:
+def _wait_for_api_call(api_delay: float = FUSION_API_DELAY) -> bool:
     """
     Wait for the appropriate time before making an API call to avoid hitting the rate
     limit. This function checks the time since the last API call and sleeps if necessary
@@ -249,15 +117,17 @@ def _wait_for_api_call() -> bool:
     Uses a global variable `LAST_API_CALL` to track the last call time.
     """
     global LAST_API_CALL
-    if LAST_API_CALL is None:
+    with lock:
+        now = datetime.datetime.now()
+        if LAST_API_CALL is None:
+            LAST_API_CALL = now
+            return True
+        diff = (now - LAST_API_CALL).total_seconds()
+        sleep_for = api_delay - diff
+        if sleep_for > 0:
+            logger.info(f"Sleeping for {sleep_for:.2f} seconds for API rate limit.")
+            time.sleep(sleep_for)
         LAST_API_CALL = datetime.datetime.now()
-        return True
-    diff = datetime.datetime.now() - LAST_API_CALL
-    sleep_for = FUSION_API_DELAY - diff.total_seconds()
-    if sleep_for > 0:
-        logger.info(f"Sleeping for {sleep_for:.2f} seconds to avoid API rate limit.")
-        time.sleep(sleep_for)
-    LAST_API_CALL = datetime.datetime.now()
     return True
 
 
@@ -272,6 +142,8 @@ def request_wrapper(
     as_json: Optional[bool] = None,
     as_bytes: Optional[bool] = None,
     as_text: Optional[bool] = None,
+    api_delay: float = FUSION_API_DELAY,
+    timeout: Optional[float] = None,
 ) -> Union[Dict[str, Any], str, bytes]:
     """
     A wrapper function for making API requests to the JPMorgan Fusion API.
@@ -291,7 +163,7 @@ def request_wrapper(
         as_json = True
     raw_response: Optional[requests.Response] = None
     try:
-        _wait_for_api_call()
+        _wait_for_api_call(api_delay=api_delay)
         response = requests.request(
             method=method.upper(),
             url=url,
@@ -300,6 +172,7 @@ def request_wrapper(
             data=data,
             json=json_payload,
             proxies=proxies,
+            timeout=timeout,
         )
         raw_response = response
         response.raise_for_status()
@@ -327,22 +200,24 @@ def request_wrapper(
             if hasattr(e_http, "response") and e_http.response
             else url
         )
-
-        error_details: str = (
-            f"API HTTP error for {actual_method} {actual_url}: {e_http}"
-        )
+        error_details = f"API HTTP error for {actual_method} {actual_url}: {e_http}"
+        error_details += f"\nTimestamp (UTC): {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
         if hasattr(e_http, "response") and e_http.response is not None:
             error_details += f"\nStatus Code: {e_http.response.status_code}\nResponse: {e_http.response.text[:500]}"
         raise Exception(error_details) from e_http
 
     except requests.exceptions.RequestException as e_req:
         error_details = f"API request failed for {method} {url}: {e_req}"
+        error_details += f"\nTimestamp (UTC): {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+
         if hasattr(e_req, "response") and e_req.response is not None:
             error_details += f"\nStatus Code: {e_req.response.status_code}\nResponse: {e_req.response.text[:500]}"
         raise Exception(error_details) from e_req
 
     except json.JSONDecodeError as e_json:
         error_details = f"Failed to decode JSON response from {method} {url}: {e_json}"
+        error_details += f"\nTimestamp (UTC): {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+
         if raw_response:
             error_details += f"\nResponse text: {raw_response.text[:500]}"
         raise Exception(error_details) from e_json
@@ -357,7 +232,9 @@ def request_wrapper_stream_bytes_to_disk(
     data: Optional[Any] = None,
     json_payload: Optional[Dict[str, Any]] = None,
     proxies: Optional[Dict[str, str]] = None,
-    chunk_size: int = 8192,
+    chunk_size: int = None,
+    api_delay: float = FUSION_API_DELAY,
+    timeout: Optional[float] = None,
 ) -> None:
     """
     Stream a request's response bytes directly to disk, chunk by chunk.
@@ -382,6 +259,10 @@ def request_wrapper_stream_bytes_to_disk(
         Proxies to use for the request.
     chunk_size : int
         Size of each chunk to write (default 8192).
+    api_delay : float
+        Delay between API calls (defaults to 1.0 seconds).
+    timeout : float, optional
+        Timeout for the request (defaults to None).
     """
     if not isinstance(method, str):
         raise TypeError("Method must be a string.")
@@ -389,7 +270,7 @@ def request_wrapper_stream_bytes_to_disk(
         raise ValueError(
             f"Invalid method: {method}. Must be 'GET' for streaming to disk."
         )
-    _wait_for_api_call()
+    _wait_for_api_call(api_delay=api_delay)
     with requests.request(
         method=method.upper(),
         url=url,
@@ -399,6 +280,7 @@ def request_wrapper_stream_bytes_to_disk(
         json=json_payload,
         proxies=proxies,
         stream=True,
+        timeout=timeout,
     ) as response:
         response.raise_for_status()
         os.makedirs(os.path.dirname(filename), exist_ok=True)
@@ -2024,6 +1906,8 @@ if __name__ == "__main__":
     print(f"Time taken for notifications download: {time.time() - st:.2f} seconds")
 
     st = time.time()
+    ds = jpmaqs_client.list_datasets()
+    print(ds.head())
 
     df = jpmaqs_client.download(
         # folder="./data",
