@@ -88,6 +88,20 @@ class PLSTransformer(BaseEstimator, TransformerMixin):
         # Transform the data using the fitted PLS model
         return self.model.transform(X)
     
+    def __getattr__(self, name):
+        """
+        Delegate attribute access to the underlying transformer.
+
+        Parameters
+        ----------
+        name : str
+            The name of the attribute to access.
+        """
+        # Prevent infinite recursion
+        if name == "model":
+            raise AttributeError()
+        return getattr(self.model, name)
+    
 if __name__ == "__main__":
     import macrosynergy.management as msm
     from macrosynergy.management.simulate import make_qdf
