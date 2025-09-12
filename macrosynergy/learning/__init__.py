@@ -53,6 +53,7 @@ from .forecasting import (
     DataFrameTransformer,
     GlobalLocalRegression,
     CountryByCountryRegression,
+    PLSTransformer,
 )
 
 from .random_effects import RandomEffects
@@ -78,6 +79,7 @@ __all__ = [
     "PanelStandardScaler",
     "ZnScoreAverager",
     "PanelPCA",
+    "PLSTransformer",
     # metrics
     "neg_mean_abs_corr",
     "panel_significance_probability",
