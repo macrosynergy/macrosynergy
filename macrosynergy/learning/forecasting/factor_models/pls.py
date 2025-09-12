@@ -15,10 +15,10 @@ class PLSTransformer(BaseEstimator, TransformerMixin):
         Number of PLS components to extract.
     """
     def __init__(self, n_components=2):
+        if not isinstance(n_components, int):
+            raise TypeError("n_components must be an integer.")
         if n_components < 1:
             raise ValueError("n_components must be at least 1.")
-        if not isinstance(n_components, int):
-            raise ValueError("n_components must be an integer.")
         
         self.n_components = n_components
         self.model = PLSRegression(n_components=n_components)
