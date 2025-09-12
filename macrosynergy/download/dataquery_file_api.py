@@ -333,9 +333,9 @@ class DataQueryFileAPIClient:
         to_ts = pd.Timestamp(to_datetime)
         if "T" not in to_datetime:
             to_ts = to_ts.normalize()
-
-        # since_ts = since_ts.tz_localize("UTC")
-        # to_ts = to_ts.tz_localize("UTC")
+        filter_date = since_ts.normalize()
+        since_ts = since_ts.tz_localize("UTC")
+        to_ts = to_ts.tz_localize("UTC")
         if since_ts > to_ts:
             logger.warning(
                 f"`since_datetime` ({since_ts}) is after `to_datetime` ({to_ts}). Swapping values."
@@ -350,7 +350,8 @@ class DataQueryFileAPIClient:
             include_metadata=include_metadata,
             include_unavailable=include_unavailable,
         )
-        files_df = files_df[files_df["file-datetime"].between(since_ts, to_ts)]
+        files_df = files_df[files_df["file-datetime"] >= filter_date]
+        files_df = files_df[files_df["last-modified"].between(since_ts, to_ts)]
         files_df = files_df.sort_values(
             by=["file-datetime", "last-modified"],
             ascending=[False, False],
