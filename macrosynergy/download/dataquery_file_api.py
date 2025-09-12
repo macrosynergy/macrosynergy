@@ -347,8 +347,8 @@ class DataQueryFileAPIClient:
             include_delta=include_delta,
             include_metadata=include_metadata,
             include_unavailable=include_unavailable,
-            start_date=since_ts.strftime("%Y%m%dT%H%M%S"),
-            end_date=to_ts.strftime("%Y%m%dT%H%M%S"),
+            start_date=since_ts.strftime("%Y%m%d"),
+            end_date=to_ts.strftime("%Y%m%d"),
         )
         files_df = files_df[files_df["file-datetime"].between(since_ts, to_ts)]
         files_df = files_df.sort_values(
