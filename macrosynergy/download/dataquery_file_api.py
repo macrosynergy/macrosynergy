@@ -342,13 +342,13 @@ class DataQueryFileAPIClient:
             )
             since_ts, to_ts = to_ts, since_ts
 
+        # DQ's internal date filtering is not as expected by end users,
+        # hence filtering is done locally instead of passing API parameters.
         files_df = self.list_available_files_for_all_file_groups(
             include_full_snapshots=include_full_snapshots,
             include_delta=include_delta,
             include_metadata=include_metadata,
             include_unavailable=include_unavailable,
-            start_date=since_ts.strftime("%Y%m%d"),
-            end_date=to_ts.strftime("%Y%m%d"),
         )
         files_df = files_df[files_df["file-datetime"].between(since_ts, to_ts)]
         files_df = files_df.sort_values(
