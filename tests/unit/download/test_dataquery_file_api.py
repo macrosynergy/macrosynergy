@@ -1,7 +1,8 @@
 import unittest
 import pandas as pd
 from unittest.mock import patch, MagicMock
-
+import functools
+import logging
 from macrosynergy.download.dataquery_file_api import (
     validate_dq_timestamp,
     get_client_id_secret,
@@ -10,6 +11,18 @@ from macrosynergy.download.dataquery_file_api import (
     InvalidResponseError,
     DQ_FILE_API_SCOPE,
 )
+
+
+def suppress_logging(func):
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        logging.disable(logging.CRITICAL)
+        try:
+            return func(*args, **kwargs)
+        finally:
+            logging.disable(logging.NOTSET)
+
+    return wrapper
 
 
 class TestStandaloneFunctions(unittest.TestCase):
@@ -185,6 +198,7 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
         with self.assertRaises(ValueError):
             client.check_file_availability()
 
+    @suppress_logging
     @patch("macrosynergy.download.dataquery_file_api.SegmentedFileDownloader")
     @patch("macrosynergy.download.dataquery_file_api.Path")
     @patch("macrosynergy.download.dataquery_file_api.DataQueryFileAPIOauth")
@@ -224,6 +238,7 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
         future1.result.assert_called_once()
         future2.result.assert_called_once()
 
+    @suppress_logging
     @patch("macrosynergy.download.dataquery_file_api.cf.as_completed")
     @patch("macrosynergy.download.dataquery_file_api.cf.ThreadPoolExecutor")
     @patch("macrosynergy.download.dataquery_file_api.DataQueryFileAPIOauth")
