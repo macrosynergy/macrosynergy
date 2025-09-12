@@ -113,3 +113,28 @@ class TestPLSTransformer(unittest.TestCase):
         np.testing.assert_array_almost_equal(
             pls.model.x_weights_, sklearn_pls.x_weights_
         )
+
+    def test_types_transform(self):
+        # X - when a dataframe
+        model = PLSTransformer(n_components=2).fit(self.X, self.y)
+        self.assertRaises(TypeError, model.transform, X=1)
+        self.assertRaises(TypeError, model.transform, X="X")
+        self.assertRaises(ValueError, model.transform, X=self.X.iloc[:,:-1])
+        self.assertRaises(ValueError, model.transform, X=self.X_nan)
+        self.assertRaises(ValueError, model.transform, X=self.X_nan.values)
+        # X - when a numpy array
+        self.assertRaises(ValueError, model.fit, X=self.X.reset_index().values, y=self.y)
+        self.assertRaises(
+            ValueError, model.fit, X=self.X_nan.reset_index(drop=True).values, y=self.y
+        )
+
+    def test_valid_transform(self):
+        model = PLSTransformer(n_components=2).fit(self.X, self.y)
+        transformed = model.transform(self.X)
+        self.assertEqual(transformed.shape[1], 2)
+        self.assertTrue(np.all(np.isfinite(transformed)))
+        # test it gives the same result as sklearn's PLSRegression
+        sklearn_pls = PLSRegression(n_components=2)
+        sklearn_pls.fit(self.X, self.y)
+        sklearn_transformed = sklearn_pls.transform(self.X)
+        np.testing.assert_array_almost_equal(transformed, sklearn_transformed)

@@ -76,9 +76,13 @@ class PLSTransformer(BaseEstimator, TransformerMixin):
             raise TypeError(
                 "X must be a pandas DataFrame, pandas Series or numpy array"
             )
-        elif isinstance(X, np.ndarray) and ((X.ndim != 2)):
+        if isinstance(X, np.ndarray) and ((X.ndim != 2)):
             raise ValueError(
                 "When X is a numpy array, it must have exactly 2 dimensions."
+            )
+        if X.shape[1] != self.model.n_features_in_:
+            raise ValueError(
+                f"X must have {self.model.n_features_in_} inputs, but has {X.shape[1]}."
             )
         
         # Transform the data using the fitted PLS model
