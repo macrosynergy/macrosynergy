@@ -193,7 +193,7 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
         mock_list_all_files.return_value = pd.DataFrame(
             {
                 "file-datetime": pd.to_datetime(
-                    ["2023-01-01", "2023-01-02", "2023-01-03", "2023-01-04"]
+                    ["2023-01-01", "2023-01-02", "2023-01-03", "2023-01-04"], utc=True
                 ),
                 "last-modified": pd.to_datetime(
                     [
