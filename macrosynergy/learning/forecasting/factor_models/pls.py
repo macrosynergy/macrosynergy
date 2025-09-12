@@ -40,15 +40,23 @@ class PLSTransformer(BaseEstimator, TransformerMixin):
             The fitted model.
         """
         # Checks
-        if not isinstance(X, (pd.DataFrame, pd.Series, np.ndarray)):
+        if not isinstance(X, (pd.DataFrame, np.ndarray)):
             raise TypeError(
-                "X must be a pandas DataFrame, pandas Series or numpy array"
+                "X must be a pandas DataFrame or numpy array"
             )
-        elif isinstance(X, np.ndarray) and ((X.ndim != 2)):
+        if isinstance(X, np.ndarray) and ((X.ndim != 2)):
             raise ValueError(
                 "When X is a numpy array, it must have exactly 2 dimensions."
             )
-        
+        if not isinstance(y, (pd.DataFrame, pd.Series, np.ndarray)):
+            raise TypeError(
+                "y must be a pandas DataFrame, pandas Series or numpy array"
+            )
+        if isinstance(y, np.ndarray) and ((y.ndim != 1)):
+            raise ValueError(
+                "When y is a numpy array, it must have exactly 1 dimension."
+            )
+
         # Fit the PLS model
         self.model.fit(X, y)
 

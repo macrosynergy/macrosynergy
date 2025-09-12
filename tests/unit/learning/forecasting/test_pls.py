@@ -72,3 +72,44 @@ class TestPLSTransformer(unittest.TestCase):
         model = PLSTransformer(n_components=2)
         self.assertIsInstance(model, PLSTransformer)
         self.assertEqual(model.n_components, 2)
+
+    def test_types_fit(self):
+        # X - when a dataframe
+        model = PLSTransformer(n_components=2)
+        self.assertRaises(TypeError, model.fit, X=1, y=self.y)
+        self.assertRaises(TypeError, model.fit, X="X", y=self.y)
+        self.assertRaises(ValueError, model.fit, X=self.X.reset_index(), y=self.y)
+        self.assertRaises(ValueError, model.fit, X=self.X_nan, y=self.y)
+        self.assertRaises(ValueError, model.fit, X=self.X_nan.values, y=self.y)
+        # X - when a numpy array
+        self.assertRaises(ValueError, model.fit, X=self.X.reset_index().values, y=self.y)
+        self.assertRaises(
+            ValueError, model.fit, X=self.X_nan.reset_index(drop=True).values, y=self.y
+        )
+        # y - when a series
+        self.assertRaises(TypeError, model.fit, X=self.X, y=1)
+        self.assertRaises(TypeError, model.fit, X=self.X, y="y")
+        self.assertRaises(ValueError, model.fit, X=self.X, y=self.y.reset_index()["cid"])
+        self.assertRaises(ValueError, model.fit, X=self.X, y=self.y_nan)
+        self.assertRaises(ValueError, model.fit, X=self.X, y=self.y_nan.values)
+        # y - when a numpy array
+        self.assertRaises(
+            ValueError, model.fit, X=self.X.values, y=np.zeros((len(self.X), 2))
+        )
+        self.assertRaises(
+            ValueError, model.fit, X=self.X.values, y=np.array([np.nan] * len(self.X))
+        )
+
+        self.assertRaises(ValueError, model.fit, X=self.X, y=self.y[:-1])
+
+    def test_valid_fit(self):
+        pls = PLSTransformer(n_components=2)
+        pls.fit(self.X, self.y)
+        self.assertIsInstance(pls, PLSTransformer)
+
+        # Check that it matches sklearn's PLSRegression
+        sklearn_pls = PLSRegression(n_components=2)
+        sklearn_pls.fit(self.X, self.y)
+        np.testing.assert_array_almost_equal(
+            pls.model.x_weights_, sklearn_pls.x_weights_
+        )
