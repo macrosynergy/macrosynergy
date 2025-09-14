@@ -1,10 +1,8 @@
 import os
 import pandas as pd
-
 import functools
 import time
 from pathlib import Path
-
 import concurrent.futures as cf
 import logging
 import shutil
@@ -12,14 +10,14 @@ import traceback as tb
 import uuid
 from typing import Dict, Any, Optional, List, Tuple
 from tqdm import tqdm
-
 import requests
+import threading
+import datetime
 
 from macrosynergy.download.dataquery import JPMAQS_GROUP_ID
 from macrosynergy.download.fusion_interface import (
     request_wrapper,
     request_wrapper_stream_bytes_to_disk,
-    _wait_for_api_call,
 )
 from macrosynergy.download.dataquery import OAUTH_TOKEN_URL
 from macrosynergy.download.exceptions import DownloadError, InvalidResponseError
@@ -40,6 +38,39 @@ DQ_FILE_API_STREAM_CHUNK_SIZE: int = 8192  # 8 KB
 JPMAQS_START_DATE = "20200101"
 
 logger = logging.getLogger(__name__)
+
+
+class RateLimitedRequester:
+    """
+    Provides a rate-limiting mechanism for API requests.
+    """
+
+    def __init__(self, api_delay: float):
+        self._api_delay = api_delay
+        self._rate_limit_lock = threading.Lock()
+        self._last_api_call = None
+
+    def _wait_for_api_call(self) -> bool:
+        """
+        Blocks until the required delay since the last API call has passed.
+        """
+        with self._rate_limit_lock:
+            now = datetime.datetime.now()
+            if self._last_api_call is None:
+                self._last_api_call = now
+                return True
+
+            diff = (now - self._last_api_call).total_seconds()
+            sleep_for = self._api_delay - diff
+            if sleep_for > 0:
+                if sleep_for > 1:
+                    logger.info(
+                        f"Sleeping for {sleep_for:.2f} seconds for API rate limit."
+                    )
+                time.sleep(sleep_for)
+
+            self._last_api_call = datetime.datetime.now()
+        return True
 
 
 def validate_dq_timestamp(
@@ -102,7 +133,7 @@ class DataQueryFileAPIOauth(JPMorganOAuth):
         )
 
 
-class DataQueryFileAPIClient:
+class DataQueryFileAPIClient(RateLimitedRequester):
     def __init__(
         self,
         client_id: Optional[str] = None,
@@ -115,6 +146,7 @@ class DataQueryFileAPIClient:
         """
         Client for JPM DataQuery File APIs using request_wrapper utilities.
         """
+        super().__init__(api_delay=DQ_FILE_API_DELAY_PARAM)
         if not (bool(client_id) and bool(client_secret)):
             client_id, client_secret = get_client_id_secret()
 
@@ -156,6 +188,7 @@ class DataQueryFileAPIClient:
         headers = self.oauth.get_auth()
         for _ in range(retries):
             try:
+                self._wait_for_api_call()
                 return request_wrapper(
                     method="GET",
                     url=url,
@@ -163,7 +196,7 @@ class DataQueryFileAPIClient:
                     params=params or {},
                     proxies=self.proxies,
                     as_json=True,
-                    api_delay=DQ_FILE_API_DELAY_PARAM,
+                    api_delay=0,
                     verify_ssl=self.verify_ssl,
                 )
             except Exception as e:
@@ -433,15 +466,17 @@ class DataQueryFileAPIClient:
             proxies=self.proxies,
             chunk_size=chunk_size,
             timeout=timeout,
-            api_delay=DQ_FILE_API_DELAY_PARAM,
+            api_delay=0,
             verify_ssl=self.verify_ssl,
         )
 
         is_small_file = any(x in file_group_id.lower() for x in ["delta", "metadata"])
 
         if is_small_file:
+            self._wait_for_api_call()
             request_wrapper_stream_bytes_to_disk(**download_args)
         else:
+            download_args["api_delay"] = DQ_FILE_API_DELAY_PARAM
             SegmentedFileDownloader(
                 **download_args,
                 max_file_retries=max_retries,
@@ -604,7 +639,7 @@ class DataQueryFileAPIClient:
         logger.info(f"Snapshot download completed in {total_time:.2f} seconds.")
 
 
-class SegmentedFileDownloader:
+class SegmentedFileDownloader(RateLimitedRequester):
     """Manages the concurrent download of a single file."""
 
     def __init__(
@@ -626,6 +661,7 @@ class SegmentedFileDownloader:
         start_download: bool = False,
         debug: bool = False,
     ):
+        super().__init__(api_delay=api_delay * api_delay_margin)
         self.filename = Path(filename)
         self.url = url
         self.headers = headers
@@ -642,7 +678,6 @@ class SegmentedFileDownloader:
         self.chunk_size = chunk_size
         self.segment_size_mb = segment_size_mb
         self.timeout = timeout
-        self.api_delay = api_delay * api_delay_margin
         self.headers_timeout = headers_timeout
         self.max_concurrent_downloads = max_concurrent_downloads
         self.max_file_retries = max_file_retries
@@ -712,7 +747,7 @@ class SegmentedFileDownloader:
                 self.log(
                     f"Retrying download (attempt {self.max_file_retries - retries + 1}/{self.max_file_retries})..."
                 )
-                time.sleep(self.api_delay)
+                time.sleep(self._api_delay)
                 self.cleanup()
                 return self.download(retries=retries - 1)
 
@@ -723,7 +758,7 @@ class SegmentedFileDownloader:
     def _get_file_size(self) -> int:
         """Fetches the total size of the file."""
         self.log("Fetching file size...")
-        _wait_for_api_call(self.api_delay)
+        self._wait_for_api_call()
         start_time = time.time()
         response = requests.head(
             self.url,
@@ -783,7 +818,7 @@ class SegmentedFileDownloader:
         part_path = self.temp_dir / f"part_{part_num}"
 
         try:
-            _wait_for_api_call(self.api_delay)
+            self._wait_for_api_call()
             with requests.get(
                 headers=segment_headers,
                 url=self.url,
@@ -860,11 +895,10 @@ if __name__ == "__main__":
     start = time.time()
     dq = DataQueryFileAPIClient()
 
-    today_str = pd.Timestamp.now().strftime("%Y%m%d")
+    today_str = '20250910'
     dq.download_full_snapshot(
         out_dir="./data/dqfiles/test/",
         since_datetime=today_str,
-        to_datetime="20250913",
     )
     end = time.time()
     print(f"Download completed in {end - start:.2f} seconds")
