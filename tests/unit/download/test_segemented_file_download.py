@@ -99,7 +99,10 @@ class TestSegmentedFileDownloaderInitAndLifecycle(unittest.TestCase):
         mock_rmtree.assert_not_called()
 
 
-@patch("macrosynergy.download.dataquery_file_api._wait_for_api_call", MagicMock())
+@patch(
+    "macrosynergy.download.dataquery_file_api.SegmentedFileDownloader._wait_for_api_call",
+    MagicMock(),
+)
 class TestSegmentedFileDownloaderNetworking(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
