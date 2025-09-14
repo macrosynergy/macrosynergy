@@ -569,17 +569,27 @@ class DataQueryFileAPIClient:
             include_metadata=include_metadata,
         )
 
+        if file_group_ids is not None:
+            if not isinstance(file_group_ids, list) and not all(
+                isinstance(x, str) for x in file_group_ids
+            ):
+                raise ValueError("`file_group_ids` must be a list of strings.")
+            files_df = files_df[files_df["file-group-id"].isin(file_group_ids)]
+
         num_files_to_download = len(files_df["file-name"])
         if not num_files_to_download:
             logger.info("No new files to download.")
             return
 
         logger.info(f"Found {num_files_to_download} new files to download.")
+
+        files_df["download-priority"] = (
+            files_df["file-name"]
+            .str.lower()
+            .apply(lambda x: (3 if "_metadata" in x else (2 if "_delta" in x else 1)))
+        )
         download_order = files_df.sort_values(
-            by="file-name",
-            key=lambda s: s.str.lower().map(
-                lambda x: (3 if "_metadata" in x else (2 if "_delta" in x else 1), x)
-            ),
+            by=["download-priority", "file-datetime", "file-name"],
         )["file-name"].tolist()
 
         self.download_multiple_parquet_files(
@@ -854,7 +864,7 @@ if __name__ == "__main__":
     dq.download_full_snapshot(
         out_dir="./data/dqfiles/test/",
         since_datetime=today_str,
-        to_datetime='20250913'
+        to_datetime="20250913",
     )
     end = time.time()
     print(f"Download completed in {end - start:.2f} seconds")
