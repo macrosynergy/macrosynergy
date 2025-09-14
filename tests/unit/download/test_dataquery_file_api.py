@@ -306,20 +306,29 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
         mock_filter_files.return_value = pd.DataFrame(
             {
                 "file-name": [
-                    "C_delta.parquet",
-                    "A_metadata.parquet",
-                    "B_full.parquet",
+                    "C_delta_20250201T110456.parquet",
+                    "A_metadata_20250201T110000.parquet",
+                    "B_full_20250201.parquet",
+                    "A_full_20250101.parquet",  # to be filtered out
+                    "A_full_20250201.parquet",
+                ],
+                "file-datetime": [
+                    "20250201T110456",
+                    "20250201T110000",
+                    "20250201T000000",
+                    "20250101T000000",
+                    "20250201T000000",
                 ],
             }
         )
-        client.download_full_snapshot(
-            since_datetime="20230103T000000", show_progress=False
-        )
+        client.download_full_snapshot(since_datetime="20250201", show_progress=False)
 
         expected_order = [
-            "B_full.parquet",
-            "C_delta.parquet",
-            "A_metadata.parquet",
+            "A_full_20250101.parquet",
+            "A_full_20250201.parquet",
+            "B_full_20250201.parquet",
+            "C_delta_20250201T110456.parquet",
+            "A_metadata_20250201T110000.parquet",
         ]
 
         mock_download_multi.assert_called_once_with(
