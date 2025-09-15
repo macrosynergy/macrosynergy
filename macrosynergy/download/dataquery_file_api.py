@@ -904,10 +904,13 @@ if __name__ == "__main__":
     start = time.time()
     dq = DataQueryFileAPIClient()
 
-    today_str = '20250910'
+    today = pd.Timestamp.utcnow().date()
+    since_datetime = pd.bdate_range(end=today, periods=2)[0].strftime("%Y%m%d")
     dq.download_full_snapshot(
         out_dir="./data/dqfiles/test/",
-        since_datetime=today_str,
+        include_delta=False,
+        include_metadata=True,
+        since_datetime=since_datetime,
     )
     end = time.time()
     print(f"Download completed in {end - start:.2f} seconds")
