@@ -350,11 +350,12 @@ def _parse_labels(keys: List[str], labels: Union[List[str], Dict[str, str]], lab
 
     labels_dict = {}
     if labels is not None:
-        assert len(labels) == len(keys), (
-            f"The number of labels provided for the {label_type} must match the "
-            f"number of {label_type}."
-        )
         if isinstance(labels, list):
+            if len(labels) != len(keys):
+                raise ValueError(
+                    f"The number of labels provided for the {label_type} must match the "
+                    f"number of {label_type}."
+                )
             for key, label in zip(keys, labels):
                 labels_dict[key] = label
         elif isinstance(labels, dict):
