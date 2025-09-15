@@ -144,6 +144,7 @@ logger = logging.getLogger(__name__)
 def validate_dq_timestamp(
     ts: str, var_name: str = None, raise_error: bool = True
 ) -> bool:
+    """Validate a timestamp string for DataQuery API."""
     try:
         pd.to_datetime(ts, format="mixed", utc=True)
         return True
@@ -159,6 +160,7 @@ def validate_dq_timestamp(
 
 
 def get_client_id_secret() -> Optional[Tuple[str, str]]:
+    """Retrieve client ID and secret from environment variables."""
     pairs = [
         ("DQ_CLIENT_ID", "DQ_CLIENT_SECRET"),
         ("DATAQUERY_CLIENT_ID", "DATAQUERY_CLIENT_SECRET"),
