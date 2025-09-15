@@ -77,6 +77,10 @@ def get_client_id_secret() -> Optional[Tuple[str, str]]:
 
 
 class DataQueryFileAPIOauth(JPMorganOAuth):
+    """
+    A class to handle OAuth authentication for the JPMorgan DataQuery File API.
+    """
+
     def __init__(
         self,
         client_id: str,
@@ -103,6 +107,33 @@ class DataQueryFileAPIOauth(JPMorganOAuth):
 
 
 class DataQueryFileAPIClient:
+    """
+    A client for accessing JPMaQS product files via the JPMorgan DataQuery File API.
+
+    This client provides an alternative distribution channel to the Fusion API for JPMaQS
+    data. It is designed to list and download JPMaQS data files, which are
+    available as full snapshots, daily deltas, and metadata files. The client handles
+    authentication, API requests, and file downloads, including large file downloads
+    using a segmented, concurrent approach.
+
+    Parameters
+    ----------
+    client_id : Optional[str]
+        Client ID for authentication. If not provided, it will be sourced from
+        environment variables (`DQ_CLIENT_ID` or `DATAQUERY_CLIENT_ID`).
+    client_secret : Optional[str]
+        Client Secret for authentication. If not provided, it will be sourced from
+        environment variables (`DQ_CLIENT_SECRET` or `DATAQUERY_CLIENT_SECRET`).
+    base_url : str
+        The base URL for the DataQuery File API. Defaults to `DQ_FILE_API_BASE_URL`.
+    scope : str
+        The API scope for authentication. Defaults to `DQ_FILE_API_SCOPE`.
+    proxies : Optional[Dict[str, str]]
+        Optional proxies to use for HTTP requests. Defaults to None.
+    verify_ssl : bool
+        If True, verifies SSL certificates for all requests. Defaults to True.
+    """
+
     def __init__(
         self,
         client_id: Optional[str] = None,
@@ -112,9 +143,6 @@ class DataQueryFileAPIClient:
         proxies: Optional[Dict[str, str]] = None,
         verify_ssl: bool = True,
     ):
-        """
-        Client for JPM DataQuery File APIs using request_wrapper utilities.
-        """
         if not (bool(client_id) and bool(client_secret)):
             client_id, client_secret = get_client_id_secret()
 
@@ -151,7 +179,23 @@ class DataQueryFileAPIClient:
     def _get(
         self, endpoint: str, params: Optional[Dict[str, Any]] = None, retries: int = 3
     ) -> Dict[str, Any]:
-        """Generic GET with request_wrapper."""
+        """
+        Executes a GET request to a specified endpoint with retry logic.
+
+        Parameters
+        ----------
+        endpoint : str
+            The API endpoint to call.
+        params : Optional[Dict[str, Any]]
+            A dictionary of query parameters for the request.
+        retries : int
+            The number of times to retry the request in case of failure.
+
+        Returns
+        -------
+        Dict[str, Any]
+            The JSON response from the API as a dictionary.
+        """
         url = f"{self.base_url}{endpoint}"
         headers = self.oauth.get_auth()
         for _ in range(retries):
@@ -174,13 +218,32 @@ class DataQueryFileAPIClient:
                 time.sleep(2**_)
 
     def list_groups(self) -> pd.DataFrame:
-        """List all groups (data providers)."""
+        """
+        Lists all available data provider groups.
+
+        Returns
+        -------
+        pd.DataFrame
+            A DataFrame containing details of available groups.
+        """
         endpoint = "/groups"
         payload = self._get(endpoint, {})
         return pd.json_normalize(payload, record_path=["groups"])
 
     def search_groups(self, keywords: str) -> pd.DataFrame:
-        """Search for groups (data providers) by keywords."""
+        """
+        Searches for data provider groups that match the given keywords.
+
+        Parameters
+        ----------
+        keywords : str
+            Keywords to search for in group names and descriptions.
+
+        Returns
+        -------
+        pd.DataFrame
+            A DataFrame of groups matching the search criteria.
+        """
         endpoint = "/groups/search"
         payload = self._get(endpoint, {"keywords": keywords})
         return pd.json_normalize(payload, record_path=["groups"])
@@ -194,14 +257,23 @@ class DataQueryFileAPIClient:
         include_metadata: bool = True,
     ) -> pd.DataFrame:
         """
-        List all files for a specific group.
+        Lists all file groups (datasets) for a specific data provider.
 
         Parameters
         ----------
-        full_snapshot_only: bool
-            If True, only full snapshot files are returned.
-        delta_only: bool
-            If True, only delta files are returned.
+        group_id : str
+            The identifier for the data provider group, defaults to the JPMaQS group.
+        include_full_snapshots : bool
+            If True, include full snapshot file groups in the result.
+        include_delta : bool
+            If True, include delta file groups in the result.
+        include_metadata : bool
+            If True, include metadata file groups in the result.
+
+        Returns
+        -------
+        pd.DataFrame
+            A DataFrame listing the available file groups.
         """
         if not any([include_full_snapshots, include_delta, include_metadata]):
             raise ValueError(
@@ -239,7 +311,25 @@ class DataQueryFileAPIClient:
         include_unavailable: bool = False,
     ) -> pd.DataFrame:
         """
-        List all available files for a specific file in a group within a date range.
+        Lists all available files for a specific file group within a date range.
+
+        Parameters
+        ----------
+        file_group_id : str
+            The identifier for the file group (e.g., "JPMAQS_GENERIC_RETURNS").
+        group_id : str
+            The identifier for the data provider group.
+        start_date : str
+            The start date for the search in "YYYYMMDD" format.
+        end_date : str
+            The end date for the search in "YYYYMMDD" format. Defaults to today.
+        include_unavailable : bool
+            If True, includes files that are listed but not currently available.
+
+        Returns
+        -------
+        pd.DataFrame
+            A DataFrame of available files with their details.
         """
         if end_date is None:
             end_date = pd.Timestamp.utcnow().strftime("%Y%m%d")
@@ -284,6 +374,36 @@ class DataQueryFileAPIClient:
         convert_metadata_timestamps: bool = True,
         include_unavailable: bool = False,
     ) -> pd.DataFrame:
+        """
+        Fetches and consolidates available files for all relevant file groups.
+
+        This method concurrently queries for available files across all specified
+        file group types (full snapshots, deltas, metadata) for a given provider.
+
+        Parameters
+        ----------
+        group_id : str
+            The identifier for the data provider group.
+        start_date : str
+            The start date for the search in "YYYYMMDD" format.
+        end_date : str
+            The end date for the search in "YYYYMMDD" format. Defaults to today.
+        include_full_snapshots : bool
+            If True, query for full snapshot file groups.
+        include_delta : bool
+            If True, query for delta file groups.
+        include_metadata : bool
+            If True, query for metadata file groups.
+        convert_metadata_timestamps : bool
+            If True, convert timestamp columns to datetime objects.
+        include_unavailable : bool
+            If True, include files that are listed but not currently available.
+
+        Returns
+        -------
+        pd.DataFrame
+            A consolidated DataFrame of all available files.
+        """
         files_groups = self.list_group_files(
             include_full_snapshots=include_full_snapshots,
             include_delta=include_delta,
@@ -327,6 +447,31 @@ class DataQueryFileAPIClient:
         include_metadata: bool = True,
         include_unavailable: bool = False,
     ) -> pd.DataFrame:
+        """
+        Retrieves files whose 'last-modified' timestamp falls within a datetime window.
+
+        Parameters
+        ----------
+        since_datetime : Optional[str]
+            The start of the time window (inclusive). Format "YYYYMMDD" or "YYYYMMDDTHHMMSS".
+            Defaults to the start of the current day (UTC).
+        to_datetime : Optional[str]
+            The end of the time window (inclusive). Format "YYYYMMDD" or "YYYYMMDDTHHMMSS".
+            Defaults to the current timestamp (UTC).
+        include_full_snapshots : bool
+            If True, include full snapshot files in the search.
+        include_delta : bool
+            If True, include delta files in the search.
+        include_metadata : bool
+            If True, include metadata files in the search.
+        include_unavailable : bool
+            If True, include files that are not currently available for download.
+
+        Returns
+        -------
+        pd.DataFrame
+            A DataFrame of files modified within the specified time window.
+        """
         if since_datetime is None:
             since_datetime = pd.Timestamp.utcnow().strftime("%Y%m%d")
         if to_datetime is None:
@@ -375,7 +520,25 @@ class DataQueryFileAPIClient:
         file_datetime: str = None,
         filename: Optional[str] = None,
     ) -> pd.DataFrame:
-        """Check the availability of a specific file in a group."""
+        """
+        Checks if a specific file is available for download.
+
+        Provide either (`file_group_id` and `file_datetime`) or `filename`.
+
+        Parameters
+        ----------
+        file_group_id : str
+            The identifier for the file group.
+        file_datetime : str
+            The file's timestamp identifier.
+        filename : Optional[str]
+            The full name of the file (e.g., "JPMAQS_GENERIC_RETURNS_20250101.parquet").
+
+        Returns
+        -------
+        pd.DataFrame
+            A DataFrame with the file's availability status.
+        """
         if not ((bool(file_group_id) and bool(file_datetime)) ^ bool(filename)):
             raise ValueError(
                 "One of `file_group_id` & `file_datetime`, or `filename` must be provided."
@@ -396,8 +559,33 @@ class DataQueryFileAPIClient:
         max_retries: int = 3,
     ) -> str:
         """
-        Stream a Parquet file directly to disk using request_wrapper_stream_bytes_to_disk.
-        Returns the full file path on success.
+        Downloads a single Parquet file to a specified directory.
+
+        This method can be called with either (`file_group_id` and `file_datetime`)
+        or a `filename`. For large files, it automatically uses the
+        `SegmentedFileDownloader` for a robust, multi-part download.
+
+        Parameters
+        ----------
+        file_group_id : str
+            The identifier of the file group to download from.
+        file_datetime : str
+            The timestamp of the file to download.
+        filename : Optional[str]
+            The full filename to download. Overrides `file_group_id` and `file_datetime`.
+        out_dir : str
+            The directory where the file will be saved.
+        chunk_size : Optional[int]
+            The chunk size for streaming downloads (in bytes).
+        timeout : Optional[float]
+            The timeout for the download request in seconds.
+        max_retries : int
+            The number of retries for the entire file download.
+
+        Returns
+        -------
+        str
+            The full path to the downloaded file.
         """
         if not ((bool(file_group_id) and bool(file_datetime)) ^ bool(filename)):
             raise ValueError(
@@ -464,6 +652,26 @@ class DataQueryFileAPIClient:
         timeout: Optional[float] = DQ_FILE_API_TIMEOUT,
         show_progress: bool = True,
     ) -> None:
+        """
+        Downloads a list of Parquet files concurrently with progress indication.
+
+        Parameters
+        ----------
+        filenames : List[str]
+            A list of full filenames to be downloaded.
+        out_dir : str
+            The directory to save the downloaded files.
+        max_retries : int
+            The number of times to retry downloading the entire list of failed files.
+        n_jobs : int
+            The number of concurrent download jobs. If -1, it uses all available cores.
+        chunk_size : Optional[int]
+            The chunk size for streaming downloads (in bytes).
+        timeout : Optional[float]
+            The timeout for each download request in seconds.
+        show_progress : bool
+            If True, displays a progress bar for the downloads.
+        """
         Path(out_dir).mkdir(parents=True, exist_ok=True)
         start_time = time.time()
         logger.info(f"Starting download of {len(filenames)} files.")
@@ -545,6 +753,40 @@ class DataQueryFileAPIClient:
         file_group_ids: Optional[List[str]] = None,
         show_progress: bool = True,
     ) -> None:
+        """
+        Downloads a complete snapshot of files based on specified criteria.
+
+        This method fetches a list of files modified within a given time window and
+        then downloads them. It can be customized to download only specific file types
+        or from a specific list of file groups.
+
+        Parameters
+        ----------
+        out_dir : str
+            The directory where files will be saved.
+        since_datetime : Optional[str]
+            Download files modified since this timestamp (inclusive).
+            Defaults to the start of the current day (UTC) if `file_datetime` is not set.
+        to_datetime : Optional[str]
+            Download files modified up to this timestamp (inclusive).
+        file_datetime : Optional[str]
+            A specific file date to check for. Overrides `since_datetime`.
+        chunk_size : Optional[int]
+            The chunk size for streaming downloads (in bytes).
+        timeout : Optional[float]
+            The timeout for each download request in seconds.
+        include_full_snapshots : bool
+            If True, download full snapshot files.
+        include_delta : bool
+            If True, download delta files.
+        include_metadata : bool
+            If True, download metadata files.
+        file_group_ids : Optional[List[str]]
+            A specific list of file groups to download from. If provided, only files
+            from these groups will be downloaded.
+        show_progress : bool
+            If True, displays a progress bar for downloads.
+        """
         Path(out_dir).mkdir(parents=True, exist_ok=True)
         start_time = time.time()
 
@@ -605,7 +847,9 @@ class DataQueryFileAPIClient:
 
 
 class SegmentedFileDownloader:
-    """Manages the concurrent download of a single file."""
+    """
+    A utility class to manage the multi-part, concurrent download of a single large file.
+    """
 
     def __init__(
         self,
@@ -626,6 +870,7 @@ class SegmentedFileDownloader:
         start_download: bool = False,
         debug: bool = False,
     ):
+        """Initializes the downloader with URL, headers, and download parameters."""
         self.filename = Path(filename)
         self.url = url
         self.headers = headers
@@ -658,22 +903,25 @@ class SegmentedFileDownloader:
                 raise
 
     def __enter__(self):
+        """Allows the downloader to be used as a context manager."""
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
+        """Ensures cleanup of temporary files upon exiting the context."""
         if exc_type is not None:
             logger.error(tb.format_exc())
         self.cleanup()
         return False
 
     def log(self, msg: str, part_num: int = None, level: int = logging.INFO):
+        """Logs a message with downloader-specific context."""
         part_info = f"[part={part_num}]" if part_num is not None else ""
         logger.log(
             level, f"[SegmentedFileDownloader][file={self.file_id}]{part_info} {msg}"
         )
 
     def download(self, retries: int = None) -> Path:
-        """Orchestrates the file download process."""
+        """Orchestrates the entire file download process, including retries."""
         last_exception = None
         if retries is None:
             retries = self.max_file_retries
@@ -721,7 +969,7 @@ class SegmentedFileDownloader:
         raise last_exception
 
     def _get_file_size(self) -> int:
-        """Fetches the total size of the file."""
+        """Fetches the total size of the file using a HEAD request."""
         self.log("Fetching file size...")
         _wait_for_api_call(self.api_delay)
         start_time = time.time()
@@ -746,7 +994,7 @@ class SegmentedFileDownloader:
         return content_length
 
     def _download_chunks_concurrently(self, chunks: range, total_size: int):
-        """Downloads all file chunks in parallel."""
+        """Manages the parallel download of all file chunks."""
         with cf.ThreadPoolExecutor(
             max_workers=self.max_concurrent_downloads
         ) as executor:
@@ -770,13 +1018,13 @@ class SegmentedFileDownloader:
                 raise
 
     def _download_chunk(self, part_num: int, start_byte: int, end_byte: int) -> None:
-        """Wrapper to start the recursive download of a single file chunk."""
+        """Starts the download process for a single file chunk."""
         self._download_chunk_retry(part_num, start_byte, end_byte, retries=1)
 
     def _download_chunk_retry(
         self, part_num: int, start_byte: int, end_byte: int, retries: int
     ) -> None:
-        """Downloads a single file chunk with a recursive retry mechanism."""
+        """Downloads a specific byte range of the file with a retry mechanism."""
         self.log(f"Downloading bytes [{start_byte}-{end_byte}]", part_num=part_num)
         segment_headers = self.headers.copy()
         segment_headers["Range"] = f"bytes={start_byte}-{end_byte}"
@@ -816,7 +1064,7 @@ class SegmentedFileDownloader:
                 raise
 
     def _assemble_parts(self, final_path: Path, num_parts: int):
-        """Assembles the downloaded chunks into a single file."""
+        """Combines the downloaded chunks into a single final file."""
         self.log(f"Assembling {num_parts} parts")
         with open(final_path, "wb") as final_file:
             for i in range(num_parts):
@@ -828,7 +1076,7 @@ class SegmentedFileDownloader:
         self.cleanup()
 
     def cleanup(self):
-        """Cleans up temporary files."""
+        """Removes the temporary directory and all downloaded parts."""
         if self.temp_dir.exists():
             shutil.rmtree(self.temp_dir)
             self.log("Cleaned up temporary files.")
