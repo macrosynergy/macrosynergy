@@ -57,7 +57,7 @@ including full datasets, deltas, and metadata.
     client = DataQueryFileAPIClient()
     output_directory = "./jpmaqs_data"
     # This specific filename can be found using the list_available_files... methods
-    target_filename = "JPMAQS_GENERIC_RETURNS_20250414.parquet"
+    target_filename = "JPMAQS_MACROECONOMIC_BALANCE_SHEETS_20250414.parquet"
 
     print(f"Downloading {target_filename}...")
     file_path = client.download_parquet_file(
@@ -72,7 +72,7 @@ including full datasets, deltas, and metadata.
 
     from macrosynergy.download import DataQueryFileAPIClient
     client = DataQueryFileAPIClient()
-    file_group_id = "JPMAQS_GENERIC_RETURNS"
+    file_group_id = "JPMAQS_MACROECONOMIC_BALANCE_SHEETS"
 
     available_files = client.list_available_files(file_group_id=file_group_id)
 
@@ -387,7 +387,7 @@ class DataQueryFileAPIClient:
         Parameters
         ----------
         file_group_id : str
-            The identifier for the file group (e.g., "JPMAQS_GENERIC_RETURNS").
+            The identifier for the file group (e.g., "JPMAQS_MACROECONOMIC_BALANCE_SHEETS").
         group_id : str
             The identifier for the data provider group.
         start_date : str
@@ -606,7 +606,7 @@ class DataQueryFileAPIClient:
         file_datetime : str
             The file's timestamp identifier.
         filename : Optional[str]
-            The full name of the file (e.g., "JPMAQS_GENERIC_RETURNS_20250101.parquet").
+            The full name of the file (e.g., "JPMAQS_GENERIC_RETURNS_20250501.parquet").
 
         Returns
         -------
@@ -1244,4 +1244,3 @@ if __name__ == "__main__":
             last_scan = curr_time
             print(f"Scan completed in {end - start:.2f} seconds")
             time.sleep(interval_minutes * 60)
-
