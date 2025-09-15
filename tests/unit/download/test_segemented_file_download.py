@@ -8,6 +8,7 @@ import uuid  # noqa
 import concurrent.futures  # noqa
 
 from macrosynergy.download.dataquery_file_api import SegmentedFileDownloader
+from macrosynergy.compat import PYTHON_3_8_OR_LATER
 
 
 class TestSegmentedFileDownloaderInitAndLifecycle(unittest.TestCase):
@@ -155,7 +156,15 @@ class TestSegmentedFileDownloaderNetworking(unittest.TestCase):
         )
 
         mock_get.assert_called_once()
-        self.assertIn("bytes=0-100", mock_get.call_args.kwargs["headers"]["Range"])
+        expected_range_header = "bytes=0-100"
+        if PYTHON_3_8_OR_LATER:
+            mock_called = mock_get.call_args.kwargs["headers"]["Range"]
+        else:
+            # python3.7 branch
+            mock_called = mock_get.call_args[1]["headers"]["Range"]
+
+        self.assertIn(expected_range_header, mock_called)
+
         mock_file.assert_called_once_with(self.downloader.temp_dir / "part_0", "wb")
         mock_file().write.assert_has_calls([call(b"part1"), call(b"part2")])
         mock_response.raise_for_status.assert_called_once()
