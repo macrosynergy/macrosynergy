@@ -1,3 +1,4 @@
+import numbers
 import numpy as np 
 import pandas as pd
 
@@ -48,6 +49,15 @@ class GlobalLocalRegression(BaseEstimator, RegressorMixin):
             L(\{\beta_i\}_{i=1}^{C}, \beta) = \frac{1}{C} \sum_{i = 1}^{C} \left [ \frac{1}{n_{i}}  \sum_{t=1}^{n_{i}} (y_{it} - x_{it}^{\intercal} \beta_{i})^2 \right ] + \lambda_{\text{local}} \sum_{i=1}^{C} ||\beta_i - \beta||_{2}^{2} + \lambda_{\text{global}} ||\beta||_{2}^{2}
     """
     def __init__(self, local_lambda = 1, global_lambda = 1, positive = False, fit_intercept = True, min_xs_samples = 36):
+        # Checks
+        self._check_init_params(
+            local_lambda,
+            global_lambda,
+            positive,
+            fit_intercept,
+            min_xs_samples,
+        )
+
         # Attributes
         self.local_lambda = local_lambda
         self.global_lambda = global_lambda
@@ -240,6 +250,36 @@ class GlobalLocalRegression(BaseEstimator, RegressorMixin):
                 preds[mask] = X_values[mask] @ beta
 
         return preds
+    
+    def _check_init_params(
+        self,
+        local_lambda,
+        global_lambda,
+        positive,
+        fit_intercept,
+        min_xs_samples,
+    ):
+        # local_lambda
+        if not (isinstance(local_lambda, numbers.Real) and not isinstance(local_lambda, bool)):
+            raise TypeError("local_lambda must be an integer or float.")
+        if local_lambda < 0:
+            raise ValueError("local_lambda must be non-negative.")
+        # global_lambda
+        if not (isinstance(global_lambda, numbers.Real) and not isinstance(global_lambda, bool)):
+            raise TypeError("global_lambda must be an integer or float.")
+        if global_lambda < 0:
+            raise ValueError("global_lambda must be non-negative.")
+        # positive
+        if not isinstance(positive, bool):
+            raise TypeError("positive must be a boolean.")
+        # fit_intercept
+        if not isinstance(fit_intercept, bool):
+            raise TypeError("fit_intercept must be a boolean.")
+        # min_xs_samples
+        if not (isinstance(min_xs_samples, numbers.Integral) and not isinstance(min_xs_samples, bool)):
+            raise TypeError("min_xs_samples must be an integer.")
+        if min_xs_samples < 1:
+            raise ValueError("min_xs_samples must be at least 1.")
     
 if __name__ == "__main__":
     import macrosynergy.management as msm
