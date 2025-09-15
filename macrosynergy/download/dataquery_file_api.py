@@ -481,6 +481,7 @@ class DataQueryFileAPIClient(RateLimitedRequester):
                 **download_args,
                 max_file_retries=max_retries,
                 start_download=True,
+                parent_requester=self,
             )
 
         time_taken = time.time() - start
