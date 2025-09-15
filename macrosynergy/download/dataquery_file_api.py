@@ -73,7 +73,7 @@ including full datasets, deltas, and metadata.
     # print the earliest file's details
     print(available_files.iloc[-1])
 
-**Example 5: Download all full snapshot files for JPMaQS.**
+**Example 5: Download all historical full snapshot files (vintages) for JPMaQS.**
 
 Please note:
     - This is a **VERY LARGE** download, taking 1hr+ and around 1GB/snapshot.
