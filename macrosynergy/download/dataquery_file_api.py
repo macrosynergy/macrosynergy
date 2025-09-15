@@ -366,7 +366,7 @@ class DataQueryFileAPIClient:
     def list_available_files_for_all_file_groups(
         self,
         group_id: str = JPMAQS_GROUP_ID,
-        start_date: str = JPMAQS_START_DATE,
+        start_date: str = JPMAQS_EARLIEST_FILE_DATE,
         end_date: str = None,
         include_full_snapshots: bool = True,
         include_delta: bool = True,
