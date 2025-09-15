@@ -238,6 +238,9 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
 
         client.download_parquet_file(filename="TEST_FULL_20230101.parquet")
         mock_final_path.unlink.assert_called_once()
+        self.assertIs(
+            mock_segmented_downloader.call_args.kwargs["parent_requester"], client
+        )
 
     @patch("macrosynergy.download.dataquery_file_api.cf.as_completed")
     @patch("macrosynergy.download.dataquery_file_api.cf.ThreadPoolExecutor")
