@@ -144,42 +144,6 @@ JPMAQS_EARLIEST_FILE_DATE = "20220101"
 logger = logging.getLogger(__name__)
 
 
-def validate_dq_timestamp(
-    ts: str, var_name: str = None, raise_error: bool = True
-) -> bool:
-    """Validate a timestamp string for DataQuery API."""
-    try:
-        pd.to_datetime(ts, format="mixed", utc=True)
-        return True
-    except (ValueError, TypeError):
-        if raise_error:
-            vn = f"`{var_name}`" if var_name else "Timestamp"
-            raise ValueError(
-                f"Invalid {vn} format. Use YYYYMMDD, YYYYMMDDTHHMMSS, or a "
-                "recognized timestamp format with timezone."
-            )
-        else:
-            return False
-
-
-def get_client_id_secret() -> Optional[Tuple[str, str]]:
-    """Retrieve client ID and secret from environment variables."""
-    pairs = [
-        ("DQ_CLIENT_ID", "DQ_CLIENT_SECRET"),
-        ("DATAQUERY_CLIENT_ID", "DATAQUERY_CLIENT_SECRET"),
-    ]
-    for client_id_env, client_secret_env in pairs:
-        client_id = os.getenv(client_id_env)
-        client_secret = os.getenv(client_secret_env)
-        if client_id and client_secret:
-            logger.info(
-                f"Using {client_id_env} and {client_secret_env} from environment"
-            )
-            return client_id, client_secret
-
-    return None, None
-
-
 class DataQueryFileAPIOauth(JPMorganOAuth):
     """
     A class to handle OAuth authentication for the JPMorgan DataQuery File API.
@@ -952,6 +916,42 @@ class DataQueryFileAPIClient:
 
         total_time = time.time() - start_time
         logger.info(f"Snapshot download completed in {total_time:.2f} seconds.")
+
+
+def validate_dq_timestamp(
+    ts: str, var_name: str = None, raise_error: bool = True
+) -> bool:
+    """Validate a timestamp string for DataQuery API."""
+    try:
+        pd.to_datetime(ts, format="mixed", utc=True)
+        return True
+    except (ValueError, TypeError):
+        if raise_error:
+            vn = f"`{var_name}`" if var_name else "Timestamp"
+            raise ValueError(
+                f"Invalid {vn} format. Use YYYYMMDD, YYYYMMDDTHHMMSS, or a "
+                "recognized timestamp format with timezone."
+            )
+        else:
+            return False
+
+
+def get_client_id_secret() -> Optional[Tuple[str, str]]:
+    """Retrieve client ID and secret from environment variables."""
+    pairs = [
+        ("DQ_CLIENT_ID", "DQ_CLIENT_SECRET"),
+        ("DATAQUERY_CLIENT_ID", "DATAQUERY_CLIENT_SECRET"),
+    ]
+    for client_id_env, client_secret_env in pairs:
+        client_id = os.getenv(client_id_env)
+        client_secret = os.getenv(client_secret_env)
+        if client_id and client_secret:
+            logger.info(
+                f"Using {client_id_env} and {client_secret_env} from environment"
+            )
+            return client_id, client_secret
+
+    return None, None
 
 
 class SegmentedFileDownloader:
