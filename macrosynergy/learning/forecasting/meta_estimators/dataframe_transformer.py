@@ -170,10 +170,11 @@ class DataFrameTransformer(BaseEstimator, TransformerMixin, MetaEstimatorMixin):
                 "fitting the transformer."
             )
         
-        # Check that the number of column names provided is equal to the number of features
-        if self.column_names is not None and len(self.column_names) != X.shape[1]:
+        # Check that the number of column names provided is less than or equal
+        # to the number of features
+        if self.column_names is not None and len(self.column_names) > X.shape[1]:
             raise ValueError(
-                "The number of column names provided must match the number of features."
+                "The number of column names provided must not exceed the number of input features."
             )
 
     def _check_predict_params(self, X):
@@ -193,9 +194,9 @@ class DataFrameTransformer(BaseEstimator, TransformerMixin, MetaEstimatorMixin):
             )
         
         # Check that the number of column names provided equal to the number of features
-        if self.column_names is not None and len(self.column_names) != X.shape[1]:
+        if self.column_names is not None and len(self.column_names) > X.shape[1]:
             raise ValueError(
-                "The number of column names provided must be equal to the number of features."
+                "The number of column names provided must not exceed the number of input features."
             )
         
 if __name__ == "__main__":
