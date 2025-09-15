@@ -7,7 +7,10 @@ import shutil  # noqa
 import uuid  # noqa
 import concurrent.futures  # noqa
 
-from macrosynergy.download.dataquery_file_api import SegmentedFileDownloader
+from macrosynergy.download.dataquery_file_api import (
+    SegmentedFileDownloader,
+    RateLimitedRequester,
+)
 
 
 class TestSegmentedFileDownloaderInitAndLifecycle(unittest.TestCase):
@@ -97,6 +100,38 @@ class TestSegmentedFileDownloaderInitAndLifecycle(unittest.TestCase):
         mock_exists.return_value = False
         downloader.cleanup()
         mock_rmtree.assert_not_called()
+
+    @patch("pathlib.Path.mkdir")
+    def test_init_with_parent_requester(self, mock_mkdir):
+        mock_parent = MagicMock()
+        downloader = SegmentedFileDownloader(
+            **self.base_args, parent_requester=mock_parent
+        )
+        self.assertIs(downloader.parent_requester, mock_parent)
+
+    @patch(
+        "macrosynergy.download.dataquery_file_api.RateLimitedRequester._wait_for_api_call"
+    )
+    def test_wait_for_api_call_delegates_to_parent(self, mock_super_wait):
+        mock_parent = MagicMock(spec=RateLimitedRequester)
+        with patch("pathlib.Path.mkdir", MagicMock()):
+            downloader = SegmentedFileDownloader(
+                **self.base_args, parent_requester=mock_parent
+            )
+
+        downloader._wait_for_api_call()
+        mock_parent._wait_for_api_call.assert_called_once()
+        mock_super_wait.assert_not_called()
+
+    @patch(
+        "macrosynergy.download.dataquery_file_api.RateLimitedRequester._wait_for_api_call"
+    )
+    def test_wait_for_api_call_uses_super_when_no_parent(self, mock_super_wait):
+        with patch("pathlib.Path.mkdir", MagicMock()):
+            downloader = SegmentedFileDownloader(**self.base_args)
+
+        downloader._wait_for_api_call()
+        mock_super_wait.assert_called_once()
 
 
 @patch(
@@ -293,11 +328,14 @@ class TestSegmentedFileDownloaderOrchestration(unittest.TestCase):
     ):
         mock_get_size.side_effect = [requests.exceptions.ConnectionError, 1024]
 
-        with patch(
-            "macrosynergy.download.dataquery_file_api.SegmentedFileDownloader._download_chunks_concurrently"
-        ), patch("builtins.open", mock_open()), patch("shutil.copyfileobj"), patch(
-            "pathlib.Path.stat"
-        ) as mock_stat:
+        with (
+            patch(
+                "macrosynergy.download.dataquery_file_api.SegmentedFileDownloader._download_chunks_concurrently"
+            ),
+            patch("builtins.open", mock_open()),
+            patch("shutil.copyfileobj"),
+            patch("pathlib.Path.stat") as mock_stat,
+        ):
             mock_stat.return_value.st_size = 1024 * 5
 
             self.downloader.download()
