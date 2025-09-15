@@ -359,8 +359,9 @@ def _parse_labels(keys: List[str], labels: Union[List[str], Dict[str, str]], lab
             for key, label in zip(keys, labels):
                 labels_dict[key] = label
         elif isinstance(labels, dict):
+            labels_dict = labels.copy()
             for key in keys:
-                if key not in labels:
+                if key not in labels_dict:
                     labels_dict[key] = key
         else:
             raise ValueError(f"The labels parameter for {label_type} must be a list or a dictionary.")
