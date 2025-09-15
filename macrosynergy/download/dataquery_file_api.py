@@ -660,8 +660,10 @@ class SegmentedFileDownloader(RateLimitedRequester):
         verify_ssl: bool = True,
         start_download: bool = False,
         debug: bool = False,
+        parent_requester: Optional[RateLimitedRequester] = None,
     ):
         super().__init__(api_delay=api_delay * api_delay_margin)
+        self.parent_requester = parent_requester
         self.filename = Path(filename)
         self.url = url
         self.headers = headers
@@ -700,6 +702,12 @@ class SegmentedFileDownloader(RateLimitedRequester):
             logger.error(tb.format_exc())
         self.cleanup()
         return False
+
+    def _wait_for_api_call(self) -> bool:
+        if self.parent_requester:
+            return self.parent_requester._wait_for_api_call()
+        else:
+            return super()._wait_for_api_call()
 
     def log(self, msg: str, part_num: int = None, level: int = logging.INFO):
         part_info = f"[part={part_num}]" if part_num is not None else ""
