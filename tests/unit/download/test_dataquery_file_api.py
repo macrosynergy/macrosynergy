@@ -146,7 +146,11 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
         mock_now.return_value = pd.Timestamp("2023-01-02")
         mock_get.return_value = {
             "available-files": [
-                {"file-datetime": "20230101T100000", "is-available": True}
+                {
+                    "file-datetime": "20230101T100000",
+                    "last-modified": "20230101T100000",
+                    "is-available": True,
+                }
             ]
         }
         client.list_available_files(file_group_id="test_id")
@@ -168,7 +172,10 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
         client = DataQueryFileAPIClient(client_id="id", client_secret="secret")
         mock_list_groups.return_value = pd.DataFrame({"file-group-id": ["FG1"]})
         mock_list_available.return_value = pd.DataFrame(
-            {"file-datetime": ["20230101T120000"], "last-modified": ["20230101T120000"]}
+            {
+                "file-datetime": pd.to_datetime(["20230101T120000"], utc=True),
+                "last-modified": pd.to_datetime(["20230101T120000"], utc=True),
+            }
         )
         df = client.list_available_files_for_all_file_groups()
         self.assertTrue(pd.api.types.is_datetime64_any_dtype(df["file-datetime"]))
@@ -180,8 +187,8 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
     ):
         client = DataQueryFileAPIClient(client_id="id", client_secret="secret")
         mock_list_groups.return_value = pd.DataFrame({"file-group-id": ["FG1"]})
-        mock_list_available.return_value = pd.DataFrame(
-            {"file-datetime": ["20230101T120000"]}
+        mock_list_available.side_effect = InvalidResponseError(
+            'Missing "last-modified" in response'
         )
         with self.assertRaisesRegex(InvalidResponseError, 'Missing "last-modified"'):
             # mssing 'last-modified'
@@ -309,7 +316,7 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
                     "C_delta_20250201T110456.parquet",
                     "A_metadata_20250201T110000.parquet",
                     "B_full_20250201.parquet",
-                    "A_full_20250101.parquet",  # to be filtered out
+                    "A_full_20250101.parquet",
                     "A_full_20250201.parquet",
                 ],
                 "file-datetime": [
