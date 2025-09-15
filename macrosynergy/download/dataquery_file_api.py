@@ -1,3 +1,102 @@
+"""
+Client for downloading JPMaQS data files from the JPMorgan DataQuery File API.
+
+This module provides the `DataQueryFileAPIClient`, a high-level wrapper for the
+JPMorgan DataQuery File API. It is specifically tailored for clients of the JPMaQS
+(J.P. Morgan Macrosynergy Quantamental System) macro-economic dataset.
+
+The client simplifies authentication, listing available data files, and downloading
+them. It supports fetching full snapshots, daily updates (deltas), and metadata files.
+A key feature is a robust, concurrent downloader for large files, which enhances
+speed and reliability by splitting files into segments.
+
+Consumption & Examples
+----------------------
+
+Before using the client, ensure your API credentials are set as environment variables:
+
+.. code-block:: bash
+
+    export DQ_CLIENT_ID="your_client_id"
+    export DQ_CLIENT_SECRET="your_client_secret"
+
+**Example 1: Initialize the client and list all available JPMaQS files.**
+
+.. code-block:: python
+
+    from macrosynergy.download import DataQueryFileAPIClient
+    import pandas as pd
+
+    client = DataQueryFileAPIClient()
+
+    # Fetch a DataFrame of all available files for the JPMaQS group
+    available_files_df = client.list_available_files_for_all_file_groups()
+    print("Available JPMaQS files:")
+    print(available_files_df.head())
+
+**Example 2: Download all new or updated files for the current day.**
+
+This is the recommended way to get a daily snapshot of all JPMaQS data,
+including full datasets, deltas, and metadata.
+
+.. code-block:: python
+
+    from macrosynergy.download import DataQueryFileAPIClient
+    client = DataQueryFileAPIClient()
+    output_directory = "./jpmaqs_data"
+
+    print(f"Downloading today's files to {output_directory}...")
+    client.download_full_snapshot(out_dir=output_directory)
+    print("Download complete.")
+
+**Example 3: Download a single, specific historical file.**
+
+.. code-block:: python
+
+    from macrosynergy.download import DataQueryFileAPIClient
+    client = DataQueryFileAPIClient()
+    output_directory = "./jpmaqs_data"
+    # This specific filename can be found using the list_available_files... methods
+    target_filename = "JPMAQS_GENERIC_RETURNS_20240101.parquet"
+
+    print(f"Downloading {target_filename}...")
+    file_path = client.download_parquet_file(
+        filename=target_filename,
+        out_dir=output_directory
+    )
+    print(f"File downloaded to: {file_path}")
+
+**Example 4: Check availability for a specific file-group.**
+
+.. code-block:: python
+
+    from macrosynergy.download import DataQueryFileAPIClient
+    client = DataQueryFileAPIClient()
+    file_group_id = "JPMAQS_GENERIC_RETURNS"
+
+    available_files = client.list_available_files(file_group_id=file_group_id)
+
+    # print the earliest file's details
+    print(available_files.iloc[-1])
+
+**Example 5: Download all full snapshot files for JPMaQS.**
+
+.. code-block:: python
+
+    from macrosynergy.download import DataQueryFileAPIClient, JPMAQS_EARLIEST_FILE_DATE
+    client = DataQueryFileAPIClient()
+
+    output_directory = "./jpmaqs_full_snapshots"
+
+    client.download_full_snapshot(
+        out_dir=output_directory,
+        since_datetime=JPMAQS_EARLIEST_FILE_DATE,
+        include_delta=False,
+        include_metadata=False,
+    )
+
+"""
+
 import os
 import pandas as pd
 
@@ -308,6 +407,7 @@ class DataQueryFileAPIClient:
         group_id: str = JPMAQS_GROUP_ID,
         start_date: str = JPMAQS_EARLIEST_FILE_DATE,
         end_date: str = None,
+        convert_metadata_timestamps: bool = True,
         include_unavailable: bool = False,
     ) -> pd.DataFrame:
         """
@@ -323,6 +423,8 @@ class DataQueryFileAPIClient:
             The start date for the search in "YYYYMMDD" format.
         end_date : str
             The end date for the search in "YYYYMMDD" format. Defaults to today.
+        convert_metadata_timestamps : bool
+            If True, convert timestamp columns to datetime objects.
         include_unavailable : bool
             If True, includes files that are listed but not currently available.
 
@@ -361,6 +463,11 @@ class DataQueryFileAPIClient:
             .reset_index(drop=True)
         )
 
+        if convert_metadata_timestamps:
+            for col in ["file-datetime", "last-modified"]:
+                if col not in df.columns:
+                    raise InvalidResponseError(f'Missing "{col}" in response')
+                df[col] = pd.to_datetime(df[col], format="mixed", utc=True)
         return df
 
     def list_available_files_for_all_file_groups(
@@ -420,6 +527,7 @@ class DataQueryFileAPIClient:
                         file_group_id=file_group_id,
                         start_date=start_date,
                         end_date=end_date,
+                        convert_metadata_timestamps=convert_metadata_timestamps,
                         include_unavailable=include_unavailable,
                     )
                 ] = file_group_id
@@ -431,11 +539,6 @@ class DataQueryFileAPIClient:
 
         files_df = pd.concat(results).reset_index(drop=True)
 
-        if convert_metadata_timestamps:
-            for col in ["file-datetime", "last-modified"]:
-                if col not in files_df.columns:
-                    raise InvalidResponseError(f'Missing "{col}" in response')
-                files_df[col] = pd.to_datetime(files_df[col], format="mixed", utc=True)
         return files_df
 
     def filter_available_files_by_datetime(
