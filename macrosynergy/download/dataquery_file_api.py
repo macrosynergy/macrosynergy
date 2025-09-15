@@ -80,9 +80,11 @@ including full datasets, deltas, and metadata.
     print(available_files.iloc[-1])
 
 **Example 5: Download all full snapshot files for JPMaQS.**
-- This is a very large download, taking 1hr+ and around 1GB/snapshot.
-- This method is NOT recommended for regular use.
-- This method is ONLY for audit and archival purposes.
+
+Please note:
+    - This is a **VERY LARGE** download, taking 1hr+ and around 1GB/snapshot.
+    - This method is **NOT** recommended for regular use.
+    - This method should **ONLY** be used for audit and archival purposes.
 
 .. code-block:: python
 
@@ -1195,22 +1197,22 @@ if __name__ == "__main__":
 
     print("Current time UTC:", pd.Timestamp.utcnow().isoformat())
 
-    print("Calling `/group/files`")
-    start = time.time()
-    print(dq.list_group_files())
-    end = time.time()
-    print(f"Call completed in {end - start:.2f} seconds")
+    # print("Calling `/group/files`")
+    # start = time.time()
+    # print(dq.list_group_files())
+    # end = time.time()
+    # print(f"Call completed in {end - start:.2f} seconds")
 
-    available_files = dq.list_available_files(
-        file_group_id="JPMAQS_MACROECONOMIC_TRENDS_DELTA"
-    )
-    latest_file_timestamp = available_files["file-datetime"].iloc[0]
-    print(
-        dq.check_file_availability(
-            file_group_id="JPMAQS_MACROECONOMIC_TRENDS_DELTA",
-            file_datetime=latest_file_timestamp,
-        )
-    )
+    # available_files = dq.list_available_files(
+    #     file_group_id="JPMAQS_MACROECONOMIC_TRENDS_DELTA"
+    # )
+    # latest_file_timestamp = available_files["file-datetime"].iloc[0]
+    # print(
+    #     dq.check_file_availability(
+    #         file_group_id="JPMAQS_MACROECONOMIC_TRENDS_DELTA",
+    #         file_datetime=latest_file_timestamp,
+    #     )
+    # )
 
     print("Starting download")
     start = time.time()
@@ -1243,14 +1245,3 @@ if __name__ == "__main__":
             print(f"Scan completed in {end - start:.2f} seconds")
             time.sleep(interval_minutes * 60)
 
-    # print("Starting download")
-    # print("Current time:", pd.Timestamp.now().isoformat())
-    # start = time.time()
-    # dq.download_parquet_file(
-    #     file_group_id="JPMAQS_GENERIC_RETURNS",
-    #     # file_datetime="20250819",
-    #     file_datetime=pd.Timestamp.now().strftime("%Y%m%d"),
-    #     out_dir="./data/dqfiles/",
-    # )
-    # end = time.time()
-    # print(f"Download completed in {end - start:.2f} seconds")
