@@ -57,7 +57,7 @@ including full datasets, deltas, and metadata.
     client = DataQueryFileAPIClient()
     output_directory = "./jpmaqs_data"
     # This specific filename can be found using the list_available_files... methods
-    target_filename = "JPMAQS_GENERIC_RETURNS_20240101.parquet"
+    target_filename = "JPMAQS_GENERIC_RETURNS_20250414.parquet"
 
     print(f"Downloading {target_filename}...")
     file_path = client.download_parquet_file(
