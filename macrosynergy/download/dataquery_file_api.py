@@ -37,7 +37,7 @@ DQ_FILE_API_SEGMENT_SIZE_MB: float = 8.0  # 8 MB
 DQ_FILE_API_STREAM_CHUNK_SIZE: int = 8192  # 8 KB
 
 
-JPMAQS_START_DATE = "20200101"
+JPMAQS_EARLIEST_FILE_DATE = "20220101"
 
 logger = logging.getLogger(__name__)
 
@@ -306,7 +306,7 @@ class DataQueryFileAPIClient:
         self,
         file_group_id: str,
         group_id: str = JPMAQS_GROUP_ID,
-        start_date: str = JPMAQS_START_DATE,
+        start_date: str = JPMAQS_EARLIEST_FILE_DATE,
         end_date: str = None,
         include_unavailable: bool = False,
     ) -> pd.DataFrame:
