@@ -80,6 +80,9 @@ including full datasets, deltas, and metadata.
     print(available_files.iloc[-1])
 
 **Example 5: Download all full snapshot files for JPMaQS.**
+- This is a very large download, taking 1hr+ and around 1GB/snapshot.
+- This method is NOT recommended for regular use.
+- This method is ONLY for audit and archival purposes.
 
 .. code-block:: python
 
