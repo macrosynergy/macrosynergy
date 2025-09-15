@@ -2,13 +2,7 @@
 Client for downloading JPMaQS data files from the JPMorgan DataQuery File API.
 
 This module provides the `DataQueryFileAPIClient`, a high-level wrapper for the
-JPMorgan DataQuery File API. It is specifically tailored for clients of the JPMaQS
-(J.P. Morgan Macrosynergy Quantamental System) macro-economic dataset.
-
-The client simplifies authentication, listing available data files, and downloading
-them. It supports fetching full snapshots, daily updates (deltas), and metadata files.
-A key feature is a robust, concurrent downloader for large files, which enhances
-speed and reliability by splitting files into segments.
+JPMorgan DataQuery File API.
 
 Consumption & Examples
 ----------------------
