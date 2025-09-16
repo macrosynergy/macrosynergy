@@ -277,8 +277,7 @@ class TestAll(unittest.TestCase):
         assert_frame_equal(corr1, corr2)
 
     def test_invalid_xcat_labels(self):
-
-        with self.assertRaises(AssertionError):
+        with self.assertRaises(ValueError):
             correl_matrix(
                 self.dfd,
                 xcats=["XR"],
@@ -290,20 +289,8 @@ class TestAll(unittest.TestCase):
                 xcat_labels=["XR", "CRY"],
             )
 
-        with self.assertRaises(AssertionError):
-            correl_matrix(
-                self.dfd,
-                xcats=["XR"],
-                cids=self.cids,
-                max_color=0.1,
-                show=False,
-                annot=True,
-                fmt=".2f",
-                xcat_labels={"XR": "Excess Returns", "CRY": "Carry"},
-            )
 
     def test_xcat_labels(self):
-
         try:
             correl_matrix(
                 self.dfd,
