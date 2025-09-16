@@ -377,6 +377,13 @@ class DataQueryCertAuth(object):
     def _get_user_id(self) -> str:
         return "CertAuth_Username - " + self.username
 
+    def get_headers(self) -> dict:
+        headers = {
+            "Authorization": f"Basic {self.auth:s}",
+            "User-Agent": f"MacrosynergyPackage/DataQueryHttpAPI-CertAuth/{ms_version_info}",
+        }
+        return headers
+
     def get_auth(self) -> Dict[str, Union[str, Optional[Tuple[str, str]]]]:
         """
         Returns a dictionary with the authentication information, in the same format as
@@ -704,7 +711,7 @@ class DataQueryInterface(object):
             proxy=self.proxy,
             tracking_id=HEARTBEAT_TRACKING_ID,
             verify=self.verify,
-            headers=self.auth.get_auth(),
+            **self.auth.get_auth(),
         )
 
         result: bool = True
@@ -765,7 +772,7 @@ class DataQueryInterface(object):
             proxy=self.proxy,
             tracking_id=tracking_id,
             verify=self.verify,
-            headers=self.auth.get_auth(),
+            **self.auth.get_auth(),
         )
 
         if (response is None) or ("instruments" not in response.keys()):

@@ -349,7 +349,7 @@ def reduce_df(
         and `cids`.
     """
     if xcats is not None:
-        if not isinstance(xcats, list):
+        if isinstance(xcats, str):
             xcats = [xcats]
 
     if start:

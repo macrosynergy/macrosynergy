@@ -176,7 +176,7 @@ class JPMorganOAuth(object):
     def _get_user_id(self) -> str:
         return "OAuth_ClientID - " + self.client_id
 
-    def get_auth(self) -> dict:
+    def get_headers(self) -> dict:
         """
         Get the authorization headers for API requests.
 
@@ -190,3 +190,21 @@ class JPMorganOAuth(object):
             "User-Agent": f"MacrosynergyPackage/{self.application_name}/{ms_version_info}",
         }
         return headers
+
+    def get_auth(self) -> dict:
+        """
+        Get the authentication parameters for API requests.
+        For use with `requests` library, e.g., `requests.get(url, **auth.w())`.
+
+        Returns
+        -------
+        dict
+            A dictionary containing the authentication parameters for API requests.
+        """
+        return {
+            "headers": self.get_headers(),
+            "cert": None,
+        }
+        # todo for future use
+        # "proxies": self.proxies,
+        # "verify": self._verify,
