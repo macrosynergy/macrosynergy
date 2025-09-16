@@ -30,6 +30,9 @@ from .ensemble import (
     VotingRegressor,
 )
 
+from .factor_models import (
+    PLSTransformer,
+)
 __all__ = [
     "LADRegressor",
     "KNNClassifier",
@@ -52,4 +55,5 @@ __all__ = [
     "DataFrameTransformer",
     "GlobalLocalRegression",
     "CountryByCountryRegression",
+    "PLSTransformer",
 ]

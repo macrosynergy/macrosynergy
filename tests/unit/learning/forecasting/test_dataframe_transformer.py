@@ -139,7 +139,7 @@ class TestDataFrameTransformer(unittest.TestCase):
 
         self.assertRaises(ValueError, dt.fit, X=self.X, y=self.y[:-1])
 
-        # Raise error when column_names do not match the number of features
+        # Raise error when column_names are more than the number of features
         with self.assertRaises(ValueError):
             dt = DataFrameTransformer(
                 transformer=transformer,

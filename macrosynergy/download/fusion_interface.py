@@ -20,8 +20,6 @@ import pyarrow.compute as pc
 import pyarrow.parquet as pq
 import pyarrow.csv as pa_csv
 
-from macrosynergy import __version__ as ms_version_info
-
 from macrosynergy.management.types import QuantamentalDataFrame
 from macrosynergy.download.exceptions import NoContentError
 from macrosynergy.download.jpm_oauth import JPMorganOAuth
@@ -330,7 +328,7 @@ class SimpleFusionAPIClient:
         **kwargs,
     ) -> Optional[Dict[str, Any]]:
         url: str = f"{self.base_url}/{endpoint.lstrip('/')}"
-        headers: Dict[str, str] = self.oauth_handler.get_auth()
+        headers: Dict[str, str] = self.oauth_handler.get_headers()
         if timestamp:
             # timestamp is solely for cache busting purposes
             pass  # pragma: no cover
@@ -629,7 +627,7 @@ class SimpleFusionAPIClient:
         """
         # /v1/catalogs/{catalog}/datasets/{dataset}/datasetseries/{seriesmember}/distributions/{distribution}
         endpoint: str = f"catalogs/{catalog}/datasets/{dataset}/datasetseries/{seriesmember}/distributions/{distribution}"
-        headers: Dict[str, str] = self.oauth_handler.get_auth()
+        headers: Dict[str, str] = self.oauth_handler.get_headers()
 
         request_wrapper_stream_bytes_to_disk(
             filename=filename,

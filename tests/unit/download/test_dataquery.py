@@ -784,7 +784,7 @@ class TestDataQueryInterface(unittest.TestCase):
         }
 
         with mock.patch(
-            "macrosynergy.download.dataquery.DataQueryOAuth.get_auth",
+            "macrosynergy.download.dataquery.DataQueryOAuth.get_headers",
             return_value={"headers": "headers", "cert": "cert"},
         ):
             with mock.patch(
@@ -942,7 +942,7 @@ class TestDataQueryInterface(unittest.TestCase):
             return_value=False,
         ):
             with mock.patch(
-                "macrosynergy.download.dataquery.DataQueryOAuth.get_auth",
+                "macrosynergy.download.dataquery.DataQueryOAuth.get_headers",
                 return_value={"user_id": random_string()},
             ):
                 with self.assertRaises(ConnectionError):
