@@ -123,7 +123,8 @@ def _wait_for_api_call(api_delay: float = FUSION_API_DELAY) -> bool:
         diff = (now - LAST_API_CALL).total_seconds()
         sleep_for = api_delay - diff
         if sleep_for > 0:
-            logger.info(f"Sleeping for {sleep_for:.2f} seconds for API rate limit.")
+            if sleep_for > 1:
+                logger.info(f"Sleeping for {sleep_for:.2f} seconds for API rate limit.")
             time.sleep(sleep_for)
         LAST_API_CALL = datetime.datetime.now()
     return True
@@ -142,6 +143,7 @@ def request_wrapper(
     as_text: Optional[bool] = None,
     api_delay: float = FUSION_API_DELAY,
     timeout: Optional[float] = None,
+    verify_ssl: bool = True,
 ) -> Union[Dict[str, Any], str, bytes]:
     """
     A wrapper function for making API requests to the JPMorgan Fusion API.
@@ -171,6 +173,7 @@ def request_wrapper(
             json=json_payload,
             proxies=proxies,
             timeout=timeout,
+            verify=verify_ssl,
         )
         raw_response = response
         response.raise_for_status()
@@ -233,6 +236,7 @@ def request_wrapper_stream_bytes_to_disk(
     chunk_size: int = None,
     api_delay: float = FUSION_API_DELAY,
     timeout: Optional[float] = None,
+    verify_ssl: bool = True,
 ) -> None:
     """
     Stream a request's response bytes directly to disk, chunk by chunk.
@@ -261,6 +265,8 @@ def request_wrapper_stream_bytes_to_disk(
         Delay between API calls (defaults to 1.0 seconds).
     timeout : float, optional
         Timeout for the request (defaults to None).
+    verify_ssl : bool
+        Whether to verify SSL certificates (defaults to True).
     """
     if not isinstance(method, str):
         raise TypeError("Method must be a string.")
@@ -279,6 +285,7 @@ def request_wrapper_stream_bytes_to_disk(
         proxies=proxies,
         stream=True,
         timeout=timeout,
+        verify=verify_ssl,
     ) as response:
         response.raise_for_status()
         os.makedirs(os.path.dirname(filename), exist_ok=True)
