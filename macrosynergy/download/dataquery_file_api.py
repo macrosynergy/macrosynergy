@@ -43,7 +43,30 @@ including full datasets, deltas, and metadata.
     client.download_full_snapshot(out_dir=output_directory)
     print("Download complete.")
 
-**Example 3: Download a single, specific historical file.**
+
+**Example 3: Download all new or updated delta-files since a specific date/time.**
+
+.. code-block:: python
+
+    from macrosynergy.download import DataQueryFileAPIClient
+    import pandas as pd
+
+    client = DataQueryFileAPIClient()
+    output_directory = "./jpmaqs_data"
+    since_datetime = pd.Timestamp.today() - pd.DateOffset(days=10)
+
+    print(f"Downloading today's files to {output_directory}...")
+    client.download_full_snapshot(
+        out_dir=output_directory,
+        since_datetime=since_datetime,
+        include_full_snapshots=False,
+        include_metadata=True,
+        include_delta=True,
+    )
+    print("Download complete.")
+
+
+**Example 4: Download a single, specific historical file.**
 
 .. code-block:: python
 
@@ -60,7 +83,7 @@ including full datasets, deltas, and metadata.
     )
     print(f"File downloaded to: {file_path}")
 
-**Example 4: Check availability for a specific file-group.**
+**Example 5: Check availability for a specific file-group.**
 
 .. code-block:: python
 
@@ -73,7 +96,7 @@ including full datasets, deltas, and metadata.
     # print the earliest file's details
     print(available_files.iloc[-1])
 
-**Example 5: Download all historical full snapshot files (vintages) for JPMaQS.**
+**Example 6: Download all historical full snapshot files (vintages) for JPMaQS.**
 
 Please note:
     - This is a **VERY LARGE** download, taking 1hr+ and around 1GB/snapshot.
