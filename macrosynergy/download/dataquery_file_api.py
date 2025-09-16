@@ -105,14 +105,14 @@ Please note:
 
 .. code-block:: python
 
-    from macrosynergy.download import DataQueryFileAPIClient, JPMAQS_EARLIEST_FILE_DATE
+    from macrosynergy.download import DataQueryFileAPIClient
     client = DataQueryFileAPIClient()
-
+    earliest_date = "20220101" # a date before the earliest available file
     output_directory = "./jpmaqs_full_snapshots"
 
     client.download_full_snapshot(
         out_dir=output_directory,
-        since_datetime=JPMAQS_EARLIEST_FILE_DATE,
+        since_datetime=earliest_date,
         include_delta=False,
         include_metadata=False,
     )
