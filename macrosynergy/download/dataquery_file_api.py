@@ -261,7 +261,7 @@ class DataQueryFileAPIClient:
             The JSON response from the API as a dictionary.
         """
         url = f"{self.base_url}{endpoint}"
-        headers = self.oauth.get_auth()
+        headers = self.oauth.get_headers()
         for _ in range(retries):
             try:
                 return request_wrapper(
@@ -665,7 +665,7 @@ class DataQueryFileAPIClient:
                 raise ValueError(f"Invalid filename format: {filename}")
         endpoint = "/group/file/download"
         url = f"{self.base_url}{endpoint}"
-        headers = self.oauth.get_auth()
+        headers = self.oauth.get_headers()
         params = {"file-group-id": file_group_id, "file-datetime": file_datetime}
 
         Path(out_dir).mkdir(parents=True, exist_ok=True)
