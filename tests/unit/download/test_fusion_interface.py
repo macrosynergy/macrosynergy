@@ -229,9 +229,9 @@ class TestFusionOAuth(unittest.TestCase):
         self.assertTrue(mock_retrieve.called)
 
     @patch.object(FusionOAuth, "_get_token", return_value="tok")
-    def test_get_auth_returns_headers(self, mock_get_token):
+    def test_get_headers(self, mock_get_token):
         oauth = FusionOAuth(**self.creds)
-        headers = oauth.get_auth()
+        headers = oauth.get_headers()
         self.assertIn("Authorization", headers)
         self.assertTrue(headers["Authorization"].startswith("Bearer "))
         self.assertIn("User-Agent", headers)
@@ -292,7 +292,7 @@ class TestSimpleFusionAPIClient(unittest.TestCase):
 
     def setUp(self):
         self.oauth = MagicMock(spec=FusionOAuth)
-        self.oauth.get_auth.return_value = {"Authorization": "Bearer test"}
+        self.oauth.get_headers.return_value = {"Authorization": "Bearer test"}
         self.client = SimpleFusionAPIClient(
             self.oauth, base_url="https://example.com/api"
         )
@@ -339,7 +339,7 @@ class TestSimpleFusionAPIClient(unittest.TestCase):
             expected_url = f"{self.client.base_url}/{expected_endpoint}"
             mock_stream.assert_called_once_with(
                 filename=filename,
-                headers=self.oauth.get_auth.return_value,
+                headers=self.oauth.get_headers.return_value,
                 url=expected_url,
                 method="GET",
                 **extra_kwargs,
