@@ -75,6 +75,16 @@ class TestGlobalLocalRegression(unittest.TestCase):
             model = GlobalLocalRegression(fit_intercept="True")
         with self.assertRaises(TypeError):
             model = GlobalLocalRegression(fit_intercept=7)
+        # shrink_intercepts
+        with self.assertRaises(TypeError):
+            model = GlobalLocalRegression(shrink_intercepts="True")
+        with self.assertRaises(TypeError):
+            model = GlobalLocalRegression(shrink_intercepts=7)
+        # shrink_to_parity
+        with self.assertRaises(TypeError):
+            model = GlobalLocalRegression(shrink_to_parity="True")
+        with self.assertRaises(TypeError):
+            model = GlobalLocalRegression(shrink_to_parity=7)
         # min_xs_samples
         with self.assertRaises(TypeError):
             model = GlobalLocalRegression(min_xs_samples=1.5)

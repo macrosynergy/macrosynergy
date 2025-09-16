@@ -21,6 +21,12 @@ class GlobalLocalRegression(BaseEstimator, RegressorMixin):
         Whether to constrain all coefficients to be positive. Default is False.
     fit_intercept : bool, default=True
         Whether to fit an intercept term. Default is True.
+    shrink_intercepts : bool, default=True
+        Whether to shrink intercepts towards the global intercept, with further shrinkage
+        towards zero. Default is True.
+    shrink_to_parity : bool, default=False
+        Whether to shrink global coefficients to an equal weighting of all features, as
+        opposed to zero (Ridge). Default is False.
     min_xs_samples : int, default=36
         Minimum number of samples required in each group for the group to be considered 
         a contribution to the mean squared error component of the loss function.
@@ -48,14 +54,25 @@ class GlobalLocalRegression(BaseEstimator, RegressorMixin):
 
             L(\{\beta_i\}_{i=1}^{C}, \beta) = \frac{1}{C} \sum_{i = 1}^{C} \left [ \frac{1}{n_{i}}  \sum_{t=1}^{n_{i}} (y_{it} - x_{it}^{\intercal} \beta_{i})^2 \right ] + \lambda_{\text{local}} \sum_{i=1}^{C} ||\beta_i - \beta||_{2}^{2} + \lambda_{\text{global}} ||\beta||_{2}^{2}
     """
-    def __init__(self, local_lambda = 1, global_lambda = 1, positive = False, fit_intercept = True, min_xs_samples = 36):
+    def __init__(
+            self,
+            local_lambda = 1,
+            global_lambda = 1,
+            positive = False,
+            fit_intercept = True,
+            shrink_intercepts = True,
+            shrink_to_parity = False,
+            min_xs_samples = 36
+        ):
         # Checks
         self._check_init_params(
-            local_lambda,
-            global_lambda,
-            positive,
-            fit_intercept,
-            min_xs_samples,
+            local_lambda=local_lambda,
+            global_lambda=global_lambda,
+            positive=positive,
+            fit_intercept=fit_intercept,
+            shrink_intercepts=shrink_intercepts,
+            shrink_to_parity=shrink_to_parity,
+            min_xs_samples=min_xs_samples,
         )
 
         # Attributes
@@ -63,6 +80,8 @@ class GlobalLocalRegression(BaseEstimator, RegressorMixin):
         self.global_lambda = global_lambda
         self.positive = positive
         self.fit_intercept = fit_intercept
+        self.shrink_intercepts = shrink_intercepts
+        self.shrink_to_parity = shrink_to_parity
         self.min_xs_samples = min_xs_samples
     
     def fit(self, X, y, sample_weight = None):
@@ -104,7 +123,7 @@ class GlobalLocalRegression(BaseEstimator, RegressorMixin):
             if sample_weight is not None:
                 self.Xy_cid_weights_[cid] = sample_weight[y.index.get_level_values(0)==cid]
 
-        # Initialise with zeros
+        # Initialise with zeros - n_cids_ sets of local coefs, 1 set of global coefs
         x0 = np.zeros((self.n_cids_ + 1) * self.n_features_)
 
         # Optional bounds
@@ -156,7 +175,7 @@ class GlobalLocalRegression(BaseEstimator, RegressorMixin):
         """
         weights = weights.reshape(self.n_cids_ + 1, self.n_features_)
         total_loss = 0.0
-        global_beta = weights[-1, :]
+        global_beta = weights[-1, :] # the last row of the weight matrix
         
         # Likelihood
         for i, g in enumerate(self.cids_):
@@ -173,13 +192,23 @@ class GlobalLocalRegression(BaseEstimator, RegressorMixin):
         
         # Local-to-global regularization term
         if self.local_lambda > 0:
-            reg = np.sum((weights[:-1] - global_beta)**2)
+            if self.shrink_intercepts:
+                reg = np.sum((weights[:-1] - global_beta)**2) # TODO: should this be an average rather than a sum?
+            else:
+                reg = np.sum((weights[:-1, 1:] - global_beta[1:])**2) # TODO: should this be an average rather than a sum?
+            
             total_loss += self.local_lambda * reg
             
         # Global regularization term
         if self.global_lambda > 0:
-            reg = np.sum(global_beta**2)
-            total_loss += self.global_lambda * reg
+            if self.shrink_to_parity and self.fit_intercept:
+                reg = np.sum((global_beta[1:] - np.mean(global_beta[1:]))**2)
+            elif self.shrink_to_parity and not self.fit_intercept:
+                reg = np.sum((global_beta - np.mean(global_beta))**2)
+            else:
+                # TODO: consider not penalizing intercept
+                reg = np.sum(global_beta**2)
+                total_loss += self.global_lambda * reg
             
         return total_loss
     
@@ -195,7 +224,7 @@ class GlobalLocalRegression(BaseEstimator, RegressorMixin):
             for each country. 
         """
         weights = weights.reshape(self.n_cids_ + 1, self.n_features_)
-        global_beta = weights[-1]
+        global_beta = weights[-1] # TODO: Do I need to copy this?
         
         grads = np.zeros_like(weights)
 
@@ -212,7 +241,10 @@ class GlobalLocalRegression(BaseEstimator, RegressorMixin):
             else:
                 grad_i = 2 * X_i.T @ residual / len(residual)
 
-            grad_i += 2 * self.local_lambda * (beta_i - global_beta)
+            if self.local_lambda > 0 and self.shrink_intercepts:
+                grad_i += 2 * self.local_lambda * (beta_i - global_beta)
+            elif self.local_lambda > 0 and not self.shrink_intercepts:
+                grad_i[1:] += 2 * self.local_lambda * (beta_i[1:] - global_beta[1:])
             grads[i] = grad_i
 
         # Gradient for global beta
@@ -257,6 +289,8 @@ class GlobalLocalRegression(BaseEstimator, RegressorMixin):
         global_lambda,
         positive,
         fit_intercept,
+        shrink_intercepts,
+        shrink_to_parity,
         min_xs_samples,
     ):
         # local_lambda
@@ -275,6 +309,12 @@ class GlobalLocalRegression(BaseEstimator, RegressorMixin):
         # fit_intercept
         if not isinstance(fit_intercept, bool):
             raise TypeError("fit_intercept must be a boolean.")
+        # shrink_intercepts
+        if not isinstance(shrink_intercepts, bool):
+            raise TypeError("shrink_intercepts must be a boolean.")
+        # shrink_to_parity
+        if not isinstance(shrink_to_parity, bool):
+            raise TypeError("shrink_to_parity must be a boolean.")
         # min_xs_samples
         if not (isinstance(min_xs_samples, numbers.Integral) and not isinstance(min_xs_samples, bool)):
             raise TypeError("min_xs_samples must be an integer.")
