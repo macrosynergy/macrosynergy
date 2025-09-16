@@ -1225,50 +1225,27 @@ if __name__ == "__main__":
 
     print("Current time UTC:", pd.Timestamp.utcnow().isoformat())
 
-    # print("Calling `/group/files`")
-    # start = time.time()
-    # print(dq.list_group_files())
-    # end = time.time()
-    # print(f"Call completed in {end - start:.2f} seconds")
+    print('Listing available file groups for "JPMAQS"')
+    print(dq.list_group_files())
 
-    # available_files = dq.list_available_files(
-    #     file_group_id="JPMAQS_MACROECONOMIC_TRENDS_DELTA"
-    # )
-    # latest_file_timestamp = available_files["file-datetime"].iloc[0]
-    # print(
-    #     dq.check_file_availability(
-    #         file_group_id="JPMAQS_MACROECONOMIC_TRENDS_DELTA",
-    #         file_datetime=latest_file_timestamp,
-    #     )
-    # )
+    print('Listing available files for group "JPMAQS_MACROECONOMIC_TRENDS_DELTA"')
+    available_files = dq.list_available_files(
+        file_group_id="JPMAQS_MACROECONOMIC_TRENDS_DELTA"
+    )
+    print(available_files.head())
+    latest_file_timestamp = available_files["file-datetime"].iloc[0]
 
-    print("Starting download")
+    print(f"Latest file timestamp: {latest_file_timestamp}")
+
     start = time.time()
-    dq = DataQueryFileAPIClient()
-
     since_datetime = pd.Timestamp.now().strftime("%Y%m%d")
+    print(
+        f"Downloading full-snapshots, delta-files, and metadata files published since {since_datetime}"
+    )
+    dq = DataQueryFileAPIClient()
     dq.download_full_snapshot(
-        out_dir="./data/dqfiles/test/",
+        out_dir="./data/jpmaqs-data/",
         since_datetime=since_datetime,
     )
     end = time.time()
     print(f"Download completed in {end - start:.2f} seconds")
-
-    def check_and_download(interval_minutes: int = 5):
-        last_scan = pd.Timestamp.utcnow().strftime("%Y%m%d")
-        while True:
-            print("Checking for new delta files...")
-            curr_time = pd.Timestamp.utcnow().strftime("%Y%m%dT%H%M%S")
-            start = time.time()
-            dq.download_full_snapshot(
-                out_dir="./data/dqfiles/continuous/",
-                since_datetime=last_scan,
-                include_full_snapshots=False,
-                include_metadata=True,
-                include_delta=True,
-                show_progress=False,
-            )
-            end = time.time()
-            last_scan = curr_time
-            print(f"Scan completed in {end - start:.2f} seconds")
-            time.sleep(interval_minutes * 60)
