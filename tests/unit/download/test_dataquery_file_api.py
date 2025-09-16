@@ -3,6 +3,7 @@ import pandas as pd
 from unittest.mock import patch, MagicMock
 import functools
 import logging
+from macrosynergy.compat import PD_2_0_OR_LATER
 from macrosynergy.download.dataquery_file_api import (
     validate_dq_timestamp,
     get_client_id_secret,
@@ -301,7 +302,13 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
                     show_progress=False,
                 )
             self.assertEqual(spy.call_count, 2)
-            self.assertEqual(spy.call_args_list[1].kwargs["filenames"], ["f2.parquet"])
+            res = None
+            expected = ["f2.parquet"]
+            if PD_2_0_OR_LATER:
+                res = spy.call_args_list[1].kwargs["filenames"]
+            else:
+                res = spy.call_args_list[1][1]["filenames"]
+            self.assertEqual(res, expected)
 
     @patch("macrosynergy.download.dataquery_file_api.logger")
     @patch.object(DataQueryFileAPIClient, "download_multiple_parquet_files")
