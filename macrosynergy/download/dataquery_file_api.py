@@ -108,11 +108,11 @@ import logging
 import shutil
 import traceback as tb
 import uuid
-from typing import Dict, Any, Optional, List, Tuple
+from typing import Dict, Any, Optional, List, Tuple, Union
 from tqdm import tqdm
 
 import requests
-
+from macrosynergy.compat import PD_2_0_OR_LATER
 from macrosynergy.download.dataquery import JPMAQS_GROUP_ID
 from macrosynergy.download.fusion_interface import (
     request_wrapper,
@@ -419,9 +419,7 @@ class DataQueryFileAPIClient:
         df.loc[:, "file-datetime"] = df["file-datetime"].astype(str)
 
         # Sort by real timestamp while leaving the column as string
-        df["_ts"] = pd.to_datetime(
-            df["file-datetime"], format="mixed", errors="coerce", utc=True
-        )
+        df["_ts"] = pd_to_datetime_compat(df["file-datetime"], utc=True)
         df = (
             df.sort_values("_ts", ascending=False)
             .drop(columns="_ts")
@@ -432,7 +430,7 @@ class DataQueryFileAPIClient:
             for col in ["file-datetime", "last-modified"]:
                 if col not in df.columns:
                     raise InvalidResponseError(f'Missing "{col}" in response')
-                df[col] = pd.to_datetime(df[col], format="mixed", utc=True)
+                df[col] = pd_to_datetime_compat(df[col], utc=True)
         return df
 
     def list_available_files_for_all_file_groups(
@@ -547,8 +545,8 @@ class DataQueryFileAPIClient:
         validate_dq_timestamp(since_datetime, var_name="since_datetime")
         validate_dq_timestamp(to_datetime, var_name="to_datetime")
 
-        since_ts = pd.to_datetime(since_datetime, utc=True)
-        to_ts = pd.to_datetime(to_datetime, utc=True)
+        since_ts = pd_to_datetime_compat(since_datetime, utc=True)
+        to_ts = pd_to_datetime_compat(to_datetime, utc=True)
 
         if "T" not in str(since_datetime):
             since_ts = since_ts.normalize()
@@ -914,12 +912,48 @@ class DataQueryFileAPIClient:
         logger.info(f"Snapshot download completed in {total_time:.2f} seconds.")
 
 
+def _pd_to_datetime_compat(ts: str, utc: bool):
+    formats = [
+        "%Y%m%d",
+        "%Y%m%dT%H%M%S",
+        "%Y-%m-%d",
+        "%Y-%m-%dT%H:%M:%S",
+        # ISO with timezone information
+        "%Y-%m-%dT%H:%M:%SZ",  # UTC with Z (e.g. 2025-09-16T12:34:56Z)
+        "%Y-%m-%dT%H:%M:%S%z",  # With numeric offset (e.g. 2025-09-16T12:34:56+02:00 or +0200)
+    ]
+    formats_str = f"[{', '.join(formats).replace('%', '').upper()}]"
+    for fmt in formats:
+        try:
+            return pd.to_datetime(ts, format=fmt, utc=utc)
+        except (ValueError, TypeError):
+            continue
+    raise ValueError(
+        f"Timestamp '{ts}' does not match expected formats. Use one of {formats_str}."
+    )
+
+
+def pd_to_datetime_compat(
+    ts: Union[str, pd.Series],
+    format: str = "mixed",
+    utc: bool = True,
+):
+    if PD_2_0_OR_LATER:
+        return pd.to_datetime(ts, format=format, utc=utc)
+    if isinstance(ts, pd.Series):
+        return ts.apply(lambda x: _pd_to_datetime_compat(x, utc=utc))
+    return _pd_to_datetime_compat(ts, utc=utc)
+
+
 def validate_dq_timestamp(
     ts: str, var_name: str = None, raise_error: bool = True
 ) -> bool:
     """Validate a timestamp string for DataQuery API."""
     try:
-        pd.to_datetime(ts, format="mixed", utc=True)
+        if PD_2_0_OR_LATER:
+            pd.to_datetime(ts, format="mixed", utc=True)
+        else:
+            pd_to_datetime_compat(ts, utc=True)
         return True
     except (ValueError, TypeError):
         if raise_error:
