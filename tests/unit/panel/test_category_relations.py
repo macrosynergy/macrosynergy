@@ -675,6 +675,34 @@ class TestAll(unittest.TestCase):
 
         warnings.resetwarnings()
 
+    def test_reg_scatter_one_cid(self):
+        sel_xcats: List[str] = ["XR", "CRY"]
+        sel_cids: List[str] = ["AUD"]
+        cr = CategoryRelations(
+            self.dfd,
+            xcats=sel_xcats,
+            cids=sel_cids,
+            freq="M",
+            xcat_aggs=["mean", "mean"],
+            lag=1,
+            start="2000-01-01",
+            years=None,
+            blacklist=self.black,
+        )
+        # test warning raised when map is used with one cid
+        with warnings.catch_warnings(record=True) as w:
+            cr.reg_scatter(
+                title="Carry and Return",
+                xlab="Carry",
+                ylab="Return",
+                coef_box="lower right",
+                prob_est="map",
+            )
+            self.assertTrue(
+                "The 'map' estimator is not applicable to a single cross-section. "
+                "Using 'pool' instead." in str(w[0].message)
+            )
+
     def test_reg_scatter(self):
         sel_xcats: List[str] = ["XR", "CRY"]
         sel_cids: List[str] = ["AUD", "CAD", "GBP"]

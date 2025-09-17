@@ -50,6 +50,10 @@ from .forecasting import (
     VotingRegressor,
     VotingClassifier,
     FIExtractor,
+    DataFrameTransformer,
+    GlobalLocalRegression,
+    CountryByCountryRegression,
+    PLSTransformer,
 )
 
 from .random_effects import RandomEffects
@@ -75,6 +79,7 @@ __all__ = [
     "PanelStandardScaler",
     "ZnScoreAverager",
     "PanelPCA",
+    "PLSTransformer",
     # metrics
     "neg_mean_abs_corr",
     "panel_significance_probability",
@@ -101,6 +106,7 @@ __all__ = [
     "ModifiedTimeWeightedLinearRegression",
     "VotingRegressor",
     "VotingClassifier",
+    "GlobalLocalRegression",
     # market beta estimation
     "BetaEstimator",
     # regression system
@@ -113,4 +119,6 @@ __all__ = [
     # Meta estimators
     "ProbabilityEstimator",
     "FIExtractor",
+    "DataFrameTransformer",
+    "CountryByCountryRegression",
 ]

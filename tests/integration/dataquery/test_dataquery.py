@@ -17,7 +17,7 @@ def random_string() -> str:
     """
     Used to generate random string for testing.
     """
-    return "".join([chr(int(random() * 26 + 97)) for i in range(10)])
+    return "random-str" + "".join([chr(int(random() * 26 + 97)) for i in range(10)])
 
 
 class TestDataQueryOAuth(unittest.TestCase):

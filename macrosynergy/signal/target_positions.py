@@ -318,6 +318,7 @@ def modify_signals(
     scale: str = "prop",
     min_obs: int = 252,
     thresh: float = None,
+    blacklist: Union[dict, None] = None
 ):
     """
     Calculate modified cross-section signals based on zn-scoring (proportionate method)
@@ -363,6 +364,10 @@ def modify_signals(
         threshold value beyond which zn-scores for propotionate position taking are
         winsorized. The threshold is the maximum absolute score value in standard
         deviations. The minimum is 1 standard deviation.
+    blacklist : dict or None
+        dictionary of cross-sections and their respective date ranges that should be
+        excluded from the calculation of the modified signals. The keys are cross-section 
+        identifiers (e.g., 'AUD') and the values are lists of date ranges (e.g., ['2012-01-03', '2012-01-03']).
 
     Returns
     -------
@@ -387,10 +392,11 @@ def modify_signals(
             min_obs=min_obs,
             iis=True,
             thresh=thresh,
+            blacklist=blacklist,
         )
     else:
         df_ms = reduce_df(
-            df=df, xcats=[xcat_sig], cids=cids, start=start, end=end, blacklist=None
+            df=df, xcats=[xcat_sig], cids=cids, start=start, end=end, blacklist=blacklist
         )
         df_ms["value"] = np.sign(df_ms["value"])
 

@@ -24,11 +24,14 @@ def correl_matrix(
     lags: dict = None,
     lags_secondary: Optional[dict] = None,
     title: str = None,
+    title_fontsize: Optional[int] = None,
     size: Tuple[float] = (14, 8),
     max_color: float = None,
     show: bool = True,
     xcat_labels: Optional[Union[List[str], Dict[str, str]]] = None,
     xcat_secondary_labels: Optional[Union[List[str], Dict[str, str]]] = None,
+    cid_labels: Optional[Union[List[str], Dict[str, str]]] = None,
+    cid_secondary_labels: Optional[Union[List[str], Dict[str, str]]] = None,
     **kwargs: Any,
 ):
     """
@@ -77,6 +80,8 @@ def correl_matrix(
         `xcats_secondary` is provided.
     title : str
         chart heading. If none is given, a default title is used.
+    title_fontsize : int
+        font size of the title. Default is None.
     size : Tuple[float]
         two-element tuple setting width/height of figure. Default is (14, 8).
     max_color : float
@@ -88,9 +93,14 @@ def correl_matrix(
     xcat_labels : Optional[Union[List[str], Dict[str, str]]
         optional list or dictionary of labels for the categories specified in `xcats`.
         A list should be in the same order as `xcats`, a dictionary should map from each
-        category to its label (e.g. {'XR': 'Exchange Rate', 'CRY': 'Cryptocurrency'}).
+        category to its label (e.g. {'XR': 'Excess returns', 'CRY': 'Carry'}).
     xcat_secondary_labels : Optional[Union[List[str], Dict[str, str]]]
         optional list or dictionary of labels for `xcats_secondary`.
+    cid_labels : Optional[Union[List[str], Dict[str, str]]]
+        optional list or dictionary of labels for cids. A list should be in the same
+        order as cids, a dictionary should map from each cid to its label.
+    cid_secondary_labels : Optional[Union[List[str], Dict[str, str]]]
+        optional list or dictionary of labels for cids_secondary.
     **kwargs : Dict
         Arbitrary keyword arguments that are passed to seaborn.heatmap.
 
@@ -117,11 +127,14 @@ def correl_matrix(
         lags=lags,
         lags_secondary=lags_secondary,
         title=title,
+        title_fontsize=title_fontsize,
         size=size,
         max_color=max_color,
         show=show,
         xcat_labels=xcat_labels,
         xcat_secondary_labels=xcat_secondary_labels,
+        cid_labels=cid_labels,
+        cid_secondary_labels=cid_secondary_labels,
         **kwargs,
     )
 

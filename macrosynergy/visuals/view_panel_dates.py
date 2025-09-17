@@ -1,9 +1,8 @@
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
-from typing import Tuple
+from typing import Tuple, List
 from macrosynergy.management import business_day_dif
-from macrosynergy.management.types import QuantamentalDataFrame
 
 
 def view_panel_dates(
@@ -11,6 +10,8 @@ def view_panel_dates(
     size: Tuple[float, float] = None,
     use_last_businessday: bool = True,
     header: str = None,
+    title_fontsize: int = None,
+    row_order: List[str] = None,
 ):
     """
     Visualize panel dates with color codes.
@@ -24,6 +25,15 @@ def view_panel_dates(
     use_last_businessday : bool
         boolean indicating whether or not to use the last business day before today as
         the end date. Default is True.
+    header : str
+        A string to be used as the title of the heatmap. If None, a default header will be used
+        based on the data type of the DataFrame.
+    title_fontsize : int
+        Font size for the title of the heatmap. Default is None (automatic sizing).
+    row_order : List[str]
+        A list of strings specifying the order of rows in the heatmap. These rows
+        correspond to the columns of the input DataFrame. If None, the default order
+        used by Seaborn will be applied.
     """
 
     # DataFrame of official timestamps.
@@ -54,9 +64,26 @@ def view_panel_dates(
     if size is None:
         size = (max(df.shape[0] / 2, 18), max(1, df.shape[1] / 2))
 
+    df = df.T
+
+    if row_order is None:
+        row_order = df.index.tolist()
+
+    if isinstance(df.index, pd.CategoricalIndex):
+        missing = set(row_order) - set(df.index.categories)
+        if missing:
+            df = df.reindex(row_order, fill_value=pd.NA)
+        df.index = pd.CategoricalIndex(df.index, categories=row_order, ordered=True)
+        df = df.sort_index()
+    else:
+        missing = set(row_order) - set(df.index)
+        if missing:
+            df = df.reindex(row_order, fill_value=pd.NA)
+        df = df.loc[row_order]
+
     sns.set(rc={"figure.figsize": size})
     sns.heatmap(
-        df.T,
+        df,
         cmap="YlOrBr",
         center=df.stack().mean(),
         annot=True,
@@ -66,5 +93,5 @@ def view_panel_dates(
     )
     plt.xlabel("")
     plt.ylabel("")
-    plt.title(header, fontsize=18)
+    plt.title(header, fontsize=title_fontsize)
     plt.show()

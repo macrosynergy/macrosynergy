@@ -477,9 +477,9 @@ def apply_slip(
 
         df = df.sort_values(by=["cid", "xcat", "real_date"])
 
+    
     for col in metrics:
         tks_isin = df["ticker"].isin(sel_tickers)
-        df.loc[tks_isin, col] = df.loc[tks_isin, col].astype(float)
         df.loc[tks_isin, col] = df.groupby("ticker", observed=True)[col].shift(slip)
 
     df = df.drop(columns=["ticker"]).reset_index(drop=True)
@@ -743,7 +743,7 @@ def reduce_df(
         )
 
     if xcats is not None:
-        if not isinstance(xcats, list):
+        if isinstance(xcats, str):
             xcats = [xcats]
 
     if start:
@@ -1610,6 +1610,55 @@ def _insert_as_categorical(df, column_name, category_name, column_idx):
             categories=[category_name],
         ),
     )
+    return df
+
+
+def forward_fill_wide_df(df, blacklist=None, n=1):
+    """
+    Forward fills NaN values in a wide DataFrame using the last valid value in each column.
+    It will not forward fill gaps in the data, only the next `n` periods after the last valid value.
+    
+    Parameters
+    ----------
+    df : pd.DataFrame
+        The DataFrame to be forward filled in `wide` format, where each column represents a
+        cross-section and the index are dates.
+    blacklist : dict, optional
+        A dictionary where keys are column names and values are lists of two elements,
+        representing the start and end dates of periods to be excluded from filling.
+    n : int, optional
+        The number of periods to fill forward. Default is 1, meaning only the next period
+    """
+    if blacklist is None:
+        blacklist = {}
+    if not isinstance(blacklist, dict):
+        raise TypeError("blacklist argument must be a dictionary.")
+    if not isinstance(df, pd.DataFrame):
+        raise TypeError("df must be a pandas DataFrame.")
+    if not isinstance(n, int):
+        raise ValueError("Parameter 'n' must be an integer.")
+    
+    for col in df.columns:
+        series = df[col]
+
+        last_valid_idx = series.last_valid_index()
+        if last_valid_idx is None:
+            continue
+        last_pos = series.index.get_loc(last_valid_idx)
+
+        fill_positions = range(last_pos + 1, min(last_pos + n + 1, len(series)))
+        if not fill_positions:
+            continue
+        mask = pd.Series(False, index=series.index)
+        mask.iloc[list(fill_positions)] = True
+
+        blist = blacklist.get(col)
+        if blist:
+            start, end = pd.to_datetime(blist[0]), pd.to_datetime(blist[1])
+            blacklist_mask = series.index.to_series().between(start, end)
+            mask &= ~blacklist_mask
+        to_fill = mask & series.isna()
+        df.loc[to_fill, col] = series.iloc[last_pos]
     return df
 
 

@@ -541,6 +541,8 @@ class CategoryRelations(object):
         ----------
         title : str
             title of plot. If None (default) an informative title is applied.
+        title_fontsize : int
+            font size of the title. Default is None.
         labels : bool
             assign a cross-section/period label to each dot. Default is False.
         size : Tuple[float]
@@ -619,6 +621,14 @@ class CategoryRelations(object):
             "kendall",
         ], "prob_est must be 'pool', 'kendall' or 'map'"
 
+        if len(self.cids) == 1 and prob_est == "map":
+            warnings.warn(
+                "The 'map' estimator is not applicable to a single cross-section. "
+                "Using 'pool' instead.",
+                UserWarning,
+            )
+            prob_est = "pool"
+
         sns.set_theme(style="whitegrid")
         dfx = self.df.copy()
 
@@ -670,6 +680,10 @@ class CategoryRelations(object):
 
             if "real_date" not in dfx.index.names:
                 raise ValueError("`real_date` expected in index names.")
+
+            if remove_zero_predictor:
+                dfx = dfx[dfx.loc[:, self.xcats[0]] != 0]
+
             rdt_index = list(dfx.index.names).index("real_date")
             index_years = dfx.index.get_level_values(rdt_index).year
             years_in_df = list(index_years.unique())
@@ -1045,6 +1059,7 @@ if __name__ == "__main__":
         coef_box="lower left",
         prob_est="map",
         remove_zero_predictor=True,
+        title_fontsize=14,
     )
 
     # years parameter
@@ -1092,6 +1107,7 @@ if __name__ == "__main__":
         ylab="Return",
         coef_box="lower left",
         ncol=5,
+        remove_zero_predictor=True
     )
     cr.reg_scatter(
         labels=False,
