@@ -300,6 +300,37 @@ def expo_std(x: np.ndarray, w: np.ndarray, remove_zeros: bool = True):
     return mabs
 
 
+def sq_std(x: np.ndarray, w: np.ndarray, remove_zeros: bool = True):
+    """
+    Estimate volatility via the exponentially weighted root mean square deviation.
+    Uses weighted squared deviations from the weighted mean (true std definition).
+
+    Parameters
+    ----------
+    x : numpy.ndarray
+        Array of returns.
+    w : numpy.ndarray
+        Array of exponential weights (must be the same length as `x`).
+        The weights are normalized internally to sum to 1.
+    remove_zeros : bool, default=True
+        If True, zero returns are excluded from the calculation, and the
+        corresponding portion of the weight vector is adjusted accordingly.
+
+    Returns
+    -------
+    float
+        Exponentially weighted standard deviation of returns.
+    """
+
+    assert len(x) == len(w), "weights and window must have same length"
+    if remove_zeros:
+        x = x[x != 0]
+        w = w[0 : len(x)] / sum(w[0 : len(x)])
+    w = w / sum(w)  # weights are normalized
+    sqstd = np.sqrt(np.sum(w * (x - np.sum(w * x)) ** 2))
+    return sqstd
+
+
 def flat_std(x: np.ndarray, remove_zeros: bool = True):
     """
     Estimate standard deviation of returns based on exponentially weighted absolute
