@@ -1,5 +1,4 @@
 import unittest
-import random
 import numpy as np
 import pandas as pd
 
@@ -261,7 +260,7 @@ class TestAll(unittest.TestCase):
         self.assertTrue(nas_test_res.isna().sum() == 19)
 
         # since the last 4 are non-NaNs, the 5th to last is a NaN value.
-        self.assertTrue(nas_test_res.isna().tolist()[-5] == True)
+        self.assertTrue(nas_test_res.isna().tolist()[-5])
         self.assertFalse(any(nas_test_res.isna().tolist()[-4:]))
 
         # test again, but for CAD from 2011-01-01 to 2011-02-01.
@@ -279,7 +278,7 @@ class TestAll(unittest.TestCase):
         self.assertTrue(nas_test_res.isna().sum() == 19)
 
         # since the last 3 are non-NaNs, the 4th to last is a NaN value.
-        self.assertTrue(nas_test_res.isna().tolist()[-4] == True)
+        self.assertTrue(nas_test_res.isna().tolist()[-4])
         self.assertFalse(any(nas_test_res.isna().tolist()[-3:]))
 
         # repeat the test for the 'xma' method but use monthly estimation frequency.
