@@ -141,6 +141,7 @@ from macrosynergy.download.fusion_interface import (
     request_wrapper,
     request_wrapper_stream_bytes_to_disk,
     _wait_for_api_call,
+    convert_ticker_based_parquet_file_to_qdf,
 )
 from macrosynergy.download.dataquery import OAUTH_TOKEN_URL
 from macrosynergy.download.exceptions import DownloadError, InvalidResponseError
@@ -643,6 +644,10 @@ class DataQueryFileAPIClient:
         file_datetime: str = None,
         filename: Optional[str] = None,
         out_dir: str = "./download",
+        overwrite: bool = False,
+        qdf: bool = False,
+        as_csv: bool = False,
+        keep_raw_data: bool = False,
         chunk_size: Optional[int] = None,
         timeout: Optional[float] = DQ_FILE_API_TIMEOUT,
         max_retries: int = 3,
@@ -696,6 +701,9 @@ class DataQueryFileAPIClient:
         file_path = Path(out_dir) / Path(file_name)
 
         if file_path.exists():
+            if not overwrite:
+                logger.warning(f"File {file_path} already exists. Skipping download.")
+                return str(file_path)
             logger.warning(f"File {file_path} already exists. It will be overwritten.")
             file_path.unlink()
 
@@ -715,7 +723,7 @@ class DataQueryFileAPIClient:
         )
 
         is_small_file = any(x in file_group_id.lower() for x in ["delta", "metadata"])
-
+        is_catalog_file = "catalog" in file_group_id.lower()
         if is_small_file:
             request_wrapper_stream_bytes_to_disk(**download_args)
         else:
@@ -729,12 +737,31 @@ class DataQueryFileAPIClient:
         logger.info(
             f"Downloaded {file_name} in {time_taken:.2f} seconds to {file_path}"
         )
-        return file_path
+        if not (qdf or as_csv) or is_catalog_file or not file_path.suffix == ".parquet":
+            return str(file_path)
+        convert_ticker_based_parquet_file_to_qdf(
+            filename=str(file_path),
+            as_csv=as_csv,
+            qdf=qdf,
+            keep_raw_data=keep_raw_data,
+        )
+        if qdf:
+            msg_str = (
+                f"Successfully converted {filename} to Quantamental Data Format (QDF)"
+            )
+            if as_csv:
+                msg_str += " and saved as CSV"
+            print(msg_str)
+        return str(file_path)
 
     def download_multiple_parquet_files(
         self,
         filenames: List[str],
         out_dir: str = "./download",
+        overwrite: bool = False,
+        qdf: bool = False,
+        as_csv: bool = False,
+        keep_raw_data: bool = False,
         max_retries: int = 3,
         n_jobs: int = None,
         chunk_size: Optional[int] = None,
@@ -779,6 +806,10 @@ class DataQueryFileAPIClient:
                         self.download_parquet_file,
                         filename=filename,
                         out_dir=out_dir,
+                        overwrite=overwrite,
+                        qdf=qdf,
+                        as_csv=as_csv,
+                        keep_raw_data=keep_raw_data,
                         chunk_size=chunk_size,
                         timeout=timeout,
                     )
@@ -834,6 +865,10 @@ class DataQueryFileAPIClient:
         since_datetime: Optional[str] = None,
         to_datetime: Optional[str] = None,
         file_datetime: Optional[str] = None,
+        overwrite: bool = False,
+        qdf: bool = False,
+        as_csv: bool = False,
+        keep_raw_data: bool = False,
         chunk_size: Optional[int] = None,
         timeout: Optional[float] = DQ_FILE_API_TIMEOUT,
         include_full_snapshots: bool = True,
@@ -926,6 +961,10 @@ class DataQueryFileAPIClient:
         self.download_multiple_parquet_files(
             filenames=download_order,
             out_dir=out_dir,
+            overwrite=overwrite,
+            qdf=qdf,
+            as_csv=as_csv,
+            keep_raw_data=keep_raw_data,
             chunk_size=chunk_size,
             timeout=timeout,
             show_progress=show_progress,
@@ -1269,6 +1308,7 @@ if __name__ == "__main__":
     dq.download_full_snapshot(
         out_dir="./data/jpmaqs-data/",
         since_datetime=since_datetime,
+        # qdf=True,
     )
     end = time.time()
     print(f"Download completed in {end - start:.2f} seconds")
