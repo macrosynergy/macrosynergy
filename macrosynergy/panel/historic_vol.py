@@ -46,9 +46,9 @@ def historic_vol(
     lback_periods : int
         Number of lookback periods over which volatility is calculated. Default is 21.
     lback_meth : str
-        Lookback method to calculate the volatility, Default is "ma". Alternative is
-        "xma", Exponential Moving Average. Expects to receive either the aforementioned
-        strings.
+        Lookback method to calculate the volatility. Options are 'ma' for moving
+        average, 'xma' for exponential moving average, and 'sq' for exponentially weighted
+        std. Default is 'ma'.
     half_life : int
         Refers to the half-time for "xma". Default is 11.
     start : str
@@ -78,17 +78,18 @@ def historic_vol(
     -------
     ~pandas.DataFrame
         standardized DataFrame with the estimated annualized standard deviations of the
-        chosen category. If the input 'value' is in % (as is the standard in 
+        chosen category. If the input 'value' is in % (as is the standard in
         JPMaQS) then the output will also be in %. 'cid', 'xcat', 'real_date' and 'value'.
     """
 
     df: QuantamentalDataFrame = QuantamentalDataFrame(df)
     est_freq = est_freq.lower()
-    assert lback_meth in ["xma", "ma"], (
+    lback_meth = lback_meth.lower()
+    assert lback_meth in ["xma", "ma", "sq"], (
         "Lookback method must be either 'xma' "
-        "(exponential moving average) or 'ma' (moving average)."
+        "(exponential moving average), 'sq' (exponentially weighted std), or 'ma' (moving average)."
     )
-    if lback_meth == "xma":
+    if lback_meth in ["xma", "sq"]:
         assert (
             lback_periods > half_life
         ), "Half life must be shorter than lookback period."
@@ -160,7 +161,7 @@ def historic_vol(
         return out
 
     expo_weights_arr: Optional[np.ndarray] = None
-    if lback_meth == "xma":
+    if lback_meth in ["xma", "sq"]:
         expo_weights_arr = expo_weights(lback_periods, half_life)
 
     if est_freq == "d":
@@ -302,7 +303,7 @@ def expo_std(x: np.ndarray, w: np.ndarray, remove_zeros: bool = True):
 
 def sq_std(x: np.ndarray, w: np.ndarray, remove_zeros: bool = True):
     """
-    Estimate volatility via the exponentially weighted root mean square deviation.
+    Estimate volatility via the exponentially weighted root mean squared.
     Uses weighted squared deviations from the weighted mean (true std definition).
 
     Parameters
