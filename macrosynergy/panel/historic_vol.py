@@ -164,13 +164,17 @@ def historic_vol(
     if lback_meth in ["xma", "sq"]:
         expo_weights_arr = expo_weights(lback_periods, half_life)
 
+    lback_meth_funcs = {
+        "xma": expo_std,
+        "sq": sq_std,
+        "ma": flat_std,
+    }
+    _args = dict(remove_zeros=remove_zeros)
     if est_freq == "d":
         _args: Dict[str, Any] = dict(remove_zeros=remove_zeros)
-        if lback_meth == "xma":
+        if lback_meth in ["xma", "sq"]:
             _args["w"] = expo_weights_arr
-            _args["func"] = expo_std
-        else:
-            _args["func"] = flat_std
+        _args["func"] = lback_meth_funcs[lback_meth]
 
         dfwa = np.sqrt(252) * dfw.rolling(window=lback_periods).agg(**_args)
     else:
@@ -180,12 +184,10 @@ def historic_vol(
             nan_tolerance=nan_tolerance,
             remove_zeros=remove_zeros,
         )
-        if lback_meth == "xma":
-            _args["weights"] = expo_weights_arr
-            _args["roll_func"] = expo_std
 
-        else:
-            _args["roll_func"] = flat_std
+        if lback_meth in ["xma", "sq"]:
+            _args["weights"] = expo_weights_arr
+        _args["roll_func"] = lback_meth_funcs[lback_meth]
 
         dfwa.loc[trigger_indices, :] = (
             dfwa.loc[trigger_indices, :]
