@@ -11,6 +11,7 @@ from macrosynergy.panel.historic_vol import (
     expo_weights,
     expo_std,
     flat_std,
+    sq_std,
 )
 from macrosynergy.management.utils import reduce_df
 
@@ -68,6 +69,33 @@ class TestEstimationMethods(unittest.TestCase):
 
         output = flat_std(data, True)
         self.assertIsInstance(output, float)  # test type
+
+    def test_sq_std(self):
+        lback_periods = 10
+        half_life = 5
+        w_series = expo_weights(lback_periods, half_life)
+
+        # Mismatched lengths should raise AssertionError
+        with self.assertRaises(AssertionError):
+            data = np.random.randn(lback_periods + 1)
+            sq_std(data, w_series)
+
+        # Output should be float for valid inputs
+        data = np.random.randn(lback_periods)
+        output = sq_std(data, w_series, remove_zeros=False)
+        self.assertIsInstance(output, float)
+
+        # Compare with numpy weighted std for consistency
+        arr = np.array([1, 2, 3, 4, 5])
+        w = expo_weights(len(arr), 2)
+        manual = np.sqrt(np.sum(w * (arr - np.sum(w * arr)) ** 2))
+        self.assertAlmostEqual(sq_std(arr, w, False), manual)
+
+        # Test with zeros removed
+        arr = np.array([0, 0, 7, 0, 0])
+        w = expo_weights(len(arr), 3)
+        result = sq_std(arr, w, True)
+        self.assertEqual(result, 0.0)  # only one non-zero → std = 0
 
 
 class TestAll(unittest.TestCase):
