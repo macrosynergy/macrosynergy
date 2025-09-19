@@ -15,42 +15,7 @@ from macrosynergy.panel.historic_vol import (
 from macrosynergy.management.utils import reduce_df
 
 
-class TestAll(unittest.TestCase):
-    def setUp(self) -> None:
-        return super().setUp()
-
-    def tearDown(self) -> None:
-        return super().tearDown()
-
-    def dataframe_generator(self):
-        self.cids: List[str] = ["AUD", "CAD", "GBP"]
-        self.xcats: List[str] = ["CRY", "XR"]
-
-        df_cids = pd.DataFrame(
-            index=self.cids, columns=["earliest", "latest", "mean_add", "sd_mult"]
-        )
-        df_cids.loc["AUD", :] = ["2010-01-01", "2020-12-31", 0.5, 2]
-        df_cids.loc["CAD", :] = ["2011-01-01", "2020-11-30", 0, 1]
-        df_cids.loc["GBP", :] = ["2012-01-01", "2020-11-30", -0.2, 0.5]
-
-        df_xcats = pd.DataFrame(
-            index=self.xcats,
-            columns=[
-                "earliest",
-                "latest",
-                "mean_add",
-                "sd_mult",
-                "ar_coef",
-                "back_coef",
-            ],
-        )
-
-        df_xcats.loc["CRY", :] = ["2011-01-01", "2020-10-30", 1, 2, 0.9, 0.5]
-        df_xcats.loc["XR", :] = ["2010-01-01", "2020-12-31", 0, 1, 0, 0.3]
-
-        dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
-        self.dfd: pd.DataFrame = dfd
-
+class TestEstimationMethods(unittest.TestCase):
     def test_expo_weights(self):
         lback_periods = 21
         half_life = 11
@@ -103,6 +68,43 @@ class TestAll(unittest.TestCase):
 
         output = flat_std(data, True)
         self.assertIsInstance(output, float)  # test type
+
+
+class TestAll(unittest.TestCase):
+    def setUp(self) -> None:
+        return super().setUp()
+
+    def tearDown(self) -> None:
+        return super().tearDown()
+
+    def dataframe_generator(self):
+        self.cids: List[str] = ["AUD", "CAD", "GBP"]
+        self.xcats: List[str] = ["CRY", "XR"]
+
+        df_cids = pd.DataFrame(
+            index=self.cids, columns=["earliest", "latest", "mean_add", "sd_mult"]
+        )
+        df_cids.loc["AUD", :] = ["2010-01-01", "2020-12-31", 0.5, 2]
+        df_cids.loc["CAD", :] = ["2011-01-01", "2020-11-30", 0, 1]
+        df_cids.loc["GBP", :] = ["2012-01-01", "2020-11-30", -0.2, 0.5]
+
+        df_xcats = pd.DataFrame(
+            index=self.xcats,
+            columns=[
+                "earliest",
+                "latest",
+                "mean_add",
+                "sd_mult",
+                "ar_coef",
+                "back_coef",
+            ],
+        )
+
+        df_xcats.loc["CRY", :] = ["2011-01-01", "2020-10-30", 1, 2, 0.9, 0.5]
+        df_xcats.loc["XR", :] = ["2010-01-01", "2020-12-31", 0, 1, 0, 0.3]
+
+        dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
+        self.dfd: pd.DataFrame = dfd
 
     def test_historic_vol(self):
         self.dataframe_generator()
