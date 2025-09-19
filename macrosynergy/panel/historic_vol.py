@@ -272,8 +272,8 @@ def expo_weights(lback_periods: int = 21, half_life: int = 11):
 
 def expo_std(x: np.ndarray, w: np.ndarray, remove_zeros: bool = True):
     """
-    Estimate standard deviation of returns based on exponentially weighted absolute
-    values.
+    Estimate volatility via the exponentially weighted mean absolute return.
+    Uses weighted absolute deviations from zero as a proxy for standard deviation.
 
     Parameters
     ----------
