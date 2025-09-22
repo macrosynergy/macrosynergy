@@ -244,8 +244,40 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
         mock_path.return_value.__truediv__.return_value = mock_final_path
         mock_final_path.exists.return_value = True
 
-        client.download_parquet_file(filename="TEST_FULL_20230101.parquet")
+        client.download_parquet_file(
+            filename="TEST_FULL_20230101.parquet", overwrite=True
+        )
         mock_final_path.unlink.assert_called_once()
+
+    @patch(
+        "macrosynergy.download.dataquery_file_api.convert_ticker_based_parquet_file_to_qdf"
+    )
+    @patch("macrosynergy.download.dataquery_file_api.SegmentedFileDownloader")
+    @patch("macrosynergy.download.dataquery_file_api.Path")
+    @patch("macrosynergy.download.dataquery_file_api.DataQueryFileAPIOauth")
+    def test_download_parquet_file_qdf_conversion(
+        self, mock_oauth, mock_path, mock_downloader, mock_convert
+    ):
+        client = DataQueryFileAPIClient(client_id="id", client_secret="secret")
+        mock_file_path = MagicMock()
+        mock_file_path.exists.return_value = False
+        mock_file_path.suffix = ".parquet"
+        mock_file_path.__str__.return_value = "mock_dir/TEST_DATA_20230101.parquet"
+        mock_path.return_value.__truediv__.return_value = mock_file_path
+
+        client.download_parquet_file(
+            filename="TEST_DATA_20230101.parquet",
+            qdf=True,
+            as_csv=True,
+            keep_raw_data=True,
+        )
+
+        mock_convert.assert_called_once_with(
+            filename=str(mock_file_path),
+            as_csv=True,
+            qdf=True,
+            keep_raw_data=True,
+        )
 
     @patch("macrosynergy.download.dataquery_file_api.cf.as_completed")
     @patch("macrosynergy.download.dataquery_file_api.cf.ThreadPoolExecutor")
@@ -348,6 +380,10 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
         mock_download_multi.assert_called_once_with(
             filenames=expected_order,
             out_dir="./download",
+            overwrite=False,
+            qdf=False,
+            as_csv=False,
+            keep_raw_data=False,
             chunk_size=None,
             timeout=300.0,
             show_progress=False,
