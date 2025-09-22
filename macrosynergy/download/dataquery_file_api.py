@@ -751,7 +751,7 @@ class DataQueryFileAPIClient:
             )
             if as_csv:
                 msg_str += " and saved as CSV"
-            print(msg_str)
+            logger.info(msg_str)
         return str(file_path)
 
     def download_multiple_parquet_files(
