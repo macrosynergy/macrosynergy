@@ -988,7 +988,7 @@ class DataQueryFileAPIClient:
                 isinstance(x, str) for x in file_group_ids
             ):
                 raise ValueError("`file_group_ids` must be a list of strings.")
-            files_df = files_df[files_df["file-group-id"].isin(file_group_ids)]
+            files_df = files_df[files_df["file-group-id"].isin(file_group_ids)].copy()
 
         num_files_to_download = len(files_df["file-name"])
         if not num_files_to_download:
