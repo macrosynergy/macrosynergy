@@ -212,6 +212,8 @@ class DataQueryFileAPIClient:
     client_secret : Optional[str]
         Client Secret for authentication. If not provided, it will be sourced from
         environment variables (`DQ_CLIENT_SECRET` or `DATAQUERY_CLIENT_SECRET`).
+    out_dir : Optional[str]
+        Default output directory for downloads. Can be overridden in download methods.
     base_url : str
         The base URL for the DataQuery File API. Defaults to `DQ_FILE_API_BASE_URL`.
     scope : str
@@ -226,6 +228,7 @@ class DataQueryFileAPIClient:
         self,
         client_id: Optional[str] = None,
         client_secret: Optional[str] = None,
+        out_dir: Optional[str] = None,
         base_url: str = DQ_FILE_API_BASE_URL,
         scope: str = DQ_FILE_API_SCOPE,
         proxies: Optional[Dict[str, str]] = None,
@@ -243,6 +246,7 @@ class DataQueryFileAPIClient:
 
         self.client_id = client_id
         self.client_secret = client_secret
+        self.out_dir = out_dir
 
         self.base_url = base_url.rstrip("/")
         self.scope = scope
@@ -644,7 +648,7 @@ class DataQueryFileAPIClient:
         file_group_id: str = None,
         file_datetime: str = None,
         filename: Optional[str] = None,
-        out_dir: str = "./download",
+        out_dir: Optional[str] = None,
         overwrite: bool = False,
         qdf: bool = False,
         as_csv: bool = False,
@@ -691,6 +695,7 @@ class DataQueryFileAPIClient:
         str
             The full path to the downloaded file.
         """
+        out_dir = out_dir or self.out_dir or "./download"
         if not ((bool(file_group_id) and bool(file_datetime)) ^ bool(filename)):
             raise ValueError(
                 "One of `file_group_id` & `file_datetime`, or `filename` must be provided."
@@ -767,7 +772,7 @@ class DataQueryFileAPIClient:
     def download_multiple_parquet_files(
         self,
         filenames: List[str],
-        out_dir: str = "./download",
+        out_dir: Optional[str] = None,
         overwrite: bool = False,
         qdf: bool = False,
         as_csv: bool = False,
@@ -798,6 +803,7 @@ class DataQueryFileAPIClient:
         show_progress : bool
             If True, displays a progress bar for the downloads.
         """
+        out_dir = out_dir or self.out_dir or "./download"
         Path(out_dir).mkdir(parents=True, exist_ok=True)
         start_time = time.time()
         logger.info(f"Starting download of {len(filenames)} files.")
@@ -871,10 +877,11 @@ class DataQueryFileAPIClient:
 
     def download_catalog_file(
         self,
-        out_dir: str = "./download",
+        out_dir: Optional[str] = None,
         overwrite: bool = False,
         timeout: Optional[float] = DQ_FILE_API_TIMEOUT,
     ) -> str:
+        out_dir = out_dir or self.out_dir or "./download"
         available_catalogs = self.list_available_files(self.catalog_file_group_id)
         if available_catalogs.empty:
             raise DownloadError("No catalog files available for download.")
@@ -892,7 +899,7 @@ class DataQueryFileAPIClient:
 
     def download_full_snapshot(
         self,
-        out_dir: str = "./download",
+        out_dir: Optional[str] = None,
         since_datetime: Optional[str] = None,
         to_datetime: Optional[str] = None,
         file_datetime: Optional[str] = None,
@@ -951,6 +958,7 @@ class DataQueryFileAPIClient:
         show_progress : bool
             If True, displays a progress bar for downloads.
         """
+        out_dir = out_dir or self.out_dir or "./download"
         Path(out_dir).mkdir(parents=True, exist_ok=True)
         start_time = time.time()
 
@@ -1344,10 +1352,8 @@ if __name__ == "__main__":
     print(
         f"Downloading full-snapshots, delta-files, and metadata files published since {since_datetime}"
     )
-    with DataQueryFileAPIClient() as dq:
-        dq.download_catalog_file(out_dir="./data/jpmaqs-data/")
-        dq.download_full_snapshot(
-            out_dir="./data/jpmaqs-data/", since_datetime=since_datetime
-        )
+    with DataQueryFileAPIClient(out_dir="./data/jpmaqs-data/") as dq:
+        dq.download_catalog_file()
+        dq.download_full_snapshot(since_datetime=since_datetime)
     end = time.time()
     print(f"Download completed in {end - start:.2f} seconds")
