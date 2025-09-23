@@ -318,17 +318,15 @@ class TestSegmentedFileDownloaderOrchestration(unittest.TestCase):
     ):
         mock_get_size.side_effect = [requests.exceptions.ConnectionError, 1024]
 
-        with (
-            patch(
-                "macrosynergy.download.dataquery_file_api.SegmentedFileDownloader._download_chunks_concurrently"
-            ),
-            patch("builtins.open", mock_open()),
-            patch("shutil.copyfileobj"),
-            patch("pathlib.Path.stat") as mock_stat,
+        with patch(
+            "macrosynergy.download.dataquery_file_api.SegmentedFileDownloader._download_chunks_concurrently"
         ):
-            mock_stat.return_value.st_size = 1024 * 5
+            with patch("builtins.open", mock_open()):
+                with patch("shutil.copyfileobj"):
+                    with patch("pathlib.Path.stat") as mock_stat:
+                        mock_stat.return_value.st_size = 1024 * 5
 
-            self.downloader.download()
+                        self.downloader.download()
 
         self.assertEqual(mock_get_size.call_count, 2)
         # Attempt 1 (fail): rmtree at start(1) + rmtree in cleanup(1) = 2
