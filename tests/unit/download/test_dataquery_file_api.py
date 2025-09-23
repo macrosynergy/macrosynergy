@@ -127,6 +127,16 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
         self.assertEqual(df_full_only["file-group-id"].tolist(), ["FULL_SNAPSHOT"])
 
     @patch.object(DataQueryFileAPIClient, "_get")
+    def test_list_group_files_value_error(self, mock_get):
+        client = DataQueryFileAPIClient(client_id="id", client_secret="secret")
+        with self.assertRaises(ValueError):
+            client.list_group_files(
+                include_full_snapshots=False,
+                include_delta=False,
+                include_metadata=False,
+            )
+
+    @patch.object(DataQueryFileAPIClient, "_get")
     def test_list_group_files_cache(self, mock_get):
         client = DataQueryFileAPIClient(client_id="id", client_secret="secret")
         mock_get.return_value = {
@@ -166,6 +176,15 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
         mock_get.return_value = {"available-files": [{"is-available": True}]}
         with self.assertRaises(InvalidResponseError):
             # missing "file-datetime"
+            client.list_available_files(file_group_id="test_id")
+
+        mock_get.return_value = {
+            "available-files": [
+                {"file-datetime": "20230101T100000", "is-available": True}
+            ]
+        }
+        with self.assertRaises(InvalidResponseError):
+            # missing "last-modified"
             client.list_available_files(file_group_id="test_id")
 
     @patch.object(DataQueryFileAPIClient, "list_available_files")
@@ -251,6 +270,32 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
             filename="TEST_FULL_20230101.parquet", overwrite=True
         )
         mock_final_path.unlink.assert_called_once()
+
+    @suppress_logging
+    @patch(
+        "macrosynergy.download.dataquery_file_api.request_wrapper_stream_bytes_to_disk"
+    )
+    @patch("macrosynergy.download.dataquery_file_api.SegmentedFileDownloader")
+    @patch("macrosynergy.download.dataquery_file_api.Path")
+    @patch("macrosynergy.download.dataquery_file_api.DataQueryFileAPIOauth")
+    def test_download_parquet_file_small_file_logic(
+        self, mock_oauth, mock_path, mock_segmented_downloader, mock_request_wrapper
+    ):
+        client = DataQueryFileAPIClient(client_id="id", client_secret="secret")
+        mock_file_path = MagicMock()
+        mock_file_path.exists.return_value = False
+        mock_path.return_value.__truediv__.return_value = mock_file_path
+
+        client.download_parquet_file(filename="TEST_DELTA_20230101.parquet")
+        mock_request_wrapper.assert_called_once()
+        mock_segmented_downloader.assert_not_called()
+
+        mock_request_wrapper.reset_mock()
+        mock_segmented_downloader.reset_mock()
+
+        client.download_parquet_file(filename="TEST_METADATA_20230101.parquet")
+        mock_request_wrapper.assert_called_once()
+        mock_segmented_downloader.assert_not_called()
 
     @patch(
         "macrosynergy.download.dataquery_file_api.convert_ticker_based_parquet_file_to_qdf"
@@ -345,6 +390,48 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
                 res = spy.call_args_list[1][1]["filenames"]
             self.assertEqual(res, expected)
 
+    @patch("macrosynergy.download.dataquery_file_api.cf.as_completed")
+    @patch("macrosynergy.download.dataquery_file_api.cf.ThreadPoolExecutor")
+    @suppress_logging
+    def test_download_multiple_files_keyboard_interrupt(
+        self, mock_executor_cls, mock_as_completed
+    ):
+        client = DataQueryFileAPIClient(client_id="id", client_secret="secret")
+        future1 = MagicMock()
+        future1.result.side_effect = KeyboardInterrupt
+        mock_executor = mock_executor_cls.return_value.__enter__.return_value
+        mock_executor.submit.return_value = future1
+        mock_as_completed.return_value = [future1]
+        with self.assertRaises(KeyboardInterrupt):
+            client.download_multiple_parquet_files(
+                filenames=["f1.parquet"], show_progress=False
+            )
+        mock_executor.shutdown.assert_called_once_with(wait=False, cancel_futures=True)
+
+    @patch.object(DataQueryFileAPIClient, "download_parquet_file")
+    @patch.object(DataQueryFileAPIClient, "list_available_files")
+    def test_download_catalog_file(self, mock_list_files, mock_download):
+        client = DataQueryFileAPIClient(client_id="id", client_secret="secret")
+        mock_list_files.return_value = pd.DataFrame(
+            {
+                "file-name": ["CATALOG_20230102.parquet", "CATALOG_20230101.parquet"],
+                "file-datetime": pd.to_datetime(["2023-01-02", "2023-01-01"]),
+                "last-modified": pd.to_datetime(["2023-01-02", "2023-01-01"]),
+            }
+        )
+
+        client.download_catalog_file(out_dir="./cat", overwrite=True)
+        mock_download.assert_called_once_with(
+            filename="CATALOG_20230102.parquet",
+            out_dir="./cat",
+            overwrite=True,
+            timeout=300.0,
+        )
+
+        mock_list_files.return_value = pd.DataFrame()
+        with self.assertRaises(DownloadError):
+            client.download_catalog_file()
+
     @patch("macrosynergy.download.dataquery_file_api.logger")
     @patch.object(DataQueryFileAPIClient, "download_multiple_parquet_files")
     @patch.object(DataQueryFileAPIClient, "filter_available_files_by_datetime")
@@ -423,6 +510,32 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
         )
         mock_download_multi.assert_not_called()
         mock_logger.info.assert_any_call("No new files to download.")
+
+    @patch.object(DataQueryFileAPIClient, "download_multiple_parquet_files")
+    @patch.object(DataQueryFileAPIClient, "filter_available_files_by_datetime")
+    def test_download_full_snapshot_file_group_ids(
+        self, mock_filter_files, mock_download_multi
+    ):
+        client = DataQueryFileAPIClient(client_id="id", client_secret="secret")
+        mock_filter_files.return_value = pd.DataFrame(
+            {
+                "file-group-id": ["FG1", "FG2", "FG1"],
+                "file-name": ["f1", "f2", "f3"],
+                "file-datetime": ["20230101", "20230101", "20230101"],
+            }
+        )
+        client.download_full_snapshot(
+            since_datetime="20230101",
+            file_group_ids=["FG1"],
+            show_progress=False,
+        )
+        called_args = mock_download_multi.call_args[1]
+        self.assertCountEqual(called_args["filenames"], ["f1", "f3"])
+
+        with self.assertRaises(TypeError):
+            client.download_full_snapshot(
+                since_datetime="20230101", file_group_ids="not-a-list"
+            )
 
 
 if __name__ == "__main__":
