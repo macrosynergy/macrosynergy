@@ -984,7 +984,7 @@ class DataQueryFileAPIClient:
         )
 
         if file_group_ids is not None:
-            if not isinstance(file_group_ids, list) and not all(
+            if not isinstance(file_group_ids, list) or not all(
                 isinstance(x, str) for x in file_group_ids
             ):
                 raise ValueError("`file_group_ids` must be a list of strings.")
