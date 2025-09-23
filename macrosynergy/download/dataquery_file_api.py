@@ -733,7 +733,7 @@ class DataQueryFileAPIClient:
         )
 
         is_small_file = any(x in file_group_id.lower() for x in ["delta", "metadata"])
-        is_catalog_file = "catalog" in file_group_id.lower()
+        is_catalog_file = file_group_id == self.catalog_file_group_id
         if is_small_file:
             request_wrapper_stream_bytes_to_disk(**download_args)
         else:
