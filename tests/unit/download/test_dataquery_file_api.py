@@ -69,10 +69,10 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
     @patch("macrosynergy.download.dataquery_file_api.DataQueryFileAPIOauth")
     def test_init_with_args(self, mock_oauth_constructor):
         client = DataQueryFileAPIClient(
-            client_id="arg_id", client_secret="arg_secret", out_dir="/test/dir"
+            client_id="arg_id", client_secret="arg_secret", out_dir="./test/dir"
         )
         self.assertEqual(client.client_id, "arg_id")
-        self.assertEqual(client.out_dir, "/test/dir")
+        self.assertEqual(client.out_dir, "./test/dir")
         mock_oauth_constructor.assert_called_once_with(
             client_id="arg_id",
             client_secret="arg_secret",
@@ -352,7 +352,7 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
         self, mock_filter_files, mock_download_multi, mock_logger
     ):
         client = DataQueryFileAPIClient(
-            client_id="id", client_secret="secret", out_dir="/class/dir"
+            client_id="id", client_secret="secret", out_dir="./class/dir"
         )
         mock_filter_files.return_value = pd.DataFrame(
             {
@@ -384,7 +384,7 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
 
         mock_download_multi.assert_called_once_with(
             filenames=expected_order,
-            out_dir="/class/dir",
+            out_dir="./class/dir",
             overwrite=False,
             qdf=False,
             as_csv=False,
@@ -396,11 +396,11 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
 
         mock_download_multi.reset_mock()
         client.download_full_snapshot(
-            since_datetime="20250201", show_progress=False, out_dir="/method/dir"
+            since_datetime="20250201", show_progress=False, out_dir="./method/dir"
         )
         mock_download_multi.assert_called_once_with(
             filenames=expected_order,
-            out_dir="/method/dir",
+            out_dir="./method/dir",
             overwrite=False,
             qdf=False,
             as_csv=False,
