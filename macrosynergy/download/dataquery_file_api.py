@@ -1326,11 +1326,10 @@ if __name__ == "__main__":
     print(
         f"Downloading full-snapshots, delta-files, and metadata files published since {since_datetime}"
     )
-    dq = DataQueryFileAPIClient()
-    dq.download_full_snapshot(
-        out_dir="./data/jpmaqs-data/",
-        since_datetime=since_datetime,
-        # qdf=True,
-    )
+    with DataQueryFileAPIClient() as dq:
+        dq.download_catalog_file(out_dir="./data/jpmaqs-data/")
+        dq.download_full_snapshot(
+            out_dir="./data/jpmaqs-data/", since_datetime=since_datetime
+        )
     end = time.time()
     print(f"Download completed in {end - start:.2f} seconds")
