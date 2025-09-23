@@ -325,7 +325,6 @@ class TestSegmentedFileDownloaderOrchestration(unittest.TestCase):
                 with patch("shutil.copyfileobj"):
                     with patch("pathlib.Path.stat") as mock_stat:
                         mock_stat.return_value.st_size = 1024 * 5
-
                         self.downloader.download()
 
         self.assertEqual(mock_get_size.call_count, 2)
