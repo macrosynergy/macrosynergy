@@ -248,6 +248,7 @@ class DataQueryFileAPIClient:
         self.scope = scope
         self.proxies = proxies
         self.verify_ssl = verify_ssl
+        self.catalog_file_group_id = "JPMAQS_METADATA_CATALOG"
 
         self.oauth = DataQueryFileAPIOauth(
             client_id=self.client_id,
@@ -857,6 +858,27 @@ class DataQueryFileAPIClient:
             chunk_size=chunk_size,
             timeout=timeout,
             show_progress=show_progress,
+        )
+
+    def download_catalog_file(
+        self,
+        out_dir: str = "./download",
+        overwrite: bool = False,
+        timeout: Optional[float] = DQ_FILE_API_TIMEOUT,
+    ) -> str:
+        available_catalogs = self.list_available_files(self.catalog_file_group_id)
+        if available_catalogs.empty:
+            raise DownloadError("No catalog files available for download.")
+        latest_catalog = available_catalogs.sort_values(
+            by=["file-datetime", "last-modified"], ascending=False
+        ).iloc[0]
+        latest_filename = latest_catalog["file-name"]
+        logger.info(f"Latest catalog file identified: {latest_filename}")
+        return self.download_parquet_file(
+            filename=latest_filename,
+            out_dir=out_dir,
+            overwrite=overwrite,
+            timeout=timeout,
         )
 
     def download_full_snapshot(
