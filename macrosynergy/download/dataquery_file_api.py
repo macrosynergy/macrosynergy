@@ -926,6 +926,15 @@ class DataQueryFileAPIClient:
             Download files modified up to this timestamp (inclusive).
         file_datetime : Optional[str]
             A specific file date to check for. Overrides `since_datetime`.
+        overwrite : bool
+            If True, overwrites files if they already exist. Default is False.
+        qdf : bool
+            If True, converts the DataFrame to a QuantamentalDataFrame.
+        as_csv : bool
+            If True, saves the downloaded datasets as CSV files. Default is False, with
+            Parquet as the default format.
+        keep_raw_data : bool
+            If True, keeps the raw data files after conversion. Default is False.
         chunk_size : Optional[int]
             The chunk size for streaming downloads (in bytes).
         timeout : Optional[float]
