@@ -670,6 +670,15 @@ class DataQueryFileAPIClient:
             The full filename to download. Overrides `file_group_id` and `file_datetime`.
         out_dir : str
             The directory where the file will be saved.
+        overwrite : bool
+            If True, overwrites the file if it already exists. Default is False.
+        qdf : bool
+            If True, converts the DataFrame to a QuantamentalDataFrame.
+        as_csv : bool
+            If True, saves the downloaded datasets as CSV files. Default is False, with
+            Parquet as the default format.
+        keep_raw_data : bool
+            If True, keeps the raw data files after conversion. Default is False.
         chunk_size : Optional[int]
             The chunk size for streaming downloads (in bytes).
         timeout : Optional[float]
