@@ -1290,6 +1290,69 @@ class JPMaQSFusionClient:
         result = get_resources_df(result)
         return result
 
+    def get_all_seriesmembers_for_all_datasets(
+        self,
+        include_catalog: bool = False,
+        include_notifications: bool = False,
+        include_full_datasets: bool = True,
+        include_explorer_datasets: bool = False,
+        include_delta_datasets: bool = False,
+        **kwargs,
+    ) -> pd.DataFrame:
+        """
+        Get all series members for all datasets in the JPMaQS product.
+
+        Parameters
+        ----------
+        include_catalog : bool
+            If True, includes the metadata catalog dataset in the snapshot. Default is
+            False.
+        include_notifications : bool
+            If True, includes notifications dataset in the snapshot. Default is False.
+        include_explorer_datasets : bool
+            If True, includes Explorer datasets in the snapshot. Default is False.
+        include_delta_datasets : bool
+            If True, includes Delta datasets in the snapshot. Default is False.
+        **kwargs : dict
+            Additional keyword arguments to pass to the API request.
+        Returns
+        -------
+        pd.DataFrame
+            A DataFrame containing all series members for all datasets.
+        """
+        datasets = self.list_datasets(
+            include_catalog=include_catalog,
+            include_notifications=include_notifications,
+            include_full_datasets=include_full_datasets,
+            include_explorer_datasets=include_explorer_datasets,
+            include_delta_datasets=include_delta_datasets,
+            **kwargs,
+        )
+
+        all_seriesmembers: List[pd.DataFrame] = []
+        futures: Dict[cf.Future, str] = {}
+        with cf.ThreadPoolExecutor() as executor:
+            for dataset in datasets["identifier"].tolist():
+                future = executor.submit(
+                    self.get_dataset_available_series, dataset, **kwargs
+                )
+                futures[future] = dataset
+
+            for future in cf.as_completed(futures):
+                dataset = futures[future]
+                try:
+                    result: pd.DataFrame = future.result()
+                    if not result.empty:
+                        result["dataset"] = dataset
+                    all_seriesmembers.append(result)
+                except Exception as e:
+                    print(f"Error retrieving series members for dataset {dataset}: {e}")
+
+        if not all_seriesmembers:
+            return pd.DataFrame()
+
+        return pd.concat(all_seriesmembers, ignore_index=True)
+
     def download_series_member_distribution(
         self,
         dataset: str,
@@ -1677,6 +1740,8 @@ class JPMaQSFusionClient:
         include_catalog : bool
             If True, includes the metadata catalog dataset in the snapshot. Default is
             False.
+        include_notifications : bool
+            If True, includes notifications dataset in the snapshot. Default is False.
         include_explorer_datasets : bool
             If True, includes Explorer datasets in the snapshot. Default is False.
         include_delta_datasets : bool
@@ -1913,6 +1978,13 @@ if __name__ == "__main__":
     st = time.time()
     ds = jpmaqs_client.list_datasets()
     print(ds.head())
+
+    jpmaqs_client.get_all_seriesmembers_for_all_datasets(
+        include_delta_datasets=True,
+        include_full_datasets=True,
+        include_catalog=True,
+        include_notifications=True,
+    )
 
     df = jpmaqs_client.download(
         # folder="./data",
