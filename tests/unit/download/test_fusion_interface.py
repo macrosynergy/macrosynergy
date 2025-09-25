@@ -358,6 +358,81 @@ class TestJPMaQSFusionClient(unittest.TestCase):
         self.mock_simple_client_ctor = patcher.start()
         self.client = JPMaQSFusionClient(self.oauth)
 
+    @patch("macrosynergy.download.fusion_interface.get_resources_df")
+    def test_get_all_seriesmembers_for_all_datasets_basic(self, mock_get_resources_df):
+        # Setup mocks
+        # Simulate datasets returned by list_datasets
+        datasets_df = pd.DataFrame(
+            {
+                "identifier": ["ds1", "ds2"],
+                "@id": ["id1", "id2"],
+            }
+        )
+        self.client.list_datasets = MagicMock(return_value=datasets_df)
+
+        # Simulate get_dataset_series returning a dict for each dataset
+        series_dict_1 = {"resources": [{"identifier": "serA", "@id": "sidA"}]}
+        series_dict_2 = {"resources": [{"identifier": "serB", "@id": "sidB"}]}
+        self.simple_client.get_dataset_series.side_effect = [
+            series_dict_1,
+            series_dict_2,
+        ]
+
+        # Simulate get_resources_df returning a DataFrame for each dataset
+        mock_get_resources_df.side_effect = [
+            pd.DataFrame(series_dict_1["resources"]),
+            pd.DataFrame(series_dict_2["resources"]),
+        ]
+
+        # Call the method
+        result = self.client.get_all_seriesmembers_for_all_datasets()
+
+        # Check that the result is a DataFrame and contains expected identifiers
+        self.assertIsInstance(result, pd.DataFrame)
+        self.assertIn("identifier", result.columns)
+        self.assertTrue(set(result["identifier"]).issuperset({"serA", "serB"}))
+
+        # Ensure mocks were called as expected
+        self.client.list_datasets.assert_called_once()
+        self.assertEqual(self.simple_client.get_dataset_series.call_count, 2)
+        self.assertEqual(mock_get_resources_df.call_count, 2)
+
+    @patch("macrosynergy.download.fusion_interface.get_resources_df")
+    def test_get_all_seriesmembers_for_all_datasets_empty(self, mock_get_resources_df):
+        # Simulate no datasets
+        self.client.list_datasets = MagicMock(
+            return_value=pd.DataFrame(columns=["identifier", "@id"])
+        )
+        # Should not call get_dataset_series or get_resources_df
+        result = self.client.get_all_seriesmembers_for_all_datasets()
+        self.assertIsInstance(result, pd.DataFrame)
+        self.assertTrue(result.empty)
+        self.client.list_datasets.assert_called_once()
+        self.assertEqual(self.simple_client.get_dataset_series.call_count, 0)
+        self.assertEqual(mock_get_resources_df.call_count, 0)
+
+    @patch("macrosynergy.download.fusion_interface.get_resources_df")
+    def test_get_all_seriesmembers_for_all_datasets_handles_exception(
+        self, mock_get_resources_df
+    ):
+        # Simulate datasets
+        datasets_df = pd.DataFrame(
+            {
+                "identifier": ["ds1"],
+                "@id": ["id1"],
+            }
+        )
+        self.client.list_datasets = MagicMock(return_value=datasets_df)
+        # Simulate get_dataset_series raising exception
+        self.simple_client.get_dataset_series.side_effect = Exception("fail")
+        # Should not call get_resources_df
+        result = self.client.get_all_seriesmembers_for_all_datasets()
+        self.assertIsInstance(result, pd.DataFrame)
+        self.assertTrue(result.empty)
+        self.client.list_datasets.assert_called_once()
+        self.assertEqual(self.simple_client.get_dataset_series.call_count, 1)
+        self.assertEqual(mock_get_resources_df.call_count, 0)
+
     def test_list_datasets(self):
         self.simple_client.get_product_details.return_value = {
             "resources": [
