@@ -790,7 +790,7 @@ class DataQueryFileAPIClient:
         show_progress: bool = True,
     ) -> None:
         """
-        Downloads a list of Parquet files concurrently with progress indication.
+        Downloads a list of files concurrently with progress indication.
 
         Parameters
         ----------
@@ -820,7 +820,7 @@ class DataQueryFileAPIClient:
             futures = {}
             for filename in tqdm(
                 filenames,
-                desc="Requesting Parquet files",
+                desc="Requesting files",
                 disable=not show_progress,
             ):
                 futures[
