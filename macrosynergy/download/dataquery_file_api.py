@@ -6,7 +6,7 @@ JPMorgan DataQuery File API.
 
 
 .. note::
-    NOTE: This functionality is currently in BETA and is subject to significant changes
+    This functionality is currently in BETA and is subject to significant changes
     without deprecation cycles.
 
 Consumption & Examples
