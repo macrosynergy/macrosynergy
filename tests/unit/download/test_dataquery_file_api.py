@@ -355,12 +355,12 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
     @suppress_logging
     @patch("macrosynergy.download.dataquery_file_api.Path")
     @patch("macrosynergy.download.dataquery_file_api.DataQueryFileAPIOauth")
-    def test_download_parquet_file_no_overwrite(self, mock_oauth, mock_path):
+    def test_download_file_no_overwrite(self, mock_oauth, mock_path):
         client = DataQueryFileAPIClient(client_id="id", client_secret="secret")
         mock_final_path = MagicMock()
         mock_path.return_value.__truediv__.return_value = mock_final_path
         mock_final_path.exists.return_value = True
-        result = client.download_parquet_file(
+        result = client.download_file(
             filename="TEST_FULL_20230101.parquet", overwrite=False
         )
         mock_final_path.unlink.assert_not_called()
@@ -370,7 +370,7 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
     @patch("macrosynergy.download.dataquery_file_api.SegmentedFileDownloader")
     @patch("macrosynergy.download.dataquery_file_api.Path")
     @patch("macrosynergy.download.dataquery_file_api.DataQueryFileAPIOauth")
-    def test_download_parquet_file_overwrite(
+    def test_download_file_overwrite(
         self, mock_oauth, mock_path, mock_segmented_downloader
     ):
         client = DataQueryFileAPIClient(client_id="id", client_secret="secret")
@@ -378,9 +378,7 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
         mock_path.return_value.__truediv__.return_value = mock_final_path
         mock_final_path.exists.return_value = True
 
-        client.download_parquet_file(
-            filename="TEST_FULL_20230101.parquet", overwrite=True
-        )
+        client.download_file(filename="TEST_FULL_20230101.parquet", overwrite=True)
         mock_final_path.unlink.assert_called_once()
 
     @suppress_logging
@@ -390,7 +388,7 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
     @patch("macrosynergy.download.dataquery_file_api.SegmentedFileDownloader")
     @patch("macrosynergy.download.dataquery_file_api.Path")
     @patch("macrosynergy.download.dataquery_file_api.DataQueryFileAPIOauth")
-    def test_download_parquet_file_small_file_logic(
+    def test_download_file_small_file_logic(
         self, mock_oauth, mock_path, mock_segmented_downloader, mock_request_wrapper
     ):
         client = DataQueryFileAPIClient(client_id="id", client_secret="secret")
@@ -398,22 +396,22 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
         mock_file_path.exists.return_value = False
         mock_path.return_value.__truediv__.return_value = mock_file_path
 
-        client.download_parquet_file(filename="TEST_DELTA_20230101.parquet")
+        client.download_file(filename="TEST_DELTA_20230101.parquet")
         mock_request_wrapper.assert_called_once()
         mock_segmented_downloader.assert_not_called()
 
         mock_request_wrapper.reset_mock()
         mock_segmented_downloader.reset_mock()
 
-        client.download_parquet_file(filename="TEST_METADATA_20230101.parquet")
+        client.download_file(filename="TEST_METADATA_20230101.parquet")
         mock_request_wrapper.assert_called_once()
         mock_segmented_downloader.assert_not_called()
 
     @patch("macrosynergy.download.dataquery_file_api.DataQueryFileAPIOauth")
-    def test_download_parquet_file_invalid_filename_format(self, mock_oauth):
+    def test_download_file_invalid_filename_format(self, mock_oauth):
         client = DataQueryFileAPIClient(client_id="id", client_secret="secret")
         with self.assertRaisesRegex(ValueError, "Invalid filename format"):
-            client.download_parquet_file(filename="invalidformat.parquet")
+            client.download_file(filename="invalidformat.parquet")
 
     @patch(
         "macrosynergy.download.dataquery_file_api.convert_ticker_based_parquet_file_to_qdf"
@@ -423,7 +421,7 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
     )
     @patch("macrosynergy.download.dataquery_file_api.Path")
     @patch("macrosynergy.download.dataquery_file_api.DataQueryFileAPIOauth")
-    def test_download_parquet_file_catalog_no_conversion(
+    def test_download_file_catalog_no_conversion(
         self, mock_oauth, mock_path, mock_downloader, mock_convert
     ):
         client = DataQueryFileAPIClient(client_id="id", client_secret="secret")
@@ -432,7 +430,7 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
         mock_file_path.suffix = ".parquet"
         mock_path.return_value.__truediv__.return_value = mock_file_path
 
-        client.download_parquet_file(
+        client.download_file(
             filename="JPMAQS_METADATA_CATALOG_20230101.parquet", qdf=True
         )
         mock_downloader.assert_called_once()
@@ -444,7 +442,7 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
     @patch("macrosynergy.download.dataquery_file_api.SegmentedFileDownloader")
     @patch("macrosynergy.download.dataquery_file_api.Path")
     @patch("macrosynergy.download.dataquery_file_api.DataQueryFileAPIOauth")
-    def test_download_parquet_file_qdf_conversion(
+    def test_download_file_qdf_conversion(
         self, mock_oauth, mock_path, mock_downloader, mock_convert
     ):
         client = DataQueryFileAPIClient(client_id="id", client_secret="secret")
@@ -454,7 +452,7 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
         mock_file_path.__str__.return_value = "mock_dir/TEST_DATA_20230101.parquet"
         mock_path.return_value.__truediv__.return_value = mock_file_path
 
-        client.download_parquet_file(
+        client.download_file(
             filename="TEST_DATA_20230101.parquet",
             qdf=True,
             as_csv=True,
@@ -471,7 +469,7 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
     @patch("macrosynergy.download.dataquery_file_api.cf.as_completed")
     @patch("macrosynergy.download.dataquery_file_api.cf.ThreadPoolExecutor")
     @patch("macrosynergy.download.dataquery_file_api.DataQueryFileAPIOauth")
-    def test_download_multiple_parquet_files_success(
+    def test_download_multiple_files_success(
         self, mock_oauth, mock_executor_cls, mock_as_completed
     ):
         client = DataQueryFileAPIClient(client_id="id", client_secret="secret")
@@ -482,10 +480,10 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
 
         with patch.object(
             client,
-            "download_multiple_parquet_files",
-            wraps=client.download_multiple_parquet_files,
+            "download_multiple_files",
+            wraps=client.download_multiple_files,
         ) as spy:
-            client.download_multiple_parquet_files(
+            client.download_multiple_files(
                 filenames=["f1.parquet", "f2.parquet"], show_progress=False
             )
             spy.assert_called_once()
@@ -497,7 +495,7 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
     @patch("macrosynergy.download.dataquery_file_api.cf.as_completed")
     @patch("macrosynergy.download.dataquery_file_api.cf.ThreadPoolExecutor")
     @patch("macrosynergy.download.dataquery_file_api.DataQueryFileAPIOauth")
-    def test_download_multiple_parquet_files_retry(
+    def test_download_multiple_files_retry(
         self, mock_oauth, mock_executor_cls, mock_as_completed
     ):
         client = DataQueryFileAPIClient(client_id="id", client_secret="secret")
@@ -513,11 +511,11 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
 
         with patch.object(
             client,
-            "download_multiple_parquet_files",
-            wraps=client.download_multiple_parquet_files,
+            "download_multiple_files",
+            wraps=client.download_multiple_files,
         ) as spy:
             with self.assertRaises(DownloadError):
-                client.download_multiple_parquet_files(
+                client.download_multiple_files(
                     filenames=["f1.parquet", "f2.parquet"],
                     max_retries=1,
                     show_progress=False,
@@ -544,12 +542,12 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
         mock_executor.submit.return_value = future1
         mock_as_completed.return_value = [future1]
         with self.assertRaises(KeyboardInterrupt):
-            client.download_multiple_parquet_files(
+            client.download_multiple_files(
                 filenames=["f1.parquet"], show_progress=False
             )
         mock_executor.shutdown.assert_called_once_with(wait=False, cancel_futures=True)
 
-    @patch.object(DataQueryFileAPIClient, "download_parquet_file")
+    @patch.object(DataQueryFileAPIClient, "download_file")
     @patch.object(DataQueryFileAPIClient, "list_available_files")
     def test_download_catalog_file(self, mock_list_files, mock_download):
         client = DataQueryFileAPIClient(client_id="id", client_secret="secret")
@@ -574,7 +572,7 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
             client.download_catalog_file()
 
     @patch("macrosynergy.download.dataquery_file_api.logger")
-    @patch.object(DataQueryFileAPIClient, "download_multiple_parquet_files")
+    @patch.object(DataQueryFileAPIClient, "download_multiple_files")
     @patch.object(DataQueryFileAPIClient, "filter_available_files_by_datetime")
     def test_download_full_snapshot(
         self, mock_filter_files, mock_download_multi, mock_logger
@@ -638,7 +636,7 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
             show_progress=False,
         )
 
-    @patch.object(DataQueryFileAPIClient, "download_multiple_parquet_files")
+    @patch.object(DataQueryFileAPIClient, "download_multiple_files")
     @patch.object(DataQueryFileAPIClient, "filter_available_files_by_datetime")
     def test_download_full_snapshot_with_file_datetime(
         self, mock_filter_files, mock_download_multi
@@ -662,7 +660,7 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
         self.assertEqual(mock_download_multi.call_args[1]["filenames"], ["f1.parquet"])
 
     @patch("macrosynergy.download.dataquery_file_api.logger")
-    @patch.object(DataQueryFileAPIClient, "download_multiple_parquet_files")
+    @patch.object(DataQueryFileAPIClient, "download_multiple_files")
     @patch.object(DataQueryFileAPIClient, "filter_available_files_by_datetime")
     def test_download_full_snapshot_no_new_files(
         self, mock_filter_files, mock_download_multi, mock_logger
@@ -675,7 +673,7 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
         mock_download_multi.assert_not_called()
         mock_logger.info.assert_any_call("No new files to download.")
 
-    @patch.object(DataQueryFileAPIClient, "download_multiple_parquet_files")
+    @patch.object(DataQueryFileAPIClient, "download_multiple_files")
     @patch.object(DataQueryFileAPIClient, "filter_available_files_by_datetime")
     def test_download_full_snapshot_file_group_ids(
         self, mock_filter_files, mock_download_multi

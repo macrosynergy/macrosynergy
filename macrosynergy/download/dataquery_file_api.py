@@ -77,7 +77,7 @@ including full datasets, deltas, and metadata.
     target_filename = "JPMAQS_MACROECONOMIC_BALANCE_SHEETS_20250414.parquet"
 
     print(f"Downloading {target_filename}...")
-    file_path = client.download_parquet_file(
+    file_path = client.download_file(
         filename=target_filename,
         out_dir=output_directory
     )
@@ -643,7 +643,7 @@ class DataQueryFileAPIClient:
         payload = self._get(endpoint, params)
         return pd.json_normalize(payload)
 
-    def download_parquet_file(
+    def download_file(
         self,
         file_group_id: str = None,
         file_datetime: str = None,
@@ -769,7 +769,7 @@ class DataQueryFileAPIClient:
             logger.info(msg_str)
         return str(file_path)
 
-    def download_multiple_parquet_files(
+    def download_multiple_files(
         self,
         filenames: List[str],
         out_dir: Optional[str] = None,
@@ -819,7 +819,7 @@ class DataQueryFileAPIClient:
             ):
                 futures[
                     executor.submit(
-                        self.download_parquet_file,
+                        self.download_file,
                         filename=filename,
                         out_dir=out_dir,
                         overwrite=overwrite,
@@ -865,7 +865,7 @@ class DataQueryFileAPIClient:
             logger.error(f"Files failed after retries: {failed_files}")
             raise DownloadError(f"Files failed after retries: {failed_files}")
 
-        return self.download_multiple_parquet_files(
+        return self.download_multiple_files(
             filenames=failed_files,
             out_dir=out_dir,
             max_retries=max_retries - 1,
@@ -890,7 +890,7 @@ class DataQueryFileAPIClient:
         ).iloc[0]
         latest_filename = latest_catalog["file-name"]
         logger.info(f"Latest catalog file identified: {latest_filename}")
-        return self.download_parquet_file(
+        return self.download_file(
             filename=latest_filename,
             out_dir=out_dir,
             overwrite=overwrite,
@@ -1006,7 +1006,7 @@ class DataQueryFileAPIClient:
             by=["download-priority", "file-datetime", "file-name"],
         )["file-name"].tolist()
 
-        self.download_multiple_parquet_files(
+        self.download_multiple_files(
             filenames=download_order,
             out_dir=out_dir,
             overwrite=overwrite,
