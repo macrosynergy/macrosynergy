@@ -4,6 +4,11 @@ Client for downloading JPMaQS data files from the JPMorgan DataQuery File API.
 This module provides the `DataQueryFileAPIClient`, a high-level wrapper for the
 JPMorgan DataQuery File API.
 
+
+.. note::
+    NOTE: This functionality is currently in BETA and is subject to significant changes
+    without deprecation cycles.
+
 Consumption & Examples
 ----------------------
 
