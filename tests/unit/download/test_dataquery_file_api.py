@@ -89,6 +89,7 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
         client = DataQueryFileAPIClient()
         self.assertEqual(client.client_id, "env_id")
         self.assertEqual(client.client_secret, "env_secret")
+        self.assertEqual(client.out_dir, "./jpmaqs-download")
         mock_get_client.assert_called_once()
         mock_oauth_constructor.assert_called_once_with(
             client_id="env_id",
