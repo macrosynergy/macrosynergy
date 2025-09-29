@@ -1,5 +1,4 @@
 name: Test & Upload to PyPI
-
 on:
   release:
     types: [published]
@@ -54,6 +53,8 @@ jobs:
         env:
           DQ_CLIENT_ID: ${{ secrets.DQ_CLIENT_ID }}
           DQ_CLIENT_SECRET: ${{ secrets.DQ_CLIENT_SECRET }}
+          FUSION_CLIENT_ID: ${{ secrets.FUSION_CLIENT_ID }}
+          FUSION_CLIENT_SECRET: ${{ secrets.FUSION_CLIENT_SECRET }}
         run: |
           echo 'Run Integration tests'
           pytest tests/integration/
@@ -73,4 +74,18 @@ jobs:
         env:
           TWINE_USERNAME: __token__
           TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+          
+      - name: Set up AWS credentials
+        uses: aws-actions/configure-aws-credentials@v3
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE }}
+          aws-region: eu-west-2
+
+      - name: Upload Docker base image to ECR
+        run: |
+          MS_VERSION=$(python ./setup.py --version)
+          aws ecr get-login-password --region eu-west-2 | docker login --username AWS --password-stdin ${{ secrets.ECR_REPOSITORY }}
+          docker build -t ${{ secrets.ECR_REPOSITORY }}:latest -t ${{ secrets.ECR_REPOSITORY }}:${MS_VERSION} . --build-arg MS_VERSION=${MS_VERSION}
+          docker push ${{ secrets.ECR_REPOSITORY }}:latest
+          docker push ${{ secrets.ECR_REPOSITORY }}:${MS_VERSION}
 # https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#release

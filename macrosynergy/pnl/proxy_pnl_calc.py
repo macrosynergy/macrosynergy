@@ -34,7 +34,23 @@ def _split_returns_positions_tickers(
 
     set_returns = set(_replace_strs(returns_tickers, rstring))
     set_positions = set(_replace_strs(positions_tickers, f"_{spos}"))
-    assert len(set_positions - set_returns) == len(set_returns - set_positions) == 0
+    # assert len(set_positions - set_returns) == len(set_returns - set_positions) == 0
+    positions_wo_returns = set_positions - set_returns
+    returns_wo_positions = set_returns - set_positions
+    if (len(positions_wo_returns) + len(returns_wo_positions)) > 0:
+        err_msg = "The following tickers are missing in the dataframe: \n"
+        positions_wo_returns = sorted(positions_wo_returns)
+        positions_wo_returns = list(map(lambda x: x + f"_{spos}", positions_wo_returns))
+        returns_wo_positions = sorted(returns_wo_positions)
+        returns_wo_positions = list(map(lambda x: x + rstring, returns_wo_positions))
+
+        if positions_wo_returns:
+            err_msg += f"Positions without returns: {positions_wo_returns} \n"
+        if returns_wo_positions:
+            err_msg += f"Returns without positions: {returns_wo_positions} \n"
+        err_msg += "Please check the tickers in the dataframe."
+        raise ValueError(err_msg)
+
     returns_tickers: List[str] = [
         ticker.replace(f"_{spos}", rstring) for ticker in positions_tickers
     ]
@@ -462,7 +478,6 @@ def proxy_pnl_calc(
     """
 
     for _varx, _namex, _typex in [
-        (df, "df", QuantamentalDataFrame),
         (spos, "spos", str),
         (transaction_costs_object, "transaction_costs", (TransactionCosts, type(None))),
         (roll_freqs, "roll_freqs", (dict, type(None))),

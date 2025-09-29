@@ -34,13 +34,11 @@ class TestHistoricPortfolioVol(unittest.TestCase):
 
         print("sigma (daily volatility):", sigma)
         cov = np.diag(sigma)
-        for ii in range(self.n_cids):
-            for jj in range(self.n_cids):
-                if ii != jj:
-                    cov[ii, jj] = (
-                        sigma[ii]
-                        * sigma[jj]
-                        * correlations_map[tuple(sorted((ii, jj)))]
+        for i in range(self.n_cids):
+            for j in range(self.n_cids):
+                if i != j:
+                    cov[i, j] = (
+                        sigma[i] * sigma[j] * correlations_map[tuple(sorted((i, j)))]
                     )
 
         self.cov = cov
@@ -54,12 +52,12 @@ class TestHistoricPortfolioVol(unittest.TestCase):
         mean_est = np.empty(shape=(n_sim, self.n_cids))
         std_est = np.empty(shape=(n_sim, self.n_cids))
 
-        for ii in range(n_sim):
+        for i in range(n_sim):
             rtn = np.random.multivariate_normal(
                 mean=self.mean, cov=self.cov, size=self.periods
             )
-            mean_est[ii, :] = rtn.mean(axis=0)
-            std_est[ii, :] = rtn.std(axis=0)
+            mean_est[i, :] = rtn.mean(axis=0)
+            std_est[i, :] = rtn.std(axis=0)
 
         # TODO convert in to actual check...
         print("estimate of mean:", (self.mean - mean_est.mean(axis=0)).round(6))
@@ -76,7 +74,7 @@ class TestHistoricPortfolioVol(unittest.TestCase):
     def _gen_sig_df(self, dates, sig_type: tuple = (1, 1, 1)) -> pd.DataFrame:
         df_signals = pd.DataFrame(
             [sig_type],
-            columns=[f"XX{ii}_AA_CSIG_STRAT" for ii in range(self.n_cids)],
+            columns=[f"XX{i}_AA_CSIG_STRAT" for i in range(self.n_cids)],
             index=dates,
         )
 
@@ -87,7 +85,7 @@ class TestHistoricPortfolioVol(unittest.TestCase):
             mean=self.mean, cov=self.cov, size=self.periods
         )
         df_returns = pd.DataFrame(
-            rtn, columns=[f"XX{ii}_AAXR" for ii in range(self.n_cids)], index=dates
+            rtn, columns=[f"XX{i}_AAXR" for i in range(self.n_cids)], index=dates
         )
 
         return self._shape_df(df_returns)
@@ -127,6 +125,7 @@ class TestHistoricPortfolioVol(unittest.TestCase):
             rstring="XR",
             est_freqs=["m"],
             lback_periods=21,
+            lback_min_obs=1,
             lback_meth="ma",
             half_life=11,
             start=None,
@@ -134,7 +133,7 @@ class TestHistoricPortfolioVol(unittest.TestCase):
             blacklist=None,
             nan_tolerance=0.25,
             remove_zeros=True,
-            fids=[f"XX{ii}_AA" for ii in range(self.n_cids)],
+            fids=[f"XX{i}_AA" for i in range(self.n_cids)],
         )
 
         rtn_df = self._gen_rtn_df(dates=dates)

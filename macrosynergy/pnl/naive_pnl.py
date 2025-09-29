@@ -97,6 +97,7 @@ class NaivePnL:
         self.bm_bool = isinstance(bms, (str, list))
         if self.bm_bool:
             bms = [bms] if isinstance(bms, str) else bms
+            self.dfd = reduce_df(self.dfd, start=start, end=end, blacklist=blacklist)
 
             # Pass in the original DataFrame; negative signal will not have been applied
             # which will corrupt the use of the benchmark categories.
@@ -105,6 +106,9 @@ class NaivePnL:
             self._bm_dict = bm_dict
 
         self.pnl_params = {}
+        self.start = start
+        self.end = end
+        self.blacklist = blacklist
 
     def make_pnl(
         self,
@@ -123,6 +127,10 @@ class NaivePnL:
         sequential: bool = True,
         neutral: str = "zero",
         thresh: float = None,
+        entry_barrier: float = None,
+        exit_barrier: float = None,
+        winsorize_first: bool = False,
+        normalized_weights: bool = False,
     ):
         """
         Calculate daily PnL and add to class instance.
@@ -153,10 +161,11 @@ class NaivePnL:
             compared, each PnL requires a distinct name.
         rebal_freq : str
             re-balancing frequency for positions according to signal must be one of
-            'daily' (default), 'weekly' or 'monthly'. The re-balancing is only concerned
-            with the signal value on the re-balancing date which is delimited by the
-            frequency chosen. Additionally, the re-balancing frequency will be applied to
-            make_zn_scores() if used as the method to produce the raw signals.
+            'daily' (default), 'weekly', 'monthly', 'quarterly', or 'annual'. The
+            re-balancing is only concerned with the signal value on the re-balancing date
+            which is delimited by the frequency chosen. Additionally, the re-balancing
+            frequency will be applied to make_zn_scores() if used as the method to produce
+            the raw signals.
         rebal_slip : str
             re-balancing slippage in days. Default is 1 which means that it takes one
             day to re-balance the position and that the new positions produce PnL from the
@@ -184,7 +193,29 @@ class NaivePnL:
             threshold. Therefore, the threshold is the maximum absolute score value that the
             function is allowed to produce. The minimum threshold is one standard deviation.
             Default is no threshold.
-
+        entry_barrier : float
+            Threshold in terms of absolute signal value to enter a position in a binary
+            strategy. This prevents binary strategies from excessive position flipping.
+            Default is None, i.e., the binary strategy always takes its full position, no
+            matter how small the signal value.
+        exit_barrier : float
+            Threshold in terms of absolute signal value to exit a position in a binary
+            strategy. In conjunction with an entry barrier, this determines the
+            probability of position liquidations when the sign of the signal does not
+            change. The value must be below the entry barrier. Without an entry barrier
+            there can be no exit barrier. Default is None, which means that a position is
+            only liquidated of the sign of the signal flips.
+        winsorize_first : bool
+            if True, the signal is winsorized before any signal manipulation is applied.
+            This means that the signal is clipped to a specified range before any further
+            processing is done.
+            Default is False, meaning that the signal is winsorized after all other
+            transformations have been applied.
+        normalized_weights : bool
+            if True, the PnL is computed using normalized weights, meaning that the
+            PnL is computed as the mean of the signal-adjusted returns across all
+            cross-sections. Default is False, meaning that the PnL is computed as the
+            sum of the signal-adjusted returns across all cross-sections.
 
         Notes
         -----
@@ -194,10 +225,12 @@ class NaivePnL:
         When `sig_op = "zn_score_cs"`, raw signals are transformed into zn-scores
         around a neutral value where statistics are calculated by cross section alone.
 
-        When `sig_op = "binary"`, transforms signals into uniform long/shorts (1/-1) across
-        all cross sections.
+        When `sig_op = "binary"`, transforms signals into uniform long/shorts (1/-1)
+        across all cross sections.
 
         When `sig_op = "raw"`, no transformation is applied to the signal.
+
+        Entry and exit barriers are only applicable when the signal operation is binary.
 
         See Also
         --------
@@ -243,7 +276,7 @@ class NaivePnL:
         if sig_op not in sig_options:
             raise ValueError(error_sig_method)
 
-        freq_params = ["daily", "weekly", "monthly"]
+        freq_params = ["daily", "weekly", "monthly", "quarterly", "annual"]
         freq_error = f"Re-balancing frequency must be one of: {freq_params}."
         if rebal_freq not in freq_params:
             raise ValueError(freq_error)
@@ -258,9 +291,28 @@ class NaivePnL:
         if vol_scale is not None and (vol_scale <= 0):
             raise ValueError(err_vol)
 
+        if entry_barrier is not None and exit_barrier is not None:
+            if not isinstance(entry_barrier, (float, int)) or not isinstance(
+                exit_barrier, (float, int)
+            ):
+                raise TypeError(
+                    "Entry and exit barriers must be numerical values >= 0."
+                )
+            if sig_op != "binary":
+                raise ValueError(
+                    "Entry and exit barriers are only applicable when the signal "
+                    "operation is binary."
+                )
+            if entry_barrier <= 0 or exit_barrier < 0 or entry_barrier < exit_barrier:
+                raise ValueError(
+                    "Please ensure that: 0 <= exit_barrier < entry_barrier"
+                )
+
         # B. Extract DataFrame of exclusively return and signal categories in time series
         # format.
         dfx = self.df[self.df["xcat"].isin([self.ret, sig])]
+
+        thresh_sig = thresh if winsorize_first else None
 
         dfw = self._make_signal(
             dfx=dfx,
@@ -270,7 +322,7 @@ class NaivePnL:
             iis=iis,
             sequential=sequential,
             neutral=neutral,
-            thresh=thresh,
+            thresh=thresh_sig,
         )
 
         if sig_neg:
@@ -282,7 +334,8 @@ class NaivePnL:
         dfw["psig"] += sig_add
         dfw["psig"] *= sig_mult
 
-        self._winsorize(df=dfw["psig"], thresh=thresh)
+        if not winsorize_first:
+            self._winsorize(df=dfw["psig"], thresh=thresh)
 
         # Multi-index DataFrame with a natural minimum lag applied.
         dfw["psig"] = dfw["psig"].groupby(level=0, observed=True).shift(1)
@@ -295,11 +348,40 @@ class NaivePnL:
         sig_series = self.rebalancing(
             dfw=dfw, rebal_freq=rebal_freq, rebal_slip=rebal_slip
         )
+
         dfw["sig"] = np.squeeze(sig_series.to_numpy())
+
+        # Code to do history dependent binary pnl
+        if (
+            entry_barrier is not None
+            and exit_barrier is not None
+            and sig_op == "binary"
+        ):
+            dfw.rename({"sig": "prev_sig"}, axis=1, inplace=True)
+            dfw["psig"] = dfw.apply(
+                self._apply_barriers,
+                axis=1,
+                sig=sig,
+                entry_barrier=entry_barrier,
+                exit_barrier=exit_barrier,
+            )
+            dfw["psig"] = dfw.groupby("cid", observed=True)["psig"].shift(1)
+
+            dfw = dfw.sort_values(["cid", "real_date"])
+            sig_series = self.rebalancing(
+                dfw=dfw, rebal_freq=rebal_freq, rebal_slip=rebal_slip
+            )
+            dfw["sig"] = np.squeeze(sig_series.to_numpy())
         # else:
         #     dfw = dfw.rename({"psig": "sig"}, axis=1)
 
         # The signals are generated across the panel.
+        if normalized_weights:
+            # Normalize signal weights by the number of available cids for each real_date
+            dfw["sig"] = dfw.groupby("real_date")["sig"].transform(
+                lambda x: x / x.count() if x.count() > 0 else x
+            )
+
         dfw["value"] = dfw[self.ret] * dfw["sig"]
 
         df_pnl = dfw.loc[:, ["cid", "real_date", "value"]]
@@ -367,6 +449,7 @@ class NaivePnL:
         vol_scale: Optional[float] = None,
         label: Optional[str] = None,
         leverage: float = 1.0,
+        normalized_weights: bool = False,
     ):
         """
         Computes long-only returns which may act as a basis for comparison
@@ -410,7 +493,11 @@ class NaivePnL:
         dfx = self.df[self.df["xcat"].isin([self.ret])]
 
         df_long = self.long_only_pnl(
-            dfw=dfx, vol_scale=vol_scale, label=label, leverage=leverage
+            dfw=dfx,
+            vol_scale=vol_scale,
+            label=label,
+            leverage=leverage,
+            normalized_weights=normalized_weights,
         )
 
         self.df = QuantamentalDataFrame.from_qdf_list([self.df, df_long])
@@ -456,6 +543,24 @@ class NaivePnL:
                     self.df = update_df(self.df, dfa)
 
         return bm_dict
+
+    @staticmethod
+    def _apply_barriers(row, sig, entry_barrier, exit_barrier):
+        if abs(row[sig]) >= entry_barrier:
+            return np.sign(row[sig])
+        elif (
+            row["prev_sig"] is None or np.isnan(row["prev_sig"]) or row["prev_sig"] == 0
+        ):
+            # No position taken last rebalancing period
+            return 0
+        elif abs(row[sig]) > exit_barrier and np.sign(row[sig]) == np.sign(
+            row["prev_sig"]
+        ):
+            # Position taken and current signal is same as previous rebalanced signal
+            return np.sign(row[sig])
+        else:
+            # Position taken and current signal is different sign from previous rebalanced signal
+            return 0
 
     @staticmethod
     def _make_signal(
@@ -551,7 +656,7 @@ class NaivePnL:
             also included with the column name 'psig'.
         rebal_freq : str
             re-balancing frequency for positions according to signal must be one of
-            'daily' (default), 'weekly' or 'monthly'.
+            'daily' (default), 'weekly', 'monthly', 'quarterly', or 'annual'.
         rebal_slip : str
             re-balancing slippage in days.
 
@@ -566,7 +671,15 @@ class NaivePnL:
         # the shift forward by one day applied earlier in the code. Therefore, only
         # concerned with the minimum date of each re-balance period.
         dfw["year"] = dfw["real_date"].dt.year
-        if rebal_freq == "monthly":
+        if rebal_freq == "annual":
+            rebal_dates = dfw.groupby(["cid", "year"], observed=True)["real_date"].min()
+        elif rebal_freq == "quarterly":
+            dfw["quarter"] = dfw["real_date"].dt.quarter
+            rebal_dates = dfw.groupby(
+                ["cid", "year", "quarter"],
+                observed=True,
+            )["real_date"].min()
+        elif rebal_freq == "monthly":
             dfw["month"] = dfw["real_date"].dt.month
             rebal_dates = dfw.groupby(
                 ["cid", "year", "month"],
@@ -574,11 +687,17 @@ class NaivePnL:
             )["real_date"].min()
         elif rebal_freq == "weekly":
             dfw["week"] = dfw["real_date"].apply(lambda x: x.week)
-            rebal_dates = dfw.groupby(["cid", "year", "week"], observed=True)["real_date"].min()
+            rebal_dates = dfw.groupby(["cid", "year", "week"], observed=True)[
+                "real_date"
+            ].min()
         elif rebal_freq == "daily":
-            rebal_dates = dfw.groupby(["cid", "year", "real_date"], observed=True)["real_date"].min()
+            rebal_dates = dfw.groupby(["cid", "year", "real_date"], observed=True)[
+                "real_date"
+            ].min()
         else:
-            raise ValueError("Re-balancing frequency must be one of: daily, weekly, monthly.")
+            raise ValueError(
+                "Re-balancing frequency must be one of: daily, weekly, monthly, quarterly or annual."
+            )
 
         # Convert the index, 'cid', to a formal column aligned to the re-balancing dates.
         r_dates_df = rebal_dates.reset_index(level=0)
@@ -602,7 +721,9 @@ class NaivePnL:
         rebal_merge = dfw[["real_date", "cid"]].merge(
             rebal_merge, how="left", on=["real_date", "cid"]
         )
-        rebal_merge["psig"] = rebal_merge.groupby("cid", observed=True)["psig"].ffill().shift(rebal_slip)
+        rebal_merge["psig"] = (
+            rebal_merge.groupby("cid", observed=True)["psig"].ffill().shift(rebal_slip)
+        )
         rebal_merge = rebal_merge.sort_values(["cid", "real_date"])
 
         rebal_merge = rebal_merge.set_index("real_date")
@@ -616,6 +737,7 @@ class NaivePnL:
         vol_scale: float = None,
         label: str = None,
         leverage: float = 1.0,
+        normalized_weights: bool = False,
     ):
         """
         Method used to compute the PnL accrued from simply taking a long-only position
@@ -645,8 +767,10 @@ class NaivePnL:
         lev_err = "`leverage` must be a numerical value greater than 0."
 
         dfw_long = dfw.reset_index(drop=True)
-
-        panel_pnl = dfw_long.groupby(["real_date"]).sum(numeric_only=True)
+        if normalized_weights:
+            panel_pnl = dfw_long.groupby(["real_date"]).mean(numeric_only=True)
+        else:
+            panel_pnl = dfw_long.groupby(["real_date"]).sum(numeric_only=True)
         panel_pnl = panel_pnl.reset_index(level=0)
         panel_pnl = QuantamentalDataFrame.from_long_df(panel_pnl, cid="ALL", xcat=label)
 
@@ -668,6 +792,7 @@ class NaivePnL:
         pnl_cids: List[str] = ["ALL"],
         start: str = None,
         end: str = None,
+        compounding: bool = False,
         facet: bool = False,
         ncol: int = 3,
         same_y: bool = True,
@@ -676,7 +801,7 @@ class NaivePnL:
         tick_fontsize: int = 12,
         xcat_labels: Union[List[str], dict] = None,
         xlab: str = "",
-        ylab: str = "% of risk capital, no compounding",
+        ylab: str = "% of risk capital",
         label_fontsize: int = 12,
         share_axis_labels: bool = True,
         figsize: Tuple = (12, 7),
@@ -686,6 +811,7 @@ class NaivePnL:
         title_adj: float = 0.95,
         y_label_adj: float = 0.95,
         legend_fontsize: int = None,
+        return_fig: bool = False
     ) -> None:
         """
         Plot line chart of cumulative PnLs, single PnL, multiple PnL types per cross
@@ -703,6 +829,8 @@ class NaivePnL:
             used.
         end : str
             latest date in ISO format. Default is None and latest date in df is used.
+        compounding : bool
+            parameter to control whether the PnLs are compounded daily. Default is False.
         facet : bool
             parameter to control whether each PnL series is plotted on its own
             respective grid using Seaborn's FacetGrid. Default is False and all series will
@@ -723,7 +851,7 @@ class NaivePnL:
             (empty string)..
         ylab : str
             label for y-axis of the plot (or subplots if faceted), default is '% of risk
-            capital, no compounding'.
+            capital' with a note on compounding.
         share_axis_labels : bool
             if True (default) the axis labels are shared by all subplots in the facet
             grid.
@@ -740,6 +868,7 @@ class NaivePnL:
         y_label_adj : float
             parameter that sets left of figure to fit the y-label.
         """
+        default_ylab: str = "% of risk capital"
 
         if pnl_cats is None:
             pnl_cats = self.pnl_names
@@ -761,7 +890,7 @@ class NaivePnL:
                 )
             elif len(pnl_cats) == 0:
                 raise ValueError(
-                    "There are not any valid PnL(s) to display given the " "request."
+                    "There are not any valid PnL(s) to display given the request."
                 )
 
         error_message = "Either pnl_cats or pnl_cids must be a list of length 1"
@@ -825,7 +954,17 @@ class NaivePnL:
                 labels = pnl_cids.copy()
             legend_title = "Cross Section(s)"
 
-        dfx["cum_value"] = dfx.groupby(plot_by, observed=True).cumsum(numeric_only=True)
+        df_grouped = dfx.groupby(plot_by, observed=True)
+
+        if compounding:
+            dfx["cum_value"] = (
+                df_grouped["value"].transform(lambda x: (x / 100 + 1).cumprod()) - 1
+            ) * 100
+        else:
+            dfx["cum_value"] = df_grouped["value"].cumsum(numeric_only=True)
+
+        if ylab == default_ylab:
+            ylab += ", with daily compounding" if compounding else ", no compounding"
 
         if facet:
             fg = sns.FacetGrid(
@@ -885,7 +1024,7 @@ class NaivePnL:
                 labels=labels,
                 title=legend_title,
                 title_fontsize=legend_fontsize,
-                fontsize=legend_fontsize
+                fontsize=legend_fontsize,
             )
             plt.xlabel(xlab, fontsize=label_fontsize)
             plt.ylabel(ylab, fontsize=label_fontsize)
@@ -896,8 +1035,10 @@ class NaivePnL:
         else:
             labels = labels[::-1]
 
-        fg.tick_params(axis='both', labelsize=tick_fontsize)
+        fg.tick_params(axis="both", labelsize=tick_fontsize)
         plt.axhline(y=0, color="black", linestyle="--", lw=1)
+        if return_fig:
+            return fg
         plt.show()
 
     def signal_heatmap(
@@ -908,10 +1049,12 @@ class NaivePnL:
         end: str = None,
         freq: str = "M",
         title: str = "Average applied signal values",
+        title_fontsize: int = None,
         x_label: str = "",
         y_label: str = "",
         figsize: Optional[Tuple[float, float]] = None,
         tick_fontsize: int = None,
+        return_fig: bool = False
     ):
         """
         Display heatmap of signals across times and cross-sections.
@@ -932,6 +1075,8 @@ class NaivePnL:
             The only alternative is quarterly ('q').
         title : str
             allows entering text for a custom chart header.
+        title_fontsize : int
+            font size of the title. Default is None, uses matplotlib default.
         x_label : str
             label for the x-axis. Default is None.
         y_label : str
@@ -960,7 +1105,7 @@ class NaivePnL:
         if not freq.startswith(("BQ", "BM")):
             raise ValueError(err_msg)
 
-        err_cids = f"Cross-sections not available. Available cids are:" f"{self.cids}."
+        err_cids = f"Cross-sections not available. Available cids are:{self.cids}."
 
         if pnl_cids is None:
             pnl_cids = self.cids
@@ -991,14 +1136,17 @@ class NaivePnL:
         fig, ax = plt.subplots(figsize=figsize)
         dfw = dfw.transpose()
         dfw.columns = [str(d.strftime("%d-%m-%Y")) for d in dfw.columns]
-        sns.heatmap(dfw, cmap="vlag_r", center=0)
+        ax = sns.heatmap(dfw, cmap="vlag_r", center=0)
 
         ax.set(xlabel=x_label, ylabel=y_label)
         ax.set_yticklabels(ax.get_yticklabels(), rotation=0)
-        ax.set_title(title, fontsize=14)
-        
+        ax.set_title(title, fontsize=title_fontsize)
+
         ax.tick_params(axis="x", labelsize=tick_fontsize)
         ax.tick_params(axis="y", labelsize=tick_fontsize)
+
+        if return_fig:
+            return fig
 
         plt.show()
 
@@ -1008,7 +1156,9 @@ class NaivePnL:
         freq: str = "m",
         metric: str = "direction",
         title: str = None,
+        title_fontsize: int = None,
         y_label: str = "Sum of Std. across the Panel",
+        return_fig: bool = False,
     ):
         """
         Display aggregate signal strength and - potentially - direction.
@@ -1025,6 +1175,8 @@ class NaivePnL:
         title : str
             allows entering text for a custom chart header. Default will be "Directional
             Bar Chart of <pnl_name>.".
+        title_fontsize : int
+            font size of the title. Default is None, uses matplotlib default.
         y_label : str
             label for the y-axis. Default is the sum of standard deviations across the
             panel corresponding to the default signal transformation: 'zn_score_pan'.
@@ -1035,9 +1187,9 @@ class NaivePnL:
             PnL.
         """
 
-        assert isinstance(pnl_name, str), (
-            "The method expects to receive a single " "PnL name."
-        )
+        assert isinstance(
+            pnl_name, str
+        ), "The method expects to receive a single PnL name."
         error_cats = (
             f"The PnL passed to 'pnl_name' parameter is not defined. The "
             f"possible options are {self.pnl_names}."
@@ -1058,16 +1210,10 @@ class NaivePnL:
         dfx: pd.DataFrame = self.signal_df[pnl_name]
         dfw: pd.DataFrame = dfx.pivot(index="real_date", columns="cid", values="sig")
 
-        # The method allows for visually understanding the overall direction of the
-        # aggregate signal but also gaining insight into the proportional exposure to the
-        # respective signal by measuring the absolute value, the size of the signal.
-        # Is the PnL value generated by large returns or a large signal, position ?
         if metric == "strength":
             dfw = dfw.abs()
 
         dfw = dfw.resample(freq).mean()
-        # Sum across the timestamps to compute the aggregate signal according to the
-        # down-sampling frequency.
         df_s = dfw.sum(axis=1)
         index = np.array(df_s.index)
         df_signal = pd.DataFrame(
@@ -1083,11 +1229,16 @@ class NaivePnL:
 
         fig, ax = plt.subplots()
         df_signal.plot.bar(
-            x="", y="aggregate_signal", ax=ax, title=title, ylabel=y_label, legend=False
+            x="",
+            y="aggregate_signal",
+            ax=ax,
+            ylabel=y_label,
+            legend=False,
         )
+        ax.set_title(title, fontsize=title_fontsize)
 
         ticklabels = [""] * len(df_signal)
-        skip = len(df_signal) // 12
+        skip = max(1, len(df_signal) // 12)  # avoid division by zero
         ticklabels[::skip] = df_signal[""].iloc[::skip].dt.strftime("%Y-%m-%d")
         ax.xaxis.set_major_formatter(mticker.FixedFormatter(ticklabels))
 
@@ -1099,23 +1250,37 @@ class NaivePnL:
             return dates[i]
 
         ax.fmt_xdata = fmt
-        plt.show()
+
+        if return_fig:
+            return fig
+        else:
+            plt.show()
 
     def evaluate_pnls(
         self,
-        pnl_cats: List[str],
+        pnl_cats: Optional[List[str]] = None,
         pnl_cids: List[str] = ["ALL"],
         start: Optional[str] = None,
         end: Optional[str] = None,
         label_dict: Optional[Dict[str, str]] = None,
     ):
         """
-        Table of key PnL statistics.
+        Returns a table of PnL statistics containing the following metrics:
+            - Return - percentage, annualized
+            - Standard Deviation - percentage, annualized
+            - Sharpe Ratio
+            - Sortino Ratio
+            - Max 21-Day Draw - percentage
+            - Max 6-Month Draw - percentage
+            - Peak to Trough Draw - percentage
+            - Top 5% Monthly PnL Share
+            - Traded Months
 
         Parameters
         ----------
-        pnl_cats : List[str]
-            list of PnL categories that should be plotted.
+        pnl_cats : List[str], optional
+            list of PnL categories that should be plotted. Default is None and all
+            available PnL categories are used.
         pnl_cids : List[str]
             list of cross-sections to be plotted; default is 'ALL' (global PnL). Note:
             one can only have multiple PnL categories or multiple cross-sections, not both.
@@ -1135,10 +1300,15 @@ class NaivePnL:
 
         error_cids = "List of cross-sections expected."
         error_xcats = "List of PnL categories expected."
-        assert isinstance(pnl_cids, list), error_cids
-        assert isinstance(pnl_cats, list), error_xcats
-        assert all([isinstance(elem, str) for elem in pnl_cids]), error_cids
-        assert all([isinstance(elem, str) for elem in pnl_cats]), error_xcats
+        if not isinstance(pnl_cids, list):
+            raise TypeError(error_cids)
+        if not isinstance(pnl_cats, (list, type(None))):
+            raise TypeError(error_xcats)
+        if pnl_cats is not None:
+            if not all([isinstance(elem, str) for elem in pnl_cats]):
+                raise TypeError(error_xcats)
+        if not all([isinstance(elem, str) for elem in pnl_cids]):
+            raise TypeError(error_cids)
 
         if pnl_cats is None:
             # The field, self.pnl_names, is a data structure that stores the name of the
@@ -1147,15 +1317,15 @@ class NaivePnL:
             # logical method: ('PNL_' + sig) if pnl_name is None else pnl_name. Each
             # category will be held in the data structure.
             pnl_cats = self.pnl_names
-        else:
-            if not set(pnl_cats) <= set(self.pnl_names):
-                missing = [pnl for pnl in pnl_cats if pnl not in self.pnl_names]
-                pnl_error = (
-                    f"Received PnL categories have not been defined. The PnL "
-                    f"category(s) which has not been defined is: {missing}. "
-                    f"The produced PnL category(s) are {self.pnl_names}."
-                )
-                raise ValueError(pnl_error)
+
+        if not set(pnl_cats) <= set(self.pnl_names):
+            missing = [pnl for pnl in pnl_cats if pnl not in self.pnl_names]
+            pnl_error = (
+                f"Received PnL categories have not been defined. The PnL "
+                f"category(s) which has not been defined is: {missing}. "
+                f"The produced PnL category(s) are {self.pnl_names}."
+            )
+            raise ValueError(pnl_error)
 
         assert (len(pnl_cats) == 1) | (len(pnl_cids) == 1)
 
@@ -1242,7 +1412,7 @@ class NaivePnL:
                     "label_dict must have the same number of keys as columns in the "
                     "DataFrame."
                 )
-            df.rename(index=label_dict, inplace=True)
+            df.rename(columns=label_dict, inplace=True)
             df = df[label_dict.values()]
 
         return df
@@ -1288,116 +1458,64 @@ class NaivePnL:
 
 def create_results_dataframe(
     title: str,
-    df: pd.DataFrame,
-    ret: str,
-    sigs: Union[str, List[str]],
-    cids: Union[str, List[str]],
-    sig_ops: Union[str, List[str]],
-    sig_adds: Union[float, List[float]],
-    neutrals: Union[str, List[str]],
-    threshs: Union[float, List[float]],
-    bm: str = None,
-    sig_negs: Union[bool, List[bool]] = None,
-    cosp: bool = False,
-    start: str = None,
-    end: str = None,
-    blacklist: dict = None,
-    freqs: Union[str, List[str]] = "M",
-    agg_sigs: Union[str, List[str]] = "last",
+    pnl: NaivePnL,
     sigs_renamed: dict = None,
-    fwin: int = 1,
-    slip: int = 0,
+    **srr_kwargs
 ):
     """
-    Create a DataFrame with key performance metrics for the signals and PnLs.
+    Create a DataFrame with key performance metrics for signals and PnLs
+    from a precomputed NaivePnL object.
 
     Parameters
     ----------
     title : str
-        title of the DataFrame.
-    df : ~pandas.DataFrame
-        DataFrame with the data.
-    ret : str
-        name of the return signal.
-    sigs : Union[str, List[str]
-        name of the comparative signal(s).
-    cids : Union[str, List[str]
-        name of the cross-section(s).
-    sig_ops : Union[str, List[str]
-        operation(s) to be applied to the signal(s).
-    sig_adds : Union[float, List[float]
-        value(s) to be added to the signal(s).
-    neutrals : Union[str, List[str]
-        neutralization method(s) to be applied.
-    threshs : Union[float, List[float]
-        threshold(s) to be applied to the signal(s).
-    bm : str
-        name of the benchmark signal.
-    sig_negs : Union[bool, List[bool]
-        whether the signal(s) should be negated.
-    cosp : bool
-        whether the signals should be cross-sectionally standardized.
-    start : str
-        start date of the analysis.
-    end : str
-        end date of the analysis.
-    blacklist : dict
-        dictionary with the blacklisted dates.
-    freqs : Union[str, List[str]
-        frequency of the rebalancing.
-    agg_sigs : Union[str, List[str]
-        aggregation method(s) for the signal(s).
-    sigs_renamed : dict
-        dictionary with the renamed signals.
-    fwin : int
-        frequency of the rolling window.
-    slip : int
-        slippage to be applied to the PnLs.
+        Title of the DataFrame.
+    pnl : NaivePnL
+        NaivePnL object with pnl.make_pnl() already applied.
+    bm : str, optional
+        Benchmark name for correlation.
+    sigs_renamed : dict, optional
+        Dictionary for renaming signals in the output.
 
     Returns
     -------
-    ~pandas.DataFrame
-        DataFrame with the performance metrics.
+    ~pandas.DataFrame or Styler
+        DataFrame with performance metrics.
     """
 
-    # Get the signals table and isolate relevant performance metrics
+    sigs = []
+    sig_neg = []
+    freqs = []
 
-    def check_list_type(type, var):
-        return isinstance(var, list) and all(isinstance(item, type) for item in var)
+    pnl_freq = {
+        "daily": "D",
+        "weekly": "W",
+        "monthly": "M",
+        "quarterly": "Q",
+        "annual": "A",
+    }
 
-    if not isinstance(ret, str):
-        raise TypeError("The return signal must be a string.")
-    if not isinstance(sigs, str) and not check_list_type(str, sigs):
-        raise TypeError("The signals must be a string or a list of strings.")
-    if not isinstance(cids, str) and not check_list_type(str, cids):
-        raise TypeError("The cids must be a string or a list of strings.")
-    if not isinstance(sig_ops, str) and not check_list_type(str, sig_ops):
-        raise TypeError("The signal operations must be a string or a list of strings.")
-    if not isinstance(sig_adds, (float, int)) and not check_list_type(
-        (float, int), sig_adds
-    ):
-        raise TypeError("The signal additions must be a float or a list of floats.")
-    if not isinstance(neutrals, str) and not check_list_type(str, neutrals):
-        raise TypeError("The neutralizations must be a string or a list of strings.")
-    if not isinstance(threshs, (float, int)) and not check_list_type(
-        (float, int), threshs
-    ):
-        raise TypeError("The thresholds must be a float or a list of floats.")
+    bms = list(pnl._bm_dict.keys())
 
+    if pnl.pnl_params is None:
+        raise ValueError("PnL parameters not found. Ensure pnl.make_pnl() has been run.")
+
+    for pnl_name, params in pnl.pnl_params.items():
+        sigs.append(params.signal)
+        sig_neg.append(params.sig_neg)
+        freqs.append(pnl_freq[params.rebal_freq])
+
+    # Get relation metrics (SignalReturnRelations lives inside pnl.df)
     srr = SignalReturnRelations(
-        df=df,
-        rets=ret,
+        df=pnl.df,
+        rets=pnl.ret,
         sigs=sigs,
-        cids=cids,
-        sig_neg=sig_negs,
-        cosp=cosp,
-        start=start,
-        end=end,
-        blacklist=blacklist,
-        freqs=freqs,
-        agg_sigs=agg_sigs,
-        fwin=fwin,
-        slip=slip,
+        sig_neg=sig_neg,
+        cids=pnl.cids,
+        start=pnl.start,
+        end=pnl.end,
+        blacklist=pnl.blacklist,
+        **srr_kwargs,
     )
     sigs_df = (
         srr.multiple_relations_table()
@@ -1405,76 +1523,37 @@ def create_results_dataframe(
         .round(3)
     )
 
-    # Get the evaluated PnL statistics and isolate relevant performance metrics
-    freq_dict = {
-        "D": "daily",
-        "W": "weekly",
-        "M": "monthly",
-    }
-    pnl_freq = lambda x: freq_dict[x] if x in freq_dict.keys() else "monthly"
-
-    if sig_negs is None:
-        sig_negs = [False] * len(sigs)
-
-    pnl = NaivePnL(
-        df=df,
-        ret=ret,
-        sigs=sigs,
-        cids=cids,
-        bms=bm,
-        start=start,
-        end=end,
-        blacklist=blacklist,
-    )
-    for idx, sig in enumerate(sigs):
-        pnl.make_pnl(
-            sig=sig,
-            sig_op=(sig_ops if isinstance(sig_ops, str) else sig_ops[idx]),
-            sig_add=(sig_adds if isinstance(sig_adds, (float, int)) else sig_adds[idx]),
-            sig_neg=(sig_negs if isinstance(sig_negs, bool) else sig_negs[idx]),
-            pnl_name=sig,
-            rebal_freq=(
-                pnl_freq(freqs) if isinstance(freqs, str) else pnl_freq(freqs[idx])
-            ),
-            rebal_slip=slip,
-            vol_scale=10,
-            neutral=(neutrals if isinstance(neutrals, str) else neutrals[idx]),
-            thresh=(threshs if isinstance(threshs, (float, int)) else threshs[idx]),
-        )
-
-    if bm is not None:
+    # Get evaluated PnL statistics
+    if bms:
+        bm_cols = [f"{bm} correl" for bm in bms]
         pnl_df = (
-            pnl.evaluate_pnls(pnl_cats=sigs)
-            .transpose()[["Sharpe Ratio", "Sortino Ratio", f"{bm} correl"]]
+            pnl.evaluate_pnls()
+            .transpose()[["Sharpe Ratio", "Sortino Ratio"] + bm_cols]
             .astype("float")
             .round(3)
         )
     else:
         pnl_df = (
-            pnl.evaluate_pnls(pnl_cats=sigs)
+            pnl.evaluate_pnls()
             .transpose()[["Sharpe Ratio", "Sortino Ratio"]]
             .astype("float")
             .round(3)
         )
 
-    # Sort pnl_df so that it matches the order of sigs
-    pnl_df = pnl_df.reindex(sigs)
+    pnl_df = pnl_df.reindex(pnl.pnl_params)
 
+    for sig in pnl_df.index:
+        new_sig = pnl.pnl_params[sig].signal
+        if pnl.pnl_params[sig].sig_neg:
+            new_sig = f"{new_sig}_NEG"
+        pnl_df.rename(index={sig: new_sig}, inplace=True)
+
+    # Reset redundant indices in sigs_df
     sigs_df = sigs_df.reset_index(
         level=["Return", "Frequency", "Aggregation"], drop=True
     )
 
-    if True in sig_negs:
-        for sig in pnl_df.index:
-            sig_neg = sig_negs[pnl_df.index.get_loc(sig)]
-            if sig_neg:
-                # Ensure each index is renamed only once
-                pnl_df.rename(
-                    index={sig: f"{sig}_NEG"},
-                    inplace=True,
-                )
-
-    # Concatenate them and clean them
+    # Combine them
     res_df = pd.concat([sigs_df, pnl_df], axis=1)
 
     metric_map = {
@@ -1485,8 +1564,6 @@ def create_results_dataframe(
         "pearson": "Pearson",
         "kendall": "Kendall",
     }
-    if bm is not None:
-        metric_map[f"{bm} correl"] = "Market corr."
 
     res_df.rename(columns=metric_map, inplace=True)
 
@@ -1567,10 +1644,25 @@ if __name__ == "__main__":
 
     pnl.make_pnl(
         sig="GROWTH",
-        sig_op="zn_score_pan",
+        sig_op="binary",
+        entry_barrier=1,
+        exit_barrier=0.3,
+        # sig_neg=True,
+        # sig_add=0.5,
+        rebal_freq="quarterly",
+        vol_scale=5,
+        rebal_slip=1,
+        min_obs=250,
+        thresh=2,
+        normalized_weights=True,
+    )
+
+    pnl.make_pnl(
+        sig="GROWTH",
+        sig_op="binary",
         sig_neg=True,
-        sig_add=0.5,
-        rebal_freq="daily",
+        # sig_add=0.5,
+        rebal_freq="annual",
         vol_scale=5,
         rebal_slip=1,
         min_obs=250,
@@ -1582,7 +1674,7 @@ if __name__ == "__main__":
         sig_op="zn_score_pan",
         sig_neg=True,
         sig_add=0.5,
-        rebal_freq="monthly",
+        rebal_freq="annual",
         vol_scale=5,
         rebal_slip=1,
         min_obs=250,
@@ -1597,7 +1689,7 @@ if __name__ == "__main__":
         end="2020-12-31",
     )
 
-    pnl.signal_heatmap(pnl_name="PNL_GROWTH_NEG", pnl_cids=cids, freq="m")
+    heatmap = pnl.signal_heatmap(pnl_name="PNL_GROWTH_NEG", pnl_cids=cids, freq="m", return_fig=True, title="Heatmap Example")
 
     print(df_eval)
 
@@ -1608,10 +1700,7 @@ if __name__ == "__main__":
         title=None,
     )
     pnl.plot_pnls(
-        pnl_cats=["PNL_GROWTH_NEG", "Long"],
-        title_fontsize=60,
-        xlab="date",
-        ylab="%"
+        pnl_cats=["PNL_GROWTH_NEG", "Long"], title_fontsize=60, xlab="date", ylab="%"
     )
     pnl.plot_pnls(
         pnl_cats=["PNL_GROWTH_NEG", "Long"],
@@ -1648,20 +1737,6 @@ if __name__ == "__main__":
 
     results_eq_ols = create_results_dataframe(
         title="Performance metrics, PARITY vs OLS, equity",
-        df=dfd,
-        ret="EQXR_NSA",
-        sigs=["GROWTH", "INFL", "CRY", "DUXR"],
-        cids=cids,
-        sig_ops="zn_score_pan",
-        sig_adds=0,
-        neutrals="zero",
-        threshs=2,
-        sig_negs=[True, False, False, True],
-        bm="USD_EQXR_NSA",
-        cosp=True,
-        start="2004-01-01",
-        freqs="M",
-        agg_sigs="last",
-        slip=1,
+        pnl=pnl,
     )
     print(results_eq_ols.data)

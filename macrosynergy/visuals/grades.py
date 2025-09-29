@@ -16,11 +16,14 @@ def view_grades(
     df: pd.DataFrame,
     xcats: List[str],
     cids: List[str] = None,
-    start: str = "2000-01-01",
+    start: str = None,
     end: str = None,
     grade: str = "grading",
     title: str = None,
+    title_fontsize: int = 16,
     figsize: Tuple[float] = None,
+    return_fig: bool = False,
+    show: bool = True,
 ):
     """
     Displays a heatmap of grading
@@ -42,6 +45,8 @@ def view_grades(
         name of column that contains the grades. Default is 'grading'.
     title : str
         string of chart title; defaults depend on type of range plot.
+    title_fontsize : int
+        font size of the title; defaults to 16.
     figsize : Tuple[float]
         Tuple of width and height of graph. Default is None, meaning it is set in
         accordance with df.
@@ -67,7 +72,7 @@ def view_grades(
         sdate = df["real_date"].min().strftime("%Y-%m-%d")
         title = f"Average grade of vintages since {sdate}"
 
-    heatmap.plot_metric(
+    fig = heatmap.plot_metric(
         x_axis_column="cid",
         y_axis_column="xcat",
         metric=grade,
@@ -80,7 +85,13 @@ def view_grades(
         show_colorbar=False,
         show_annotations=True,
         show_boundaries=True,
+        title_fontsize=title_fontsize,
+        return_fig=return_fig,
+        show=show,
     )
+
+    if return_fig:
+        return fig
 
 
 if __name__ == "__main__":
@@ -142,7 +153,7 @@ if __name__ == "__main__":
             "CPIXFE_SA_P1M1ML12",
             "CPIXFE_SA_P1M1ML12_D1M1ML3",
         ],
-        cids=cids,
+        cids=cids
     )
 
     dfd.info()

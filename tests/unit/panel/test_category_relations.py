@@ -580,7 +580,7 @@ class TestAll(unittest.TestCase):
         )
 
         # NOTE: casting df.vx to int as pandas casts it to float64
-        self.assertEqual(int(min(df["vx"])) + test_slip, int(min(out_df["vx"])))
+        self.assertEqual(int(df["vx"].max()) - test_slip, int(out_df["vx"].max()))
 
         for cid in sel_cids:
             for xcat in sel_xcats:
@@ -592,7 +592,7 @@ class TestAll(unittest.TestCase):
                     .isna()
                     .sum()
                 )
-                assert inan_count == onan_count - test_slip
+                self.assertEqual(inan_count, onan_count - test_slip)
 
         # Test Case 2 - slip is greater than the number of unique dates for a cid, xcat pair
 
@@ -674,6 +674,34 @@ class TestAll(unittest.TestCase):
             self.fail("CategoryRelations init failed")
 
         warnings.resetwarnings()
+
+    def test_reg_scatter_one_cid(self):
+        sel_xcats: List[str] = ["XR", "CRY"]
+        sel_cids: List[str] = ["AUD"]
+        cr = CategoryRelations(
+            self.dfd,
+            xcats=sel_xcats,
+            cids=sel_cids,
+            freq="M",
+            xcat_aggs=["mean", "mean"],
+            lag=1,
+            start="2000-01-01",
+            years=None,
+            blacklist=self.black,
+        )
+        # test warning raised when map is used with one cid
+        with warnings.catch_warnings(record=True) as w:
+            cr.reg_scatter(
+                title="Carry and Return",
+                xlab="Carry",
+                ylab="Return",
+                coef_box="lower right",
+                prob_est="map",
+            )
+            self.assertTrue(
+                "The 'map' estimator is not applicable to a single cross-section. "
+                "Using 'pool' instead." in str(w[0].message)
+            )
 
     def test_reg_scatter(self):
         sel_xcats: List[str] = ["XR", "CRY"]

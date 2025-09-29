@@ -18,7 +18,7 @@ def view_timelines(
     intersect: bool = False,
     val: str = "value",
     cumsum: bool = False,
-    start: str = "2000-01-01",
+    start: str = None,
     end: Optional[str] = None,
     ncol: int = 3,
     legend_ncol: int = 1,
@@ -27,6 +27,7 @@ def view_timelines(
     xcat_grid: bool = False,
     xcat_labels: Union[Optional[List[str]], Dict] = None,
     cid_labels: Union[Optional[List[str]], Dict] = None,
+    sort_cid_labels: bool = False,
     single_chart: bool = False,
     label_adj: float = 0.05,
     title: Optional[str] = None,
@@ -39,6 +40,8 @@ def view_timelines(
     height: float = 2.85,
     legend_fontsize: int = 12,
     blacklist: Dict = None,
+    ax_hline: Optional[Dict] = 0.0,
+    return_fig: bool = False,
 ):
     """
     Displays a grid with subplots of time line charts of one or more categories.
@@ -82,6 +85,9 @@ def view_timelines(
     cid_labels : Union[Optional[List[str]], Dict]
         labels to be used for cids. If not defined, the labels will be identical to
         cross-sections.
+    sort_cid_labels : bool
+        if True, sorts the cross-sectional labels in the grid alphabetically. Otherwise,
+        the order of `cids` is preserved. Default is False.
     single_chart : bool
         if True, all lines are plotted in a single chart.
     title : str
@@ -108,6 +114,11 @@ def view_timelines(
         font size of legend. Default is 12.
     blacklist : dict
         cross-sections with date ranges that should be excluded from the dataframe.
+    ax_hline : Union[float, Dict]
+        if float, this value is used for all cross-sections to draw a horizontal line.
+        horizontal line to be drawn at this value. Default is 0.0. This can be a dict
+        with keys as cross-sections and values as the value of the horizontal line. 
+        If none is provided, no horizontal line is drawn.
     """
 
     msv.timelines(
@@ -125,6 +136,7 @@ def view_timelines(
         xcat_grid=xcat_grid,
         xcat_labels=xcat_labels,
         cid_labels=cid_labels,
+        sort_cid_labels=sort_cid_labels,
         single_chart=single_chart,
         title=title,
         legend_ncol=legend_ncol,
@@ -139,10 +151,13 @@ def view_timelines(
         label_adj=label_adj,
         title_xadj=title_xadj,
         blacklist=blacklist,
+        ax_hline=ax_hline,
+        return_fig=return_fig,
     )
 
 
 if __name__ == "__main__":
+    np.random.seed(42)
     cids = ["AUD", "CAD", "GBP", "NZD"]
     xcats = ["XR", "CRY", "INFL", "FXXR"]
     df_cids = pd.DataFrame(
@@ -187,6 +202,7 @@ if __name__ == "__main__":
         size=(10, 5),
         title="AUD Return and Carry",
         aspect=3,
+        ax_hline=0
     )
 
     view_timelines(
@@ -210,10 +226,16 @@ if __name__ == "__main__":
     view_timelines(
         dfd,
         xcats=["XR"],
-        cids=cids[:2],
+        cids=['AUD', 'NZD', 'CAD'],
         ncol=2,
         cumsum=True,
         same_y=False,
         aspect=2,
-        single_chart=True,
+        single_chart=False,
+        cid_labels={
+            'NZD': 'New Zealand Dollar',
+            'CAD': 'Canadian Dollar',
+            'AUD': 'Australian Dollar'
+        },
+        sort_cid_labels=False,
     )

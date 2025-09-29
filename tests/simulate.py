@@ -2,11 +2,12 @@
 
 import numpy as np
 import pandas as pd
-from typing import List, Union, Tuple
+from typing import List, Union, Tuple, Optional
 from statsmodels.tsa.arima_process import ArmaProcess
 import random
 from macrosynergy.management.utils import reduce_df_by_ticker
 from itertools import chain
+import contextlib
 
 
 def simulate_ar(nobs: int, mean: float = 0, sd_mult: float = 1, ar_coef: float = 0.75):
@@ -30,7 +31,34 @@ def simulate_ar(nobs: int, mean: float = 0, sd_mult: float = 1, ar_coef: float =
     return sd_mult * ser / np.std(ser)
 
 
-def make_qdf(df_cids: pd.DataFrame, df_xcats: pd.DataFrame, back_ar: float = 0):
+@contextlib.contextmanager
+def temporary_seed(seed: Optional[int]):
+    """
+    A context manager that temporarily sets the seed for both NumPy and Python's random.
+    """
+    if seed is None or not isinstance(seed, int):
+        yield
+        return  # no seed - do nothing.
+
+    np_state = np.random.get_state()
+    random_state = random.getstate()
+
+    np.random.seed(seed)
+    random.seed(seed)
+
+    try:
+        yield
+    finally:
+        np.random.set_state(np_state)
+        random.setstate(random_state)
+
+
+def make_qdf(
+    df_cids: pd.DataFrame,
+    df_xcats: pd.DataFrame,
+    back_ar: float = 0,
+    seed: Optional[int] = 2,
+) -> pd.DataFrame:
     """
     Make quantamental DataFrame with basic columns: 'cid', 'xcat', 'real_date', 'value'
 
@@ -51,10 +79,19 @@ def make_qdf(df_cids: pd.DataFrame, df_xcats: pd.DataFrame, back_ar: float = 0):
                  is added to category values.
     :param <float> back_ar: float between 0 and 1 denoting set autocorrelation of the
         background factor. Default is zero.
+    seed : int
+        seed for random number generation. Default is None.
 
     :return <pd.DataFrame>: basic quantamental dataframe according to specifications.
-
     """
+
+    with temporary_seed(seed):
+        qdf = _make_qdf(df_cids, df_xcats, back_ar)
+    return qdf
+
+
+def _make_qdf(df_cids: pd.DataFrame, df_xcats: pd.DataFrame, back_ar: float = 0):
+
     qdf_cols = ["cid", "xcat", "real_date", "value"]
     df_out = []
 

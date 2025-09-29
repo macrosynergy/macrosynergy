@@ -164,7 +164,7 @@ class ProxyPnL(object):
         rebal_freq: str = "m",
         lback_meth: str = "ma",
         est_freqs: Union[str, List[str]] = ["D", "W", "M"],
-        est_weights: Union[Number, List[Number]] = [1, 2, 3],
+        est_weights: Union[Number, List[Number]] = [1, 1, 1],
         lback_periods: Union[int, List[int]] = [-1, -1, -1],
         half_life: Union[int, List[int]] = [11, 5, 6],
         rstring: str = None,

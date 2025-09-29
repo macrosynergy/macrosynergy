@@ -46,9 +46,9 @@ def historic_vol(
     lback_periods : int
         Number of lookback periods over which volatility is calculated. Default is 21.
     lback_meth : str
-        Lookback method to calculate the volatility, Default is "ma". Alternative is
-        "xma", Exponential Moving Average. Expects to receive either the aforementioned
-        strings.
+        Lookback method to calculate the volatility. Options are 'ma' for moving
+        average, 'xma' for exponential moving average, and 'sq' for exponentially weighted
+        std. Default is 'ma'.
     half_life : int
         Refers to the half-time for "xma". Default is 11.
     start : str
@@ -78,17 +78,18 @@ def historic_vol(
     -------
     ~pandas.DataFrame
         standardized DataFrame with the estimated annualized standard deviations of the
-        chosen category. If the input 'value' is in % (as is the standard in 
+        chosen category. If the input 'value' is in % (as is the standard in
         JPMaQS) then the output will also be in %. 'cid', 'xcat', 'real_date' and 'value'.
     """
 
     df: QuantamentalDataFrame = QuantamentalDataFrame(df)
     est_freq = est_freq.lower()
-    assert lback_meth in ["xma", "ma"], (
+    lback_meth = lback_meth.lower()
+    assert lback_meth in ["xma", "ma", "sq"], (
         "Lookback method must be either 'xma' "
-        "(exponential moving average) or 'ma' (moving average)."
+        "(exponential moving average), 'sq' (exponentially weighted std), or 'ma' (moving average)."
     )
-    if lback_meth == "xma":
+    if lback_meth in ["xma", "sq"]:
         assert (
             lback_periods > half_life
         ), "Half life must be shorter than lookback period."
@@ -160,16 +161,20 @@ def historic_vol(
         return out
 
     expo_weights_arr: Optional[np.ndarray] = None
-    if lback_meth == "xma":
+    if lback_meth in ["xma", "sq"]:
         expo_weights_arr = expo_weights(lback_periods, half_life)
 
+    lback_meth_funcs = {
+        "xma": expo_std,
+        "sq": sq_std,
+        "ma": flat_std,
+    }
+    _args = dict(remove_zeros=remove_zeros)
     if est_freq == "d":
         _args: Dict[str, Any] = dict(remove_zeros=remove_zeros)
-        if lback_meth == "xma":
+        if lback_meth in ["xma", "sq"]:
             _args["w"] = expo_weights_arr
-            _args["func"] = expo_std
-        else:
-            _args["func"] = flat_std
+        _args["func"] = lback_meth_funcs[lback_meth]
 
         dfwa = np.sqrt(252) * dfw.rolling(window=lback_periods).agg(**_args)
     else:
@@ -179,12 +184,10 @@ def historic_vol(
             nan_tolerance=nan_tolerance,
             remove_zeros=remove_zeros,
         )
-        if lback_meth == "xma":
-            _args["weights"] = expo_weights_arr
-            _args["roll_func"] = expo_std
 
-        else:
-            _args["roll_func"] = flat_std
+        if lback_meth in ["xma", "sq"]:
+            _args["weights"] = expo_weights_arr
+        _args["roll_func"] = lback_meth_funcs[lback_meth]
 
         dfwa.loc[trigger_indices, :] = (
             dfwa.loc[trigger_indices, :]
@@ -272,8 +275,8 @@ def expo_weights(lback_periods: int = 21, half_life: int = 11):
 
 def expo_std(x: np.ndarray, w: np.ndarray, remove_zeros: bool = True):
     """
-    Estimate standard deviation of returns based on exponentially weighted absolute
-    values.
+    Estimate volatility via the exponentially weighted mean absolute return.
+    Uses weighted absolute deviations from zero as a proxy for standard deviation.
 
     Parameters
     ----------
@@ -298,6 +301,37 @@ def expo_std(x: np.ndarray, w: np.ndarray, remove_zeros: bool = True):
     w = w / sum(w)  # weights are normalized
     mabs = np.sum(np.multiply(w, np.abs(x)))
     return mabs
+
+
+def sq_std(x: np.ndarray, w: np.ndarray, remove_zeros: bool = True):
+    """
+    Estimate volatility via the exponentially weighted root mean squared.
+    Uses weighted squared deviations from the weighted mean (true std definition).
+
+    Parameters
+    ----------
+    x : numpy.ndarray
+        Array of returns.
+    w : numpy.ndarray
+        Array of exponential weights (must be the same length as `x`).
+        The weights are normalized internally to sum to 1.
+    remove_zeros : bool, default=True
+        If True, zero returns are excluded from the calculation, and the
+        corresponding portion of the weight vector is adjusted accordingly.
+
+    Returns
+    -------
+    float
+        Exponentially weighted standard deviation of returns.
+    """
+
+    assert len(x) == len(w), "weights and window must have same length"
+    if remove_zeros:
+        x = x[x != 0]
+        w = w[0 : len(x)] / sum(w[0 : len(x)])
+    w = w / sum(w)  # weights are normalized
+    sqstd = np.sqrt(np.sum(w * (x - np.sum(w * x)) ** 2))
+    return sqstd
 
 
 def flat_std(x: np.ndarray, remove_zeros: bool = True):

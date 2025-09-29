@@ -460,12 +460,16 @@ class TestAll(unittest.TestCase):
         # Confirm the direct negative correlation across the two PnLs. By adding the
         # correlation coefficients with the benchmarks, the value should equate to
         # zero.
-        df_eval = pnl.evaluate_pnls(
-            pnl_cats=["PNL_INFL", "PNL_INFL_NEG"],
-        )
+        df_eval = pnl.evaluate_pnls(pnl_cats=["PNL_INFL", "PNL_INFL_NEG"])
 
         bm_correl = df_eval.loc[[b + " correl" for b in bms], :]
         self.assertTrue(np.all(bm_correl.sum(axis=1).to_numpy()) == 0)
+
+        # test it works with no pnl_cats input
+        try:
+            pnl.evaluate_pnls()
+        except Exception as e:
+            self.fail(f"evaluate_pnls raised {e} unexpectedly")
 
     def test_make_long_pnl(self):
         ret = "EQXR"
@@ -580,6 +584,22 @@ class TestAll(unittest.TestCase):
         )
         pnl.make_long_pnl(vol_scale=None, label=None)
 
+    def test_evaluate_pnls_type_checks(self):
+        ret = "EQXR"
+        sigs = ["CRY", "GROWTH", "INFL"]
+
+        pnl = NaivePnL(self.dfd, ret=ret, sigs=sigs)
+
+        for arg in ["pnl_cids", "pnl_cats"]:
+            for argval in [1, "A", [1]]:
+                with self.assertRaises(TypeError):
+                    pnl.evaluate_pnls(**{arg: argval})
+
+        # pass a random pnl_cat
+        with self.assertRaises(ValueError):
+            pnl.evaluate_pnls(pnl_cats=["banana"])
+
+
     def test_plotting_methods(self):
         plt.close("all")
         mock_plt = patch("matplotlib.pyplot.show").start()
@@ -619,6 +639,11 @@ class TestAll(unittest.TestCase):
 
         try:
             pnl.plot_pnls(pnl_cats=["PNL_GROWTH", "Unit_Long_EQXR"])
+        except Exception as e:
+            self.fail(f"plot_pnl raised {e} unexpectedly")
+
+        try:
+            pnl.plot_pnls(pnl_cats=["PNL_GROWTH", "Unit_Long_EQXR"], compounding=True)
         except Exception as e:
             self.fail(f"plot_pnl raised {e} unexpectedly")
 
@@ -807,21 +832,30 @@ class TestAll(unittest.TestCase):
         sigs = ["CRY", "GROWTH", "INFL"]
         sig_negs = [True, False, False]
 
-        results_df = create_results_dataframe(
-            title="Performance metrics, PARITY vs OLS, equity",
-            df=self.dfd,
+        pnl = NaivePnL(
+            self.dfd,
             ret=ret,
             sigs=sigs,
             cids=self.cids,
-            sig_ops="zn_score_pan",
-            sig_adds=0,
-            neutrals="zero",
-            threshs=2,
-            sig_negs=sig_negs,
-            bm="USD_EQXR",
+            start="2000-01-01",
+            blacklist=self.blacklist,
+            bms=["USD_DUXR", "EUR_DUXR"],
+        )
+        for i, sig in enumerate(sigs):
+            pnl.make_pnl(
+                sig=sig,
+                sig_op="zn_score_pan",
+                sig_neg=sig_negs[i],
+                rebal_freq="monthly",
+                thresh=2,
+                neutral="zero",
+                sig_add=0,
+            )
+
+        results_df = create_results_dataframe(
+            title="Performance metrics, PARITY vs OLS, equity",
+            pnl=pnl,
             cosp=True,
-            start="2004-01-01",
-            freqs="M",
             agg_sigs="last",
             slip=1,
         )
@@ -839,7 +873,7 @@ class TestAll(unittest.TestCase):
 
         self.assertEqual(set(results.index), set(negative_sigs))
 
-        self.assertEqual(len(results.columns), 7)
+        self.assertEqual(len(results.columns), 8)
 
 
 if __name__ == "__main__":

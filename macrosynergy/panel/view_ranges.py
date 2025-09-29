@@ -13,12 +13,13 @@ def view_ranges(
     df: pd.DataFrame,
     xcats: List[str],
     cids: Optional[List[str]] = None,
-    start: str = "2000-01-01",
+    start: str = None,
     end: Optional[str] = None,
     val: str = "value",
     kind: str = "bar",
     sort_cids_by: Optional[str] = None,
     title: Optional[str] = None,
+    title_fontsize: int = None,
     ylab: Optional[str] = None,
     size: Tuple[float] = (16, 8),
     xcat_labels: Optional[List[str]] = None,
@@ -52,11 +53,13 @@ def view_ranges(
         calculated, of the cross-sections, computed across all categories.
     title : str
         string of chart title; defaults depend on type of range plot.
+    title_fontsize : int
+        font size of the title. Default is None.
     ylab : str
         y label. Default is no label.
     size : Tuple[float]
         Tuple of width and height of graph. Default is (16, 8).
-    xcat_labels : List[str]
+    xcat_labels : Union[List[str], Dict[str, str]]
         custom labels to be used for the ranges.
     legend_loc : str
         location of legend; passed to matplotlib.pyplot.legend(). Default is 'upper
@@ -85,6 +88,7 @@ def view_ranges(
         kind=kind,
         sort_cids_by=sort_cids_by,
         title=title,
+        title_fontsize=title_fontsize,
         ylab=ylab,
         size=size,
         xcat_labels=xcat_labels,

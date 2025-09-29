@@ -93,9 +93,10 @@ def deconstruct_expression(
             if len(result) != 3:
                 raise ValueError(f"{exprx} is not a valid JPMaQS expression.")
             return ticker.split("_", 1) + [metric]
-        except Exception as e:
+        except Exception as exc:
             warnings.warn(
-                f"Failed to deconstruct expression `{expression}`: assuming it is a non-JPMaQS expression.",
+                f"Failed to deconstruct expression `{expression}`: assuming it is a non-JPMaQS expression."
+                f" Exception: {exc}",
                 UserWarning,
             )
             # fail safely, return list where cid = xcat = expression,
@@ -143,7 +144,7 @@ def check_attributes_in_sync(ts_list) -> bool:
             last_valid_item = time_series[0]
 
         expression = attributes[0].get("expression")
-        if not "JPMAQS" in expression:
+        if "JPMAQS" not in expression:
             continue
         if not expression:
             last_valid_item = ["No data", 0]
@@ -250,6 +251,9 @@ def timeseries_to_qdf(timeseries: Dict[str, Any]) -> QuantamentalDataFrame:
         cid=cid,
         xcat=xcat,
     )
+
+    if metric == "last_updated":
+        df["last_updated"] = pd.to_datetime(df["last_updated"])
 
     return df
 
@@ -495,10 +499,6 @@ def validate_downloaded_df(
         "The expressions in the downloaded data are not a subset of the expected expressions."
         " Missing expressions: {missing_exprs}"
     )
-    err_statement = (
-        "The expressions in the downloaded data are not a subset of the "
-        "expected expressions."
-    )
     check_exprs = set()
     if isinstance(data_df, QuantamentalDataFrame):
         found_metrics = list(
@@ -583,7 +583,7 @@ def get_expressions_from_file(
     if not as_dataframe:
         return _get_expressions_from_json(file_path)
 
-    if not dataframe_format in ["qdf", "wide"]:
+    if dataframe_format not in ["qdf", "wide"]:
         raise ValueError("`dataframe_format` must be one of 'qdf' or 'wide'.")
 
     if dataframe_format == "qdf":
@@ -953,8 +953,9 @@ class JPMaQSDownload(DataQueryInterface):
         catalogue_expressions: List[str] = construct_expressions(
             tickers=catalogue_tickers, metrics=self.valid_metrics
         )
+        upper_exprs = [ex.upper() for ex in catalogue_expressions]
         r: List[str] = sorted(
-            list(set(expressions).intersection(set(catalogue_expressions)))
+            set(ex for ex in expressions if ex.upper() in upper_exprs)
         )
         if verbose:
             filtered: int = len(expressions) - len(r)
@@ -1346,8 +1347,10 @@ class JPMaQSDownload(DataQueryInterface):
         xcats : list[str]
             list of xcats.
         metrics : list[str]
-            list of metrics, one of "value" (default), "grading", "eop_lag", "mop_lag".
-            "all" is also accepted.
+            list of metrics. Available metrics are "value" (default), "grading",
+            "eop_lag", "mop_lag", and "last_updated". If "all" is provided,
+            all available metrics are used. The available metrics are defined in
+            `macrosynergy.download.jpmaqs.JPMAQS_METRICS`.
         start_date : str
             start date of the data to download, in the ISO format - YYYY-MM-DD.
         end_date : str
@@ -1398,7 +1401,9 @@ class JPMaQSDownload(DataQueryInterface):
         self.suppress_warning = suppress_warning
         self.debug = debug
 
-        vartolist = lambda x: [x] if isinstance(x, str) else x
+        def vartolist(x):
+            return [x] if isinstance(x, str) else x
+
         tickers = vartolist(tickers)
         cids = vartolist(cids)
         xcats = vartolist(xcats)
@@ -1584,12 +1589,12 @@ if __name__ == "__main__":
 
     with JPMaQSDownload(
         client_id=os.getenv("DQ_CLIENT_ID"),
-        client_secret=os.getenv("DQ_CLIENT_SECRET"),
+        client_secret=os.getenv("DQ_CLIENT_SECRET")
     ) as jpmaqs:
         data = jpmaqs.download(
             xcats=xcats,
             cids=cids,
-            metrics="value",
+            metrics="all",
             start_date=start_date,
             end_date=end_date,
             show_progress=True,

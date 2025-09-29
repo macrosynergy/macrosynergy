@@ -25,6 +25,9 @@ def check_availability(
     missing_recent: bool = True,
     use_last_businessday: bool = True,
     title: str = None,
+    title_fontsize: int = None,
+    xcat_labels: dict = None,
+    sort_labels: bool = False,
 ):
     """
     Wrapper for visualizing start and end dates of a filtered DataFrame.
@@ -56,28 +59,66 @@ def check_availability(
     use_last_businessday : bool
         boolean indicating whether or not to use the last business day before today as
         the end date. Default is True.
+    title : str
+        A string to be used as the title of the heatmap. If None, a default header will be
+        used.
+    title_fontsize : int
+        Font size for the title of the heatmap. Default is None (automatic sizing).
+    xcat_labels : dict
+        dictionary with xcat labels. Default is None (no labels).
+    sort_labels : bool
+        boolean indicating whether to sort the `xcats` in the heatmap alphabetically.
+        The sorting is done based on the `xcats` list, with the labels from `xcat_labels`
+        simply used for display (not regarded for sorting at all). Default is False (no
+        sorting, ordered as provided in `xcats`).
     """
 
-    if not isinstance(start_years, bool):
-        raise TypeError(f"<bool> object expected and not {type(start_years)}.")
-    if not isinstance(missing_recent, bool):
-        raise TypeError(f"<bool> object expected and not {type(missing_recent)}.")
+    for bvar, varname in zip(
+        [start_years, missing_recent, sort_labels],
+        ["start_years", "missing_recent", "sort_labels"],
+    ):
+        if not isinstance(bvar, bool):
+            raise TypeError(f"`{varname}` must be a `bool` and not {type(bvar)}.")
 
     df = QuantamentalDataFrame(df)
 
     dfx = reduce_df(df, xcats=xcats, cids=cids, start=start)
+
+    if xcats is None:
+        xcats = sorted(dfx["xcat"].unique())
+
+    if sort_labels:
+        xcats = sorted(xcats)
+
+    if xcat_labels is not None:
+        dfx = dfx.rename_xcats(xcat_labels)
+
     if dfx.empty:
         raise ValueError(
             "No data available for the selected cross-sections and categories."
         )
     if start_years:
         dfs = check_startyears(dfx)
+        row_order = get_heatmap_row_order(xcats=xcats, xcat_labels=xcat_labels)
         visual_paneldates(
-            dfs, size=start_size, use_last_businessday=use_last_businessday, title=title
+            dfs,
+            size=start_size,
+            use_last_businessday=use_last_businessday,
+            title=title,
+            title_fontsize=title_fontsize,
+            row_order=row_order,
         )
     if missing_recent:
         dfe = check_enddates(dfx)
-        visual_paneldates(dfe, size=end_size, use_last_businessday=use_last_businessday, title=title)
+        row_order = get_heatmap_row_order(xcats=xcats, xcat_labels=xcat_labels)
+        visual_paneldates(
+            dfe,
+            size=end_size,
+            use_last_businessday=use_last_businessday,
+            title=title,
+            title_fontsize=title_fontsize,
+            row_order=row_order,
+        )
 
 
 def missing_in_df(
@@ -215,11 +256,26 @@ def business_day_dif(df: pd.DataFrame, maxdate: pd.Timestamp) -> pd.DataFrame:
     return df.where(df >= 0, 0)
 
 
+def get_heatmap_row_order(xcats: List[str], xcat_labels: dict = None) -> List[str]:
+    if not xcat_labels:
+        return xcats
+    missing = set(xcats) - set(xcat_labels.keys())
+    if missing:
+        raise ValueError(
+            f"Missing labels for xcats: {sorted(missing)}. "
+            "Ensure all specified `xcats` are present in the `xcat_labels` dictionary."
+        )
+
+    return [xcat_labels[xcat] for xcat in xcats] if xcat_labels else xcats
+
+
 def visual_paneldates(
     df: pd.DataFrame,
     size: Tuple[float] = None,
     use_last_businessday: bool = True,
     title: str = None,
+    row_order: List[str] = None,
+    title_fontsize: int = None,
 ):
     """
     Visualize panel dates with color codes.
@@ -233,10 +289,24 @@ def visual_paneldates(
     use_last_businessday : bool
         boolean indicating whether or not to use the last business day before today as
         the end date. Default is True.
+    title : str
+        A string to be used as the title of the heatmap. If None, a default header will be
+        used.
+    title_fontsize : int
+        Font size for the title of the heatmap. Default is None (automatic sizing).
+    row_order : List[str]
+        A list of strings specifying the order of rows in the heatmap. These rows
+        correspond to the columns of the input DataFrame. If None, the default order
+        used by Seaborn will be applied.
     """
 
     msv.view_panel_dates(
-        df=df, size=size, use_last_businessday=use_last_businessday, header=title
+        df=df,
+        size=size,
+        use_last_businessday=use_last_businessday,
+        header=title,
+        row_order=row_order,
+        title_fontsize=title_fontsize,
     )
 
 
@@ -264,5 +334,10 @@ if __name__ == "__main__":
     xxcids = cids + ["USD"]
 
     check_availability(
-        df=dfd, xcats=xcats, cids=cids, start_size=(10, 5), end_size=(10, 8)
+        df=dfd,
+        xcats=xcats,
+        cids=cids,
+        start_size=(10, 5),
+        end_size=(10, 8),
+        xcat_labels={"XR": "Exchange Rate", "CRY": "Commodity"},
     )

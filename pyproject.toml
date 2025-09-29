@@ -17,11 +17,13 @@ dependencies = [
   "pandas>=1.3.5",
   "statsmodels>=0.13.2",
   "scikit-learn>=1.2.2",
-  "numpy>=1.21.6,<2.0.0",
+  "numpy>=1.21.6",
   "requests>=2.27.1",
   "tqdm>=4.62",
   "Jinja2>=2.10",
   "joblib>=1.3.0",
+  "pyarrow>=11.0.0",
+  "scipy<=1.15.3",
 ]
 classifiers = [
   "Development Status :: 4 - Beta",
@@ -37,6 +39,7 @@ classifiers = [
   "Programming Language :: Python :: 3.9",
   "Programming Language :: Python :: 3.10",
   "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
   "Topic :: Software Development",
   "Topic :: Scientific/Engineering",
   "Typing :: Typed",
@@ -80,8 +83,9 @@ docs = [
   "myst_parser==2.0.0",
   "sphinx-copybutton==0.5.0",
   "sphinxcontrib-mermaid>=0.8.0",
-  "requests>=2.27.1",
+  "requests>=2.32.2",
   "packaging>=21.0",
+  "zipp>=3.19.1",
 ]
 
 all = [
@@ -106,8 +110,9 @@ all = [
   "sphinx_design==0.5.0",
   "myst_parser==2.0.0",
   "sphinx-copybutton==0.5.0",
-  "requests>=2.27.1",
+  "requests>=2.32.2",
   "packaging>=21.0",
+  "zipp>=3.19.1",
 ]
 
 [tool.setuptools]

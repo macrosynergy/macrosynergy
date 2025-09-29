@@ -29,7 +29,7 @@ def timelines(
     intersect: bool = False,
     val: str = "value",
     cumsum: bool = False,
-    start: str = "2000-01-01",
+    start: str = None,
     end: Optional[str] = None,
     ncol: int = 3,
     square_grid: bool = False,
@@ -39,6 +39,7 @@ def timelines(
     xcat_grid: bool = False,
     xcat_labels: Union[Optional[List[str]], Dict] = None,
     cid_labels: Union[Optional[List[str]], Dict] = None,
+    sort_cid_labels: bool = False,
     single_chart: bool = False,
     label_adj: float = 0.05,
     title: Optional[str] = None,
@@ -51,6 +52,8 @@ def timelines(
     height: Number = 3.0,
     legend_fontsize: int = 12,
     blacklist: Dict = None,
+    ax_hline: Union[float, Dict] = None,
+    return_fig: bool = False,
 ):
     """
     Displays a facet grid of time line charts of one or more categories.
@@ -93,6 +96,9 @@ def timelines(
     cid_labels : Union[Optional[List[str]], Dict]
         labels to be used for cids. If not defined, the labels will be identical to
         cross-sections.
+    sort_cid_labels : bool
+        if True, sorts the cross-sectional labels in the grid alphabetically. Otherwise,
+        the order of `cids` is preserved. Default is False.
     single_chart : bool
         if True, all lines are plotted in a single chart.
     title : str
@@ -170,7 +176,7 @@ def timelines(
         for key, value in blacklist.items():
             if not isinstance(key, str):
                 raise TypeError("Keys in `blacklist` must be strings.")
-            if not isinstance(value, list):
+            if not isinstance(value, (list, tuple)):
                 raise TypeError("Values in `blacklist` must be lists.")
 
     if xcats is None:
@@ -181,10 +187,11 @@ def timelines(
     if cids is None:
         cids: List[str] = df["cid"].unique().tolist()
 
+    df = reduce_df(
+        df, xcats=xcats, cids=cids, start=start, end=end, blacklist=blacklist
+    )
+
     if cumsum:
-        df = reduce_df(
-            df, xcats=xcats, cids=cids, start=start, end=end, blacklist=blacklist
-        )
         df[val] = (
             df.sort_values(["cid", "xcat", "real_date"])[["cid", "xcat", val]]
             .groupby(["cid", "xcat"])
@@ -193,9 +200,6 @@ def timelines(
 
     cross_mean_series: Optional[str] = f"mean_{xcats[0]}" if cs_mean else None
     if cs_mean:
-        df = reduce_df(
-            df, xcats=xcats, cids=cids, start=start, end=end, blacklist=blacklist
-        )
         if len(xcats) > 1:
             raise ValueError("`cs_mean` cannot be True for multiple categories.")
 
@@ -254,10 +258,9 @@ def timelines(
         xcat_grid: bool = False
         single_chart: bool = True
 
-    if xcat_grid:
-        if ncol > len(xcats):
-            ncol: int = len(xcats)
+    fig = None
 
+    if xcat_grid:
         with FacetPlot(
             df=df,
             xcats=xcats,
@@ -269,25 +272,25 @@ def timelines(
             end=end,
             blacklist=blacklist,
         ) as fp:
-            fp.lineplot(
+            fig = fp.lineplot(
                 share_y=same_y,
                 share_x=not all_xticks,
                 figsize=size,
-                xcat_grid=True,  # Not to be confused with `xcat_grid` parameter
-                # legend_labels=xcat_labels or None,
+                xcat_grid=True,
                 facet_titles=xcat_labels or None,
                 title=title,
                 title_yadjust=title_adj,
                 title_xadjust=title_xadj,
                 compare_series=cross_mean_series if cs_mean else None,
                 title_fontsize=title_fontsize,
-                # title_fontsize=24,
                 ncols=ncol,
                 attempt_square=square_grid,
                 facet_size=facet_size,
                 legend_ncol=legend_ncol,
                 legend_fontsize=legend_fontsize,
                 interpolate=cumsum,
+                ax_hline=ax_hline,
+                return_figure=return_fig,
             )
 
     elif single_chart or (len(cids) == 1):
@@ -302,7 +305,7 @@ def timelines(
             end=end,
             blacklist=blacklist,
         ) as lp:
-            lp.plot(
+            fig = lp.plot(
                 metric=val,
                 figsize=size,
                 title=title,
@@ -310,13 +313,19 @@ def timelines(
                 title_xadjust=title_xadj,
                 compare_series=cross_mean_series if cs_mean else None,
                 title_fontsize=title_fontsize,
-                # title_fontsize=18,
                 legend_ncol=legend_ncol,
                 legend_fontsize=legend_fontsize,
                 legend_labels=xcat_labels or None,
+                ax_hline=ax_hline,
+                return_figure=return_fig,
             )
 
     else:
+        if cid_labels and sort_cid_labels:
+            if isinstance(cid_labels, list):
+                cid_labels = {cid: label for cid, label in zip(cids, cid_labels)}
+            cids = sorted(cids, key=lambda x: cid_labels.get(x, x))
+
         with FacetPlot(
             df=df,
             xcats=xcats,
@@ -328,17 +337,15 @@ def timelines(
             end=end,
             blacklist=blacklist,
         ) as fp:
-            show_legend: bool = True if cross_mean_series else False
-            show_legend = show_legend or (len(xcats) > 1)
+            show_legend = bool(cross_mean_series) or (len(xcats) > 1)
             if ncol > len(cids):
-                ncol: int = len(cids)
+                ncol = len(cids)
 
-            fp.lineplot(
+            fig = fp.lineplot(
                 figsize=size,
                 share_y=same_y,
                 share_x=not all_xticks,
                 title=title,
-                # cid_xcat_grid=True,
                 cid_grid=True,
                 facet_titles=cid_labels or None,
                 title_yadjust=title_adj,
@@ -346,7 +353,6 @@ def timelines(
                 compare_series=cross_mean_series if cs_mean else None,
                 facet_size=facet_size,
                 title_fontsize=title_fontsize,
-                # title_fontsize=24,
                 ncols=ncol,
                 attempt_square=square_grid,
                 legend=show_legend,
@@ -354,7 +360,12 @@ def timelines(
                 legend_labels=xcat_labels,
                 legend_fontsize=legend_fontsize,
                 interpolate=cumsum,
+                ax_hline=ax_hline,
+                return_figure=return_fig,
             )
+
+    if return_fig:
+        return fig
 
 
 if __name__ == "__main__":
@@ -392,7 +403,7 @@ if __name__ == "__main__":
         "FXVOL",
         "FX",
     ]
-    sel_cids: List[str] = ["USD", "EUR", "GBP"]
+    sel_cids: List[str] = ["GBP", "USD", "EUR"]
     sel_xcats: List[str] = ["FXXR", "EQXR", "RIR", "IR"]
     r_styles: List[str] = [
         "linear",
@@ -431,7 +442,7 @@ if __name__ == "__main__":
     import time
 
     black = {
-        "EUR": ["2012-01-01", "2018-01-01"],
+        "EUR": tuple(["2012-01-01", "2018-01-01"]),
         "GBP": ["2004-01-01", "2007-01-01"],
         "USD": ["2015-01-01", "2018-01-01"],
     }
@@ -446,6 +457,7 @@ if __name__ == "__main__":
         blacklist=black,
         same_y=True,
         xcat_labels={"FXXR": "FX Returns", "EQXR": "Equity Returns", "RIR": "Real Interest Rate", "IR": "Interest Rate"},
+        return_fig=True,
     )
 
     # timelines(

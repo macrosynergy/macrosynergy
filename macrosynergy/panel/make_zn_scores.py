@@ -11,6 +11,7 @@ from macrosynergy.management.utils import (
     drop_nan_series,
     reduce_df,
     _map_to_business_day_frequency,
+    forward_fill_wide_df,
 )
 from macrosynergy.management.types import QuantamentalDataFrame
 from numbers import Number
@@ -31,6 +32,8 @@ def make_zn_scores(
     thresh: float = None,
     pan_weight: float = 1,
     postfix: str = "ZN",
+    ffill: int = 0,
+    unscore: bool = False,
 ) -> pd.DataFrame:
     """
     Computes z-scores for a panel around a neutral level ("zn scores").
@@ -83,6 +86,15 @@ def make_zn_scores(
         parameters are all specific to cross section.
     postfix : str
         string appended to category name for output; default is "ZN".
+    ffill : int, default 0
+        Forward fills the trailing NaN values in the input DataFrame. The parameter
+        specifies the number of periods to fill. If set to 0, no forward fill is
+        performed.
+    unscore : bool, default False
+        If True, the function will apply the specified threshold to z-scores,
+        but return values on the original scale. The `thresh` parameter will
+        determine the z-score limits, and the winsorized values will be
+        converted back to the original scale before being returned.
 
     Returns
     -------
@@ -167,6 +179,12 @@ def make_zn_scores(
 
     dfw = df.pivot(index="real_date", columns="cid", values="value")
     cross_sections = dfw.columns
+    
+    if ffill > 0:
+        # Forward fill the trailing NaN values in the input DataFrame.
+        dfw = forward_fill_wide_df(
+            dfw, blacklist, n=ffill
+        )
 
     # --- The actual scoring.
 
@@ -179,8 +197,9 @@ def make_zn_scores(
             "Please adjust the `min_obs` parameter."
         )
 
+    dfx_pan, df_mabs_pan, df_neutral_pan = None, None, None
     if pan_weight > 0:
-        df_neutral = expanding_stat(
+        df_neutral_pan = expanding_stat(
             dfw,
             dates_iter,
             stat=neutral,
@@ -188,17 +207,18 @@ def make_zn_scores(
             min_obs=min_obs,
             iis=iis,
         )
-        dfx = dfw.sub(df_neutral["value"], axis=0)
-        df_mabs = expanding_stat(
-            dfx.abs(),
+        dfx_pan = dfw.sub(df_neutral_pan["value"], axis=0)
+        df_mabs_pan = expanding_stat(
+            dfx_pan.abs(),
             dates_iter,
             stat="mean",
             sequential=sequential,
             min_obs=min_obs,
             iis=iis,
         )
-        dfw_zns_pan = dfx.div(df_mabs["value"], axis="rows")
+        dfw_zns_pan = dfx_pan.div(df_mabs_pan["value"], axis="rows")
 
+    cid_dfx, cid_mabs, cid_neutral = {}, {}, {}
     if pan_weight < 1:
         for cid in cross_sections:
             dfi = dfw[cid]
@@ -227,11 +247,29 @@ def make_zn_scores(
             zns_css_df = dfx / df_mabs
             dfw_zns_css.loc[:, cid] = zns_css_df["value"]
 
+            cid_dfx[cid] = dfx
+            cid_mabs[cid] = df_mabs["value"]
+            cid_neutral[cid] = df_neutral["value"]
+
     dfw_zns = (dfw_zns_pan * pan_weight) + (dfw_zns_css * (1 - pan_weight))
+
     dfw_zns = dfw_zns.dropna(axis=0, how="all")
 
     if thresh is not None:
         dfw_zns.clip(lower=-thresh, upper=thresh, inplace=True)
+
+    if unscore:
+        dfw_zns = _unscore_dfw_zns(
+            dfw_zns,
+            dfw_zns_pan,
+            dfw_zns_css,
+            df_mabs_pan,
+            df_neutral_pan,
+            cid_mabs,
+            cid_neutral,
+            cross_sections,
+            pan_weight,
+        )
 
     # --- Reformatting of output into standardised DataFrame.
 
@@ -318,7 +356,12 @@ def expanding_stat(
                 .sum()
                 / expanding_count
             )
-            df_mean = df_mean.dropna().loc[dates]
+            try:
+                df_mean = df_mean.dropna().loc[dates]
+            except KeyError as e:
+                err_str = 'Some dates in "dates_iter" have no corresponding data.'
+                raise KeyError(err_str) from e
+
             df_mean.name = "value"
             df_out.update(df_mean)
         else:
@@ -357,6 +400,76 @@ def _get_expanding_count(X: pd.DataFrame, min_periods: int = 1):
     return X.expanding(min_periods).count().sum(1).to_numpy()
 
 
+def _unscore_dfw_zns(
+    dfw_zns: pd.DataFrame,
+    dfw_zns_pan: pd.DataFrame,
+    dfw_zns_css: pd.DataFrame,
+    df_mabs_pan: pd.DataFrame,
+    df_neutral_pan: pd.DataFrame,
+    cid_mabs: dict,
+    cid_neutral: dict,
+    cross_sections: list,
+    pan_weight: float,
+) -> pd.DataFrame:
+    """
+    Unscore the weighted panel and cross-sectional components of dfw_zns.
+
+    Parameters
+    ----------
+    dfw_zns : pd.DataFrame
+        The combined z-scored DataFrame.
+    dfw_zns_pan : pd.DataFrame
+        The panel component of dfw_zns.
+    dfw_zns_css : pd.DataFrame
+        The cross-sectional component of dfw_zns.
+    df_mabs_pan : pd.DataFrame
+        Mean absolute deviation for the panel component.
+    df_neutral_pan : pd.DataFrame
+        Neutral component for the panel component.
+    cid_mabs : dict
+        Dictionary of mean absolute deviations per cross-section.
+    cid_neutral : dict
+        Dictionary of neutral components per cross-section.
+    cross_sections : list
+        List of cross-section identifiers.
+    pan_weight : float
+        The weight of the panel component, ranging from 0 to 1.
+
+    Returns
+    -------
+    pd.DataFrame
+        The unscored DataFrame.
+    """
+
+    if pan_weight > 0:
+        dfw_zns_pan = (dfw_zns - (dfw_zns_css * (1 - pan_weight))) / pan_weight
+        dfw_unscored_pan = dfw_zns_pan.mul(df_mabs_pan["value"], axis=0).add(
+            df_neutral_pan["value"], axis=0
+        )
+    else:
+        dfw_unscored_pan = pd.DataFrame(0, index=dfw_zns.index, columns=dfw_zns.columns)
+
+    if pan_weight < 1:
+        dfw_zns_css = (dfw_zns - (dfw_zns_pan * pan_weight)) / (1 - pan_weight)
+        dfw_unscored_css = pd.DataFrame(index=dfw_zns.index, columns=dfw_zns.columns)
+        for cid in cross_sections:
+            dfw_unscored_css[cid] = (dfw_zns_css[cid] * cid_mabs[cid]) + cid_neutral[
+                cid
+            ]
+    else:
+        dfw_unscored_css = pd.DataFrame(0, index=dfw_zns.index, columns=dfw_zns.columns)
+
+    if pan_weight == 1:
+        dfw_unscored = dfw_unscored_pan
+    elif pan_weight == 0:
+        dfw_unscored = dfw_unscored_css
+    else:
+        dfw_unscored = dfw_unscored_css
+    dfw_zns = dfw_unscored
+
+    return dfw_unscored
+
+
 if __name__ == "__main__":
     np.random.seed(1)
 
@@ -368,8 +481,8 @@ if __name__ == "__main__":
     )
 
     df_cids.loc["AUD"] = ["2010-01-01", "2020-12-31", 0.5, 2]
-    df_cids.loc["CAD"] = ["2006-01-01", "2020-11-30", 0, 1]
-    df_cids.loc["GBP"] = ["2008-01-01", "2020-11-30", -0.2, 0.5]
+    df_cids.loc["CAD"] = ["2006-01-01", "2020-12-30", 0, 1]
+    df_cids.loc["GBP"] = ["2008-01-01", "2020-12-29", -0.2, 0.5]
     df_cids.loc["USD"] = ["2007-01-01", "2020-09-30", -0.2, 0.5]
     df_cids.loc["NZD"] = ["2002-01-01", "2020-09-30", -0.1, 2]
 
@@ -383,23 +496,25 @@ if __name__ == "__main__":
     df_xcats.loc["INFL"] = ["2013-01-01", "2020-10-30", 1, 2, 0.8, 0.5]
 
     # Apply a blacklist period from series' start date.
-    black = {"AUD": ["2010-01-01", "2013-12-31"], "GBP": ["2018-01-01", "2100-01-01"]}
+    black = {"AUD": ["2010-01-01", "2013-12-31"], "GBP": ["2020-12-31", "2100-01-01"]}
 
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
     dfd["grading"] = np.ones(dfd.shape[0])
 
     # Monthly: panel + cross.
     dfzm = make_zn_scores(
-        dfd,
+        dfd.copy(deep=True),
         xcat="XR",
         sequential=True,
         cids=cids,
         blacklist=black,
         iis=True,
         neutral="mean",
-        pan_weight=0.75,
+        pan_weight=0.5,
         min_obs=261,
-        est_freq="m",
+        est_freq="D",
+        unscore=True,
+        # thresh=5
     )
     print(dfzm)
 

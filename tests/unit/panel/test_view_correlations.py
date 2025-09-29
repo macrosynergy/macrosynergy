@@ -4,7 +4,7 @@ from pandas.testing import assert_frame_equal
 from tests.simulate import make_qdf
 from macrosynergy.panel.view_correlations import correl_matrix
 from macrosynergy.visuals.correlation import (
-    _parse_xcat_labels,
+    _parse_labels,
     lag_series,
     _transform_df_for_cross_sectional_corr,
     _transform_df_for_cross_category_corr,
@@ -256,7 +256,7 @@ class TestAll(unittest.TestCase):
     def test_transform_df_for_cross_category_corr(self):
         xcats = ["XR", "CRY"]
         df = reduce_df(self.dfd, xcats=xcats, cids=self.cids)
-        df_w = _transform_df_for_cross_category_corr(df, xcats=xcats, val="value")
+        df_w, _ = _transform_df_for_cross_category_corr(df, xcats=xcats, val="value")
 
         # Test that columns are now the xcats.
         self.assertEqual(df_w.columns.to_list(), xcats)
@@ -277,8 +277,7 @@ class TestAll(unittest.TestCase):
         assert_frame_equal(corr1, corr2)
 
     def test_invalid_xcat_labels(self):
-
-        with self.assertRaises(AssertionError):
+        with self.assertRaises(ValueError):
             correl_matrix(
                 self.dfd,
                 xcats=["XR"],
@@ -290,20 +289,8 @@ class TestAll(unittest.TestCase):
                 xcat_labels=["XR", "CRY"],
             )
 
-        with self.assertRaises(AssertionError):
-            correl_matrix(
-                self.dfd,
-                xcats=["XR"],
-                cids=self.cids,
-                max_color=0.1,
-                show=False,
-                annot=True,
-                fmt=".2f",
-                xcat_labels={"XR": "Excess Returns", "CRY": "Carry"},
-            )
 
     def test_xcat_labels(self):
-
         try:
             correl_matrix(
                 self.dfd,
@@ -345,17 +332,17 @@ class TestAll(unittest.TestCase):
         except Exception as e:
             self.fail(f"correl_matrix raised {e} unexpectedly")
 
-    def test_parse_xcat_labels(self):
+    def test_parse_labels(self):
         xcats = ["XR", "CRY"]
         xcat_labels_dict = {"XR": "Excess Returns", "CRY": "Carry"}
-        xcat_labels = _parse_xcat_labels(xcats, xcat_labels_dict)
+        xcat_labels = _parse_labels(keys=xcats, labels=xcat_labels_dict, label_type="xcat")
         self.assertEqual(xcat_labels_dict, xcat_labels)
 
         xcat_labels_list = ["Excess Returns", "Carry"]
-        xcat_labels = _parse_xcat_labels(xcats, xcat_labels_list)
+        xcat_labels = _parse_labels(keys=xcats, labels=xcat_labels_list, label_type="xcat")
         self.assertEqual(xcat_labels_dict, xcat_labels)
 
-        xcat_labels = _parse_xcat_labels(xcats, None)
+        xcat_labels = _parse_labels(keys=xcats, labels=None, label_type="xcat")
         self.assertEqual(xcat_labels, {"XR": "XR", "CRY": "CRY"})
 
 

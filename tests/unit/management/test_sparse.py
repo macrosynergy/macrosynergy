@@ -4,8 +4,9 @@ import pandas as pd
 import warnings
 import numpy as np
 
-from typing import List, Tuple, Dict, Union, Set, Any
+from typing import List, Dict, Set, Any
 from macrosynergy.management.types import QuantamentalDataFrame
+from macrosynergy.management.simulate import make_test_df
 from macrosynergy.management.utils import (
     concat_single_metric_qdfs,
     ticker_df_to_qdf,
@@ -75,7 +76,9 @@ def get_long_format_data(
     # Map of frequency codes to their descriptive names
     freq_map = FREQ_STR_MAP.copy()
     full_date_range = pd.bdate_range(start=start, end=end)
-    get_random_freq = lambda: random.choice(list(freq_map.keys()))
+
+    def get_random_freq() -> str:
+        return random.choice(list(freq_map.keys()))
 
     # Generate ticker symbols by combining currency ids and category names
     tickers = [f"{cid}_{xc}" for cid in cids for xc in xcats]
@@ -160,7 +163,14 @@ class TestFunctions(unittest.TestCase):
             create_delta_data(df=qdf.drop(columns="value"))
 
         # test with missing eop_lag
-        create_delta_data(qdf.drop(columns="eop_lag"))
+        # should warn saying 'eop_lag' not found
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            create_delta_data(df=qdf.drop(columns="eop_lag"))
+            self.assertTrue(len(w) == 1)
+            self.assertTrue(
+                "`df` does not contain an `eop_lag` column" in str(w[-1].message)
+            )
 
     def test_calculate_score_on_sparse_indicator(self) -> None:
         qdf = self.qdf_small.copy()
@@ -363,7 +373,6 @@ class TestVolatilityEstimationMethods(unittest.TestCase):
 
 
 class TestInformationStateChanges(unittest.TestCase):
-
     def test_class_methods(self) -> None:
         # test the class methods
         qdf = get_long_format_data(end="2012-01-01")
@@ -428,7 +437,6 @@ class TestInformationStateChanges(unittest.TestCase):
         )
 
     def test_isc_object_round_trip(self) -> None:
-
         qdfidx = QuantamentalDataFrame.IndexCols
 
         df = get_long_format_data()
@@ -457,9 +465,7 @@ class TestInformationStateChanges(unittest.TestCase):
         self.assertTrue(diff_df.eq(dfc).all().all())
 
     def test_isc_object_round_trip_wide(self) -> None:
-
         df = get_long_format_data()
-        dfc = df.copy()
 
         tdf = InformationStateChanges.from_qdf(df).to_qdf()
         wdf_orig = qdf_to_ticker_df(df)
@@ -484,6 +490,31 @@ class TestInformationStateChanges(unittest.TestCase):
         self.assertTrue("grading" not in tdf.columns)
 
         self.assertTrue([str(u).endswith("$%A") for u in list(tdf["xcat"])])
+
+    def test_isc_to_qdf_metrics(self) -> None:
+        df = get_long_format_data(end="2012-01-01")
+        ## Test that the grading is not output when not asked for
+        tdf = InformationStateChanges.from_qdf(df).to_qdf(metrics=None, postfix="$%A")
+        self.assertTrue("value" in tdf.columns)
+        self.assertTrue("eop" not in tdf.columns)
+        self.assertTrue("eop_lag" not in tdf.columns)
+        self.assertTrue("grading" not in tdf.columns)
+
+    def test_isc_to_qdf_winsorise(self) -> None:
+        df = get_long_format_data(end="2012-01-01")
+        ## Test that the grading is not output when not asked for
+        isc: InformationStateChanges = InformationStateChanges.from_qdf(df)
+        win_df = isc.to_qdf(metrics=None, thresh=0)
+        self.assertTrue(np.allclose(win_df["value"], 0))
+        win_df = isc.to_qdf(metrics=None, thresh=(-0.01, 0.1))
+        self.assertFalse((win_df["value"] > 0.1).any())
+        self.assertFalse((win_df["value"] < -0.01).any())
+
+        with self.assertRaises(ValueError):
+            isc.to_qdf(metrics=None, thresh="banana")
+
+        with self.assertRaises(ValueError):
+            isc.to_qdf(metrics=None, thresh=(-0.01, "banana"))
 
     def test_temporal_aggregator_period(self) -> None:
         df = get_long_format_data(end="2012-01-01")
@@ -784,6 +815,28 @@ class TestInformationStateChanges(unittest.TestCase):
         self.assertTrue(outdf["cid"].dtype.name == "object")
         self.assertTrue(outdf["xcat"].dtype.name == "object")
 
+    def test_to_qdf_error(self):
+        isc = InformationStateChanges()
+        try:
+            isc.to_qdf()
+        except ValueError as e:
+            expected_msg = "InformationStateChanges object is empty"
+            self.assertTrue(expected_msg.lower() in str(e).lower())
+
+    def test_to_qdf_error_missing_eop_lag(self):
+        df = make_test_df(start="2012-01-01", end="2012-01-06")
+        with warnings.catch_warnings(record=True) as w:
+            isc: InformationStateChanges = InformationStateChanges.from_qdf(df)
+            self.assertTrue(len(w) == 1)
+            expected = "`df` does not contain an `eop_lag` column"
+            self.assertTrue(expected in str(w[-1].message))
+
+        try:
+            isc.to_qdf()
+        except ValueError as e:
+            expected_msg = "Please verify that the input data has the required"
+            self.assertTrue(expected_msg.lower() in str(e).lower())
+
 
 class TestInformationStateChangesScoreBy(unittest.TestCase):
     def test_score_by_diff(self):
@@ -820,7 +873,7 @@ class TestInformationStateChangesScoreBy(unittest.TestCase):
             with unittest.mock.patch(
                 "macrosynergy.management.utils.sparse._calculate_score_on_sparse_indicator_for_class"
             ) as mock:
-                isc = InformationStateChanges.from_qdf(qdf, norm=True, score_by=sc_by)
+                _ = InformationStateChanges.from_qdf(qdf, norm=True, score_by=sc_by)
                 mock.assert_called_once()
                 self.assertEqual(mock.call_args[1]["score_by"], sc_by)
 
@@ -829,20 +882,6 @@ class TestInformationStateChangesScoreBy(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             InformationStateChanges.from_qdf(qdf, score_by="banana")
-
-    def test_score_by_unplanned_method(self):
-        qdf = get_long_format_data(end="2015-01-01")
-        test_options = {"apple": "banana"}
-        expected_err = "Column `banana` not in"
-        with unittest.mock.patch(
-            "macrosynergy.management.utils.sparse.SCORE_BY_OPTIONS", test_options
-        ):
-            try:
-                InformationStateChanges.from_qdf(qdf, score_by="apple")
-            except ValueError as e:
-                self.assertIn(expected_err, str(e))
-            except Exception as e:
-                self.fail(f"Expected ValueError, got {type(e)}")
 
 
 if __name__ == "__main__":
