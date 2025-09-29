@@ -832,21 +832,30 @@ class TestAll(unittest.TestCase):
         sigs = ["CRY", "GROWTH", "INFL"]
         sig_negs = [True, False, False]
 
-        results_df = create_results_dataframe(
-            title="Performance metrics, PARITY vs OLS, equity",
-            df=self.dfd,
+        pnl = NaivePnL(
+            self.dfd,
             ret=ret,
             sigs=sigs,
             cids=self.cids,
-            sig_ops="zn_score_pan",
-            sig_adds=0,
-            neutrals="zero",
-            threshs=2,
-            sig_negs=sig_negs,
-            bm="USD_EQXR",
+            start="2000-01-01",
+            blacklist=self.blacklist,
+            bms=["USD_DUXR", "EUR_DUXR"],
+        )
+        for i, sig in enumerate(sigs):
+            pnl.make_pnl(
+                sig=sig,
+                sig_op="zn_score_pan",
+                sig_neg=sig_negs[i],
+                rebal_freq="monthly",
+                thresh=2,
+                neutral="zero",
+                sig_add=0,
+            )
+
+        results_df = create_results_dataframe(
+            title="Performance metrics, PARITY vs OLS, equity",
+            pnl=pnl,
             cosp=True,
-            start="2004-01-01",
-            freqs="M",
             agg_sigs="last",
             slip=1,
         )
@@ -864,7 +873,7 @@ class TestAll(unittest.TestCase):
 
         self.assertEqual(set(results.index), set(negative_sigs))
 
-        self.assertEqual(len(results.columns), 7)
+        self.assertEqual(len(results.columns), 8)
 
 
 if __name__ == "__main__":

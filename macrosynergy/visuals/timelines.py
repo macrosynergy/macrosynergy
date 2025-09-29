@@ -53,6 +53,7 @@ def timelines(
     legend_fontsize: int = 12,
     blacklist: Dict = None,
     ax_hline: Union[float, Dict] = None,
+    return_fig: bool = False,
 ):
     """
     Displays a facet grid of time line charts of one or more categories.
@@ -257,10 +258,9 @@ def timelines(
         xcat_grid: bool = False
         single_chart: bool = True
 
-    if xcat_grid:
-        if ncol > len(xcats):
-            ncol: int = len(xcats)
+    fig = None
 
+    if xcat_grid:
         with FacetPlot(
             df=df,
             xcats=xcats,
@@ -272,19 +272,17 @@ def timelines(
             end=end,
             blacklist=blacklist,
         ) as fp:
-            fp.lineplot(
+            fig = fp.lineplot(
                 share_y=same_y,
                 share_x=not all_xticks,
                 figsize=size,
-                xcat_grid=True,  # Not to be confused with `xcat_grid` parameter
-                # legend_labels=xcat_labels or None,
+                xcat_grid=True,
                 facet_titles=xcat_labels or None,
                 title=title,
                 title_yadjust=title_adj,
                 title_xadjust=title_xadj,
                 compare_series=cross_mean_series if cs_mean else None,
                 title_fontsize=title_fontsize,
-                # title_fontsize=24,
                 ncols=ncol,
                 attempt_square=square_grid,
                 facet_size=facet_size,
@@ -292,6 +290,7 @@ def timelines(
                 legend_fontsize=legend_fontsize,
                 interpolate=cumsum,
                 ax_hline=ax_hline,
+                return_figure=return_fig,
             )
 
     elif single_chart or (len(cids) == 1):
@@ -306,7 +305,7 @@ def timelines(
             end=end,
             blacklist=blacklist,
         ) as lp:
-            lp.plot(
+            fig = lp.plot(
                 metric=val,
                 figsize=size,
                 title=title,
@@ -314,15 +313,14 @@ def timelines(
                 title_xadjust=title_xadj,
                 compare_series=cross_mean_series if cs_mean else None,
                 title_fontsize=title_fontsize,
-                # title_fontsize=18,
                 legend_ncol=legend_ncol,
                 legend_fontsize=legend_fontsize,
                 legend_labels=xcat_labels or None,
                 ax_hline=ax_hline,
+                return_figure=return_fig,
             )
 
     else:
-        # Order cids by the values in cid_labels if provided, otherwise by the cids themselves
         if cid_labels and sort_cid_labels:
             if isinstance(cid_labels, list):
                 cid_labels = {cid: label for cid, label in zip(cids, cid_labels)}
@@ -339,17 +337,15 @@ def timelines(
             end=end,
             blacklist=blacklist,
         ) as fp:
-            show_legend: bool = True if cross_mean_series else False
-            show_legend = show_legend or (len(xcats) > 1)
+            show_legend = bool(cross_mean_series) or (len(xcats) > 1)
             if ncol > len(cids):
-                ncol: int = len(cids)
+                ncol = len(cids)
 
-            fp.lineplot(
+            fig = fp.lineplot(
                 figsize=size,
                 share_y=same_y,
                 share_x=not all_xticks,
                 title=title,
-                # cid_xcat_grid=True,
                 cid_grid=True,
                 facet_titles=cid_labels or None,
                 title_yadjust=title_adj,
@@ -357,7 +353,6 @@ def timelines(
                 compare_series=cross_mean_series if cs_mean else None,
                 facet_size=facet_size,
                 title_fontsize=title_fontsize,
-                # title_fontsize=24,
                 ncols=ncol,
                 attempt_square=square_grid,
                 legend=show_legend,
@@ -366,7 +361,11 @@ def timelines(
                 legend_fontsize=legend_fontsize,
                 interpolate=cumsum,
                 ax_hline=ax_hline,
+                return_figure=return_fig,
             )
+
+    if return_fig:
+        return fig
 
 
 if __name__ == "__main__":
@@ -458,6 +457,7 @@ if __name__ == "__main__":
         blacklist=black,
         same_y=True,
         xcat_labels={"FXXR": "FX Returns", "EQXR": "Equity Returns", "RIR": "Real Interest Rate", "IR": "Interest Rate"},
+        return_fig=True,
     )
 
     # timelines(
