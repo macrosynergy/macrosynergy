@@ -811,6 +811,7 @@ class NaivePnL:
         title_adj: float = 0.95,
         y_label_adj: float = 0.95,
         legend_fontsize: int = None,
+        return_fig: bool = False
     ) -> None:
         """
         Plot line chart of cumulative PnLs, single PnL, multiple PnL types per cross
@@ -1036,6 +1037,8 @@ class NaivePnL:
 
         fg.tick_params(axis="both", labelsize=tick_fontsize)
         plt.axhline(y=0, color="black", linestyle="--", lw=1)
+        if return_fig:
+            return fg
         plt.show()
 
     def signal_heatmap(
@@ -1051,6 +1054,7 @@ class NaivePnL:
         y_label: str = "",
         figsize: Optional[Tuple[float, float]] = None,
         tick_fontsize: int = None,
+        return_fig: bool = False
     ):
         """
         Display heatmap of signals across times and cross-sections.
@@ -1132,7 +1136,7 @@ class NaivePnL:
         fig, ax = plt.subplots(figsize=figsize)
         dfw = dfw.transpose()
         dfw.columns = [str(d.strftime("%d-%m-%Y")) for d in dfw.columns]
-        sns.heatmap(dfw, cmap="vlag_r", center=0)
+        ax = sns.heatmap(dfw, cmap="vlag_r", center=0)
 
         ax.set(xlabel=x_label, ylabel=y_label)
         ax.set_yticklabels(ax.get_yticklabels(), rotation=0)
@@ -1140,6 +1144,9 @@ class NaivePnL:
 
         ax.tick_params(axis="x", labelsize=tick_fontsize)
         ax.tick_params(axis="y", labelsize=tick_fontsize)
+
+        if return_fig:
+            return fig
 
         plt.show()
 
@@ -1453,7 +1460,6 @@ def create_results_dataframe(
     title: str,
     pnl: NaivePnL,
     sigs_renamed: dict = None,
-    agg_sigs: Union[str, List[str]] = "last",
     **srr_kwargs
 ):
     """
@@ -1506,7 +1512,6 @@ def create_results_dataframe(
         sigs=sigs,
         sig_neg=sig_neg,
         cids=pnl.cids,
-        agg_sigs=agg_sigs,
         start=pnl.start,
         end=pnl.end,
         blacklist=pnl.blacklist,
@@ -1684,7 +1689,7 @@ if __name__ == "__main__":
         end="2020-12-31",
     )
 
-    pnl.signal_heatmap(pnl_name="PNL_GROWTH_NEG", pnl_cids=cids, freq="m")
+    heatmap = pnl.signal_heatmap(pnl_name="PNL_GROWTH_NEG", pnl_cids=cids, freq="m", return_fig=True, title="Heatmap Example")
 
     print(df_eval)
 
@@ -1733,6 +1738,5 @@ if __name__ == "__main__":
     results_eq_ols = create_results_dataframe(
         title="Performance metrics, PARITY vs OLS, equity",
         pnl=pnl,
-        bm="USD_EQXR_NSA",
     )
     print(results_eq_ols.data)
