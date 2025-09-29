@@ -34,6 +34,7 @@ def view_ranges(
     ncols: int = None,
     nrows: int = None,
     drop_cid_labels: bool = False,
+    return_fig: bool = False,
 ):
     """
     Plots averages and various ranges across sections for one or more categories.
@@ -43,53 +44,9 @@ def view_ranges(
     df : ~pandas.DataFrame
         standardized DataFrame with the necessary columns: 'cid', 'xcat', 'real_date'
         and at least one column with values of interest.
-    xcats : List[str]
-        extended categories to be checked on. Default is all in the DataFrame.
-    cids : List[str]
-        cross sections to plot. Default is all in DataFrame.
-    start : str
-        earliest date in ISO format. Default earliest date in df.
-    end : str
-        latest date in ISO format. Default is latest date in df.
-    val : str
-        name of column that contains the values. Default is 'value'.
-    kind : str
-        type of range plot. Default is 'bar'; other option is 'box'.
-    sort_cids_by : str
-        criterion for sorting cids on x-axis; Arguments can be 'mean' and 'std'. Default
-        is None, i.e. original order. Ordering will be based on the first category if the
-        category is defined over the complete panel. Otherwise, mean and standard deviation
-        calculated, of the cross-sections, computed across all categories.
-    title : str
-        string of chart title; defaults depend on type of range plot.
-    title_fontsize : int
-        font size of the title. Default is None, uses matplotlib default.
-    ylab : str
-        y label. Default is no label.
-    size : Tuple[float]
-        Tuple of width and height of graph. Default is (16, 8).
-    xcat_labels : Union[List[str], Dict[str, str]]
-        custom labels to be used for the ranges.
-    legend_loc : str
-        location of legend; passed to matplotlib.pyplot.legend() as `loc`. Default is
-        'center right'.
-    legend_bbox_to_anchor : Tuple[float]
-        passed to matplotlib.pyplot.legend() as `bbox_to_anchor`. Default is None.
-        Please see [Matplotlib's Legend Documentation]:
-        (https://matplotlib.org/stable/api/_as_gen/matplotlib.pyplot.legend.html) for more
-        information on the legend parameters `loc` and `bbox_to_anchor`.
-    facet : bool
-        If True, facets the plot by xcat. Default is False.
-    ncols : int
-        Number of columns in the facet plot. Default is None, which will be set to
-        `ceil(n_xcats / nrows)`.
-    nrows : int
-        Number of rows in the facet plot. Default is None, which will be set to
-        `min(n_xcats, 2)`.
-    drop_cid_labels : bool
-        If True, the x-axis labels for cids will be dropped when plotting a facet. 
-        Default is False. This is useful when there are many cids and the labels would 
-        overlap.
+    ...
+    return_fig : bool
+        If True, return the Matplotlib figure object instead of displaying.
     """
 
     df = QuantamentalDataFrame(df)
@@ -110,23 +67,17 @@ def view_ranges(
         sort_error = "Sorting parameter must either be 'mean' or 'std'."
         if  sort_cids_by not in ["mean", "std"]:
             raise ValueError(sort_error)
-        if sort_cids_by == "mean":
-            sort_cids_func = np.mean
-        else:
-            sort_cids_func = np.std
+        sort_cids_func = np.mean if sort_cids_by == "mean" else np.std
 
-    error_message = (
-        "The number of custom labels must match the defined number of "
-        "categories in pnl_cats."
-    )
     if xcat_labels is not None:
         if isinstance(xcat_labels, dict):
             xcat_labels = [xcat_labels[xcat] for xcat in xcats]
         if len(xcat_labels) != len(xcats):
-            raise ValueError(error_message)
+            raise ValueError(
+                "The number of custom labels must match the defined number of categories."
+            )
 
-    # Unique cross-sections across the union of categories passed - not the intersection.
-    # Order of categories will be preserved.
+    # Reduce dataframe
     df, xcats, cids = reduce_df(df, xcats, cids, start, end, out_all=True)
 
     s_date = df["real_date"].min().strftime("%Y-%m-%d")
@@ -145,17 +96,15 @@ def view_ranges(
     if ylab is None:
         ylab = ""
 
+    # Ordering logic
     filt_1 = df["xcat"] == xcats[0]
     first_xcat_cids = set(df[filt_1]["cid"])
-    # First category is not defined over all cross-sections.
     order_condition = list(set(cids)) == list(first_xcat_cids)
 
     if order_condition and sort_cids_func is not None:
-        # Sort exclusively on the first category.
         dfx = df[filt_1].groupby(["cid"], observed=True)[val].apply(sort_cids_func)
         order = dfx.sort_values(ascending=False).index
     elif not order_condition and sort_cids_func is not None:
-        # Sort across all categories on the available cross-sections.
         dfx = df.groupby(["cid"], observed=True)[val].apply(sort_cids_func)
         order = dfx.sort_values(ascending=False).index
     else:
@@ -213,14 +162,14 @@ def view_ranges(
             ax.set_xticklabels([])
             ax.set_xlabel("")
 
-            ax.set_xticklabels([])
-
     def _set_main_axis(ax, title, ylab):
         ax.set_title(title, fontdict={"fontsize": 16})
         ax.set_xlabel("")
         ax.set_ylabel(ylab)
         ax.xaxis.grid(True)
         ax.axhline(0, ls="--", linewidth=1, color="black")
+
+    fig = None
 
     if facet:
         n_xcats = len(xcats)
@@ -244,7 +193,6 @@ def view_ranges(
             fig.delaxes(axes[j])
         fig.suptitle(title, fontsize=16)
         plt.tight_layout(rect=[0, 0, 1, 0.97])
-        plt.show()
     else:
         fig, ax = plt.subplots(figsize=size)
         if kind == "bar":
@@ -268,7 +216,12 @@ def view_ranges(
                 bbox_to_anchor=legend_bbox_to_anchor,
             )
         plt.tight_layout()
+
+    if return_fig:
+        return fig
+    else:
         plt.show()
+
 
 
 if __name__ == "__main__":

@@ -343,6 +343,7 @@ class SignalReturnRelations:
         legend_pos: str = "best",
         x_labels: Dict = None,
         x_labels_rotate: int = 0,
+        return_fig: bool = False,
     ):
         """
         Plot bar chart for the overall and balanced accuracy metrics. For types:
@@ -436,18 +437,18 @@ class SignalReturnRelations:
             size = (np.max([dfx.shape[0] / 2, 8]), 6)
 
         sns.set_style("darkgrid")
-        plt.figure(figsize=size)
+        fig, ax = plt.subplots(figsize=size)
         x_indexes = np.arange(dfx.shape[0])
 
         w = 0.4
-        plt.bar(
+        ax.bar(
             x_indexes - w / 2,
             dfx["accuracy"],
             label="Accuracy",
             width=w,
             color="lightblue",
         )
-        plt.bar(
+        ax.bar(
             x_indexes + w / 2,
             dfx["bal_accuracy"],
             label="Balanced Accuracy",
@@ -466,18 +467,20 @@ class SignalReturnRelations:
         else:
             labels = dfx.index
 
-        plt.xticks(ticks=x_indexes, labels=labels, rotation=x_labels_rotate)
-        plt.axhline(y=0.5, color="black", linestyle="-", linewidth=0.5)
+        ax.set_xticks(x_indexes)
+        ax.set_xticklabels(labels, rotation=x_labels_rotate)
+        ax.axhline(y=0.5, color="black", linestyle="-", linewidth=0.5)
 
-        y_input = self.__yaxis_lim__(
-            accuracy_df=dfx.loc[:, ["accuracy", "bal_accuracy"]]
-        )
+        y_input = self.__yaxis_lim__(accuracy_df=dfx.loc[:, ["accuracy", "bal_accuracy"]])
+        ax.set_ylim(round(y_input, 2))
 
-        plt.ylim(round(y_input, 2))
+        ax.set_title(title, fontsize=title_fontsize)
+        ax.legend(loc=legend_pos)
 
-        plt.title(title, fontsize=title_fontsize)
-        plt.legend(loc=legend_pos)
-        plt.show()
+        if return_fig:
+            return fig
+        else:
+            plt.show()
 
     def correlation_bars(
         self,
@@ -559,7 +562,6 @@ class SignalReturnRelations:
         else:
             df_xs = self.__rival_sigs__(ret, sigs)
 
-        # Panel plus the cs_types.
         dfx = df_xs[~df_xs.index.isin(["PosRatio", "Mean"])]
 
         pprobs = np.array(
@@ -575,7 +577,6 @@ class SignalReturnRelations:
                 for pv, cc in zip(dfx["kendall_pval"], dfx["kendall"])
             ]
         )
-
         kprobs[kprobs == 0] = 0.01
 
         if title is None:
@@ -588,11 +589,11 @@ class SignalReturnRelations:
             size = (np.max([dfx.shape[0] / 2, 8]), 6)
 
         sns.set_style("darkgrid")
-        plt.figure(figsize=size)
+        fig, ax = plt.subplots(figsize=size)
         x_indexes = np.arange(len(dfx.index))
         w = 0.4
-        plt.bar(x_indexes - w / 2, pprobs, label="Pearson", width=w, color="lightblue")
-        plt.bar(x_indexes + w / 2, kprobs, label="Kendall", width=w, color="steelblue")
+        ax.bar(x_indexes - w / 2, pprobs, label="Pearson", width=w, color="lightblue")
+        ax.bar(x_indexes + w / 2, kprobs, label="Kendall", width=w, color="steelblue")
 
         if x_labels:
             validated_labels = {}
@@ -605,22 +606,23 @@ class SignalReturnRelations:
         else:
             labels = dfx.index
 
-        plt.xticks(ticks=x_indexes, labels=labels, rotation=x_labels_rotate)
+        ax.set_xticks(x_indexes)
+        ax.set_xticklabels(labels, rotation=x_labels_rotate)
 
-        plt.axhline(
-            y=0.95,
-            color="orange",
-            linestyle="--",
-            linewidth=0.5,
-            label="95% probability",
+        ax.axhline(
+            y=0.95, color="orange", linestyle="--", linewidth=0.5, label="95% probability"
         )
-        plt.axhline(
+        ax.axhline(
             y=0.99, color="red", linestyle="--", linewidth=0.5, label="99% probability"
         )
 
-        plt.title(title, fontsize=title_fontsize)
-        plt.legend(loc=legend_pos)
-        plt.show()
+        ax.set_title(title, fontsize=title_fontsize)
+        ax.legend(loc=legend_pos)
+
+        if return_fig:
+            return fig
+        else:
+            plt.show()
 
     @staticmethod
     def __slice_df__(df: pd.DataFrame, cs: str, cs_type: str):
@@ -1804,25 +1806,25 @@ if __name__ == "__main__":
 
     sigs = ["CRY"]
     # Additional signals.
-    # srn = SignalReturnRelations(
-    #     dfd,
-    #     rets="XR",
-    #     sigs=sigs,
-    #     sig_neg=True,
-    #     cosp=True,
-    #     freqs="Q",
-    #     start="2002-01-01",
-    #     ms_panel_test=True,
-    #     additional_metrics=[spearman, granger, granger_pval],
-    # )
+    srn = SignalReturnRelations(
+        dfd,
+        rets="XR",
+        sigs=sigs,
+        sig_neg=True,
+        cosp=True,
+        freqs="Q",
+        start="2002-01-01",
+        ms_panel_test=True,
+        additional_metrics=[spearman, granger, granger_pval],
+    )
 
-    # print(sigs)
+    print(sigs)
 
-    # df_dep = srn.summary_table()
-    # print(df_dep)
+    df_dep = srn.summary_table()
+    print(df_dep)
 
-    # dfsum = srn.single_relation_table(table_type="summary")
-    # print(dfsum)
+    dfsum = srn.single_relation_table(table_type="summary")
+    print(dfsum)
 
     srn = SignalReturnRelations(
         dfd,
