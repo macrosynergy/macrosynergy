@@ -494,6 +494,7 @@ class SignalReturnRelations:
         legend_pos: str = "best",
         x_labels: Dict = None,
         x_labels_rotate: int = 0,
+        return_fig: bool = False,
     ):
         """
         Plot correlation coefficients and significance. For types: cross_section and 
