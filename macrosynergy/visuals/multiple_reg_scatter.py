@@ -35,6 +35,7 @@ def multiple_reg_scatter(
     color_cids: bool = False,
     remove_zero_predictor: bool = False,
     share_axes: bool = True,
+    return_fig: bool = False,
 ):
     """
     Displays multiple regression scatter plots across categories. The categories are 
@@ -106,10 +107,13 @@ def multiple_reg_scatter(
     if separator is not None:
         if separator == "cids":
             raise ValueError(
-                "Separator 'cids' is not permitted in multiple_reg_scatter. To get a plot across multiple cids, please specify separator as cids inside reg_scatter."
+                "Separator 'cids' is not permitted in multiple_reg_scatter. "
+                "To get a plot across multiple cids, please specify separator as cids "
+                "inside reg_scatter."
             )
     single_scatter = color_cids
     separator = "cids" if color_cids else separator
+
     fig, axes = plt.subplots(
         nrows=nrow, ncols=ncol, figsize=figsize, sharex=share_axes, sharey=share_axes
     )
@@ -126,6 +130,7 @@ def multiple_reg_scatter(
         else:
             ax = axes[i] if (ncol == 1 or nrow == 1) else axes[row, col]
             ax.set_facecolor("white")
+
         if subplot_titles is not None:
             subplot_title = subplot_titles[i]
         else:
@@ -143,8 +148,8 @@ def multiple_reg_scatter(
                 subplot_title = f"{cat_rel.xcats[0]} and {cat_rel.xcats[1]}"
 
         width = (figsize[0] // ncol) * 6
-
         wrapped_title = "\n".join(textwrap.wrap(subplot_title, width=width))
+
         cat_rel.reg_scatter(
             title=wrapped_title,
             labels=False,
@@ -168,7 +173,11 @@ def multiple_reg_scatter(
 
     plt.subplots_adjust(top=title_yadj - 0.01)
     plt.tight_layout()
-    plt.show()
+
+    if return_fig:
+        return fig
+    else:
+        plt.show()
 
 
 if __name__ == "__main__":

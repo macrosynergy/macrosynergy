@@ -41,6 +41,7 @@ def view_timelines(
     legend_fontsize: int = 12,
     blacklist: Dict = None,
     ax_hline: Optional[Dict] = 0.0,
+    return_fig: bool = False,
 ):
     """
     Displays a grid with subplots of time line charts of one or more categories.
@@ -151,6 +152,7 @@ def view_timelines(
         title_xadj=title_xadj,
         blacklist=blacklist,
         ax_hline=ax_hline,
+        return_fig=return_fig,
     )
 
 
