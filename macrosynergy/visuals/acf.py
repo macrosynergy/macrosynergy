@@ -280,7 +280,7 @@ def _plot_acf(
             title=title,
             cid_grid=True,
             interpolate=True,
-            return_figure=return_fig
+            return_figure=return_fig,
             **kwargs,
         )
 
