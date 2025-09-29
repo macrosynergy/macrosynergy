@@ -839,7 +839,7 @@ class TestAll(unittest.TestCase):
             cids=self.cids,
             start="2000-01-01",
             blacklist=self.blacklist,
-            bms=["USD_DUXR"],
+            bms=["USD_DUXR", "EUR_DUXR"],
         )
         for i, sig in enumerate(sigs):
             pnl.make_pnl(
@@ -853,9 +853,9 @@ class TestAll(unittest.TestCase):
             )
 
         results_df = create_results_dataframe(
+            title="Performance metrics, PARITY vs OLS, equity",
             pnl=pnl,
             cosp=True,
-            start="2000-01-01",
             agg_sigs="last",
             slip=1,
         )
@@ -873,7 +873,7 @@ class TestAll(unittest.TestCase):
 
         self.assertEqual(set(results.index), set(negative_sigs))
 
-        self.assertEqual(len(results.columns), 7)
+        self.assertEqual(len(results.columns), 8)
 
 
 if __name__ == "__main__":

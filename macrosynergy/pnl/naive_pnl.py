@@ -1452,7 +1452,6 @@ class NaivePnL:
 def create_results_dataframe(
     title: str,
     pnl: NaivePnL,
-    bm: str = None,
     sigs_renamed: dict = None,
     agg_sigs: Union[str, List[str]] = "last",
     **srr_kwargs
@@ -1490,6 +1489,8 @@ def create_results_dataframe(
         "annual": "A",
     }
 
+    bms = list(pnl._bm_dict.keys())
+
     if pnl.pnl_params is None:
         raise ValueError("PnL parameters not found. Ensure pnl.make_pnl() has been run.")
 
@@ -1518,10 +1519,11 @@ def create_results_dataframe(
     )
 
     # Get evaluated PnL statistics
-    if bm is not None:
+    if bms:
+        bm_cols = [f"{bm} correl" for bm in bms]
         pnl_df = (
             pnl.evaluate_pnls()
-            .transpose()[["Sharpe Ratio", "Sortino Ratio", f"{bm} correl"]]
+            .transpose()[["Sharpe Ratio", "Sortino Ratio"] + bm_cols]
             .astype("float")
             .round(3)
         )
@@ -1557,8 +1559,6 @@ def create_results_dataframe(
         "pearson": "Pearson",
         "kendall": "Kendall",
     }
-    if bm is not None:
-        metric_map[f"{bm} correl"] = "Market corr."
 
     res_df.rename(columns=metric_map, inplace=True)
 
