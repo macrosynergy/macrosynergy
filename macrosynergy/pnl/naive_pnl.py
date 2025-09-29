@@ -106,6 +106,9 @@ class NaivePnL:
             self._bm_dict = bm_dict
 
         self.pnl_params = {}
+        self.start = start
+        self.end = end
+        self.blacklist = blacklist
 
     def make_pnl(
         self,
@@ -1450,116 +1453,62 @@ class NaivePnL:
 
 def create_results_dataframe(
     title: str,
-    df: pd.DataFrame,
-    ret: str,
-    sigs: Union[str, List[str]],
-    cids: Union[str, List[str]],
-    sig_ops: Union[str, List[str]],
-    sig_adds: Union[float, List[float]],
-    neutrals: Union[str, List[str]],
-    threshs: Union[float, List[float]],
+    pnl: NaivePnL,
     bm: str = None,
-    sig_negs: Union[bool, List[bool]] = None,
-    cosp: bool = False,
-    start: str = None,
-    end: str = None,
-    blacklist: dict = None,
-    freqs: Union[str, List[str]] = "M",
-    agg_sigs: Union[str, List[str]] = "last",
     sigs_renamed: dict = None,
-    fwin: int = 1,
-    slip: int = 0,
+    agg_sigs: Union[str, List[str]] = "last",
+    **srr_kwargs
 ):
     """
-    Create a DataFrame with key performance metrics for the signals and PnLs.
+    Create a DataFrame with key performance metrics for signals and PnLs
+    from a precomputed NaivePnL object.
 
     Parameters
     ----------
     title : str
-        title of the DataFrame.
-    df : ~pandas.DataFrame
-        DataFrame with the data.
-    ret : str
-        name of the return signal.
-    sigs : Union[str, List[str]
-        name of the comparative signal(s).
-    cids : Union[str, List[str]
-        name of the cross-section(s).
-    sig_ops : Union[str, List[str]
-        operation(s) to be applied to the signal(s).
-    sig_adds : Union[float, List[float]
-        value(s) to be added to the signal(s).
-    neutrals : Union[str, List[str]
-        neutralization method(s) to be applied.
-    threshs : Union[float, List[float]
-        threshold(s) to be applied to the signal(s).
-    bm : str
-        name of the benchmark signal.
-    sig_negs : Union[bool, List[bool]
-        whether the signal(s) should be negated.
-    cosp : bool
-        whether the signals should be cross-sectionally standardized.
-    start : str
-        start date of the analysis.
-    end : str
-        end date of the analysis.
-    blacklist : dict
-        dictionary with the blacklisted dates.
-    freqs : Union[str, List[str]
-        frequency of the rebalancing.
-    agg_sigs : Union[str, List[str]
-        aggregation method(s) for the signal(s).
-    sigs_renamed : dict
-        dictionary with the renamed signals.
-    fwin : int
-        frequency of the rolling window.
-    slip : int
-        slippage to be applied to the PnLs.
+        Title of the DataFrame.
+    pnl : NaivePnL
+        NaivePnL object with pnl.make_pnl() already applied.
+    bm : str, optional
+        Benchmark name for correlation.
+    sigs_renamed : dict, optional
+        Dictionary for renaming signals in the output.
 
     Returns
     -------
-    ~pandas.DataFrame
-        DataFrame with the performance metrics.
+    ~pandas.DataFrame or Styler
+        DataFrame with performance metrics.
     """
 
-    # Get the signals table and isolate relevant performance metrics
+    sigs = []
+    sig_neg = []
+    freqs = []
 
-    def check_list_type(type, var):
-        return isinstance(var, list) and all(isinstance(item, type) for item in var)
+    pnl_freq = {
+        "daily": "D",
+        "weekly": "W",
+        "monthly": "M",
+        "quarterly": "Q",
+        "annual": "A",
+    }
 
-    if not isinstance(ret, str):
-        raise TypeError("The return signal must be a string.")
-    if not isinstance(sigs, str) and not check_list_type(str, sigs):
-        raise TypeError("The signals must be a string or a list of strings.")
-    if not isinstance(cids, str) and not check_list_type(str, cids):
-        raise TypeError("The cids must be a string or a list of strings.")
-    if not isinstance(sig_ops, str) and not check_list_type(str, sig_ops):
-        raise TypeError("The signal operations must be a string or a list of strings.")
-    if not isinstance(sig_adds, (float, int)) and not check_list_type(
-        (float, int), sig_adds
-    ):
-        raise TypeError("The signal additions must be a float or a list of floats.")
-    if not isinstance(neutrals, str) and not check_list_type(str, neutrals):
-        raise TypeError("The neutralizations must be a string or a list of strings.")
-    if not isinstance(threshs, (float, int)) and not check_list_type(
-        (float, int), threshs
-    ):
-        raise TypeError("The thresholds must be a float or a list of floats.")
+    for pnl_name, params in pnl.pnl_params.items():
+        sigs.append(params.signal)
+        sig_neg.append(params.sig_neg)
+        freqs.append(pnl_freq[params.rebal_freq])
 
+    # Get relation metrics (SignalReturnRelations lives inside pnl.df)
     srr = SignalReturnRelations(
-        df=df,
-        rets=ret,
+        df=pnl.df,
+        rets=pnl.ret,
         sigs=sigs,
-        cids=cids,
-        sig_neg=sig_negs,
-        cosp=cosp,
-        start=start,
-        end=end,
-        blacklist=blacklist,
-        freqs=freqs,
+        sig_neg=sig_neg,
+        cids=pnl.cids,
         agg_sigs=agg_sigs,
-        fwin=fwin,
-        slip=slip,
+        start=pnl.start,
+        end=pnl.end,
+        blacklist=pnl.blacklist,
+        **srr_kwargs,
     )
     sigs_df = (
         srr.multiple_relations_table()
@@ -1567,76 +1516,36 @@ def create_results_dataframe(
         .round(3)
     )
 
-    # Get the evaluated PnL statistics and isolate relevant performance metrics
-    freq_dict = {
-        "D": "daily",
-        "W": "weekly",
-        "M": "monthly",
-    }
-    pnl_freq = lambda x: freq_dict[x] if x in freq_dict.keys() else "monthly"
-
-    if sig_negs is None:
-        sig_negs = [False] * len(sigs)
-
-    pnl = NaivePnL(
-        df=df,
-        ret=ret,
-        sigs=sigs,
-        cids=cids,
-        bms=bm,
-        start=start,
-        end=end,
-        blacklist=blacklist,
-    )
-    for idx, sig in enumerate(sigs):
-        pnl.make_pnl(
-            sig=sig,
-            sig_op=(sig_ops if isinstance(sig_ops, str) else sig_ops[idx]),
-            sig_add=(sig_adds if isinstance(sig_adds, (float, int)) else sig_adds[idx]),
-            sig_neg=(sig_negs if isinstance(sig_negs, bool) else sig_negs[idx]),
-            pnl_name=sig,
-            rebal_freq=(
-                pnl_freq(freqs) if isinstance(freqs, str) else pnl_freq(freqs[idx])
-            ),
-            rebal_slip=slip,
-            vol_scale=10,
-            neutral=(neutrals if isinstance(neutrals, str) else neutrals[idx]),
-            thresh=(threshs if isinstance(threshs, (float, int)) else threshs[idx]),
-        )
-
+    # Get evaluated PnL statistics
     if bm is not None:
         pnl_df = (
-            pnl.evaluate_pnls(pnl_cats=sigs)
+            pnl.evaluate_pnls()
             .transpose()[["Sharpe Ratio", "Sortino Ratio", f"{bm} correl"]]
             .astype("float")
             .round(3)
         )
     else:
         pnl_df = (
-            pnl.evaluate_pnls(pnl_cats=sigs)
+            pnl.evaluate_pnls()
             .transpose()[["Sharpe Ratio", "Sortino Ratio"]]
             .astype("float")
             .round(3)
         )
 
-    # Sort pnl_df so that it matches the order of sigs
-    pnl_df = pnl_df.reindex(sigs)
+    pnl_df = pnl_df.reindex(pnl.pnl_params)
 
+    for sig in pnl_df.index:
+        new_sig = pnl.pnl_params[sig].signal
+        if pnl.pnl_params[sig].sig_neg:
+            new_sig = f"{new_sig}_NEG"
+        pnl_df.rename(index={sig: new_sig}, inplace=True)
+
+    # Reset redundant indices in sigs_df
     sigs_df = sigs_df.reset_index(
         level=["Return", "Frequency", "Aggregation"], drop=True
     )
 
-    if True in sig_negs:
-        for sig in pnl_df.index:
-            sig_neg = sig_negs[pnl_df.index.get_loc(sig)]
-            if sig_neg:
-                # Ensure each index is renamed only once
-                pnl_df.rename(
-                    index={sig: f"{sig}_NEG"},
-                    inplace=True,
-                )
-
-    # Concatenate them and clean them
+    # Combine them
     res_df = pd.concat([sigs_df, pnl_df], axis=1)
 
     metric_map = {
@@ -1822,20 +1731,7 @@ if __name__ == "__main__":
 
     results_eq_ols = create_results_dataframe(
         title="Performance metrics, PARITY vs OLS, equity",
-        df=dfd,
-        ret="EQXR_NSA",
-        sigs=["GROWTH", "INFL", "CRY", "DUXR"],
-        cids=cids,
-        sig_ops="zn_score_pan",
-        sig_adds=0,
-        neutrals="zero",
-        threshs=2,
-        sig_negs=[True, False, False, True],
+        pnl=pnl,
         bm="USD_EQXR_NSA",
-        cosp=True,
-        start="2004-01-01",
-        freqs="M",
-        agg_sigs="last",
-        slip=1,
     )
     print(results_eq_ols.data)

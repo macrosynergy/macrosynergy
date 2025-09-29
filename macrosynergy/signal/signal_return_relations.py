@@ -17,6 +17,7 @@ from macrosynergy.management.utils import (
     apply_slip as apply_slip_util,
     reduce_df,
     categories_df,
+    update_df
 )
 from macrosynergy.management.types import QuantamentalDataFrame
 import macrosynergy.visuals as msv
@@ -268,17 +269,22 @@ class SignalReturnRelations:
             blacklist=self.blacklist,
         )
 
-        for sig in self.sigs:
-            if self.signs[self.sigs.index(sig)]:
-                self.df.loc[self.df["xcat"] == sig, "value"] *= -1
-                if type(self.df) is QuantamentalDataFrame:
-                    self.df = self.df.rename_xcats({sig: f"{sig}_NEG"})
-                else:
-                    self.df.loc[self.df["xcat"] == sig, "xcat"] = (
-                        self.df.loc[self.df["xcat"] == sig, "xcat"] + "_NEG"
-                    )
+        new_sigs = []
 
-                self.sigs[self.sigs.index(sig)] = f"{sig}_NEG"
+        for i, sig in enumerate(self.sigs):
+            if self.signs[i]:
+                neg_sig = f"{sig}_NEG"
+                neg_df = self.df[self.df["xcat"] == sig].copy()
+                neg_df["value"] *= -1
+                neg_df["xcat"] = neg_sig
+
+                # Append the negated version to the main df
+                self.df = update_df(self.df, neg_df)
+                new_sigs.append(neg_sig)
+            else:
+                new_sigs.append(sig)
+
+        self.sigs = new_sigs
 
         self.original_df = self.df.copy()
 
@@ -1821,8 +1827,8 @@ if __name__ == "__main__":
     srn = SignalReturnRelations(
         dfd,
         rets="XR",
-        sigs=["CRY", "INFL", "GROWTH"],
-        sig_neg=[True, True, True],
+        sigs=["CRY", "CRY", "INFL", "GROWTH"],
+        sig_neg=[True, False, True, True],
         cosp=True,
         freqs="M",
         start="2002-01-01",
