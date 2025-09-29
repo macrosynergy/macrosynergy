@@ -613,7 +613,7 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
             filenames=expected_order,
             out_dir="./class/dir",
             overwrite=False,
-            qdf=False,
+            qdf=True,
             as_csv=False,
             keep_raw_data=False,
             chunk_size=None,
@@ -623,14 +623,14 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
 
         mock_download_multi.reset_mock()
         client.download_full_snapshot(
-            since_datetime="20250201", show_progress=False, out_dir="./method/dir"
+            since_datetime="20250201", show_progress=False, out_dir="./method/dir", qdf=False, as_csv=True
         )
         mock_download_multi.assert_called_once_with(
             filenames=expected_order,
             out_dir="./method/dir",
             overwrite=False,
             qdf=False,
-            as_csv=False,
+            as_csv=True,
             keep_raw_data=False,
             chunk_size=None,
             timeout=300.0,
