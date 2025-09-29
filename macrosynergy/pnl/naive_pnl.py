@@ -1492,6 +1492,9 @@ def create_results_dataframe(
         "annual": "A",
     }
 
+    if pnl.pnl_params is None:
+        raise ValueError("PnL parameters not found. Ensure pnl.make_pnl() has been run.")
+
     for pnl_name, params in pnl.pnl_params.items():
         sigs.append(params.signal)
         sig_neg.append(params.sig_neg)
