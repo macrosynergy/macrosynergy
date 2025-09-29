@@ -22,6 +22,8 @@ def view_grades(
     title: str = None,
     title_fontsize: int = 16,
     figsize: Tuple[float] = None,
+    return_fig: bool = False,
+    show: bool = True,
 ):
     """
     Displays a heatmap of grading
@@ -70,7 +72,7 @@ def view_grades(
         sdate = df["real_date"].min().strftime("%Y-%m-%d")
         title = f"Average grade of vintages since {sdate}"
 
-    heatmap.plot_metric(
+    fig = heatmap.plot_metric(
         x_axis_column="cid",
         y_axis_column="xcat",
         metric=grade,
@@ -84,7 +86,12 @@ def view_grades(
         show_annotations=True,
         show_boundaries=True,
         title_fontsize=title_fontsize,
+        return_fig=return_fig,
+        show=show,
     )
+
+    if return_fig:
+        return fig
 
 
 if __name__ == "__main__":
@@ -146,7 +153,7 @@ if __name__ == "__main__":
             "CPIXFE_SA_P1M1ML12",
             "CPIXFE_SA_P1M1ML12_D1M1ML3",
         ],
-        cids=cids,
+        cids=cids
     )
 
     dfd.info()

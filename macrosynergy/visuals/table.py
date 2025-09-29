@@ -17,13 +17,14 @@ def view_table(
     yticklabels: Optional[List[str]] = None,
     annot: bool = True,
     fmt: str = ".2f",
-) -> None:
+    return_fig: bool = False,
+):
     """
     Displays a DataFrame representing a table as a heatmap.
 
     Parameters
     ----------
-    table : ~pandas.DataFrame
+    df : ~pandas.DataFrame
         table to be displayed.
     title : str, optional
         string of chart title; defaults depend on type of range plot.
@@ -47,6 +48,8 @@ def view_table(
         whether to annotate heatmap with values.
     fmt : str
         string format for annotations. Default is '.2f'.
+    return_fig : bool
+        If True, return the Matplotlib figure object instead of displaying.
     """
 
     if not isinstance(df, pd.DataFrame):
@@ -70,7 +73,6 @@ def view_table(
     elif len(yticklabels) != len(df.index):
         raise ValueError("Number of yticklabels must match number of rows")
 
-    ax: plt.Axes
     fig, ax = plt.subplots(figsize=figsize)
     sns.set(style="ticks")
     sns.heatmap(
@@ -91,8 +93,10 @@ def view_table(
     ax.set_title(title, fontsize=title_fontsize)
     plt.tight_layout()
 
-    plt.show()
-
+    if return_fig:
+        return fig
+    else:
+        plt.show()
 
 if __name__ == "__main__":
     data = {
