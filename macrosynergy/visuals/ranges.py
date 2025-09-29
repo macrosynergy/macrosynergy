@@ -44,7 +44,53 @@ def view_ranges(
     df : ~pandas.DataFrame
         standardized DataFrame with the necessary columns: 'cid', 'xcat', 'real_date'
         and at least one column with values of interest.
-    ...
+    xcats : List[str]
+        extended categories to be checked on. Default is all in the DataFrame.
+    cids : List[str]
+        cross sections to plot. Default is all in DataFrame.
+    start : str
+        earliest date in ISO format. Default earliest date in df.
+    end : str
+        latest date in ISO format. Default is latest date in df.
+    val : str
+        name of column that contains the values. Default is 'value'.
+    kind : str
+        type of range plot. Default is 'bar'; other option is 'box'.
+    sort_cids_by : str
+        criterion for sorting cids on x-axis; Arguments can be 'mean' and 'std'. Default
+        is None, i.e. original order. Ordering will be based on the first category if the
+        category is defined over the complete panel. Otherwise, mean and standard deviation
+        calculated, of the cross-sections, computed across all categories.
+    title : str
+        string of chart title; defaults depend on type of range plot.
+    title_fontsize : int
+        font size of the title. Default is None, uses matplotlib default.
+    ylab : str
+        y label. Default is no label.
+    size : Tuple[float]
+        Tuple of width and height of graph. Default is (16, 8).
+    xcat_labels : Union[List[str], Dict[str, str]]
+        custom labels to be used for the ranges.
+    legend_loc : str
+        location of legend; passed to matplotlib.pyplot.legend() as `loc`. Default is
+        'center right'.
+    legend_bbox_to_anchor : Tuple[float]
+        passed to matplotlib.pyplot.legend() as `bbox_to_anchor`. Default is None.
+        Please see [Matplotlib's Legend Documentation]:
+        (https://matplotlib.org/stable/api/_as_gen/matplotlib.pyplot.legend.html) for more
+        information on the legend parameters `loc` and `bbox_to_anchor`.
+    facet : bool
+        If True, facets the plot by xcat. Default is False.
+    ncols : int
+        Number of columns in the facet plot. Default is None, which will be set to
+        `ceil(n_xcats / nrows)`.
+    nrows : int
+        Number of rows in the facet plot. Default is None, which will be set to
+        `min(n_xcats, 2)`.
+    drop_cid_labels : bool
+        If True, the x-axis labels for cids will be dropped when plotting a facet. 
+        Default is False. This is useful when there are many cids and the labels would 
+        overlap.
     return_fig : bool
         If True, return the Matplotlib figure object instead of displaying.
     """
