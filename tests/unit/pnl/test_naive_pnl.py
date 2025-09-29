@@ -850,7 +850,6 @@ class TestAll(unittest.TestCase):
                 thresh=2,
                 neutral="zero",
                 sig_add=0,
-                sig_op="zn_score_pan",
             )
 
         results_df = create_results_dataframe(
