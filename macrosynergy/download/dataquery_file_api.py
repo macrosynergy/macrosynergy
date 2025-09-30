@@ -656,7 +656,7 @@ class DataQueryFileAPIClient:
         filename: Optional[str] = None,
         out_dir: Optional[str] = None,
         overwrite: bool = False,
-        qdf: bool = False,
+        qdf: bool = True,
         as_csv: bool = False,
         keep_raw_data: bool = False,
         chunk_size: Optional[int] = None,
@@ -683,7 +683,8 @@ class DataQueryFileAPIClient:
         overwrite : bool
             If True, overwrites the file if it already exists. Default is False.
         qdf : bool
-            If True, converts the DataFrame to a QuantamentalDataFrame.
+            If True, converts the DataFrame to a QuantamentalDataFrame. If False, files
+            are saved as-is in the ticker-based Parquet format. Default is True.
         as_csv : bool
             If True, saves the downloaded datasets as CSV files. Default is False, with
             Parquet as the default format.
@@ -780,7 +781,7 @@ class DataQueryFileAPIClient:
         filenames: List[str],
         out_dir: Optional[str] = None,
         overwrite: bool = False,
-        qdf: bool = False,
+        qdf: bool = True,
         as_csv: bool = False,
         keep_raw_data: bool = False,
         max_retries: int = 3,
@@ -798,6 +799,15 @@ class DataQueryFileAPIClient:
             A list of full filenames to be downloaded.
         out_dir : str
             The directory to save the downloaded files.
+        overwrite : bool
+            If True, overwrites files if they already exist. Default is False.
+        qdf : bool
+            If True, converts the DataFrame to a QuantamentalDataFrame. If False, files
+            are saved as-is in the ticker-based Parquet format. Default is True.
+        as_csv : bool
+            If True, saves the DataFrame as a CSV file. Default is False.
+        keep_raw_data : bool
+            If True, keeps the raw data files after conversion. Default is False.
         max_retries : int
             The number of times to retry downloading the entire list of failed files.
         n_jobs : int
@@ -841,7 +851,7 @@ class DataQueryFileAPIClient:
             for future in tqdm(
                 cf.as_completed(futures),
                 total=len(futures),
-                desc="Downloading Parquet files",
+                desc="Downloading files",
                 disable=not show_progress,
             ):
                 fname = futures[future]
@@ -910,7 +920,7 @@ class DataQueryFileAPIClient:
         to_datetime: Optional[str] = None,
         file_datetime: Optional[str] = None,
         overwrite: bool = False,
-        qdf: bool = False,
+        qdf: bool = True,
         as_csv: bool = False,
         keep_raw_data: bool = False,
         chunk_size: Optional[int] = None,
@@ -942,7 +952,8 @@ class DataQueryFileAPIClient:
         overwrite : bool
             If True, overwrites files if they already exist. Default is False.
         qdf : bool
-            If True, converts the DataFrame to a QuantamentalDataFrame.
+            If True, converts the DataFrame to a QuantamentalDataFrame. If False, files
+            are saved as-is in the ticker-based Parquet format. Default is True.
         as_csv : bool
             If True, saves the downloaded datasets as CSV files. Default is False, with
             Parquet as the default format.
