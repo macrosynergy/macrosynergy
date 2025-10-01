@@ -884,7 +884,10 @@ class DataQueryFileAPIClient:
     def download_catalog_file(
         self,
         out_dir: Optional[str] = None,
+        add_dataset_column: bool = False,
+        as_csv: bool = False,
         overwrite: bool = False,
+        keep_raw_data: bool = False,
         timeout: Optional[float] = DQ_FILE_API_TIMEOUT,
     ) -> str:
         out_dir = out_dir or self.out_dir
@@ -896,12 +899,33 @@ class DataQueryFileAPIClient:
         ).iloc[0]
         latest_filename = latest_catalog["file-name"]
         logger.info(f"Latest catalog file identified: {latest_filename}")
-        return self.download_file(
+        file_path = self.download_file(
             filename=latest_filename,
             out_dir=out_dir,
             overwrite=overwrite,
             timeout=timeout,
         )
+
+        if not (add_dataset_column or as_csv):
+            return file_path
+
+        df = pd.read_parquet(file_path)
+
+        if add_dataset_column:
+            df.loc[:, "Dataset"] = df["Theme"].apply(
+                lambda x: "JPMAQS_" + str(x).upper().replace(" ", "_")
+            )
+
+        if as_csv:
+            csv_file_path = Path(file_path).with_suffix(".csv")
+            df.to_csv(csv_file_path, index=False)
+            if not keep_raw_data:
+                Path(file_path).unlink(missing_ok=True)
+            file_path = str(csv_file_path)
+        else:
+            df.to_parquet(file_path, index=False)
+
+        return file_path
 
     def download_full_snapshot(
         self,
