@@ -146,6 +146,7 @@ from macrosynergy.download.fusion_interface import (
     request_wrapper,
     request_wrapper_stream_bytes_to_disk,
     _wait_for_api_call,
+    cache_decorator,
     convert_ticker_based_parquet_file_to_qdf,
 )
 from macrosynergy.download.dataquery import OAUTH_TOKEN_URL
@@ -401,7 +402,8 @@ class DataQueryFileAPIClient:
 
         return df
 
-    def list_available_files(
+    @cache_decorator(60)
+    def _list_available_files(
         self,
         file_group_id: str,
         group_id: str = JPMAQS_GROUP_ID,
@@ -409,30 +411,11 @@ class DataQueryFileAPIClient:
         end_date: str = None,
         convert_metadata_timestamps: bool = True,
         include_unavailable: bool = False,
+        cache_bust: Any = None,
     ) -> pd.DataFrame:
-        """
-        Lists all available files for a specific file group within a date range.
+        if cache_bust is not None:
+            pass  # pragma: no cover
 
-        Parameters
-        ----------
-        file_group_id : str
-            The identifier for the file group (e.g., "JPMAQS_MACROECONOMIC_BALANCE_SHEETS").
-        group_id : str
-            The identifier for the data provider group.
-        start_date : str
-            The start date for the search in "YYYYMMDD" format.
-        end_date : str
-            The end date for the search in "YYYYMMDD" format. Defaults to today.
-        convert_metadata_timestamps : bool
-            If True, convert timestamp columns to datetime objects.
-        include_unavailable : bool
-            If True, includes files that are listed but not currently available.
-
-        Returns
-        -------
-        pd.DataFrame
-            A DataFrame of available files with their details.
-        """
         if end_date is None:
             end_date = pd.Timestamp.utcnow().strftime("%Y%m%d")
         endpoint = "/group/files/available-files"
@@ -467,6 +450,52 @@ class DataQueryFileAPIClient:
                     raise InvalidResponseError(f'Missing "{col}" in response')
                 df[col] = pd_to_datetime_compat(df[col], utc=True)
         return df
+
+    def list_available_files(
+        self,
+        file_group_id: str,
+        group_id: str = JPMAQS_GROUP_ID,
+        start_date: str = JPMAQS_EARLIEST_FILE_DATE,
+        end_date: str = None,
+        convert_metadata_timestamps: bool = True,
+        include_unavailable: bool = False,
+        no_cache: bool = False,
+    ) -> pd.DataFrame:
+        """
+        Lists all available files for a specific file group within a date range.
+
+        Parameters
+        ----------
+        file_group_id : str
+            The identifier for the file group (e.g., "JPMAQS_MACROECONOMIC_BALANCE_SHEETS").
+        group_id : str
+            The identifier for the data provider group.
+        start_date : str
+            The start date for the search in "YYYYMMDD" format.
+        end_date : str
+            The end date for the search in "YYYYMMDD" format. Defaults to today.
+        convert_metadata_timestamps : bool
+            If True, convert timestamp columns to datetime objects.
+        include_unavailable : bool
+            If True, includes files that are listed but not currently available.
+        no_cache : bool
+            If True, bypass the cache and fetch fresh data. Defaults to False.
+
+        Returns
+        -------
+        pd.DataFrame
+            A DataFrame of available files with their details.
+        """
+        cache_bust = time.time() if no_cache else None
+        return self._list_available_files(
+            file_group_id=file_group_id,
+            group_id=group_id,
+            start_date=start_date,
+            end_date=end_date,
+            convert_metadata_timestamps=convert_metadata_timestamps,
+            include_unavailable=include_unavailable,
+            cache_bust=cache_bust,
+        )
 
     def list_available_files_for_all_file_groups(
         self,
