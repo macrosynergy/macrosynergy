@@ -700,6 +700,89 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
                 since_datetime="20230101", file_group_ids="not-a-list"
             )
 
+    @patch.object(DataQueryFileAPIClient, "_get")
+    def test_cache_decorator_caching_and_buster(self, mock_get):
+        DataQueryFileAPIClient._list_available_files.cache_clear()
+        call_counter = {"count": 0}
+
+        def fake_get(endpoint, params):
+            call_counter["count"] += 1
+            return {
+                "available-files": [
+                    {
+                        "file-datetime": f"20230101T10000{call_counter['count']}",
+                        "last-modified": f"20230101T10000{call_counter['count']}",
+                        "is-available": True,
+                    }
+                ]
+            }
+
+        mock_get.side_effect = fake_get
+        client = DataQueryFileAPIClient(client_id="id", client_secret="secret")
+        file_group_id = f"test_id_{id(self)}"
+        df1 = client.list_available_files(file_group_id=file_group_id, no_cache=False)
+        self.assertEqual(call_counter["count"], 1)
+        df2 = client.list_available_files(file_group_id=file_group_id, no_cache=False)
+        self.assertEqual(call_counter["count"], 1)
+        self.assertEqual(df1.to_dict(), df2.to_dict())
+
+        df3 = client.list_available_files(file_group_id=file_group_id, no_cache=True)
+        self.assertEqual(call_counter["count"], 2)
+        self.assertNotEqual(df1.to_dict(), df3.to_dict())
+
+        DataQueryFileAPIClient._list_available_files.cache_clear()
+        df4 = client.list_available_files(file_group_id=file_group_id, no_cache=False)
+        self.assertEqual(call_counter["count"], 3)
+        self.assertEqual(df4.to_dict(), df4.to_dict())
+
+    @patch.object(DataQueryFileAPIClient, "_get")
+    def test_cache_decorator_ttl_expiry(self, mock_get):
+        DataQueryFileAPIClient._list_available_files.cache_clear()
+        call_counter = {"count": 0}
+
+        def fake_get(endpoint, params):
+            call_counter["count"] += 1
+            return {
+                "available-files": [
+                    {
+                        "file-datetime": f"20230101T10000{call_counter['count']}",
+                        "last-modified": f"20230101T10000{call_counter['count']}",
+                        "is-available": True,
+                    }
+                ]
+            }
+
+        mock_get.side_effect = fake_get
+        client = DataQueryFileAPIClient(client_id="id", client_secret="secret")
+        file_group_id = f"test_id_{id(self)}_ttl"
+        import macrosynergy.download.fusion_interface as fusion_interface
+
+        orig_time = fusion_interface.time.time
+        try:
+            fusion_interface.time.time = lambda: 0
+            df1 = client.list_available_files(
+                file_group_id=file_group_id, no_cache=False
+            )
+            self.assertEqual(call_counter["count"], 1)
+
+            fusion_interface.time.time = lambda: 0
+            df2 = client.list_available_files(
+                file_group_id=file_group_id, no_cache=False
+            )
+            self.assertEqual(call_counter["count"], 1)
+            self.assertEqual(df1.to_dict(), df2.to_dict())
+
+            fusion_interface.time.time = lambda: 61
+
+            DataQueryFileAPIClient._list_available_files.cache_clear()
+            df3 = client.list_available_files(
+                file_group_id=file_group_id, no_cache=False
+            )
+            self.assertEqual(call_counter["count"], 2)
+            self.assertNotEqual(df1.to_dict(), df3.to_dict())
+        finally:
+            fusion_interface.time.time = orig_time
+
 
 if __name__ == "__main__":
     unittest.main()
