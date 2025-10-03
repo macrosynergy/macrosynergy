@@ -1,5 +1,4 @@
 import unittest
-import random
 import numpy as np
 import pandas as pd
 
@@ -11,46 +10,12 @@ from macrosynergy.panel.historic_vol import (
     expo_weights,
     expo_std,
     flat_std,
+    sq_std,
 )
 from macrosynergy.management.utils import reduce_df
 
 
-class TestAll(unittest.TestCase):
-    def setUp(self) -> None:
-        return super().setUp()
-
-    def tearDown(self) -> None:
-        return super().tearDown()
-
-    def dataframe_generator(self):
-        self.cids: List[str] = ["AUD", "CAD", "GBP"]
-        self.xcats: List[str] = ["CRY", "XR"]
-
-        df_cids = pd.DataFrame(
-            index=self.cids, columns=["earliest", "latest", "mean_add", "sd_mult"]
-        )
-        df_cids.loc["AUD", :] = ["2010-01-01", "2020-12-31", 0.5, 2]
-        df_cids.loc["CAD", :] = ["2011-01-01", "2020-11-30", 0, 1]
-        df_cids.loc["GBP", :] = ["2012-01-01", "2020-11-30", -0.2, 0.5]
-
-        df_xcats = pd.DataFrame(
-            index=self.xcats,
-            columns=[
-                "earliest",
-                "latest",
-                "mean_add",
-                "sd_mult",
-                "ar_coef",
-                "back_coef",
-            ],
-        )
-
-        df_xcats.loc["CRY", :] = ["2011-01-01", "2020-10-30", 1, 2, 0.9, 0.5]
-        df_xcats.loc["XR", :] = ["2010-01-01", "2020-12-31", 0, 1, 0, 0.3]
-
-        dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
-        self.dfd: pd.DataFrame = dfd
-
+class TestEstimationMethods(unittest.TestCase):
     def test_expo_weights(self):
         lback_periods = 21
         half_life = 11
@@ -103,6 +68,70 @@ class TestAll(unittest.TestCase):
 
         output = flat_std(data, True)
         self.assertIsInstance(output, float)  # test type
+
+    def test_sq_std(self):
+        lback_periods = 10
+        half_life = 5
+        w_series = expo_weights(lback_periods, half_life)
+
+        # Mismatched lengths should raise AssertionError
+        with self.assertRaises(AssertionError):
+            data = np.random.randn(lback_periods + 1)
+            sq_std(data, w_series)
+
+        # Output should be float for valid inputs
+        data = np.random.randn(lback_periods)
+        output = sq_std(data, w_series, remove_zeros=False)
+        self.assertIsInstance(output, float)
+
+        # Compare with numpy weighted std for consistency
+        arr = np.array([1, 2, 3, 4, 5])
+        w = expo_weights(len(arr), 2)
+        manual = np.sqrt(np.sum(w * (arr - np.sum(w * arr)) ** 2))
+        self.assertAlmostEqual(sq_std(arr, w, False), manual)
+
+        # Test with zeros removed
+        arr = np.array([0, 0, 7, 0, 0])
+        w = expo_weights(len(arr), 3)
+        result = sq_std(arr, w, True)
+        self.assertEqual(result, 0.0)  # only one non-zero → std = 0
+
+
+class TestAll(unittest.TestCase):
+    def setUp(self) -> None:
+        return super().setUp()
+
+    def tearDown(self) -> None:
+        return super().tearDown()
+
+    def dataframe_generator(self):
+        self.cids: List[str] = ["AUD", "CAD", "GBP"]
+        self.xcats: List[str] = ["CRY", "XR"]
+
+        df_cids = pd.DataFrame(
+            index=self.cids, columns=["earliest", "latest", "mean_add", "sd_mult"]
+        )
+        df_cids.loc["AUD", :] = ["2010-01-01", "2020-12-31", 0.5, 2]
+        df_cids.loc["CAD", :] = ["2011-01-01", "2020-11-30", 0, 1]
+        df_cids.loc["GBP", :] = ["2012-01-01", "2020-11-30", -0.2, 0.5]
+
+        df_xcats = pd.DataFrame(
+            index=self.xcats,
+            columns=[
+                "earliest",
+                "latest",
+                "mean_add",
+                "sd_mult",
+                "ar_coef",
+                "back_coef",
+            ],
+        )
+
+        df_xcats.loc["CRY", :] = ["2011-01-01", "2020-10-30", 1, 2, 0.9, 0.5]
+        df_xcats.loc["XR", :] = ["2010-01-01", "2020-12-31", 0, 1, 0, 0.3]
+
+        dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
+        self.dfd: pd.DataFrame = dfd
 
     def test_historic_vol(self):
         self.dataframe_generator()
@@ -231,7 +260,7 @@ class TestAll(unittest.TestCase):
         self.assertTrue(nas_test_res.isna().sum() == 19)
 
         # since the last 4 are non-NaNs, the 5th to last is a NaN value.
-        self.assertTrue(nas_test_res.isna().tolist()[-5] == True)
+        self.assertTrue(nas_test_res.isna().tolist()[-5])
         self.assertFalse(any(nas_test_res.isna().tolist()[-4:]))
 
         # test again, but for CAD from 2011-01-01 to 2011-02-01.
@@ -249,7 +278,7 @@ class TestAll(unittest.TestCase):
         self.assertTrue(nas_test_res.isna().sum() == 19)
 
         # since the last 3 are non-NaNs, the 4th to last is a NaN value.
-        self.assertTrue(nas_test_res.isna().tolist()[-4] == True)
+        self.assertTrue(nas_test_res.isna().tolist()[-4])
         self.assertFalse(any(nas_test_res.isna().tolist()[-3:]))
 
         # repeat the test for the 'xma' method but use monthly estimation frequency.

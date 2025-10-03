@@ -28,6 +28,7 @@ def plot_acf(
     share_y: bool = True,
     zero: bool = False,
     auto_ylims: bool = True,
+    return_fig: bool = False,
     **kwargs,
 ):
     """
@@ -101,7 +102,7 @@ def plot_acf(
         "auto_ylims": auto_ylims,
     }
 
-    _plot_acf(
+    return _plot_acf(
         df=df,
         cids=cids,
         xcat=xcat,
@@ -115,6 +116,7 @@ def plot_acf(
         title=title,
         share_x=share_x,
         share_y=share_y,
+        return_fig=return_fig,
         **kwargs,
     )
 
@@ -136,6 +138,7 @@ def plot_pacf(
     share_y: bool = True,
     zero: bool = False,
     auto_ylims: bool = True,
+    return_fig: bool = False,
     **kwargs,
 ):
     """
@@ -212,7 +215,7 @@ def plot_pacf(
         "auto_ylims": auto_ylims,
     }
 
-    _plot_acf(
+    return _plot_acf(
         df=df,
         cids=cids,
         xcat=xcat,
@@ -226,6 +229,7 @@ def plot_pacf(
         title=title,
         share_x=share_x,
         share_y=share_y,
+        return_fig=return_fig,
         **kwargs,
     )
 
@@ -244,9 +248,9 @@ def _plot_acf(
     title: Optional[str] = None,
     share_x: bool = True,
     share_y: bool = True,
+    return_fig: bool = False,
     **kwargs,
 ):
-
     with FacetPlot(
         df=df,
         xcats=[xcat],
@@ -267,7 +271,7 @@ def _plot_acf(
 
         fp.cids = sorted(fp.cids)
 
-        fp.lineplot(
+        fig = fp.lineplot(
             plot_func=plot_func,
             plot_func_kwargs=plot_func_kwargs,
             share_x=share_x,
@@ -276,9 +280,12 @@ def _plot_acf(
             title=title,
             cid_grid=True,
             interpolate=True,
+            return_figure=return_fig,
             **kwargs,
         )
 
+    if return_fig:
+        return fig
 
 def _statsmodels_plot_acf_wrapper(df, plt_dict, ax, **kwargs):
     """

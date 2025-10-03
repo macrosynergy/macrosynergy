@@ -197,6 +197,12 @@ class TestSegmentedFileDownloaderNetworking(unittest.TestCase):
         self.assertIs(cm.exception, exception)
         self.assertEqual(mock_get.call_count, 1)
 
+    @patch("requests.get")
+    def test_download_chunk_retry_keyboard_interrupt(self, mock_get):
+        mock_get.side_effect = KeyboardInterrupt
+        with self.assertRaises(KeyboardInterrupt):
+            self.downloader._download_chunk_retry(0, 0, 100, retries=1)
+
 
 @patch("shutil.rmtree")
 @patch("pathlib.Path.mkdir")
@@ -259,6 +265,19 @@ class TestSegmentedFileDownloaderOrchestration(unittest.TestCase):
         self.downloader._download_chunks_concurrently(chunks, 250)
         self.assertEqual(mock_executor.submit.call_count, 3)
 
+    @patch("concurrent.futures.as_completed")
+    @patch("concurrent.futures.ThreadPoolExecutor")
+    def test_download_chunks_concurrently_keyboard_interrupt(
+        self, mock_executor_cls, mock_as_completed, mock_mkdir, mock_rmtree
+    ):
+        mock_executor = mock_executor_cls.return_value.__enter__.return_value
+        future = MagicMock()
+        mock_executor.submit.return_value = future
+        mock_as_completed.side_effect = KeyboardInterrupt
+        with self.assertRaises(KeyboardInterrupt):
+            self.downloader._download_chunks_concurrently(range(0, 50, 10), 50)
+        mock_executor.shutdown.assert_called_once_with(wait=False, cancel_futures=True)
+
     @patch(
         "macrosynergy.download.dataquery_file_api.SegmentedFileDownloader._assemble_parts"
     )
@@ -301,12 +320,12 @@ class TestSegmentedFileDownloaderOrchestration(unittest.TestCase):
 
         with patch(
             "macrosynergy.download.dataquery_file_api.SegmentedFileDownloader._download_chunks_concurrently"
-        ), patch("builtins.open", mock_open()), patch("shutil.copyfileobj"), patch(
-            "pathlib.Path.stat"
-        ) as mock_stat:
-            mock_stat.return_value.st_size = 1024 * 5
-
-            self.downloader.download()
+        ):
+            with patch("builtins.open", mock_open()):
+                with patch("shutil.copyfileobj"):
+                    with patch("pathlib.Path.stat") as mock_stat:
+                        mock_stat.return_value.st_size = 1024 * 5
+                        self.downloader.download()
 
         self.assertEqual(mock_get_size.call_count, 2)
         # Attempt 1 (fail): rmtree at start(1) + rmtree in cleanup(1) = 2
@@ -331,6 +350,20 @@ class TestSegmentedFileDownloaderOrchestration(unittest.TestCase):
         self.assertEqual(mock_get_size.call_count, 3)
         # rmtree called at start + in cleanup for each of the 3 failed attempts
         self.assertEqual(mock_rmtree.call_count, 6)
+
+    @patch("time.sleep", MagicMock())
+    @patch(
+        "macrosynergy.download.dataquery_file_api.SegmentedFileDownloader._get_file_size"
+    )
+    def test_download_debug_mode(self, mock_get_size, mock_mkdir, mock_rmtree):
+        self.downloader.debug = True
+        self.downloader.max_file_retries = 3
+        error = requests.exceptions.Timeout("Timed out")
+        mock_get_size.side_effect = error
+        with self.assertRaises(requests.exceptions.Timeout) as cm:
+            self.downloader.download()
+        self.assertIs(cm.exception, error)
+        mock_get_size.assert_called_once()
 
     @patch("time.sleep", MagicMock())
     @patch(
