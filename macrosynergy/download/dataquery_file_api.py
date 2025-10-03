@@ -146,6 +146,7 @@ from macrosynergy.download.fusion_interface import (
     request_wrapper,
     request_wrapper_stream_bytes_to_disk,
     _wait_for_api_call,
+    cache_decorator,
     convert_ticker_based_parquet_file_to_qdf,
 )
 from macrosynergy.download.dataquery import OAUTH_TOKEN_URL
@@ -401,7 +402,8 @@ class DataQueryFileAPIClient:
 
         return df
 
-    def list_available_files(
+    @cache_decorator(60)
+    def _list_available_files(
         self,
         file_group_id: str,
         group_id: str = JPMAQS_GROUP_ID,
@@ -409,30 +411,11 @@ class DataQueryFileAPIClient:
         end_date: str = None,
         convert_metadata_timestamps: bool = True,
         include_unavailable: bool = False,
+        cache_bust: Any = None,
     ) -> pd.DataFrame:
-        """
-        Lists all available files for a specific file group within a date range.
+        if cache_bust is not None:
+            pass  # pragma: no cover
 
-        Parameters
-        ----------
-        file_group_id : str
-            The identifier for the file group (e.g., "JPMAQS_MACROECONOMIC_BALANCE_SHEETS").
-        group_id : str
-            The identifier for the data provider group.
-        start_date : str
-            The start date for the search in "YYYYMMDD" format.
-        end_date : str
-            The end date for the search in "YYYYMMDD" format. Defaults to today.
-        convert_metadata_timestamps : bool
-            If True, convert timestamp columns to datetime objects.
-        include_unavailable : bool
-            If True, includes files that are listed but not currently available.
-
-        Returns
-        -------
-        pd.DataFrame
-            A DataFrame of available files with their details.
-        """
         if end_date is None:
             end_date = pd.Timestamp.utcnow().strftime("%Y%m%d")
         endpoint = "/group/files/available-files"
@@ -467,6 +450,52 @@ class DataQueryFileAPIClient:
                     raise InvalidResponseError(f'Missing "{col}" in response')
                 df[col] = pd_to_datetime_compat(df[col], utc=True)
         return df
+
+    def list_available_files(
+        self,
+        file_group_id: str,
+        group_id: str = JPMAQS_GROUP_ID,
+        start_date: str = JPMAQS_EARLIEST_FILE_DATE,
+        end_date: str = None,
+        convert_metadata_timestamps: bool = True,
+        include_unavailable: bool = False,
+        no_cache: bool = False,
+    ) -> pd.DataFrame:
+        """
+        Lists all available files for a specific file group within a date range.
+
+        Parameters
+        ----------
+        file_group_id : str
+            The identifier for the file group (e.g., "JPMAQS_MACROECONOMIC_BALANCE_SHEETS").
+        group_id : str
+            The identifier for the data provider group.
+        start_date : str
+            The start date for the search in "YYYYMMDD" format.
+        end_date : str
+            The end date for the search in "YYYYMMDD" format. Defaults to today.
+        convert_metadata_timestamps : bool
+            If True, convert timestamp columns to datetime objects.
+        include_unavailable : bool
+            If True, includes files that are listed but not currently available.
+        no_cache : bool
+            If True, bypass the cache and fetch fresh data. Defaults to False.
+
+        Returns
+        -------
+        pd.DataFrame
+            A DataFrame of available files with their details.
+        """
+        cache_bust = time.time() if no_cache else None
+        return self._list_available_files(
+            file_group_id=file_group_id,
+            group_id=group_id,
+            start_date=start_date,
+            end_date=end_date,
+            convert_metadata_timestamps=convert_metadata_timestamps,
+            include_unavailable=include_unavailable,
+            cache_bust=cache_bust,
+        )
 
     def list_available_files_for_all_file_groups(
         self,
@@ -894,7 +923,10 @@ class DataQueryFileAPIClient:
     def download_catalog_file(
         self,
         out_dir: Optional[str] = None,
+        add_dataset_column: bool = False,
+        as_csv: bool = False,
         overwrite: bool = False,
+        keep_raw_data: bool = False,
         timeout: Optional[float] = DQ_FILE_API_TIMEOUT,
     ) -> str:
         out_dir = out_dir or self.out_dir
@@ -906,12 +938,33 @@ class DataQueryFileAPIClient:
         ).iloc[0]
         latest_filename = latest_catalog["file-name"]
         logger.info(f"Latest catalog file identified: {latest_filename}")
-        return self.download_file(
+        file_path = self.download_file(
             filename=latest_filename,
             out_dir=out_dir,
             overwrite=overwrite,
             timeout=timeout,
         )
+
+        if not (add_dataset_column or as_csv):
+            return file_path
+
+        df = pd.read_parquet(file_path)
+
+        if add_dataset_column:
+            df.loc[:, "Dataset"] = df["Theme"].apply(
+                lambda x: "JPMAQS_" + str(x).upper().replace(" ", "_")
+            )
+
+        if as_csv:
+            csv_file_path = Path(file_path).with_suffix(".csv")
+            df.to_csv(csv_file_path, index=False)
+            if not keep_raw_data:
+                Path(file_path).unlink(missing_ok=True)
+            file_path = str(csv_file_path)
+        else:
+            df.to_parquet(file_path, index=False)
+
+        return file_path
 
     def download_full_snapshot(
         self,
