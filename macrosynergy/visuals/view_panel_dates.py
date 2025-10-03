@@ -12,6 +12,7 @@ def view_panel_dates(
     header: str = None,
     title_fontsize: int = None,
     row_order: List[str] = None,
+    return_fig: bool = False,
 ):
     """
     Visualize panel dates with color codes.
@@ -34,13 +35,13 @@ def view_panel_dates(
         A list of strings specifying the order of rows in the heatmap. These rows
         correspond to the columns of the input DataFrame. If None, the default order
         used by Seaborn will be applied.
+    return_fig : bool
+        If True, returns the Matplotlib figure object instead of showing it.
     """
 
     # DataFrame of official timestamps.
     if all(df.dtypes == object):
         df = df.apply(pd.to_datetime)
-        # All series, in principle, should be populated to the last active release date
-        # in the DataFrame.
 
         if use_last_businessday:
             maxdate: pd.Timestamp = (
@@ -50,13 +51,10 @@ def view_panel_dates(
             maxdate: pd.Timestamp = df.max().max()
 
         df = business_day_dif(df=df, maxdate=maxdate)
-
         df = df.astype(float)
-        # Ideally the data type should be int, but Pandas cannot represent NaN as int.
-        # -- https://pandas.pydata.org/pandas-docs/stable/user_guide/gotchas.html#support-for-integer-na
+
         if header is None:
             header = f"Missing days up to {maxdate.strftime('%Y-%m-%d')}"
-
     else:
         if header is None:
             header = "Start years of quantamental indicators."
@@ -82,7 +80,7 @@ def view_panel_dates(
         df = df.loc[row_order]
 
     sns.set(rc={"figure.figsize": size})
-    sns.heatmap(
+    ax = sns.heatmap(
         df,
         cmap="YlOrBr",
         center=df.stack().mean(),
@@ -94,4 +92,10 @@ def view_panel_dates(
     plt.xlabel("")
     plt.ylabel("")
     plt.title(header, fontsize=title_fontsize)
-    plt.show()
+
+    fig = ax.get_figure()
+
+    if return_fig:
+        return fig
+    else:
+        plt.show()

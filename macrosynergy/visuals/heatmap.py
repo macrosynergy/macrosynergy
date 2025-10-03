@@ -294,6 +294,7 @@ class Heatmap(Plotter):
         show_boundaries: Optional[bool] = False,
         annotation_fontsize: int = 14,
         tick_fontsize: int = 13,
+        return_fig: bool = False,
         *args,
         **kwargs,
     ):
@@ -432,7 +433,7 @@ class Heatmap(Plotter):
         elif isinstance(figsize, list):
             figsize = tuple(figsize)
 
-        self.plot(
+        fig = self.plot(
             df=df,
             figsize=figsize,
             x_axis_label=x_axis_label,
@@ -447,7 +448,7 @@ class Heatmap(Plotter):
             show=show,
             save_to_file=save_to_file,
             dpi=dpi,
-            return_figure=return_figure,
+            return_figure=return_fig,
             on_axis=on_axis,
             max_xticks=max_xticks,
             cmap=cmap,
@@ -460,6 +461,9 @@ class Heatmap(Plotter):
             annotation_fontsize=annotation_fontsize,
             tick_fontsize=tick_fontsize,
         )
+
+        if return_figure:
+            return fig
 
 
 if __name__ == "__main__":

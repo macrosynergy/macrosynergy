@@ -34,6 +34,7 @@ def view_ranges(
     ncols: int = None,
     nrows: int = None,
     drop_cid_labels: bool = False,
+    return_fig: bool = False,
 ):
     """
     Plots averages and various ranges across sections for one or more categories.
@@ -90,6 +91,8 @@ def view_ranges(
         If True, the x-axis labels for cids will be dropped when plotting a facet. 
         Default is False. This is useful when there are many cids and the labels would 
         overlap.
+    return_fig : bool
+        If True, return the Matplotlib figure object instead of displaying.
     """
 
     df = QuantamentalDataFrame(df)
@@ -110,23 +113,17 @@ def view_ranges(
         sort_error = "Sorting parameter must either be 'mean' or 'std'."
         if  sort_cids_by not in ["mean", "std"]:
             raise ValueError(sort_error)
-        if sort_cids_by == "mean":
-            sort_cids_func = np.mean
-        else:
-            sort_cids_func = np.std
+        sort_cids_func = np.mean if sort_cids_by == "mean" else np.std
 
-    error_message = (
-        "The number of custom labels must match the defined number of "
-        "categories in pnl_cats."
-    )
     if xcat_labels is not None:
         if isinstance(xcat_labels, dict):
             xcat_labels = [xcat_labels[xcat] for xcat in xcats]
         if len(xcat_labels) != len(xcats):
-            raise ValueError(error_message)
+            raise ValueError(
+                "The number of custom labels must match the defined number of categories."
+            )
 
-    # Unique cross-sections across the union of categories passed - not the intersection.
-    # Order of categories will be preserved.
+    # Reduce dataframe
     df, xcats, cids = reduce_df(df, xcats, cids, start, end, out_all=True)
 
     s_date = df["real_date"].min().strftime("%Y-%m-%d")
@@ -145,17 +142,15 @@ def view_ranges(
     if ylab is None:
         ylab = ""
 
+    # Ordering logic
     filt_1 = df["xcat"] == xcats[0]
     first_xcat_cids = set(df[filt_1]["cid"])
-    # First category is not defined over all cross-sections.
     order_condition = list(set(cids)) == list(first_xcat_cids)
 
     if order_condition and sort_cids_func is not None:
-        # Sort exclusively on the first category.
         dfx = df[filt_1].groupby(["cid"], observed=True)[val].apply(sort_cids_func)
         order = dfx.sort_values(ascending=False).index
     elif not order_condition and sort_cids_func is not None:
-        # Sort across all categories on the available cross-sections.
         dfx = df.groupby(["cid"], observed=True)[val].apply(sort_cids_func)
         order = dfx.sort_values(ascending=False).index
     else:
@@ -213,14 +208,14 @@ def view_ranges(
             ax.set_xticklabels([])
             ax.set_xlabel("")
 
-            ax.set_xticklabels([])
-
     def _set_main_axis(ax, title, ylab):
         ax.set_title(title, fontdict={"fontsize": 16})
         ax.set_xlabel("")
         ax.set_ylabel(ylab)
         ax.xaxis.grid(True)
         ax.axhline(0, ls="--", linewidth=1, color="black")
+
+    fig = None
 
     if facet:
         n_xcats = len(xcats)
@@ -244,7 +239,6 @@ def view_ranges(
             fig.delaxes(axes[j])
         fig.suptitle(title, fontsize=16)
         plt.tight_layout(rect=[0, 0, 1, 0.97])
-        plt.show()
     else:
         fig, ax = plt.subplots(figsize=size)
         if kind == "bar":
@@ -268,7 +262,12 @@ def view_ranges(
                 bbox_to_anchor=legend_bbox_to_anchor,
             )
         plt.tight_layout()
+
+    if return_fig:
+        return fig
+    else:
         plt.show()
+
 
 
 if __name__ == "__main__":

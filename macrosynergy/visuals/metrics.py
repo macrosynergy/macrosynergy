@@ -28,6 +28,7 @@ def view_metrics(
     metric: str = "eop_lag",
     title: Optional[str] = None,
     figsize: Optional[Tuple[float]] = (14, None),
+    return_fig: bool = False,
 ) -> None:
     """
     A function to visualise the `eop_lag`, `mop_lag` or `grading` metrics for a given
@@ -98,7 +99,7 @@ def view_metrics(
     if not isinstance(figsize[1], (int, float)):
         raise ValueError("Second element of `figsize` must be a float")
 
-    heatmap.plot_metric(
+    fig = heatmap.plot_metric(
         x_axis_column="real_date",
         y_axis_column="cid",
         metric=metric,
@@ -110,7 +111,11 @@ def view_metrics(
         y_axis_label="Cross Sections",
         cmap=sns.color_palette("light:red", as_cmap=True),
         rotate_xticks=90,
+        return_fig=return_fig,
     )
+
+    if return_fig:
+        return fig
 
 
 if __name__ == "__main__":
@@ -137,6 +142,7 @@ if __name__ == "__main__":
     view_metrics(
         df=dfx,
         xcat="FX",
+        return_fig=True,
     )
     view_metrics(
         df=dfx,
