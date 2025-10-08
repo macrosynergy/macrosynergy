@@ -260,9 +260,14 @@ class SupervisedTorchModel(BaseEstimator):
         return filtered_cids
     
     def decoder_shrinkage(self, decoder):
+        # Ger weights
+        weights = [decoder[cid].weight for cid in decoder.keys()]
+        weights = torch.vstack(weights) # Shape (num_heads, hidden_dim)
         # Get the 2,1 norm of the decoder weights
-        # i.e. want sparsity of l2 column norms 
-        pass
+        # NOTE: this encourages column sparsity so its the L1 norm of the L2 norms of each column
+        l21_norm = torch.norm(weights, p=2, dim=0).sum()
+        
+        return l21_norm
     
 class MTFLRegressor(SupervisedTorchModel, RegressorMixin):
     def __init__(
@@ -412,12 +417,12 @@ if __name__ == "__main__":
     mtfl = MTFLRegressor(
         hidden_dim = 2,
         lr = 1e-3, 
-        decoder_sparsity = 0,
+        decoder_sparsity = 1,
         epochs = 10000,
         pct_train = 0.7,
         patience = 10,
         min_xs_samples = 36,
-        verbose = 1
+        verbose = 0
     )
 
     mtfl.fit(X,y)
