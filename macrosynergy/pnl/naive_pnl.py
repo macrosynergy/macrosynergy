@@ -811,7 +811,7 @@ class NaivePnL:
         title_adj: float = 0.95,
         y_label_adj: float = 0.95,
         legend_fontsize: int = None,
-        return_fig: bool = False
+        return_fig: bool = False,
     ) -> None:
         """
         Plot line chart of cumulative PnLs, single PnL, multiple PnL types per cross
@@ -1040,6 +1040,64 @@ class NaivePnL:
         if return_fig:
             return fg
         plt.show()
+
+    def get_input_data(self) -> pd.DataFrame:
+        """
+        Returns a DataFrame containing the input tickers (post any filtering).
+
+        Returns
+        -------
+        ~pandas.DataFrame
+            DataFrame containing the input tickers
+        """
+        return QuantamentalDataFrame(self.df, self._as_categorical).reduce_df(
+            cids=self.cids, xcats=list(set(self.xcats) - set([self.ret]))
+        )
+
+    def get_signals_data(self) -> pd.DataFrame:
+        """
+        Returns a DataFrame containing the signals used to generate the PnLs.
+
+        Returns
+        -------
+        ~pandas.DataFrame
+            DataFrame containing the signals used to generate the PnLs.
+        """
+        return QuantamentalDataFrame(
+            pd.concat(
+                [self.signal_df[xc].assign(xcat=xc) for xc in self.signal_df.keys()]
+            )
+            .dropna()
+            .reset_index(drop=True)
+            .rename(columns={"sig": "value"})
+        )
+
+    def get_returns_data(self) -> pd.DataFrame:
+        """
+        Returns a DataFrame containing the returns used to generate the PnLs.
+
+        Returns
+        -------
+        ~pandas.DataFrame
+            DataFrame containing the returns used to generate the PnLs.
+        """
+        return QuantamentalDataFrame(self.df, self._as_categorical).reduce_df(
+            cids=self.cids, xcats=[self.ret]
+        )
+
+    def get_pnls_data(self) -> pd.DataFrame:
+        """
+        Returns a DataFrame containing the PnLs generated.
+
+        Returns
+        -------
+        ~pandas.DataFrame
+            DataFrame containing the PnLs generated.
+        """
+        return QuantamentalDataFrame(
+            self.df,
+            self._as_categorical,
+        ).reduce_df(cids=self.cids, xcats=self.pnl_names)
 
     def signal_heatmap(
         self,
