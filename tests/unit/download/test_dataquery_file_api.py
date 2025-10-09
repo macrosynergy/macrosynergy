@@ -425,7 +425,7 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
             client.download_file(filename="invalidformat.parquet")
 
     @patch(
-        "macrosynergy.download.dataquery_file_api.convert_ticker_based_parquet_file_to_qdf"
+        "macrosynergy.download.dataquery_file_api.convert_ticker_based_parquet_file_to_qdf_pl"
     )
     @patch(
         "macrosynergy.download.dataquery_file_api.request_wrapper_stream_bytes_to_disk"
@@ -450,7 +450,7 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
         mock_convert.assert_not_called()
 
     @patch(
-        "macrosynergy.download.dataquery_file_api.convert_ticker_based_parquet_file_to_qdf"
+        "macrosynergy.download.dataquery_file_api.convert_ticker_based_parquet_file_to_qdf_pl"
     )
     @patch("macrosynergy.download.dataquery_file_api.SegmentedFileDownloader")
     @patch("macrosynergy.download.dataquery_file_api.Path")
