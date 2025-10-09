@@ -12,6 +12,7 @@ from macrosynergy.download.dataquery_file_api import (
     _atomic_sink_parquet,
     convert_ticker_based_parquet_file_to_qdf_pl,
 )
+from macrosynergy.compat import PYTHON_3_8_OR_LATER
 
 
 def suppress_logging(func):
@@ -47,8 +48,6 @@ def _make_sample_parquet(path: Path) -> pl.DataFrame:
 
 
 class TestQDFConvertPolars(unittest.TestCase):
-    """Unit tests for Polars-based QDF conversion functions."""
-
     def setUp(self):
         self.tmpdir = Path(tempfile.mkdtemp())
 
@@ -78,6 +77,8 @@ class TestQDFConvertPolars(unittest.TestCase):
     # ---------- Tests ----------
 
     def test_passthrough_to_csv_without_qdf(self):
+        if not PYTHON_3_8_OR_LATER:
+            self.skipTest("Skipping test on Python 3.8+")
         src = self.tmpdir / "input.parquet"
         original = _make_sample_parquet(src)
 
@@ -99,6 +100,8 @@ class TestQDFConvertPolars(unittest.TestCase):
         self.assertTrue(self._no_sidecars())
 
     def test_qdf_parquet_overwrite_in_place(self):
+        if not PYTHON_3_8_OR_LATER:
+            self.skipTest("Skipping test on Python 3.8+")
         src = self.tmpdir / "market.parquet"
         _make_sample_parquet(src)
 
@@ -115,6 +118,8 @@ class TestQDFConvertPolars(unittest.TestCase):
         self.assertTrue(self._no_sidecars())
 
     def test_qdf_parquet_keep_raw_data(self):
+        if not PYTHON_3_8_OR_LATER:
+            self.skipTest("Skipping test on Python 3.8+")
         src = self.tmpdir / "series.parquet"
         _make_sample_parquet(src)
 
@@ -132,6 +137,8 @@ class TestQDFConvertPolars(unittest.TestCase):
         self.assertEqual(got["cid"].to_list(), ["US", "JP"])
 
     def test_qdf_csv_outputs_selected_columns(self):
+        if not PYTHON_3_8_OR_LATER:
+            self.skipTest("Skipping test on Python 3.8+")
         src = self.tmpdir / "x.parquet"
         _make_sample_parquet(src)
 
@@ -158,11 +165,15 @@ class TestQDFConvertPolars(unittest.TestCase):
 
     @suppress_logging
     def test_missing_file_raises(self):
+        if not PYTHON_3_8_OR_LATER:
+            self.skipTest("Skipping test on Python 3.8+")
         missing = self.tmpdir / "nope.parquet"
         with self.assertRaises(FileNotFoundError):
             convert_ticker_based_parquet_file_to_qdf_pl(filename=str(missing))
 
     def test_atomic_sink_parquet_cleans_sidecar_on_failure(self):
+        if not PYTHON_3_8_OR_LATER:
+            self.skipTest("Skipping test on Python 3.8+")
         src = self.tmpdir / "boom.parquet"
         _make_sample_parquet(src)
 
@@ -180,6 +191,8 @@ class TestQDFConvertPolars(unittest.TestCase):
         self.assertFalse(final_out.exists())
 
     def test_atomic_sink_csv_cleans_sidecar_on_failure(self):
+        if not PYTHON_3_8_OR_LATER:
+            self.skipTest("Skipping test on Python 3.8+")
         src = self.tmpdir / "boomcsv.parquet"
         _make_sample_parquet(src)
 
@@ -198,6 +211,8 @@ class TestQDFConvertPolars(unittest.TestCase):
 
     @suppress_logging
     def test_inplace_overwrite_preserves_source_on_failure(self):
+        if not PYTHON_3_8_OR_LATER:
+            self.skipTest("Skipping test on Python 3.8+")
         src = self.tmpdir / "inplace.parquet"
         original_df = _make_sample_parquet(src)
 
