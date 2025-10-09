@@ -248,11 +248,10 @@ class DataQueryFileAPIClient:
                 "via environment variables DQ_CLIENT_ID & DQ_CLIENT_SECRET or "
                 "DATAQUERY_CLIENT_ID & DATAQUERY_CLIENT_SECRET"
             )
-        self.default_out_dir = "./jpmaqs-download"
 
         self.client_id = client_id
         self.client_secret = client_secret
-        self.out_dir = out_dir or self.default_out_dir
+        self.out_dir = out_dir or "./jpmaqs-download"
 
         self.base_url = base_url.rstrip("/")
         self.scope = scope
@@ -274,6 +273,12 @@ class DataQueryFileAPIClient:
         if exc_type is not None:
             logger.error(tb.format_exc())
         return False
+
+    def _get_save_dir(self, out_dir: Optional[str] = None) -> str:
+        base_dir = Path(out_dir or self.out_dir)
+        if base_dir.name != "jpmaqs-download":
+            return str(base_dir / "jpmaqs-download")
+        return str(base_dir)
 
     def _get(
         self, endpoint: str, params: Optional[Dict[str, Any]] = None, retries: int = 3
@@ -702,7 +707,7 @@ class DataQueryFileAPIClient:
         str
             The full path to the downloaded file.
         """
-        out_dir = out_dir or self.out_dir
+        out_dir = self._get_save_dir(out_dir)
         if not ((bool(file_group_id) and bool(file_datetime)) ^ bool(filename)):
             raise ValueError(
                 "One of `file_group_id` & `file_datetime`, or `filename` must be provided."
@@ -718,10 +723,11 @@ class DataQueryFileAPIClient:
         headers = self.oauth.get_headers()
         params = {"file-group-id": file_group_id, "file-datetime": file_datetime}
 
-        Path(out_dir).mkdir(parents=True, exist_ok=True)
         file_name = filename or f"{file_group_id}_{file_datetime}.parquet"
-        file_path = Path(out_dir) / Path(file_name)
+        file_date = pd_to_datetime_compat(file_datetime).strftime("%Y-%m-%d")
+        file_path = Path(out_dir) / Path(file_date) / Path(file_name)
 
+        file_path.parent.mkdir(parents=True, exist_ok=True)
         if file_path.exists():
             if not overwrite:
                 logger.warning(f"File {file_path} already exists. Skipping download.")
@@ -819,7 +825,7 @@ class DataQueryFileAPIClient:
         show_progress : bool
             If True, displays a progress bar for the downloads.
         """
-        out_dir = out_dir or self.out_dir
+        out_dir = self._get_save_dir(out_dir)
         Path(out_dir).mkdir(parents=True, exist_ok=True)
         start_time = time.time()
         logger.info(f"Starting download of {len(filenames)} files.")
@@ -894,10 +900,13 @@ class DataQueryFileAPIClient:
     def download_catalog_file(
         self,
         out_dir: Optional[str] = None,
+        add_dataset_column: bool = False,
+        as_csv: bool = False,
         overwrite: bool = False,
+        keep_raw_data: bool = False,
         timeout: Optional[float] = DQ_FILE_API_TIMEOUT,
     ) -> str:
-        out_dir = out_dir or self.out_dir
+        out_dir = self._get_save_dir(out_dir)
         available_catalogs = self.list_available_files(self.catalog_file_group_id)
         if available_catalogs.empty:
             raise DownloadError("No catalog files available for download.")
@@ -906,12 +915,33 @@ class DataQueryFileAPIClient:
         ).iloc[0]
         latest_filename = latest_catalog["file-name"]
         logger.info(f"Latest catalog file identified: {latest_filename}")
-        return self.download_file(
+        file_path = self.download_file(
             filename=latest_filename,
             out_dir=out_dir,
             overwrite=overwrite,
             timeout=timeout,
         )
+
+        if not (add_dataset_column or as_csv):
+            return file_path
+
+        df = pd.read_parquet(file_path)
+
+        if add_dataset_column:
+            df.loc[:, "Dataset"] = df["Theme"].apply(
+                lambda x: "JPMAQS_" + str(x).upper().replace(" ", "_")
+            )
+
+        if as_csv:
+            csv_file_path = Path(file_path).with_suffix(".csv")
+            df.to_csv(csv_file_path, index=False)
+            if not keep_raw_data:
+                Path(file_path).unlink(missing_ok=True)
+            file_path = str(csv_file_path)
+        else:
+            df.to_parquet(file_path, index=False)
+
+        return file_path
 
     def download_full_snapshot(
         self,
@@ -975,7 +1005,7 @@ class DataQueryFileAPIClient:
         show_progress : bool
             If True, displays a progress bar for downloads.
         """
-        out_dir = out_dir or self.out_dir
+        out_dir = self._get_save_dir(out_dir)
         Path(out_dir).mkdir(parents=True, exist_ok=True)
         start_time = time.time()
 
@@ -1365,7 +1395,7 @@ if __name__ == "__main__":
     print(f"Latest file timestamp: {latest_file_timestamp}")
 
     start = time.time()
-    since_datetime = pd.Timestamp.now().strftime("%Y%m%d")
+    since_datetime = (pd.Timestamp.now() - pd.offsets.BDay(5)).strftime("%Y%m%d")
     print(
         f"Downloading full-snapshots, delta-files, and metadata files published since {since_datetime}"
     )
