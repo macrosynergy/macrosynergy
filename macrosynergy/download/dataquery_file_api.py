@@ -141,12 +141,13 @@ from typing import Dict, Any, Optional, List, Tuple, Union
 from tqdm import tqdm
 
 import requests
-from macrosynergy.compat import PD_2_0_OR_LATER
+from macrosynergy.compat import PD_2_0_OR_LATER, PYTHON_3_8_OR_LATER
 from macrosynergy.download.dataquery import JPMAQS_GROUP_ID
 from macrosynergy.download.fusion_interface import (
     request_wrapper,
     request_wrapper_stream_bytes_to_disk,
     _wait_for_api_call,
+    convert_ticker_based_parquet_file_to_qdf,
 )
 from macrosynergy.download.dataquery import OAUTH_TOKEN_URL
 from macrosynergy.download.exceptions import DownloadError, InvalidResponseError
@@ -767,12 +768,18 @@ class DataQueryFileAPIClient:
         )
         if not (qdf or as_csv) or is_catalog_file or not file_path.suffix == ".parquet":
             return str(file_path)
-        convert_ticker_based_parquet_file_to_qdf_pl(
+
+        convert_args = dict(
             filename=str(file_path),
             as_csv=as_csv,
             qdf=qdf,
             keep_raw_data=keep_raw_data,
         )
+
+        if PYTHON_3_8_OR_LATER:
+            convert_ticker_based_parquet_file_to_qdf_pl(**convert_args)
+        else:
+            convert_ticker_based_parquet_file_to_qdf(**convert_args)
         if qdf:
             msg_str = (
                 f"Successfully converted {filename} to Quantamental Data Format (QDF)"
