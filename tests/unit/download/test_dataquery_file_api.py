@@ -1,8 +1,10 @@
+import os
 import unittest
 import pandas as pd
 from unittest.mock import patch, MagicMock
 import functools
 import logging
+import tempfile
 from macrosynergy.compat import PD_2_0_OR_LATER
 from macrosynergy.download.dataquery_file_api import (
     validate_dq_timestamp,
@@ -359,7 +361,9 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
     def test_download_file_no_overwrite(self, mock_oauth, mock_path):
         client = DataQueryFileAPIClient(client_id="id", client_secret="secret")
         mock_final_path = MagicMock()
-        mock_path.return_value.__truediv__.return_value = mock_final_path
+        (
+            mock_path.return_value.__truediv__.return_value.__truediv__.return_value
+        ) = mock_final_path
         mock_final_path.exists.return_value = True
         result = client.download_file(
             filename="TEST_FULL_20230101.parquet", overwrite=False
@@ -376,7 +380,9 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
     ):
         client = DataQueryFileAPIClient(client_id="id", client_secret="secret")
         mock_final_path = MagicMock()
-        mock_path.return_value.__truediv__.return_value = mock_final_path
+        (
+            mock_path.return_value.__truediv__.return_value.__truediv__.return_value
+        ) = mock_final_path
         mock_final_path.exists.return_value = True
 
         client.download_file(filename="TEST_FULL_20230101.parquet", overwrite=True)
@@ -395,7 +401,9 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
         client = DataQueryFileAPIClient(client_id="id", client_secret="secret")
         mock_file_path = MagicMock()
         mock_file_path.exists.return_value = False
-        mock_path.return_value.__truediv__.return_value = mock_file_path
+        (
+            mock_path.return_value.__truediv__.return_value.__truediv__.return_value
+        ) = mock_file_path
 
         client.download_file(filename="TEST_DELTA_20230101.parquet")
         mock_request_wrapper.assert_called_once()
@@ -429,7 +437,9 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
         mock_file_path = MagicMock()
         mock_file_path.exists.return_value = False
         mock_file_path.suffix = ".parquet"
-        mock_path.return_value.__truediv__.return_value = mock_file_path
+        (
+            mock_path.return_value.__truediv__.return_value.__truediv__.return_value
+        ) = mock_file_path
 
         client.download_file(
             filename="JPMAQS_METADATA_CATALOG_20230101.parquet", qdf=True
@@ -451,7 +461,9 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
         mock_file_path.exists.return_value = False
         mock_file_path.suffix = ".parquet"
         mock_file_path.__str__.return_value = "mock_dir/TEST_DATA_20230101.parquet"
-        mock_path.return_value.__truediv__.return_value = mock_file_path
+        (
+            mock_path.return_value.__truediv__.return_value.__truediv__.return_value
+        ) = mock_file_path
 
         client.download_file(
             filename="TEST_DATA_20230101.parquet",
@@ -548,26 +560,70 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
             )
         mock_executor.shutdown.assert_called_once_with(wait=False, cancel_futures=True)
 
+    @patch("macrosynergy.download.dataquery_file_api.Path")
+    @patch("macrosynergy.download.dataquery_file_api.pd.read_parquet")
     @patch.object(DataQueryFileAPIClient, "download_file")
     @patch.object(DataQueryFileAPIClient, "list_available_files")
-    def test_download_catalog_file(self, mock_list_files, mock_download):
+    def test_download_catalog_file(
+        self, mock_list_files, mock_download, mock_read_parquet, mock_path_cls
+    ):
         client = DataQueryFileAPIClient(client_id="id", client_secret="secret")
         mock_list_files.return_value = pd.DataFrame(
             {
-                "file-name": ["CATALOG_20230102.parquet", "CATALOG_20230101.parquet"],
-                "file-datetime": pd.to_datetime(["2023-01-02", "2023-01-01"]),
-                "last-modified": pd.to_datetime(["2023-01-02", "2023-01-01"]),
+                "file-name": ["CATALOG_20230102.parquet"],
+                "file-datetime": pd.to_datetime(["2023-01-02"]),
+                "last-modified": pd.to_datetime(["2023-01-02"]),
             }
         )
+        fake_path_str = os.path.join(
+            "cat", "jpmaqs-download", "CATALOG_20230102.parquet"
+        )
+        mock_download.return_value = fake_path_str
 
+        # Configure mock for the first call's _get_save_dir
+        mock_path_cls.return_value.name = "cat"
+        mock_path_cls.return_value.__truediv__.return_value.__str__.return_value = (
+            os.path.join("cat", "jpmaqs-download")
+        )
+
+        # simple base case
         client.download_catalog_file(out_dir="./cat", overwrite=True)
         mock_download.assert_called_once_with(
             filename="CATALOG_20230102.parquet",
-            out_dir="./cat",
+            out_dir=os.path.join("cat", "jpmaqs-download"),
             overwrite=True,
             timeout=300.0,
         )
+        mock_read_parquet.assert_not_called()
 
+        # reset mocks
+        mock_download.reset_mock()
+        mock_read_parquet.reset_mock()
+        mock_df = pd.DataFrame({"Theme": ["Test Theme"]})
+        mock_df.to_parquet = MagicMock()
+        mock_df.to_csv = MagicMock()
+        mock_read_parquet.return_value = mock_df
+        mock_path_instance = MagicMock()
+        mock_path_cls.return_value = mock_path_instance
+
+        # add_dataset_column without as_csv
+        client.download_catalog_file(add_dataset_column=True)
+        mock_read_parquet.assert_called_once_with(fake_path_str)
+        self.assertEqual(mock_df["Dataset"].iloc[0], "JPMAQS_TEST_THEME")
+        mock_df.to_parquet.assert_called_once_with(fake_path_str, index=False)
+        mock_df.to_csv.assert_not_called()
+
+        # as_csv with keep_raw_data=False
+        mock_read_parquet.reset_mock()
+        mock_df.to_csv.reset_mock()
+        mock_path_instance = MagicMock()
+        mock_path_cls.return_value = mock_path_instance
+        client.download_catalog_file(as_csv=True, keep_raw_data=False)
+        mock_read_parquet.assert_called_once_with(fake_path_str)
+        mock_df.to_csv.assert_called_once()
+        mock_path_instance.unlink.assert_called_once_with(missing_ok=True)
+
+        # error case
         mock_list_files.return_value = pd.DataFrame()
         with self.assertRaises(DownloadError):
             client.download_catalog_file()
@@ -578,64 +634,71 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
     def test_download_full_snapshot(
         self, mock_filter_files, mock_download_multi, mock_logger
     ):
-        client = DataQueryFileAPIClient(
-            client_id="id", client_secret="secret", out_dir="./class/dir"
-        )
-        mock_filter_files.return_value = pd.DataFrame(
-            {
-                "file-name": [
-                    "C_delta_20250201T110456.parquet",
-                    "A_metadata_20250201T110000.parquet",
-                    "B_full_20250201.parquet",
-                    "A_full_20250101.parquet",
-                    "A_full_20250201.parquet",
-                ],
-                "file-datetime": [
-                    "20250201T110456",
-                    "20250201T110000",
-                    "20250201T000000",
-                    "20250101T000000",
-                    "20250201T000000",
-                ],
-            }
-        )
-        client.download_full_snapshot(since_datetime="20250201", show_progress=False)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            class_dir = os.path.join(tmpdir, "class", "dir")
+            client = DataQueryFileAPIClient(
+                client_id="id", client_secret="secret", out_dir=class_dir
+            )
+            mock_filter_files.return_value = pd.DataFrame(
+                {
+                    "file-name": [
+                        "C_delta_20250201T110456.parquet",
+                        "A_metadata_20250201T110000.parquet",
+                        "B_full_20250201.parquet",
+                        "A_full_20250101.parquet",
+                        "A_full_20250201.parquet",
+                    ],
+                    "file-datetime": [
+                        "20250201T110456",
+                        "20250201T110000",
+                        "20250201T000000",
+                        "20250101T000000",
+                        "20250201T000000",
+                    ],
+                }
+            )
+            client.download_full_snapshot(
+                since_datetime="20250201", show_progress=False
+            )
 
-        expected_order = [
-            "A_full_20250101.parquet",
-            "A_full_20250201.parquet",
-            "B_full_20250201.parquet",
-            "C_delta_20250201T110456.parquet",
-            "A_metadata_20250201T110000.parquet",
-        ]
+            expected_order = [
+                "A_full_20250101.parquet",
+                "A_full_20250201.parquet",
+                "B_full_20250201.parquet",
+                "C_delta_20250201T110456.parquet",
+                "A_metadata_20250201T110000.parquet",
+            ]
 
-        mock_download_multi.assert_called_once_with(
-            filenames=expected_order,
-            out_dir="./class/dir",
-            overwrite=False,
-            qdf=True,
-            as_csv=False,
-            keep_raw_data=False,
-            chunk_size=None,
-            timeout=300.0,
-            show_progress=False,
-        )
+            mock_download_multi.assert_called_once_with(
+                filenames=expected_order,
+                out_dir=os.path.join(class_dir, "jpmaqs-download"),
+                overwrite=False,
+                qdf=True,
+                as_csv=False,
+                keep_raw_data=False,
+                chunk_size=None,
+                timeout=300.0,
+                show_progress=False,
+            )
 
-        mock_download_multi.reset_mock()
-        client.download_full_snapshot(
-            since_datetime="20250201", show_progress=False, out_dir="./method/dir", qdf=False, as_csv=True
-        )
-        mock_download_multi.assert_called_once_with(
-            filenames=expected_order,
-            out_dir="./method/dir",
-            overwrite=False,
-            qdf=False,
-            as_csv=True,
-            keep_raw_data=False,
-            chunk_size=None,
-            timeout=300.0,
-            show_progress=False,
-        )
+            mock_download_multi.reset_mock()
+            method_dir = os.path.join(tmpdir, "method", "dir")
+            client.download_full_snapshot(
+                since_datetime="20250201",
+                show_progress=False,
+                out_dir=method_dir,
+            )
+            mock_download_multi.assert_called_once_with(
+                filenames=expected_order,
+                out_dir=os.path.join(method_dir, "jpmaqs-download"),
+                overwrite=False,
+                qdf=True,
+                as_csv=False,
+                keep_raw_data=False,
+                chunk_size=None,
+                timeout=300.0,
+                show_progress=False,
+            )
 
     @patch.object(DataQueryFileAPIClient, "download_multiple_files")
     @patch.object(DataQueryFileAPIClient, "filter_available_files_by_datetime")
