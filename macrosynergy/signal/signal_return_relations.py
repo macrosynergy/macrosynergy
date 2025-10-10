@@ -17,7 +17,7 @@ from macrosynergy.management.utils import (
     apply_slip as apply_slip_util,
     reduce_df,
     categories_df,
-    update_df
+    update_df,
 )
 from macrosynergy.management.types import QuantamentalDataFrame
 import macrosynergy.visuals as msv
@@ -63,7 +63,7 @@ class SignalReturnRelations:
         Default is False.
     cosp : bool
         If True the comparative statistics are calculated only for the "communal sample
-        periods", i.e. periods and cross-sections that have values for all compared 
+        periods", i.e. periods and cross-sections that have values for all compared
         signals. Default is False.
     start : str
         earliest date in ISO format. Default is None in which case the earliest date
@@ -89,9 +89,9 @@ class SignalReturnRelations:
         conceptually corresponds to the holding period of a position in accordance with the
         signal.
     slip : int
-        Default is 0, implied slippage of feature availability for relationship with the 
+        Default is 0, implied slippage of feature availability for relationship with the
         target category. See :func:`macrosynergy.management.df_utils.apply_slip` for more
-        information. 
+        information.
     ms_panel_test : bool
         if True the Macrosynergy Panel test is calculated. Please note that this is a
         very time-consuming operation and should be used only if you require the result.
@@ -471,7 +471,9 @@ class SignalReturnRelations:
         ax.set_xticklabels(labels, rotation=x_labels_rotate)
         ax.axhline(y=0.5, color="black", linestyle="-", linewidth=0.5)
 
-        y_input = self.__yaxis_lim__(accuracy_df=dfx.loc[:, ["accuracy", "bal_accuracy"]])
+        y_input = self.__yaxis_lim__(
+            accuracy_df=dfx.loc[:, ["accuracy", "bal_accuracy"]]
+        )
         ax.set_ylim(round(y_input, 2))
 
         ax.set_title(title, fontsize=title_fontsize)
@@ -497,7 +499,7 @@ class SignalReturnRelations:
         return_fig: bool = False,
     ):
         """
-        Plot correlation coefficients and significance. For types: cross_section and 
+        Plot correlation coefficients and significance. For types: cross_section and
         years.
 
         Parameters
@@ -611,7 +613,11 @@ class SignalReturnRelations:
         ax.set_xticklabels(labels, rotation=x_labels_rotate)
 
         ax.axhline(
-            y=0.95, color="orange", linestyle="--", linewidth=0.5, label="95% probability"
+            y=0.95,
+            color="orange",
+            linestyle="--",
+            linewidth=0.5,
+            label="95% probability",
         )
         ax.axhline(
             y=0.99, color="red", linestyle="--", linewidth=0.5, label="99% probability"
@@ -731,7 +737,8 @@ class SignalReturnRelations:
             blacklist=self.blacklist,
         )
         metric_cols: List[str] = list(
-            set(dfd.columns.tolist()) - set(["real_date", "xcat", "cid", "ticker", "last_updated"])
+            set(dfd.columns.tolist())
+            - set(["real_date", "xcat", "cid", "ticker", "last_updated"])
         )
         # here, the slip is applied to the the first xcat (explanatory variable)
         dfd: pd.DataFrame = self.apply_slip(
@@ -809,7 +816,7 @@ class SignalReturnRelations:
                 s_date = intersection_df.index[0]
                 e_date = intersection_df.index[-1]
 
-                final_df.loc[(cid_name, s_date):(cid_name, e_date), signal] = (
+                final_df.loc[(cid_name, s_date) : (cid_name, e_date), signal] = (
                     intersection_df.to_numpy()
                 )
                 storage.append(final_df)
@@ -1848,7 +1855,7 @@ if __name__ == "__main__":
         type="signals",
         title="Accuracy",
         x_labels={"CRY": "Cry", "INFL": "Inflation", "GROWTH": "Growth"},
-        x_labels_rotate=45
+        x_labels_rotate=45,
     )
 
     sst = srn.single_statistic_table(stat="granger_pval")
