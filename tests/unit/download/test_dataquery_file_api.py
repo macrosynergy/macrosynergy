@@ -5,7 +5,7 @@ from unittest.mock import patch, MagicMock
 import functools
 import logging
 import tempfile
-from macrosynergy.compat import PD_2_0_OR_LATER
+from macrosynergy.compat import PD_2_0_OR_LATER, PYTHON_3_8_OR_LATER
 from macrosynergy.download.dataquery_file_api import (
     validate_dq_timestamp,
     get_client_id_secret,
@@ -458,6 +458,8 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
     def test_download_file_qdf_conversion(
         self, mock_oauth, mock_path, mock_downloader, mock_convert
     ):
+        if not PYTHON_3_8_OR_LATER:
+            self.skipTest("Requires Python 3.8+")
         client = DataQueryFileAPIClient(client_id="id", client_secret="secret")
         mock_file_path = MagicMock()
         mock_file_path.exists.return_value = False
