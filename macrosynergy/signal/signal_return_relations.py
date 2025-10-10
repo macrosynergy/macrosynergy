@@ -731,7 +731,7 @@ class SignalReturnRelations:
             blacklist=self.blacklist,
         )
         metric_cols: List[str] = list(
-            set(dfd.columns.tolist()) - set(["real_date", "xcat", "cid", "ticker"])
+            set(dfd.columns.tolist()) - set(["real_date", "xcat", "cid", "ticker", "last_updated"])
         )
         # here, the slip is applied to the the first xcat (explanatory variable)
         dfd: pd.DataFrame = self.apply_slip(
