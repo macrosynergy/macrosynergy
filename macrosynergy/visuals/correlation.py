@@ -366,7 +366,10 @@ def _parse_labels(keys: List[str], labels: Union[List[str], Dict[str, str]], lab
         else:
             raise ValueError(f"The labels parameter for {label_type} must be a list or a dictionary.")
     else:
-        labels_dict = {key: key for key in keys}
+        if keys is not None and len(keys) > 0:
+            labels_dict = {key: key for key in keys}
+        else:
+            labels_dict = {}
     return labels_dict
 
 
