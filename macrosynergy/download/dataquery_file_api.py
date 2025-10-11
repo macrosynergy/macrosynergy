@@ -1385,17 +1385,16 @@ class SegmentedFileDownloader:
 
 
 def _atomic_sink_csv(lf: pl.LazyFrame, final_out: Path, sidecar: Path) -> None:
-    # ensure no stale sidecar
+    """Atomic sink for CSV files - ensures complete writes/cleans up on failure."""
     try:
         sidecar.unlink()
     except FileNotFoundError:
         pass
 
     try:
-        lf.sink_csv(str(sidecar))  # streaming write to sidecar
-        os.replace(sidecar, final_out)  # atomic promote
+        lf.sink_csv(str(sidecar))
+        os.replace(sidecar, final_out)
     except BaseException:
-        # best-effort cleanup of sidecar on failure
         try:
             sidecar.unlink()
         except FileNotFoundError:
@@ -1406,6 +1405,7 @@ def _atomic_sink_csv(lf: pl.LazyFrame, final_out: Path, sidecar: Path) -> None:
 def _atomic_sink_parquet(
     lf: pl.LazyFrame, final_out: Path, sidecar: Path, *, compression: str
 ) -> None:
+    """Atomic sink for Parquet files - ensures complete writes/cleans up on failure."""
     try:
         sidecar.unlink()
     except FileNotFoundError:
@@ -1433,7 +1433,7 @@ def _convert_ticker_based_parquet_file_to_qdf_pl(
     if not src.is_file():
         raise FileNotFoundError(f"No such file: {filename}")
 
-    base = src.with_suffix("")  # strip extension
+    base = src.with_suffix("")
     dirpath = src.parent
 
     # passthrough to CSV from sink_csv
@@ -1445,24 +1445,20 @@ def _convert_ticker_based_parquet_file_to_qdf_pl(
             src.unlink(missing_ok=True)
         return
 
-    # if no qdf and no CSV - return
     if not qdf:
         return
 
-    # QDF conversion pipeline - lazyload + stream to disk
     lf = pl.scan_parquet(str(src))
-    parts = pl.col("ticker").str.split_exact("_", 1)
+    parts = pl.col("ticker").str.splitn("_", 2)
     lf = lf.with_columns(
         cid=parts.struct.field("field_0"),
         xcat=parts.struct.field("field_1"),
     )
 
     wanted = ["real_date", "value", "grading", "eop_lag", "mop_lag", "last_updated"]
-    # use collect_schema to avoid materializing data - inspect only
     present = [c for c in wanted if c in lf.collect_schema().names()]
     lf = lf.select(present + ["cid", "xcat"])
 
-    # output with atomic sink
     if as_csv:
         final_out = (
             base.with_suffix(".csv")

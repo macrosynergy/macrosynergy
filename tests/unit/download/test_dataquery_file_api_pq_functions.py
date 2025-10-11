@@ -28,10 +28,9 @@ def suppress_logging(func):
 
 
 def _make_sample_parquet(path: Path) -> pl.DataFrame:
-    """Create a small valid parquet file for testing."""
     df = pl.DataFrame(
         {
-            "ticker": ["US_GROWTH", "JP_INFL"],
+            "ticker": ["USD_GROWTH", "JPY_INFL"],
             "real_date": [
                 datetime.date(2024, 1, 31),
                 datetime.date(2024, 2, 29),
@@ -53,7 +52,6 @@ class TestQDFConvertPolars(unittest.TestCase):
         self.tmpdir = Path(tempfile.mkdtemp())
 
     def tearDown(self):
-        # Clean up temp dir completely
         for item in self.tmpdir.iterdir():
             try:
                 if item.is_file() or item.is_symlink():
@@ -108,7 +106,7 @@ class TestQDFConvertPolars(unittest.TestCase):
         got = pl.read_parquet(src)
         self.assertNotIn("ticker", got.columns)
         self.assertTrue({"cid", "xcat"}.issubset(set(got.columns)))
-        self.assertEqual(got["cid"].to_list(), ["US", "JP"])
+        self.assertEqual(got["cid"].to_list(), ["USD", "JPY"])
         self.assertEqual(got["xcat"].to_list(), ["GROWTH", "INFL"])
         self.assertTrue(self._no_sidecars())
 
@@ -127,7 +125,7 @@ class TestQDFConvertPolars(unittest.TestCase):
         got = pl.read_parquet(qdf_path)
         self.assertNotIn("ticker", got.columns)
         self.assertTrue({"cid", "xcat"}.issubset(set(got.columns)))
-        self.assertEqual(got["cid"].to_list(), ["US", "JP"])
+        self.assertEqual(got["cid"].to_list(), ["USD", "JPY"])
 
     def test_qdf_csv_outputs_selected_columns(self):
         src = self.tmpdir / "x.parquet"
@@ -210,6 +208,44 @@ class TestQDFConvertPolars(unittest.TestCase):
         self.assertSetEqual(set(roundtrip.columns), set(original_df.columns))
         self.assertEqual(roundtrip.shape, original_df.shape)
         self.assertTrue(self._no_sidecars())
+
+    def test_qdf_handles_multi_part_xcat_and_various_cids(self):
+        src = self.tmpdir / "variety.parquet"
+        tickers = [
+            "USD_GROWTH_X1_D1M1",
+            "CAD_GDP_XY",
+            "JPY_INFL",
+            "INR_PROD_ABC_DEF",
+            "CNY_SALES_A1",
+            "CHF_CPI_12M",
+            "EUR_RATE_ABC_12",
+            "AUD_TRADE_BAL",
+        ]
+        df = pl.DataFrame(
+            {
+                "ticker": tickers,
+                "real_date": [datetime.date(2024, 1, 1)] * len(tickers),
+                "value": list(range(len(tickers))),
+                "grading": ["A"] * len(tickers),
+                "eop_lag": [0] * len(tickers),
+                "mop_lag": [0] * len(tickers),
+                "last_updated": ["2024-03-01"] * len(tickers),
+            }
+        )
+        df.write_parquet(src)
+
+        convert_ticker_based_parquet_file_to_qdf_pl(
+            filename=str(src), as_csv=False, qdf=True, keep_raw_data=True
+        )
+
+        qdf_path = self.tmpdir / "variety_qdf.parquet"
+        got = pl.read_parquet(qdf_path).select("cid", "xcat")
+
+        expected_cid = [t.split("_", 1)[0] for t in tickers]
+        expected_xcat = [t.split("_", 1)[1] for t in tickers]
+
+        self.assertEqual(got["cid"].to_list(), expected_cid)
+        self.assertEqual(got["xcat"].to_list(), expected_xcat)
 
 
 if __name__ == "__main__":
