@@ -1970,21 +1970,24 @@ def load_filtered_parquets(
     return out.collect()
 
 
+if __name__ == "__main__":
+    print("Current time UTC:", pd.Timestamp.utcnow().isoformat())
 
     start = time.time()
-    since_datetime = (pd.Timestamp.now() - pd.offsets.BDay(3)).strftime("%Y%m%d")
+    since_datetime = pd.Timestamp.now() - pd.offsets.BDay(5)
     print(
         f"Downloading full-snapshots, delta-files, and metadata files published since {since_datetime}"
     )
+    since_datetime = since_datetime.strftime("%Y%m%d")
     with DataQueryFileAPIClient(out_dir="./data/jpmaqs-data/") as dq:
         dq.download_catalog_file()
         dq.download_full_snapshot(since_datetime=since_datetime)
     end = time.time()
 
-    lazy_load_from_parquets(files_dir="./data/jpmaqs-data/")
     print(f"Download completed in {end - start:.2f} seconds")
 
     cids = ["AUD", "BRL", "CAD", "CHF", "CNY", "CZK", "EUR", "GBP", "USD"]
     xcats = ["RIR_NSA", "FXXR_NSA", "FXXR_VT10", "DU05YXR_NSA", "DU05YXR_VT10"]
-
-    dq.download(cids=cids, xcats=xcats)
+    with DataQueryFileAPIClient(out_dir="./data/jpmaqs-data/") as dq:
+        df = dq.download(cids=cids, xcats=xcats)
+        print(df.head())
