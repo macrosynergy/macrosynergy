@@ -126,6 +126,7 @@ Please note:
 
 import os
 import pandas as pd
+import polars as pl
 
 import functools
 import time
@@ -140,7 +141,7 @@ from typing import Dict, Any, Optional, List, Tuple, Union
 from tqdm import tqdm
 
 import requests
-from macrosynergy.compat import PD_2_0_OR_LATER
+from macrosynergy.compat import PD_2_0_OR_LATER, PYTHON_3_8_OR_LATER
 from macrosynergy.download.dataquery import JPMAQS_GROUP_ID
 from macrosynergy.download.fusion_interface import (
     request_wrapper,
@@ -767,12 +768,18 @@ class DataQueryFileAPIClient:
         )
         if not (qdf or as_csv) or is_catalog_file or not file_path.suffix == ".parquet":
             return str(file_path)
-        convert_ticker_based_parquet_file_to_qdf(
+
+        convert_args = dict(
             filename=str(file_path),
             as_csv=as_csv,
             qdf=qdf,
             keep_raw_data=keep_raw_data,
         )
+
+        if PYTHON_3_8_OR_LATER:
+            convert_ticker_based_parquet_file_to_qdf_pl(**convert_args)
+        else:
+            convert_ticker_based_parquet_file_to_qdf(**convert_args)
         if qdf:
             msg_str = (
                 f"Successfully converted {filename} to Quantamental Data Format (QDF)"
@@ -1375,6 +1382,141 @@ class SegmentedFileDownloader:
         if self.temp_dir.exists():
             shutil.rmtree(self.temp_dir)
             self.log("Cleaned up temporary files.")
+
+
+def _atomic_sink_csv(lf: pl.LazyFrame, final_out: Path, sidecar: Path) -> None:
+    """Atomic sink for CSV files - ensures complete writes/cleans up on failure."""
+    try:
+        sidecar.unlink()
+    except FileNotFoundError:
+        pass
+
+    try:
+        lf.sink_csv(str(sidecar))
+        os.replace(sidecar, final_out)
+    except BaseException:
+        try:
+            sidecar.unlink()
+        except FileNotFoundError:
+            pass
+        raise
+
+
+def _atomic_sink_parquet(
+    lf: pl.LazyFrame, final_out: Path, sidecar: Path, *, compression: str
+) -> None:
+    """Atomic sink for Parquet files - ensures complete writes/cleans up on failure."""
+    try:
+        sidecar.unlink()
+    except FileNotFoundError:
+        pass
+
+    try:
+        lf.sink_parquet(str(sidecar), compression=compression)
+        os.replace(sidecar, final_out)
+    except BaseException:
+        try:
+            sidecar.unlink()
+        except FileNotFoundError:
+            pass
+        raise
+
+
+def _convert_ticker_based_parquet_file_to_qdf_pl(
+    filename: str,
+    compression: str = "zstd",
+    as_csv: bool = False,
+    qdf: bool = False,
+    keep_raw_data: bool = False,
+) -> None:
+    src = Path(filename)
+    if not src.is_file():
+        raise FileNotFoundError(f"No such file: {filename}")
+
+    base = src.with_suffix("")
+    dirpath = src.parent
+
+    # passthrough to CSV from sink_csv
+    if as_csv and not qdf:
+        final_out = base.with_suffix(".csv")
+        sidecar = dirpath / f".{final_out.name}.inprogress"
+        _atomic_sink_csv(pl.scan_parquet(str(src)), final_out, sidecar)
+        if not keep_raw_data:
+            src.unlink(missing_ok=True)
+        return
+
+    if not qdf:
+        return
+
+    lf = pl.scan_parquet(str(src))
+    parts = pl.col("ticker").str.splitn("_", 2)
+    lf = lf.with_columns(
+        cid=parts.struct.field("field_0"),
+        xcat=parts.struct.field("field_1"),
+    )
+
+    wanted = ["real_date", "value", "grading", "eop_lag", "mop_lag", "last_updated"]
+    present = [c for c in wanted if c in lf.collect_schema().names()]
+    lf = lf.select(present + ["cid", "xcat"])
+
+    if as_csv:
+        final_out = (
+            base.with_suffix(".csv")
+            if not keep_raw_data
+            else dirpath / f"{base.name}_qdf.csv"
+        )
+        sidecar = dirpath / f".{final_out.name}.inprogress"
+        _atomic_sink_csv(lf, final_out, sidecar)
+        if not keep_raw_data:
+            src.unlink(missing_ok=True)
+    else:
+        if keep_raw_data:
+            final_out = dirpath / f"{base.name}_qdf.parquet"
+        else:
+            final_out = src
+        sidecar = dirpath / f".{final_out.name}.inprogress"
+        _atomic_sink_parquet(lf, final_out, sidecar, compression=compression)
+        if not keep_raw_data and final_out is not src:
+            src.unlink(missing_ok=True)
+
+
+def convert_ticker_based_parquet_file_to_qdf_pl(
+    filename: str,
+    compression: str = "zstd",
+    as_csv: bool = False,
+    qdf: bool = True,
+    keep_raw_data: bool = False,
+) -> None:
+    try:
+        _convert_ticker_based_parquet_file_to_qdf_pl(
+            filename=filename,
+            compression=compression,
+            as_csv=as_csv,
+            qdf=qdf,
+            keep_raw_data=keep_raw_data,
+        )
+    except Exception as e:
+        logger.error(f"Error converting file {filename}: {e}")
+        try:
+            p = Path(filename)
+            for cand in [
+                f".{p.with_suffix('.csv').name}.inprogress",
+                f".{p.name}.inprogress",
+                f".{p.with_suffix('').name}_qdf.csv.inprogress",
+                f".{p.with_suffix('').name}_qdf.parquet.inprogress",
+            ]:
+                try:
+                    (p.parent / cand).unlink()
+                except FileNotFoundError:
+                    pass
+        except Exception:
+            pass
+
+        if not Path(filename).is_file():
+            raise FileNotFoundError(
+                f"Conversion failed and file not found: {filename}"
+            ) from e
+        raise
 
 
 if __name__ == "__main__":
