@@ -1857,7 +1857,11 @@ def lazy_load_from_parquets(
 
     qdf = dataframe_format == "qdf"
     lf: pl.LazyFrame = _lazy_load_filtered_parquets(
-        tickers=tickers, paths=sorted(available_files_df["path"]), return_qdf=qdf
+        paths=sorted(available_files_df["path"]),
+        tickers=tickers,
+        start_date=start_date,
+        end_date=end_date,
+        return_qdf=qdf,
     )
     if dataframe_type == "polars-lazy":
         return lf
@@ -1919,18 +1923,29 @@ def _ensure_columns(lf: pl.LazyFrame, cols: Sequence[str]) -> pl.LazyFrame:
 
 
 def _filter_lazy_frame_by_tickers(
-    lf: pl.LazyFrame, tickers: Sequence[str], kind: JPMaQSParquetSchemaKind
+    lf: pl.LazyFrame,
+    kind: JPMaQSParquetSchemaKind,
+    tickers: Sequence[str],
+    start_date: Optional[Union[str, pd.Timestamp]],
+    end_date: Optional[Union[str, pd.Timestamp]],
 ) -> pl.LazyFrame:
     tickers_list = [t for t in tickers if t]
     if kind is JPMaQSParquetSchemaKind.TICKER:
         return lf.filter(pl.col("ticker").is_in(tickers_list))
-    return (
+    lf = (
         lf.with_columns(
             _ticker=pl.concat_str([pl.col("cid"), pl.lit("_"), pl.col("xcat")])
         )
         .filter(pl.col("_ticker").is_in(tickers_list))
         .drop("_ticker")
     )
+    if start_date:
+        start_date = pd_to_datetime_compat(start_date).strftime("%Y-%m-%d")
+        lf = lf.filter(pl.col("real_date") >= pl.lit(start_date).str.to_date())
+    if end_date:
+        end_date = pd_to_datetime_compat(end_date).strftime("%Y-%m-%d")
+        lf = lf.filter(pl.col("real_date") <= pl.lit(end_date).str.to_date())
+    return lf
 
 
 def _to_output_schema(
@@ -1959,18 +1974,28 @@ def _to_output_schema(
 def _scan_and_prepare_single_parquet(
     path: str,
     tickers: Sequence[str],
+    start_date: Optional[Union[str, pd.Timestamp]],
+    end_date: Optional[Union[str, pd.Timestamp]],
     return_qdf: bool,
 ) -> pl.LazyFrame:
     lf = pl.scan_parquet(path)
     kind = _identify_schema_type(lf)
-    lf = _filter_lazy_frame_by_tickers(lf, tickers, kind)
+    lf = _filter_lazy_frame_by_tickers(
+        lf=lf,
+        kind=kind,
+        tickers=tickers,
+        start_date=start_date,
+        end_date=end_date,
+    )
     lf = _to_output_schema(lf, kind, return_qdf)
     return lf
 
 
 def _lazy_load_filtered_parquets(
-    tickers: List[str],
     paths: List[str],
+    tickers: List[str],
+    start_date: Optional[Union[str, pd.Timestamp]],
+    end_date: Optional[Union[str, pd.Timestamp]],
     return_qdf: bool = True,
 ) -> pl.LazyFrame:
     if not paths:
@@ -1982,6 +2007,8 @@ def _lazy_load_filtered_parquets(
         _scan_and_prepare_single_parquet(
             path=p,
             tickers=tickers_list,
+            start_date=start_date,
+            end_date=end_date,
             return_qdf=return_qdf,
         )
         for p in paths
