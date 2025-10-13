@@ -16,6 +16,11 @@ docs/_build/
 
 docs.build/
 
+jpmaqs-download/*
+*.parquet
+*.csv
+*.json
+
 ####### Python template #######
 
 # Byte-compiled / optimized / DLL files
