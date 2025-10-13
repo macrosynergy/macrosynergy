@@ -62,6 +62,16 @@ as a dataframe.**
         print(df.head())
 
 
+.. code-block:: python
+
+       real_date  cid     xcat  value  eop_lag  mop_lag  grading        last_updated
+    0 2000-01-03  AUD  RIR_NSA  4.078      0.0     55.0     1.25 2024-07-25 07:27:22
+    1 2000-01-04  AUD  RIR_NSA  3.778      0.0     56.0     1.25 2024-07-25 07:27:22
+    2 2000-01-05  AUD  RIR_NSA  3.747      0.0     56.0     1.25 2024-07-25 07:27:22
+    3 2000-01-06  AUD  RIR_NSA  3.710      0.0     56.0     1.25 2024-07-25 07:27:22
+    4 2000-01-07  AUD  RIR_NSA  3.697      0.0     57.0     1.25 2024-07-25 07:27:22
+
+
 **Example 4: Download all new or updated delta-files since a specific date/time.**
 
 .. code-block:: python
