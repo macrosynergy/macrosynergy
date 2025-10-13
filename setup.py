@@ -10,8 +10,8 @@ if sys.version_info[:2] < (3, 7):
     raise RuntimeError("Python version >= 3.8 required.")
 
 MAJOR = 1
-MINOR = 3
-MICRO = 8
+MINOR = 4
+MICRO = 0
 ISRELEASED = True
 VERSION = "%d.%d.%d" % (MAJOR, MINOR, MICRO)
 
@@ -81,7 +81,6 @@ def get_version_info():
         GIT_REVISION = "Unknown"
 
     if not ISRELEASED:
-
         FULLVERSION += f"dev0+{GIT_REVISION[:7]}"
 
     return FULLVERSION, GIT_REVISION
@@ -130,6 +129,7 @@ if not release:
 
 def setup_package():
     from setuptools import setup
+
     FULLVERSION, GIT_REVISION = get_version_info()
     # Rewrite the version file every time
     write_version_py(FULLVERSION, GIT_REVISION)
