@@ -1184,6 +1184,7 @@ class DataQueryFileAPIClient:
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
         dataframe_format: str = "qdf",
+        dataframe_type: str = "pandas",
         categorical_dataframe: bool = True,
         include_delta_files: bool = False,
         show_progress: bool = True,
@@ -1224,6 +1225,7 @@ class DataQueryFileAPIClient:
             start_date=start_date,
             end_date=end_date,
             dataframe_format=dataframe_format,
+            dataframe_type=dataframe_type,
             categorical_dataframe=categorical_dataframe,
             datasets=datasets_to_download,
         )
@@ -1854,9 +1856,28 @@ def lazy_load_from_parquets(
         tickers += [f"{c}_{x}" for c in cids for x in xcats]
 
     qdf = dataframe_format == "qdf"
-    return load_filtered_parquets(
+    lf: pl.LazyFrame = _lazy_load_filtered_parquets(
         tickers=tickers, paths=sorted(available_files_df["path"]), return_qdf=qdf
-    ).to_pandas()
+    )
+    if dataframe_type == "polars-lazy":
+        return lf
+
+    cat_cols = ["cid", "xcat", "ticker"]
+    if dataframe_type == "polars":
+        if categorical_dataframe:
+            cols = [c for c in cat_cols if c in lf.collect_schema().names()]
+            if cols:
+                lf = lf.with_columns([pl.col(c).cast(pl.Categorical) for c in cols])
+        return lf.collect()
+    if dataframe_type == "pandas":
+        df = lf.collect().to_pandas()
+        if categorical_dataframe:
+            cols = [c for c in cat_cols if c in df.columns]
+            if cols:
+                df[cols] = df[cols].astype("category")
+        return df
+
+    raise ValueError("Unknown dataframe type")
 
 
 class JPMaQSParquetSchemaKind(Enum):
@@ -1947,11 +1968,11 @@ def _scan_and_prepare_single_parquet(
     return lf
 
 
-def load_filtered_parquets(
+def _lazy_load_filtered_parquets(
     tickers: List[str],
     paths: List[str],
     return_qdf: bool = True,
-) -> pl.DataFrame:
+) -> pl.LazyFrame:
     if not paths:
         raise ValueError("No paths provided")
 
@@ -1967,27 +1988,38 @@ def load_filtered_parquets(
     ]
 
     out = pl.concat(lazy_parts, how="vertical")
-    return out.collect()
+    return out
 
 
 if __name__ == "__main__":
     print("Current time UTC:", pd.Timestamp.utcnow().isoformat())
 
-    start = time.time()
-    since_datetime = pd.Timestamp.now() - pd.offsets.BDay(5)
-    print(
-        f"Downloading full-snapshots, delta-files, and metadata files published since {since_datetime}"
-    )
-    since_datetime = since_datetime.strftime("%Y%m%d")
-    with DataQueryFileAPIClient(out_dir="./data/jpmaqs-data/") as dq:
-        dq.download_catalog_file()
-        dq.download_full_snapshot(since_datetime=since_datetime)
-    end = time.time()
+    # start = time.time()
+    # since_datetime = pd.Timestamp.now() - pd.offsets.BDay(5)
+    # print(
+    #     f"Downloading full-snapshots, delta-files, and metadata files published since {since_datetime}"
+    # )
+    # since_datetime = since_datetime.strftime("%Y%m%d")
+    # with DataQueryFileAPIClient(out_dir="./data/jpmaqs-data/") as dq:
+    #     dq.download_catalog_file()
+    #     dq.download_full_snapshot(since_datetime=since_datetime)
+    # end = time.time()
 
-    print(f"Download completed in {end - start:.2f} seconds")
+    # print(f"Download completed in {end - start:.2f} seconds")
 
     cids = ["AUD", "BRL", "CAD", "CHF", "CNY", "CZK", "EUR", "GBP", "USD"]
     xcats = ["RIR_NSA", "FXXR_NSA", "FXXR_VT10", "DU05YXR_NSA", "DU05YXR_VT10"]
+    tickers = [f"{c}_{x}" for c in cids for x in xcats]
+
     with DataQueryFileAPIClient(out_dir="./data/jpmaqs-data/") as dq:
-        df = dq.download(cids=cids, xcats=xcats)
+        df = dq.download(tickers=tickers)
         print(df.head())
+
+    with DataQueryFileAPIClient(out_dir="./data/jpmaqs-data/") as dq:
+        pl_df: pl.DataFrame = dq.download(
+            cids=cids,
+            xcats=xcats,
+            dataframe_format="tickers",
+            dataframe_type="polars",
+        )
+        print(pl_df.head())
