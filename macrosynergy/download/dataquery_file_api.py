@@ -50,6 +50,13 @@ including full datasets, deltas, and metadata.
 **Example 3: Download all new or updated files for the day, and load data from them
 as a dataframe.**
 
+Here, the client checks locally available files, compares them to the latest files.
+It automatically downloads new or updated files, and loads data for the specified `cids`, `xcats`,
+`tickers`, and `start_date`/`end_date` as appropriate.
+The resulting dataframe is returned to the user in the chosen dataframe format
+(quantamental format/tickers format) and dataframe type (`pandas`/`polars`).
+
+
 .. code-block:: python
 
     from macrosynergy.download import DataQueryFileAPIClient
@@ -57,6 +64,7 @@ as a dataframe.**
     cids = ['AUD', 'CAD', 'USD', 'JPY']
     xcats = ['EQXR_NSA', 'RIR_NSA']
     start_date = '2000-01-01'
+
     with DataQueryFileAPIClient(out_dir="./jpmaqs_data") as client:
         df = client.download(cids=cids, xcats=xcats, start_date=start_date)
         print(df.head())
