@@ -1941,6 +1941,14 @@ def lazy_load_from_parquets(
         end_date=end_date,
         return_qdf=qdf,
     )
+    if metrics and set(metrics) != set(JPMAQS_METRICS):
+        cols_to_keep = ["real_date", "cid", "xcat", "ticker"] + metrics
+        if PYTHON_3_8_OR_LATER:
+            lf = lf.select(
+                [pl.col(c) for c in cols_to_keep if c in lf.collect_schema().names()]
+            )
+        else:
+            lf = lf.select([pl.col(c) for c in cols_to_keep if c in lf.schema.keys()])
     if dataframe_type == "polars-lazy":
         return lf
 
