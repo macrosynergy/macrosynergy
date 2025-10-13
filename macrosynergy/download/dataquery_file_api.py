@@ -41,28 +41,38 @@ including full datasets, deltas, and metadata.
 .. code-block:: python
 
     from macrosynergy.download import DataQueryFileAPIClient
-    client = DataQueryFileAPIClient()
-    output_directory = "./jpmaqs_data"
+    client = DataQueryFileAPIClient(out_dir="./jpmaqs_data")
 
-    print(f"Downloading today's files to {output_directory}...")
-    client.download_full_snapshot(out_dir=output_directory)
+    print(f"Downloading today's files to {client.out_dir}...")
+    client.download_full_snapshot()
     print("Download complete.")
 
+**Example 3: Download all new or updated files for the day, and load data from them
+as a dataframe.**
 
-**Example 3: Download all new or updated delta-files since a specific date/time.**
+.. code-block:: python
+
+    from macrosynergy.download import DataQueryFileAPIClient
+
+    cids = ['AUD', 'CAD', 'USD', 'JPY']
+    xcats = ['EQXR_NSA', 'RIR_NSA']
+    start_date = '2000-01-01'
+    with DataQueryFileAPIClient(out_dir="./jpmaqs_data") as client:
+        df = client.download(cids=cids, xcats=xcats, start_date=start_date)
+        print(df.head())
+
+
+**Example 4: Download all new or updated delta-files since a specific date/time.**
 
 .. code-block:: python
 
     from macrosynergy.download import DataQueryFileAPIClient
     import pandas as pd
 
-    client = DataQueryFileAPIClient()
-    output_directory = "./jpmaqs_data"
+    client = DataQueryFileAPIClient("./jpmaqs_data")
     since_datetime = pd.Timestamp.today() - pd.DateOffset(days=10)
 
-    print(f"Downloading today's files to {output_directory}...")
     client.download_full_snapshot(
-        out_dir=output_directory,
         since_datetime=since_datetime,
         include_full_snapshots=False,
         include_metadata=True,
@@ -71,24 +81,20 @@ including full datasets, deltas, and metadata.
     print("Download complete.")
 
 
-**Example 4: Download a single, specific historical file.**
+**Example 5: Download a single, specific historical file.**
 
 .. code-block:: python
 
     from macrosynergy.download import DataQueryFileAPIClient
-    client = DataQueryFileAPIClient()
-    output_directory = "./jpmaqs_data"
+    client = DataQueryFileAPIClient("./jpmaqs_data")
     # This specific filename can be found using the list_available_files... methods
     target_filename = "JPMAQS_MACROECONOMIC_BALANCE_SHEETS_20250414.parquet"
 
     print(f"Downloading {target_filename}...")
-    file_path = client.download_file(
-        filename=target_filename,
-        out_dir=output_directory
-    )
+    file_path = client.download_file(filename=target_filename)
     print(f"File downloaded to: {file_path}")
 
-**Example 5: Check availability for a specific file-group.**
+**Example 6: Check availability for a specific file-group.**
 
 .. code-block:: python
 
@@ -101,7 +107,7 @@ including full datasets, deltas, and metadata.
     # print the earliest file's details
     print(available_files.iloc[-1])
 
-**Example 6: Download all historical full snapshot files (vintages) for JPMaQS.**
+**Example 7: Download all historical full snapshot files (vintages) for JPMaQS.**
 
 Please note:
     - This is a **VERY LARGE** download, taking 1hr+ and around 1GB/snapshot.
@@ -111,12 +117,10 @@ Please note:
 .. code-block:: python
 
     from macrosynergy.download import DataQueryFileAPIClient
-    client = DataQueryFileAPIClient()
+    client = DataQueryFileAPIClient(out_dir="./jpmaqs_full_snapshots")
     earliest_date = "20220101" # a date before the earliest available file
-    output_directory = "./jpmaqs_full_snapshots"
 
     client.download_full_snapshot(
-        out_dir=output_directory,
         since_datetime=earliest_date,
         include_delta=False,
         include_metadata=False,
