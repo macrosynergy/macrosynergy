@@ -1869,7 +1869,11 @@ def lazy_load_from_parquets(
     cat_cols = ["cid", "xcat", "ticker"]
     if dataframe_type == "polars":
         if categorical_dataframe:
-            cols = [c for c in cat_cols if c in lf.collect_schema().names()]
+            cols = None
+            if PYTHON_3_8_OR_LATER:
+                cols = [c for c in cat_cols if c in lf.collect_schema().names()]
+            else:
+                cols = [c for c in cat_cols if c in lf.schema.keys()]
             if cols:
                 lf = lf.with_columns([pl.col(c).cast(pl.Categorical) for c in cols])
         return lf.collect()
@@ -1890,7 +1894,10 @@ class JPMaQSParquetSchemaKind(Enum):
 
 
 def _identify_schema_type(lf: pl.LazyFrame) -> JPMaQSParquetSchemaKind:
-    cols = set(lf.collect_schema().keys())
+    if PYTHON_3_8_OR_LATER:
+        cols = set(lf.collect_schema().keys())
+    else:
+        cols = set(lf.schema.keys())
     if "ticker" in cols:
         return JPMaQSParquetSchemaKind.TICKER
     if {"cid", "xcat"}.issubset(cols):
@@ -1901,7 +1908,7 @@ def _identify_schema_type(lf: pl.LazyFrame) -> JPMaQSParquetSchemaKind:
     )
 
 
-def _expr_split_ticker(ticker_expr: pl.Expr) -> tuple[pl.Expr, pl.Expr]:
+def _expr_split_ticker(ticker_expr: pl.Expr) -> Tuple[pl.Expr, pl.Expr]:
     """
     Robust split of 'CID_XCAT...' into (cid, xcat) WITHOUT using splitn().
     Works across Polars versions (avoids struct vs list return type issues).
@@ -1917,7 +1924,10 @@ def _ensure_columns(lf: pl.LazyFrame, cols: Sequence[str]) -> pl.LazyFrame:
     Ensure all `cols` exist before .select(...).
     This runs schema-only (lf.collect_schema()), not a materialization.
     """
-    have = set(lf.collect_schema().keys())
+    if PYTHON_3_8_OR_LATER:
+        have = set(lf.collect_schema().keys())
+    else:
+        have = set(lf.schema.keys())
     missing = [c for c in cols if c not in have]
     return lf.with_columns(**{c: pl.lit(None) for c in missing}) if missing else lf
 
