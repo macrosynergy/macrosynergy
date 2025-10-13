@@ -1215,7 +1215,63 @@ class DataQueryFileAPIClient:
         qdf: bool = True,
         keep_raw_data: bool = False,
         as_csv: bool = False,
-    ) -> pd.DataFrame:
+    ) -> Union[pd.DataFrame, pl.DataFrame, pl.LazyFrame]:
+        """
+        A method to download data and load it as a DataFrame based on specified
+        indicators, and specified date range.
+
+        Parameters
+        ----------
+        tickers : Optional[List[str]]
+            A list of tickers to filter datasets. Each ticker must be in the standard
+            format "CID_XCAT" used in JPMaQS.
+        cids : Optional[List[str]]
+            A list of cross-sectional identifiers (CIDs) to filter datasets.
+        xcats : Optional[List[str]]
+            A list of extended categories (XCATS) to filter datasets.
+        metrics : Optional[List[str]]
+            A list of JPMaQS metrics to filter the data. Available metrics are "value",
+            "grading", "eop_lag", "mop_lag", and "last_updated". The available metrics
+            are also defined in `macrosynergy.constants.JPMAQS_METRICS`. The default
+            is None, in which case all metrics are returned.
+        start_date : Optional[str]
+            The start date for the returned data in the ISO format "YYYY-MM-DD".
+            If None, data is returned from the earliest available date.
+        end_date : Optional[str]
+            The end date for the returned data in the ISO format "YYYY-MM-DD".
+            If None, data is returned up to the latest available date.
+        dataframe_format : str
+            The format of the returned DataFrame. Options are "qdf" for QuantamentalDataFrame
+            or "tickers" for a standard DataFrame with tickers as columns. Default is "qdf".
+        dataframe_type : str
+            The type of DataFrame to return. Options are "pandas" for a pandas DataFrame,
+            "polars" for a polars DataFrame, or "polars-lazy" for a polars LazyFrame.
+            Default is "pandas".
+        categorical_dataframe : bool
+            If True and `dataframe_type` is "pandas", the returned DataFrame will use
+            categorical dtypes for object columns. Default is True.
+        include_delta_files : bool
+            If True, delta files will be included in the download. Default is False.
+        show_progress : bool
+            If True, displays a progress bar during downloads. Default is True.
+        out_dir : Optional[str]
+            The output directory for downloaded files. The default directory being used
+            by the DataQueryFileAPI instance is used if None.
+        overwrite : bool
+            If True, overwrites files if they already exist. Default is False.
+        qdf : bool
+            If True, the data will be returned as a QuantamentalDataFrame. Default is True.
+        keep_raw_data : bool
+            If True, keeps the raw data files after conversion. Default is False.
+        as_csv : bool
+            If True, saves the downloaded datasets as CSV files. Default is False, with
+            Parquet as the default format.
+
+        Returns
+        -------
+        Union[pd.DataFrame, pl.DataFrame, pl.LazyFrame]
+            A DataFrame containing the requested data.
+        """
         if include_delta_files:
             raise NotImplementedError(
                 "Downloading delta files is not implemented in this method."
