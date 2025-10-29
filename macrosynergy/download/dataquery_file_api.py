@@ -414,20 +414,12 @@ class DataQueryFileAPIClient:
         payload = self._get(endpoint, {"group-id": group_id})
         df = pd.json_normalize(payload, record_path=["file-group-ids"])
 
-        isdeltafile = df["file-group-id"].str.endswith("_DELTA")
-        ismetadata = df["file-group-id"].str.contains("_METADATA")
-        isfullsnapshot = ~(isdeltafile | ismetadata)
-
-        mask = pd.Series(False, index=df.index)
-        if include_full_snapshots:
-            mask |= isfullsnapshot
-        if include_delta:
-            mask |= isdeltafile
-        if include_metadata:
-            mask |= ismetadata
-        df = df[mask]
-
-        df = df.sort_values(by=["item"]).reset_index(drop=True)
+        df = filter_files_df_by_type(
+            df=df,
+            include_full_snapshots=include_full_snapshots,
+            include_delta=include_delta,
+            include_metadata=include_metadata,
+        )
 
         return df
 
@@ -1042,8 +1034,11 @@ class DataQueryFileAPIClient:
     def list_downloaded_files(
         self,
         out_dir: Optional[str] = None,
+        include_full_snapshots: bool = True,
+        include_delta: bool = True,
+        include_metadata: bool = True,
     ) -> pd.DataFrame:
-        out_dir = self._get_save_dir()
+        out_dir = self._get_save_dir(out_dir)
         col_order = [
             "filename",
             "file-datetime",
@@ -1064,6 +1059,15 @@ class DataQueryFileAPIClient:
             return files_df
 
         files_df = files_df[col_order].rename(columns={"filename": "file-name"})
+
+        files_df = filter_files_df_by_type(
+            df=files_df,
+            include_full_snapshots=include_full_snapshots,
+            include_delta=include_delta,
+            include_metadata=include_metadata,
+            file_group_id_col="dataset",
+        )
+
         return files_df
 
     def download_full_snapshot(
@@ -1379,6 +1383,47 @@ def get_client_id_secret() -> Optional[Tuple[str, str]]:
             return client_id, client_secret
 
     return None, None
+
+
+def filter_files_df_by_type(
+    df: pd.DataFrame,
+    include_full_snapshots: bool = True,
+    include_delta: bool = True,
+    include_metadata: bool = True,
+    file_group_id_col: str = "file-group-id",
+) -> pd.DataFrame:
+    """Filters the files DataFrame based on file type inclusion flags."""
+    if not any([include_full_snapshots, include_delta, include_metadata]):
+        raise ValueError(
+            "At least one of `include_full_snapshots`, `include_delta`, or "
+            "`include_metadata` must be True."
+        )
+    if df.empty:
+        return df
+    if file_group_id_col not in df.columns:
+        raise ValueError(
+            f"`{file_group_id_col}` column not found in DataFrame for filtering."
+        )
+    isdeltafile = df[file_group_id_col].str.endswith("_DELTA")
+    ismetadata = df[file_group_id_col].str.contains("_METADATA")
+    isfullsnapshot = ~(isdeltafile | ismetadata)
+
+    mask = pd.Series(False, index=df.index)
+    if include_full_snapshots:
+        mask |= isfullsnapshot
+    if include_delta:
+        mask |= isdeltafile
+    if include_metadata:
+        mask |= ismetadata
+    df = df[mask]
+
+    sort_col = "item"
+    if "item" not in df.columns:
+        sort_col = "file-timestamp"
+
+    if sort_col in df.columns:
+        df = df.sort_values(by=[sort_col]).reset_index(drop=True)
+    return df
 
 
 class SegmentedFileDownloader:
