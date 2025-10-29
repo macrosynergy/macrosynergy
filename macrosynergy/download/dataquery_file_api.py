@@ -1070,6 +1070,46 @@ class DataQueryFileAPIClient:
 
         return files_df
 
+    def cleanup_old_files(
+        self,
+        out_dir: Optional[str] = None,
+        include_full_snapshots: bool = True,
+        include_delta: bool = True,
+        include_metadata: bool = True,
+        days_to_keep: int = 3,
+    ) -> None:
+        out_dir = self._get_save_dir(out_dir)
+        cutoff_date = pd.Timestamp.utcnow() - pd.Timedelta(days=days_to_keep)
+        downloaded_files_df = self.list_downloaded_files(
+            out_dir=out_dir,
+            include_full_snapshots=include_full_snapshots,
+            include_delta=include_delta,
+            include_metadata=include_metadata,
+        )
+        files_to_delete = downloaded_files_df[
+            pd_to_datetime_compat(downloaded_files_df["file-datetime"], utc=True)
+            < cutoff_date
+        ]
+        num_files_to_delete = len(files_to_delete)
+        if num_files_to_delete == 0:
+            logger.info("No old files to delete.")
+            return
+
+        log_str = (
+            f"Found {num_files_to_delete} files older than {cutoff_date} to delete."
+        )
+        logger.info(log_str)
+        print(log_str)
+        for _, row in files_to_delete.iterrows():
+            file_path = Path(row["path"])
+            try:
+                file_path.unlink(missing_ok=True)
+                logger.info(f"Deleted file: {file_path}")
+            except Exception as e:
+                logger.error(f"Failed to delete file {file_path}: {e}")
+
+        return
+
     def download_full_snapshot(
         self,
         out_dir: Optional[str] = None,
@@ -1080,6 +1120,7 @@ class DataQueryFileAPIClient:
         qdf: bool = True,
         as_csv: bool = False,
         keep_raw_data: bool = False,
+        cleanup_old_files: Union[int, bool] = False,
         chunk_size: Optional[int] = None,
         timeout: Optional[float] = DQ_FILE_API_TIMEOUT,
         include_full_snapshots: bool = True,
@@ -1116,6 +1157,9 @@ class DataQueryFileAPIClient:
             Parquet as the default format.
         keep_raw_data : bool
             If True, keeps the raw data files after conversion. Default is False.
+        cleanup_old_files : Union[int, bool]
+            If True, deletes files older than 1 day (T-1). If an integer is provided,
+            deletes files older than that many days. Default is False.
         chunk_size : Optional[int]
             The chunk size for streaming downloads (in bytes).
         timeout : Optional[float]
@@ -1148,6 +1192,8 @@ class DataQueryFileAPIClient:
             effective_ts,
             var_name="file_datetime" if file_datetime else "since_datetime",
         )
+        if not isinstance(cleanup_old_files, (bool, int)):
+            raise ValueError("`cleanup_old_files` must be a boolean or an integer.")
 
         files_df = self.filter_available_files_by_datetime(
             since_datetime=since_datetime,
@@ -1200,6 +1246,14 @@ class DataQueryFileAPIClient:
 
         total_time = time.time() - start_time
         logger.info(f"Snapshot download completed in {total_time:.2f} seconds.")
+        if cleanup_old_files:
+            self.cleanup_old_files(
+                out_dir=out_dir,
+                include_full_snapshots=include_full_snapshots,
+                include_delta=include_delta,
+                include_metadata=include_metadata,
+                days_to_keep=int(cleanup_old_files),
+            )
 
     def download(
         self,
@@ -1219,6 +1273,7 @@ class DataQueryFileAPIClient:
         qdf: bool = True,
         keep_raw_data: bool = False,
         as_csv: bool = False,
+        cleanup_old_files: Union[int, bool] = False,
     ) -> Union[pd.DataFrame, pl.DataFrame, pl.LazyFrame]:
         """
         A method to download data and load it as a DataFrame based on specified
@@ -1270,6 +1325,9 @@ class DataQueryFileAPIClient:
         as_csv : bool
             If True, saves the downloaded datasets as CSV files. Default is False, with
             Parquet as the default format.
+        cleanup_old_files : Union[int, bool]
+            If True, deletes files older than 1 day (T-1). If an integer is provided,
+            deletes files older than that many days. Default is False.
 
         Returns
         -------
@@ -1297,6 +1355,7 @@ class DataQueryFileAPIClient:
             include_full_snapshots=True,
             include_delta=include_delta_files,
             include_metadata=False,
+            cleanup_old_files=cleanup_old_files,
         )
         return lazy_load_from_parquets(
             files_dir=out_dir,
@@ -1514,7 +1573,7 @@ class SegmentedFileDownloader:
             self.temp_dir.mkdir(exist_ok=True, parents=True)
 
             total_size = self._get_file_size()
-            self.log(f"File size: {total_size / (1024*1024):.2f} MB")
+            self.log(f"File size: {total_size / (1024 * 1024):.2f} MB")
 
             chunk_size = int(self.segment_size_mb * 1024 * 1024)
             chunks = range(0, total_size, chunk_size)
@@ -1652,7 +1711,7 @@ class SegmentedFileDownloader:
                 with open(part_path, "rb") as part_file:
                     shutil.copyfileobj(part_file, final_file)
         final_size = final_path.stat().st_size
-        self.log(f"Assembled file size: {final_size / (1024*1024):.2f} MB")
+        self.log(f"Assembled file size: {final_size / (1024 * 1024):.2f} MB")
         self.cleanup()
 
     def cleanup(self):
@@ -2189,5 +2248,6 @@ if __name__ == "__main__":
             xcats=xcats,
             dataframe_format="tickers",
             dataframe_type="polars",
+            cleanup_old_files=2,
         )
-        print(pl_df.head())
+        print(pl_df.head()) 
