@@ -1260,7 +1260,9 @@ class DataQueryFileAPIClient:
         overwrite : bool
             If True, overwrites files if they already exist. Default is False.
         qdf : bool
-            If True, the data will be returned as a QuantamentalDataFrame. Default is False.
+            If True, each downloaded dataframe will be saved as a QuantamentalDataFrame,
+            otherwise files are saved as-is in the ticker-based Parquet format.
+            Default is False.
         keep_raw_data : bool
             If True, keeps the raw data files after conversion. Default is False.
         as_csv : bool
