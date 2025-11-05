@@ -686,7 +686,7 @@ class DataQueryFileAPIClient:
         filename: Optional[str] = None,
         out_dir: Optional[str] = None,
         overwrite: bool = False,
-        qdf: bool = True,
+        qdf: bool = False,
         as_csv: bool = False,
         keep_raw_data: bool = False,
         chunk_size: Optional[int] = None,
@@ -714,7 +714,7 @@ class DataQueryFileAPIClient:
             If True, overwrites the file if it already exists. Default is False.
         qdf : bool
             If True, converts the DataFrame to a QuantamentalDataFrame. If False, files
-            are saved as-is in the ticker-based Parquet format. Default is True.
+            are saved as-is in the ticker-based Parquet format. Default is False.
         as_csv : bool
             If True, saves the downloaded datasets as CSV files. Default is False, with
             Parquet as the default format.
@@ -818,7 +818,7 @@ class DataQueryFileAPIClient:
         filenames: List[str],
         out_dir: Optional[str] = None,
         overwrite: bool = False,
-        qdf: bool = True,
+        qdf: bool = False,
         as_csv: bool = False,
         keep_raw_data: bool = False,
         max_retries: int = 3,
@@ -840,7 +840,7 @@ class DataQueryFileAPIClient:
             If True, overwrites files if they already exist. Default is False.
         qdf : bool
             If True, converts the DataFrame to a QuantamentalDataFrame. If False, files
-            are saved as-is in the ticker-based Parquet format. Default is True.
+            are saved as-is in the ticker-based Parquet format. Default is False.
         as_csv : bool
             If True, saves the DataFrame as a CSV file. Default is False.
         keep_raw_data : bool
@@ -1073,7 +1073,7 @@ class DataQueryFileAPIClient:
         to_datetime: Optional[str] = None,
         file_datetime: Optional[str] = None,
         overwrite: bool = False,
-        qdf: bool = True,
+        qdf: bool = False,
         as_csv: bool = False,
         keep_raw_data: bool = False,
         chunk_size: Optional[int] = None,
@@ -1106,7 +1106,7 @@ class DataQueryFileAPIClient:
             If True, overwrites files if they already exist. Default is False.
         qdf : bool
             If True, converts the DataFrame to a QuantamentalDataFrame. If False, files
-            are saved as-is in the ticker-based Parquet format. Default is True.
+            are saved as-is in the ticker-based Parquet format. Default is False.
         as_csv : bool
             If True, saves the downloaded datasets as CSV files. Default is False, with
             Parquet as the default format.
@@ -1212,7 +1212,7 @@ class DataQueryFileAPIClient:
         show_progress: bool = True,
         out_dir: Optional[str] = None,
         overwrite: bool = False,
-        qdf: bool = True,
+        qdf: bool = False,
         keep_raw_data: bool = False,
         as_csv: bool = False,
     ) -> Union[pd.DataFrame, pl.DataFrame, pl.LazyFrame]:
@@ -1260,7 +1260,7 @@ class DataQueryFileAPIClient:
         overwrite : bool
             If True, overwrites files if they already exist. Default is False.
         qdf : bool
-            If True, the data will be returned as a QuantamentalDataFrame. Default is True.
+            If True, the data will be returned as a QuantamentalDataFrame. Default is False.
         keep_raw_data : bool
             If True, keeps the raw data files after conversion. Default is False.
         as_csv : bool
@@ -1933,13 +1933,12 @@ def lazy_load_from_parquets(
     if cids:
         tickers += [f"{c}_{x}" for c in cids for x in xcats]
 
-    qdf = dataframe_format == "qdf"
     lf: pl.LazyFrame = _lazy_load_filtered_parquets(
         paths=sorted(available_files_df["path"]),
         tickers=tickers,
         start_date=start_date,
         end_date=end_date,
-        return_qdf=qdf,
+        return_qdf=(dataframe_format == "qdf"),
     )
     if metrics and set(metrics) != set(JPMAQS_METRICS):
         cols_to_keep = ["real_date", "cid", "xcat", "ticker"] + metrics
