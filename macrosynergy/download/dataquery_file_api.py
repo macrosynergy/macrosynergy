@@ -776,6 +776,9 @@ class DataQueryFileAPIClient:
         )
 
         is_small_file = any(x in file_group_id.lower() for x in ["delta", "metadata"])
+        if "_DELTA" in file_group_id:
+            is_small_file = file_datetime not in large_delta_file_datetimes()
+
         is_catalog_file = file_group_id == self.catalog_file_group_id
         if is_small_file:
             request_wrapper_stream_bytes_to_disk(**download_args)
@@ -1379,6 +1382,26 @@ def get_client_id_secret() -> Optional[Tuple[str, str]]:
             return client_id, client_secret
 
     return None, None
+
+
+@functools.lru_cache(maxsize=1)
+def large_delta_file_datetimes(as_str: bool = True) -> List[str]:
+    """
+    Plausible file datetimes for large delta files, which are typically
+    generated at the end of each month and on business month ends, with timestamps of
+    end-of-day (23:59:59).
+    """
+    sd, ed = JPMAQS_EARLIEST_FILE_DATE, pd.Timestamp.today()
+    dt1 = list(pd.date_range(start=sd, end=ed, freq="M"))
+    dt2 = list(pd.date_range(start=sd, end=ed, freq="BM"))
+    all_dates = sorted(set(dt1 + dt2))
+    all_dates = [
+        d.normalize() + pd.Timedelta(hours=23, minutes=59, seconds=59)
+        for d in all_dates
+    ]
+    if not as_str:
+        return all_dates
+    return [d.strftime("%Y%m%dT%H%M%S") for d in all_dates]
 
 
 class SegmentedFileDownloader:
