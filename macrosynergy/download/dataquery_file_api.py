@@ -1392,8 +1392,8 @@ def large_delta_file_datetimes(as_str: bool = True) -> List[str]:
     end-of-day (23:59:59).
     """
     sd, ed = JPMAQS_EARLIEST_FILE_DATE, pd.Timestamp.today()
-    dt1 = list(pd.bdate_range(start=sd, end=ed, freq="ME"))
-    dt2 = list(pd.date_range(start=sd, end=ed, freq="BME"))
+    dt1 = list(pd.date_range(start=sd, end=ed, freq="M"))
+    dt2 = list(pd.date_range(start=sd, end=ed, freq="BM"))
     all_dates = sorted(set(dt1 + dt2))
     all_dates = [
         d.normalize() + pd.Timedelta(hours=23, minutes=59, seconds=59)
