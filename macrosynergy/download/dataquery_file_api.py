@@ -777,7 +777,7 @@ class DataQueryFileAPIClient:
 
         is_small_file = any(x in file_group_id.lower() for x in ["delta", "metadata"])
         if "_DELTA" in file_group_id:
-            is_small_file = file_datetime in large_delta_file_datetimes()
+            is_small_file = file_datetime not in large_delta_file_datetimes()
 
         is_catalog_file = file_group_id == self.catalog_file_group_id
         if is_small_file:
