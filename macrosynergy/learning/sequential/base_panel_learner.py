@@ -32,6 +32,7 @@ class BasePanelLearner(ABC):
         df,
         xcats,
         cids=None,
+        n_targets=1,
         start=None,
         end=None,
         blacklist=None,
@@ -56,6 +57,8 @@ class BasePanelLearner(ABC):
             independent variables in a supervised learning framework.
         cids : list, 
             Cross-sections to be included. Default is all in the dataframe.
+        n_targets : int
+            Number of response variables to consider. Default is 1.
         start : str, 
             Start date for considered data in subsequent analysis in ISO 8601 format.
             Default is None i.e. the earliest date in the dataframe.
@@ -117,6 +120,7 @@ class BasePanelLearner(ABC):
                 df,
                 xcats,
                 cids,
+                n_targets,
                 start,
                 end,
                 blacklist,
@@ -130,6 +134,7 @@ class BasePanelLearner(ABC):
         self.df = QuantamentalDataFrame(df)
         self.xcats = xcats
         self.cids = cids
+        self.n_targets = n_targets
         self.start = start
         self.end = end
         self.blacklist = blacklist
@@ -140,29 +145,57 @@ class BasePanelLearner(ABC):
         self.drop_nas = drop_nas
 
         # Create long-format dataframe
-        df_long = (
-            categories_df(
-                df=self.df,
-                xcats=self.xcats,
-                cids=self.cids,
-                start=self.start,
-                end=self.end,
-                blacklist=self.blacklist,
-                freq=self.freq,
-                lag=self.lag,
-                xcat_aggs=self.xcat_aggs,
+        if self.n_targets == 1:
+            df_long = (
+                categories_df(
+                    df=self.df,
+                    xcats=self.xcats,
+                    cids=self.cids,
+                    start=self.start,
+                    end=self.end,
+                    blacklist=self.blacklist,
+                    freq=self.freq,
+                    lag=self.lag,
+                    xcat_aggs=self.xcat_aggs,
+                )
             )
-        )
-
+        else:
+            features_xcats = self.xcats[:-self.n_targets]
+            targets_xcats = self.xcats[-self.n_targets:]
+            dfs = []
+            for target in targets_xcats:
+                df_long = (
+                    categories_df(
+                        df=self.df,
+                        xcats=features_xcats + [target],
+                        cids=self.cids,
+                        start=self.start,
+                        end=self.end,
+                        blacklist=self.blacklist,
+                        freq=self.freq,
+                        lag=self.lag,
+                        xcat_aggs=self.xcat_aggs,
+                    )
+                )
+                dfs.append(df_long)
+            df_long = pd.concat(dfs, axis=1).sort_index()
+            # Filter out duplicate categories
+            df_features = df_long.iloc[:,:len(features_xcats)]
+            df_targets = df_long[targets_xcats]
+            df_long = pd.concat([df_features, df_targets], axis=1)
         if self.drop_nas:
             df_long = df_long.dropna().sort_index()
         else:
-            # Only drop rows with NaN values in the dependent variable
-            df_long = df_long.dropna(subset=[self.xcats[-1]]).sort_index()
-            
+            # Only drop rows with NaN values in the dependent variable(s)
+            df_long = df_long.dropna(subset=self.xcats[-self.n_targets:]).sort_index()
+            # Drop if all independent variables are NaN
+            df_long = df_long.dropna(
+                how="all", subset=self.xcats[:-self.n_targets]
+            ).sort_index()
+
         # Create X and y
-        self.X = df_long.iloc[:, :-1]
-        self.y = df_long.iloc[:, -1]
+        self.X = df_long.iloc[:, :-self.n_targets]
+        self.y = df_long.iloc[:, -self.n_targets:]
 
         if self.generate_labels is not None:
             self.y = self.y.apply(self.generate_labels)
@@ -1045,6 +1078,7 @@ class BasePanelLearner(ABC):
         df,
         xcats,
         cids,
+        n_targets,
         start,
         end,
         blacklist,
@@ -1065,6 +1099,8 @@ class BasePanelLearner(ABC):
             List of xcats to be used in the learning process.
         cids : list, optional
             List of cids to be used in the learning process. Default is None.
+        n_targets : int
+            Number of target variables to predict.
         start : str, optional
             Start date for the learning process. Default is None.
         end : str, optional
@@ -1114,6 +1150,12 @@ class BasePanelLearner(ABC):
             difference_cids = set(cids) - set(df["cid"].unique())
             if difference_cids != set():
                 raise ValueError(f"{str(difference_cids)} not in the dataframe.")
+            
+        # n_targets checks
+        if not isinstance(n_targets, int):
+            raise TypeError("n_targets must be an integer.")
+        if n_targets < 1:
+            raise ValueError("n_targets must be at least 1.")
 
         # start checks
         if start is not None:

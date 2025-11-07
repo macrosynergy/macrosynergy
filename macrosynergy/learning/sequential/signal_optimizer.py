@@ -30,11 +30,14 @@ class SignalOptimizer(BasePanelLearner):
         Daily quantamental dataframe in JPMaQS format containing a panel of features, as
         well as a panel of returns.
     xcats : list
-        List comprising feature names, with the last element being the response variable
-        name. The features and the response variable must be categories in the dataframe.
+        List comprising feature names, with the last n_targets elements being the response
+        variable name(s). The features and the response variable(s) must be categories in the
+        dataframe.
     cids : list
         List of cross-section identifiers for consideration in the panel. Default is None,
         in which case all cross-sections in `df` are considered.
+    n_targets : int
+        Number of response variables to consider. Default is 1.
     start : str
         Start date for considered data in subsequent analysis in ISO 8601 format.
         Default is None i.e. the earliest date in the dataframe.
@@ -61,11 +64,11 @@ class SignalOptimizer(BasePanelLearner):
 
     Notes
     -----
-    The `SignalOptimizer` class is used to predict the response variable, usually a panel
+    The `SignalOptimizer` class is used to predict the response variable(s), usually a panel
     of asset class returns, based on a panel of features that are lagged by a specified
     number of periods. This is done in a sequential manner, by specifying the size of an
     initial training set, choosing an optimal model out of a provided collection
-    (with associated hyperparameters), forecasting the return panel, and then expanding
+    (with associated hyperparameters), forecasting the return panel(s), and then expanding
     the training set to include the now-realized returns. The process continues until the
     end of the dataset is reached.
 
@@ -101,6 +104,7 @@ class SignalOptimizer(BasePanelLearner):
         df,
         xcats,
         cids=None,
+        n_targets=1,
         start=None,
         end=None,
         blacklist=None,
@@ -115,6 +119,7 @@ class SignalOptimizer(BasePanelLearner):
             df=df,
             xcats=xcats,
             cids=cids,
+            n_targets=n_targets,
             start=start,
             end=end,
             blacklist=blacklist,
@@ -1742,7 +1747,7 @@ if __name__ == "__main__":
     from macrosynergy.management.types import QuantamentalDataFrame
 
     cids = ["AUD", "CAD", "GBP", "USD"]
-    xcats = ["XR", "CRY", "GROWTH", "INFL"]
+    xcats = ["XR1", "CRY", "GROWTH", "XR2"]
     cols = ["earliest", "latest", "mean_add", "sd_mult", "ar_coef", "back_coef"]
 
     df_cids = pd.DataFrame(
@@ -1754,10 +1759,10 @@ if __name__ == "__main__":
     df_cids.loc["USD"] = ["2012-01-01", "2020-12-31", 0, 1]
 
     df_xcats = pd.DataFrame(index=xcats, columns=cols)
-    df_xcats.loc["XR"] = ["2012-01-01", "2020-12-31", 0.1, 1, 0, 0.3]
+    df_xcats.loc["XR1"] = ["2012-01-01", "2020-12-31", 0.1, 1, 0, 0.3]
     df_xcats.loc["CRY"] = ["2012-01-01", "2020-12-31", 1, 2, 0.95, 1]
     df_xcats.loc["GROWTH"] = ["2012-01-01", "2020-12-31", 1, 2, 0.9, 1]
-    df_xcats.loc["INFL"] = ["2015-01-01", "2020-12-31", -0.1, 2, 0.8, 0.3]
+    df_xcats.loc["XR2"] = ["2015-01-01", "2020-12-31", -0.1, 2, 0.8, 0.3]
 
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
     dfd["grading"] = np.ones(dfd.shape[0])
@@ -1774,10 +1779,11 @@ if __name__ == "__main__":
 
     so = SignalOptimizer(
         df=dfd,
-        xcats=["CRY", "GROWTH", "INFL", "XR"],
+        xcats=["CRY", "GROWTH", "XR1", "XR2"],
         cids=cids,
         blacklist=black,
-        drop_nas = True
+        drop_nas = False,
+        n_targets=2,
     )
 
     so.calculate_predictions(
@@ -1813,7 +1819,7 @@ if __name__ == "__main__":
         #n_iter=6,
         cv_summary="mean-std-ge",
         include_train_folds=True,
-        n_jobs_outer=1,
+        n_jobs_outer=-1,
         n_jobs_inner=1,
         normalize_fold_results=True,
         split_functions={
@@ -1836,7 +1842,6 @@ if __name__ == "__main__":
         xcats=["CRY", "GROWTH", "INFL", "XR"],
         cids=cids,
         blacklist=black,
-        drop_nas = False
     )
 
     so.calculate_predictions(
