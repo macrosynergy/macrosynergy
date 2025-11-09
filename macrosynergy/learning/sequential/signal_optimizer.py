@@ -357,12 +357,20 @@ class SignalOptimizer(BasePanelLearner):
             ftr_corr_data.extend(split_result["ftr_corr"])
 
         # First create pandas dataframes to store the forecasts
-        forecasts_df = pd.DataFrame(
-            index=self.forecast_idxs, columns=[name], data=np.nan, dtype="float32"
-        )
+        if self.n_targets == 1:
+            forecasts_df = pd.DataFrame(
+                index=self.forecast_idxs, columns=[name], data=np.nan, dtype="float32"
+            )
+        else:
+            forecasts_df = pd.DataFrame(
+                index=self.forecast_idxs,
+                columns=[f"{target}_{name}" for target in self.xcats[-self.n_targets :]],
+                data=np.nan,
+                dtype="float32",
+            )
         # Create quantamental dataframe of forecasts
         for idx, forecasts in prediction_data:
-            forecasts_df.loc[idx, name] = forecasts
+            forecasts_df.loc[idx] = forecasts
 
         forecasts_df = forecasts_df.groupby(level=0).ffill().dropna()
 
@@ -538,6 +546,8 @@ class SignalOptimizer(BasePanelLearner):
             elif coef.ndim == 2:
                 if coef.shape[0] == 1:
                     coefs = coef.flatten()
+                elif self.n_targets > 1 and coef.shape[0] == self.n_targets:
+                    coefs = coef.mean(axis=0)
 
         coef_ftr_map = {ftr: coef for ftr, coef in zip(feature_names, coefs)}
         coefs = [
@@ -546,9 +556,11 @@ class SignalOptimizer(BasePanelLearner):
         ]
         if hasattr(final_estimator, "intercept_"):
             if isinstance(final_estimator.intercept_, np.ndarray):
-                # Store the intercept if it has length one
                 if len(final_estimator.intercept_) == 1:
                     intercepts = final_estimator.intercept_[0]
+                elif self.n_targets > 1 and len(final_estimator.intercept_) == self.n_targets:
+                    # Use average intercept if multiple targets
+                    intercepts = final_estimator.intercept_.mean()
                 else:
                     intercepts = np.nan
             else:
@@ -1737,11 +1749,11 @@ class SignalOptimizer(BasePanelLearner):
 
 
 if __name__ == "__main__":
-    from sklearn.linear_model import Ridge, Lasso
+    from sklearn.linear_model import LinearRegression
+    from sklearn.ensemble import RandomForestRegressor
     from sklearn.metrics import make_scorer, r2_score, mean_absolute_error
     from macrosynergy.learning import (
         ExpandingKFoldPanelSplit,
-        TimeWeightedLinearRegression,
     )
     from macrosynergy.management.simulate import make_qdf
     from macrosynergy.management.types import QuantamentalDataFrame
@@ -1782,29 +1794,22 @@ if __name__ == "__main__":
         xcats=["CRY", "GROWTH", "XR1", "XR2"],
         cids=cids,
         blacklist=black,
-        drop_nas = False,
+        drop_nas = True,
         n_targets=2,
     )
 
     so.calculate_predictions(
         name="LR",
         models={
-            "Ridge": Ridge(),
-            "Lasso": Lasso(),
-            "TWLS": TimeWeightedLinearRegression(),
+            "LR": LinearRegression(),
+            "RF": RandomForestRegressor(),
         },
         hyperparameters={
-            "Ridge": {
+            "LR": {
                 "fit_intercept": [True, False],
-                "alpha": [1e-4, 1e-3, 1e-2, 1e-1, 1, 10, 100, 1000, 10000],
             },
-            "Lasso": {
-                "fit_intercept": [True, False],
-                "alpha": [1e-4, 1e-3, 1e-2, 1e-1, 1, 10, 100, 1000, 10000],
-            },
-            "TWLS": {
-                "half_life": [24, 36, 60, 120, 240],
-                "fit_intercept": [True, False],
+            "RF": {
+                "n_estimators": [5, 10], # just for speed not statistical sense
             },
         },
         scorers={
