@@ -162,6 +162,7 @@ import traceback as tb
 import uuid
 from typing import Dict, Any, Optional, List, Tuple, Union, Sequence
 from tqdm import tqdm
+import json
 
 import requests
 from macrosynergy.compat import PD_2_0_OR_LATER, PYTHON_3_8_OR_LATER
@@ -816,6 +817,30 @@ class DataQueryFileAPIClient:
             logger.info(msg_str)
         return str(file_path)
 
+    def delete_corrupt_files(
+        self,
+        out_dir: Optional[str] = None,
+    ) -> List[str]:
+        """
+        Deletes corrupt files from the provided list based on file integrity checks.
+
+        Parameters
+        ----------
+        out_dir : Optional[str]
+            The directory to scan for corrupt files. If None, uses the client's default
+            output directory.
+
+        Returns
+        -------
+        List[str]
+            A list of file paths that were identified as corrupt and deleted.
+        """
+        out_dir = self._get_save_dir(out_dir)
+        avail_files = self.list_downloaded_files(out_dir=out_dir)
+        files = sorted(set(map(str, avail_files["path"])))
+        extensions = sorted(set(avail_files["filetype"]))
+        return _delete_corrupt_files(files=files, extensions=extensions)
+
     def download_multiple_files(
         self,
         filenames: List[str],
@@ -903,7 +928,8 @@ class DataQueryFileAPIClient:
                 except Exception as e:
                     logger.error(f"Failed to download {fname}: {e}")
                     failed_files.append(fname)
-
+        found_corrupt_files = self.delete_corrupt_files(out_dir=out_dir)
+        failed_files = sorted(set(failed_files + found_corrupt_files))
         if not failed_files:
             total_time = time.time() - start_time
             logger.info(
@@ -1404,6 +1430,40 @@ def large_delta_file_datetimes(as_str: bool = True) -> List[str]:
     if not as_str:
         return all_dates
     return [d.strftime("%Y%m%dT%H%M%S") for d in all_dates]
+
+
+def _delete_corrupt_files(
+    files: List[Path],
+    extensions: List[str] = ["parquet", "json"],
+    allow_empty: bool = False,
+) -> List[Path]:
+    """Deletes corrupt files based on their extensions."""
+    removed_files = []
+    for file_path in map(Path, files):
+        if not file_path.exists():
+            continue
+        if file_path.suffix.lower() not in [f".{ext.lower()}" for ext in extensions]:
+            continue
+        try:
+            if file_path.suffix.lower() == ".parquet":
+                head = pl.scan_parquet(file_path).head().collect()
+                if not allow_empty and head.is_empty():
+                    raise ValueError("File is empty")
+            elif file_path.suffix.lower() == ".json":
+                with open(file_path, "r", encoding="utf-8") as f:
+                    js = json.load(f)
+                    if not allow_empty and not js:
+                        raise ValueError("File is empty")
+            else:
+                continue
+        except KeyboardInterrupt:
+            raise
+        except Exception:
+            logger.warning(f"Deleting corrupt file: {file_path}")
+            file_path.unlink(missing_ok=True)
+            removed_files.append(file_path)
+
+    return sorted(map(str, removed_files))
 
 
 class SegmentedFileDownloader:
