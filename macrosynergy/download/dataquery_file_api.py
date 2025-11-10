@@ -838,7 +838,7 @@ class DataQueryFileAPIClient:
         out_dir = self._get_save_dir(out_dir)
         avail_files = self.list_downloaded_files(out_dir=out_dir)
         files = sorted(set(map(str, avail_files["path"])))
-        extensions = sorted(set(avail_files["filetype"]))
+        extensions = sorted(set(Path(f).suffix.rsplit(".", 1)[-1] for f in files))
         return _delete_corrupt_files(files=files, extensions=extensions)
 
     def download_multiple_files(
@@ -1442,7 +1442,9 @@ def _delete_corrupt_files(
     for file_path in map(Path, files):
         if not file_path.exists():
             continue
-        if file_path.suffix.lower() not in [f".{ext.lower()}" for ext in extensions]:
+        if file_path.suffix.lower() not in [
+            f".{ext.strip('.').lower()}" for ext in extensions
+        ]:
             continue
         try:
             if file_path.suffix.lower() == ".parquet":
