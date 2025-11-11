@@ -841,6 +841,8 @@ class DataQueryFileAPIClient:
         """
         out_dir = self._get_save_dir(out_dir)
         avail_files = self.list_downloaded_files(out_dir=out_dir)
+        if avail_files.empty:
+            return []
         if files is not None:
             if not all(isinstance(f, str) for f in files):
                 raise ValueError(
