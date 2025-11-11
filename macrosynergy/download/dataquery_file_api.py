@@ -1007,7 +1007,7 @@ class DataQueryFileAPIClient:
             csv_file_path = Path(file_path).with_suffix(".csv")
             df.to_csv(csv_file_path, index=False)
             if not keep_raw_data:
-                Path(file_path).unlink(missing_ok=True)
+                Path(file_path).unlink()
             file_path = str(csv_file_path)
         else:
             df.to_parquet(file_path, index=False)
@@ -1462,7 +1462,7 @@ def _delete_corrupt_files(
             raise
         except Exception:
             logger.warning(f"Deleting corrupt file: {file_path}")
-            file_path.unlink(missing_ok=True)
+            file_path.unlink()
             removed_files.append(file_path)
 
     return sorted(map(str, removed_files))
