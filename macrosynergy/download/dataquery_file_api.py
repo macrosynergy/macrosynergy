@@ -820,6 +820,7 @@ class DataQueryFileAPIClient:
     def delete_corrupt_files(
         self,
         out_dir: Optional[str] = None,
+        files: Optional[List[str]] = None,
     ) -> List[str]:
         """
         Deletes corrupt files from the provided list based on file integrity checks.
@@ -829,6 +830,9 @@ class DataQueryFileAPIClient:
         out_dir : Optional[str]
             The directory to scan for corrupt files. If None, uses the client's default
             output directory.
+        files : Optional[List[str]]
+            A list of file paths to check for corruption. If None, scans all downloaded
+            files in the specified output directory.
 
         Returns
         -------
@@ -837,6 +841,12 @@ class DataQueryFileAPIClient:
         """
         out_dir = self._get_save_dir(out_dir)
         avail_files = self.list_downloaded_files(out_dir=out_dir)
+        if files is not None:
+            if not all(isinstance(f, str) for f in files):
+                raise ValueError(
+                    "All items in `files` must be strings representing file paths."
+                )
+            avail_files = avail_files[avail_files["file-name"].isin(files)]
         files = sorted(set(map(str, avail_files["path"])))
         extensions = sorted(set(Path(f).suffix.rsplit(".", 1)[-1] for f in files))
         return _delete_corrupt_files(files=files, extensions=extensions)
@@ -928,7 +938,9 @@ class DataQueryFileAPIClient:
                 except Exception as e:
                     logger.error(f"Failed to download {fname}: {e}")
                     failed_files.append(fname)
-        found_corrupt_files = self.delete_corrupt_files(out_dir=out_dir)
+        found_corrupt_files = self.delete_corrupt_files(
+            out_dir=out_dir, files=filenames
+        )
         failed_files = sorted(set(failed_files + found_corrupt_files))
         if not failed_files:
             total_time = time.time() - start_time
