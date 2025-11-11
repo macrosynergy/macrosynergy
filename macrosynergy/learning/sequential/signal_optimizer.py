@@ -370,7 +370,7 @@ class SignalOptimizer(BasePanelLearner):
             )
         # Create quantamental dataframe of forecasts
         for idx, forecasts in prediction_data:
-            forecasts_df.loc[idx] = forecasts
+            forecasts_df.loc[idx, :] = forecasts
 
         forecasts_df = forecasts_df.groupby(level=0).ffill().dropna()
 

@@ -195,7 +195,7 @@ class BasePanelLearner(ABC):
 
         # Create X and y
         self.X = df_long.iloc[:, :-self.n_targets]
-        self.y = df_long.iloc[:, -self.n_targets:]
+        self.y = df_long.iloc[:, -self.n_targets:].squeeze()
 
         if self.generate_labels is not None:
             self.y = self.y.apply(self.generate_labels)

@@ -3440,6 +3440,7 @@ def _get_X_y(so: SignalOptimizer, drop_nas: bool):
     if drop_nas:
         df_long = df_long.dropna()
     else:
+        df_long = df_long.dropna(subset=so.xcats[:-1], how="all")
         df_long = df_long.dropna(subset=[so.xcats[-1]])
 
     df_long = df_long.sort_index()
