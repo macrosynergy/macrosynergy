@@ -678,7 +678,7 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
         client.download_catalog_file(as_csv=True, keep_raw_data=False)
         mock_read_parquet.assert_called_once_with(fake_path_str)
         mock_df.to_csv.assert_called_once()
-        mock_path_instance.unlink.assert_called_once_with(missing_ok=True)
+        mock_path_instance.unlink.assert_called_once_with()
 
         # error case
         mock_list_files.return_value = pd.DataFrame()
