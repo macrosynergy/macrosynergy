@@ -244,6 +244,6 @@ if __name__ == "__main__":
     X = so.X.copy(deep=True)
     y = so.y.copy(deep=True)
 
-    model = LinearMultiTargetRegression(seemingly_unrelated=True, fit_intercept = False, feature_selection=LarsSelector(n_factors = 1))
+    model = LinearMultiTargetRegression(seemingly_unrelated=True, fit_intercept = True, feature_selection=LarsSelector(n_factors = 2))
     model.fit(X, y)
     print(model.predict(X))
