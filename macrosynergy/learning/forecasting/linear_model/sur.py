@@ -196,13 +196,13 @@ if __name__ == "__main__":
     from sklearn.ensemble import RandomForestRegressor
     from sklearn.metrics import make_scorer, r2_score, mean_absolute_error
     from macrosynergy.learning import (
-        ExpandingKFoldPanelSplit, SignalOptimizer
+        ExpandingKFoldPanelSplit, SignalOptimizer, LarsSelector
     )
     from macrosynergy.management.simulate import make_qdf
     from macrosynergy.management.types import QuantamentalDataFrame
 
     cids = ["AUD", "CAD", "GBP", "USD"]
-    xcats = ["XR1", "CRY", "GROWTH", "XR2"]
+    xcats = ["XR1", "CRY", "GROWTH", "RATES", "XR2"]
     cols = ["earliest", "latest", "mean_add", "sd_mult", "ar_coef", "back_coef"]
 
     df_cids = pd.DataFrame(
@@ -217,6 +217,7 @@ if __name__ == "__main__":
     df_xcats.loc["XR1"] = ["2012-01-01", "2020-12-31", 0.1, 1, 0, 0.3]
     df_xcats.loc["CRY"] = ["2012-01-01", "2020-12-31", 1, 2, 0.95, 1]
     df_xcats.loc["GROWTH"] = ["2012-01-01", "2020-12-31", 1, 2, 0.9, 1]
+    df_xcats.loc["RATES"] = ["2010-01-01", "2020-12-31", 0, 1, 0.5, 0.5]
     df_xcats.loc["XR2"] = ["2015-01-01", "2020-12-31", -0.1, 2, 0.8, 0.3]
 
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
@@ -234,7 +235,7 @@ if __name__ == "__main__":
 
     so = SignalOptimizer(
         df=dfd,
-        xcats=["CRY", "GROWTH", "XR1", "XR2"],
+        xcats=["CRY", "GROWTH", "RATES", "XR1", "XR2"],
         cids=cids,
         blacklist=black,
         drop_nas = True,
@@ -243,6 +244,6 @@ if __name__ == "__main__":
     X = so.X.copy(deep=True)
     y = so.y.copy(deep=True)
 
-    model = LinearMultiTargetRegression(seemingly_unrelated=True, fit_intercept = False)
+    model = LinearMultiTargetRegression(seemingly_unrelated=True, fit_intercept = False, feature_selection=LarsSelector(n_factors = 1))
     model.fit(X, y)
     print(model.predict(X))
