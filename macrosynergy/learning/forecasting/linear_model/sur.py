@@ -26,7 +26,7 @@ class LinearMultiTargetRegression(BaseEstimator, RegressorMixin):
 
         self.assets = list(y.columns)
         self.n_assets = len(self.assets)
-        self.n_periods = y.shape[0] # Think about this more carefully for the instance where we operate on panel data
+        self.n_periods = y.shape[0] # TODO: Think about this more carefully for the instance where we operate on panel data
         self.features_ = list(X.columns)
         self.n_features = X.shape[1]
 
@@ -110,7 +110,7 @@ class LinearMultiTargetRegression(BaseEstimator, RegressorMixin):
         # Flatten W for scipy optimize
         x0 = W_full[mask]
 
-        #
+        # Minimise SUR loss over the panel
         self.coefs_, self.intercepts_ = self.__minimise_sur_loss(
             X = X.to_numpy(),
             y = y.to_numpy(),
@@ -243,6 +243,6 @@ if __name__ == "__main__":
     X = so.X.copy(deep=True)
     y = so.y.copy(deep=True)
 
-    model = LinearMultiTargetRegression(seemingly_unrelated=True)
+    model = LinearMultiTargetRegression(seemingly_unrelated=True, fit_intercept = False)
     model.fit(X, y)
-    model.predict(X)
+    print(model.predict(X))
