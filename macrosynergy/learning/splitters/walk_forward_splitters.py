@@ -428,7 +428,10 @@ class ExpandingFrequencyPanelSplit(WalkForwardPanelSplit):
         if self.drop_nas:
             Xy = pd.concat([X, y], axis=1).dropna()
         else:
-            Xy = pd.concat([X, y], axis=1).dropna(subset=[y.name])
+            if isinstance(y, pd.Series):
+                y = y.to_frame()
+            Xy = pd.concat([X, y], axis=1).dropna(subset=y.columns)
+            Xy = Xy.dropna(subset=X.columns, how='all')
 
         real_dates = Xy.index.get_level_values(1)
         splits = self._determine_unique_training_times(Xy, real_dates)

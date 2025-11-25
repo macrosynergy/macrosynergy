@@ -215,6 +215,7 @@ class BasePanelLearner(ABC):
                 "model_type",
                 "score",
                 "hparams",
+                "additional_data",
                 "n_splits_used",
             ]
         ).astype(
@@ -224,6 +225,7 @@ class BasePanelLearner(ABC):
                 "model_type": "category",
                 "score": "float32",
                 "hparams": "object",
+                "additional_data": "object",
                 "n_splits_used": "object",
             }
         )
@@ -244,6 +246,7 @@ class BasePanelLearner(ABC):
         include_train_folds=False,
         n_iter=100,
         split_functions=None,
+        store_additional_data=None,
         n_jobs_outer=-1,
         n_jobs_inner=1,
     ):
@@ -288,6 +291,9 @@ class BasePanelLearner(ABC):
             splits to add to the initial number, as a function of the number of iterations
             passed in the sequential learning process. If no hyperparameter tuning
             is required, this parameter can be disregarded.
+        store_additional_data : list, optional
+            List of optimal model attributes to store from each optimal model at each
+            retraining date. Default is None.
         n_jobs_outer : int, optional
             Number of jobs to run in parallel for the outer loop. Default is -1. 
         n_jobs_inner : int, optional
@@ -313,6 +319,7 @@ class BasePanelLearner(ABC):
             include_train_folds=include_train_folds,
             n_iter=n_iter,
             split_functions=split_functions,
+            store_additional_data=store_additional_data,
             n_jobs_outer=n_jobs_outer,
             n_jobs_inner=n_jobs_inner,
         )
@@ -340,6 +347,7 @@ class BasePanelLearner(ABC):
                     cv_summary=cv_summary,
                     include_train_folds=include_train_folds,
                     search_type=search_type,
+                    store_additional_data=store_additional_data,
                     normalize_fold_results=normalize_fold_results,
                     n_iter=n_iter,
                     n_splits_add=self._get_n_splits_add(
@@ -368,6 +376,7 @@ class BasePanelLearner(ABC):
         include_train_folds,
         search_type,
         normalize_fold_results,
+        store_additional_data,
         n_iter,
         n_splits_add,
         n_jobs_inner,
@@ -408,6 +417,9 @@ class BasePanelLearner(ABC):
         normalize_fold_results : bool, optional
             Whether to normalize the scores across folds before combining them.
             If no hyperparameter tuning is required, this parameter can be disregarded.
+        store_additional_data : list, optional
+            List of optimal model attributes to store from each optimal model at each
+            retraining date.
         n_iter : int, optional
             Number of iterations for random or bayesian hyperparameter optimization.
             If no hyperparameter tuning is required, this parameter can be disregarded.
@@ -473,7 +485,7 @@ class BasePanelLearner(ABC):
             else:
                 inner_splitters_adj = inner_splitters
 
-            optim_name, optim_model, optim_score, optim_params = self._model_search(
+            optim_name, optim_model, optim_score, optim_params, optim_additional_data = self._model_search(
                 X_train=X_train,
                 y_train=y_train,
                 inner_splitters=inner_splitters_adj,
@@ -481,6 +493,7 @@ class BasePanelLearner(ABC):
                 hyperparameters=hyperparameters,
                 scorers=scorers,
                 search_type=search_type,
+                store_additional_data=store_additional_data,
                 normalize_fold_results=normalize_fold_results,
                 n_iter=n_iter,
                 cv_summary=cv_summary,
@@ -492,6 +505,10 @@ class BasePanelLearner(ABC):
             optim_model = models[optim_name].fit(X_train, y_train)
             optim_score = np.ubyte(0) # For memory efficiency
             optim_params = {}
+            optim_additional_data = {
+                attr: getattr(optim_model, attr, None)
+                for attr in store_additional_data
+            }
             inner_splitters_adj = None
 
         split_results = self._get_split_results(
@@ -500,6 +517,7 @@ class BasePanelLearner(ABC):
             optimal_model_name=optim_name,
             optimal_model_score=optim_score,
             optimal_model_params=optim_params,
+            optimal_model_additional_data=optim_additional_data,
             inner_splitters_adj=inner_splitters_adj,
             X_train=X_train,
             y_train=y_train,
@@ -520,6 +538,7 @@ class BasePanelLearner(ABC):
         hyperparameters,
         scorers,
         search_type,
+        store_additional_data,
         normalize_fold_results,
         n_iter,
         cv_summary,
@@ -545,6 +564,9 @@ class BasePanelLearner(ABC):
             Compatible `scikit-learn` scoring functions.
         search_type : str
             Search type for hyperparameter optimization. Default is "grid".
+        store_additional_data : list, optional
+            List of optimal model attributes to store from each optimal model at each
+            retraining date.
         normalize_fold_results : bool
             Whether to normalize the scores across folds before combining them.
         n_iter : int
@@ -568,6 +590,7 @@ class BasePanelLearner(ABC):
         optim_model = None
         optim_score = np.float32("-inf")
         optim_params = {}
+        optim_additional_data = {}
 
         cv_splits = []
 
@@ -631,8 +654,13 @@ class BasePanelLearner(ABC):
                 optim_model = search_object.best_estimator_
                 optim_score = score
                 optim_params = search_object.best_params_
+                if store_additional_data is not None:
+                    for attr in store_additional_data:
+                        optim_additional_data[attr] = getattr(
+                            optim_model, attr, None
+                        )
 
-        return optim_name, optim_model, optim_score, optim_params
+        return optim_name, optim_model, optim_score, optim_params, optim_additional_data
 
     def _model_selection(
         self, cv_results, cv_summary, scorers, normalize_fold_results, return_index=True
@@ -747,6 +775,7 @@ class BasePanelLearner(ABC):
         optimal_model_name,
         optimal_model_score,
         optimal_model_params,
+        optimal_model_additional_data,
         inner_splitters_adj,
         X_train,
         y_train,
@@ -771,6 +800,8 @@ class BasePanelLearner(ABC):
             Score of the optimal model.
         optimal_model_params : dict
             Hyperparameters of the optimal model.
+        optimal_model_additional_data : dict
+            Additional attributes of the optimal model to store.
         inner_splitters_adj : dict
             Inner splitters for the learning process.
         X_train : pd.DataFrame
@@ -798,6 +829,7 @@ class BasePanelLearner(ABC):
             optimal_model_name,
             optimal_model_score,
             optimal_model_params,
+            optimal_model_additional_data,
             inner_splitters_adj,
             X_train,
             y_train,
@@ -814,6 +846,7 @@ class BasePanelLearner(ABC):
             optimal_model_name,
             optimal_model_score,
             optimal_model_params,
+            optimal_model_additional_data,
             inner_splitters_adj,
             X_train,
             y_train,
@@ -833,6 +866,7 @@ class BasePanelLearner(ABC):
         optimal_model_name,
         optimal_model_score,
         optimal_model_params,
+        optimal_model_additional_data,
         inner_splitters_adj,
         X_train,
         y_train,
@@ -855,6 +889,8 @@ class BasePanelLearner(ABC):
             Score of the optimal model.
         optimal_model_params : dict
             Hyperparameters of the optimal model.
+        optimal_model_additional_data : dict
+            Additional attributes of the optimal model to store.
         inner_splitters_adj : dict
             Inner splitters for the learning process.
         X_train : pd.DataFrame
@@ -881,12 +917,14 @@ class BasePanelLearner(ABC):
             optimal_model_name = None
             optimal_model_score = np.float32("-inf")
             optimal_model_params = {}
+            optimal_model_additional_data = {}
 
         data = [
             timestamp,
             optimal_model_name,
             optimal_model_score,
             optimal_model_params,
+            optimal_model_additional_data,
         ]
 
         if inner_splitters_adj is not None:
@@ -907,6 +945,7 @@ class BasePanelLearner(ABC):
         optimal_model_name,
         optimal_model_score,
         optimal_model_params,
+        optimal_model_additional_data,
         inner_splitters_adj,
         X_train,
         y_train,
@@ -930,6 +969,8 @@ class BasePanelLearner(ABC):
             Score of the optimal model.
         optimal_model_params : dict
             Hyperparameters of the optimal model.
+        optimal_model_additional_data : dict
+            Additional attributes of the optimal model to store.
         inner_splitters_adj : dict
             Inner splitters for the learning process.
         X_train : pd.DataFrame
@@ -1254,6 +1295,7 @@ class BasePanelLearner(ABC):
         include_train_folds,
         n_iter,
         split_functions,
+        store_additional_data,
         n_jobs_outer,
         n_jobs_inner,
     ):
@@ -1290,6 +1332,8 @@ class BasePanelLearner(ABC):
         split_functions : dict
             Dictionary of functions associated with each inner splitter describing how to
             increase the number of splits as a function of the number of iterations passed.
+        store_additional_data : list, optional
+            List of additional data to store at each retraining date.
         n_jobs_outer : int
             Number of jobs to run in parallel for the outer loop.
         n_jobs_inner : int
@@ -1570,6 +1614,17 @@ class BasePanelLearner(ABC):
                         raise ValueError(
                             "The values of the split_functions dictionary must be callables or None."
                         )
+
+        # store_additional_data
+        if store_additional_data is not None:
+            if not isinstance(store_additional_data, list):
+                raise TypeError("store_additional_data must be a list.")
+            for element in store_additional_data:
+                if not isinstance(element, str):
+                    raise ValueError(
+                        "The elements of the store_additional_data list must be strings."
+                    )
+            # TODO: check for validity of the elements relative to the models being used.
 
         # n_jobs_outer
         if not isinstance(n_jobs_outer, int):

@@ -213,6 +213,7 @@ class SignalOptimizer(BasePanelLearner):
         test_size=1,
         max_periods=None,
         split_functions=None,
+        store_additional_data=None,
         n_iter=None,
         n_jobs_outer=-1,
         n_jobs_inner=1,
@@ -281,6 +282,9 @@ class SignalOptimizer(BasePanelLearner):
             correspond to the keys in `inner_splitters` and should be set to None for any
             splitters that do not require splitter adjustment. Default is None. If no
             hyperparameter tuning is required, this parameter can be disregarded.
+        store_additional_data : list, optional
+            List of optimal model attributes to store from each optimal model at each
+            retraining date. Default is None.
         n_iter : int, optional
             Number of iterations to run in random hyperparameter search. Default is None.
             If no hyperparameter tuning is required, this parameter can be disregarded.
@@ -332,6 +336,7 @@ class SignalOptimizer(BasePanelLearner):
             cv_summary=cv_summary,
             include_train_folds=include_train_folds,
             split_functions=split_functions,
+            store_additional_data=store_additional_data,
             n_iter=n_iter,
             n_jobs_outer=n_jobs_outer,
             n_jobs_inner=n_jobs_inner,
@@ -466,6 +471,7 @@ class SignalOptimizer(BasePanelLearner):
         optimal_model_score,
         optimal_model_params,
         inner_splitters_adj,
+        optimal_model_additional_data,
         X_train,
         y_train,
         X_test,
@@ -488,6 +494,8 @@ class SignalOptimizer(BasePanelLearner):
             Cross-validation score for the optimal model.
         optimal_model_params : dict
             Chosen hyperparameters for the optimal model.
+        optimal_model_additional_data : dict
+            Additional attributes of the optimal model to store.
         inner_splitters_adj : dict
             Dictionary of adjusted inner splitters.
         X_train : pd.DataFrame
@@ -1802,7 +1810,7 @@ if __name__ == "__main__":
         name="LR",
         models={
             "LR": LinearRegression(),
-            "RF": RandomForestRegressor(),
+            "RF": RandomForestRegressor(oob_score=True),
         },
         hyperparameters={
             "LR": {
@@ -1831,6 +1839,10 @@ if __name__ == "__main__":
             "ExpandingKFold": lambda n: n // 12,
             "SecondSplit": None,
         },
+        store_additional_data=[
+            "oob_score_",
+            "feature_importances_"
+        ]
     )
 
     so.models_heatmap("LR")
