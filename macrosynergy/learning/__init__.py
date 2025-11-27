@@ -17,6 +17,7 @@ from .preprocessing import (
     BasePanelScaler,
     BasePanelSelector,
     PanelPCA,
+    KendallSignificanceSelector,
 )
 from .model_evaluation import (
     neg_mean_abs_corr,
@@ -73,6 +74,7 @@ __all__ = [
     "LassoSelector",
     "LarsSelector",
     "MapSelector",
+    "KendallSignificanceSelector",
     # transformers
     "BasePanelScaler",
     "PanelMinMaxScaler",
