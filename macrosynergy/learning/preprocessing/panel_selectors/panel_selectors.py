@@ -4,6 +4,8 @@ import numpy as np
 import pandas as pd
 from sklearn.linear_model import Lars, lars_path
 
+from scipy.stats import kendalltau
+
 from macrosynergy.learning.preprocessing.panel_selectors.base_panel_selector import (
     BasePanelSelector,
 )
@@ -276,6 +278,71 @@ class MapSelector(BasePanelSelector):
                 ]
 
         return np.array(mask)
+    
+class KendallSignificanceSelector(BasePanelSelector):
+    """
+    Univariate statistical feature selection using Kendall correlation tests.
+
+    Future enhancements will include Bonferroni corrections for multiple testing.
+
+    Parameters
+    ----------
+    alpha : float, default=0.05
+        Significance level.
+    """
+    def __init__(self, alpha=0.05):
+        if not isinstance(alpha, numbers.Number):
+            raise TypeError("The 'alpha' parameter must be a number.")
+        if alpha <= 0 or alpha >= 1:
+            raise ValueError("The 'alpha' parameter must be between 0 and 1.")
+        
+        self.alpha = alpha
+
+    def determine_features(self, X, y):
+        """
+        Create feature mask based on the Macrosynergy panel test.
+
+        Parameters
+        ----------
+        X : pandas.DataFrame
+            The feature matrix.
+        y : pandas.Series or pandas.DataFrame
+            The target vector.
+
+        Returns
+        -------
+        mask : np.ndarray
+            Boolean mask of selected features.
+        """
+        n_features = X.shape[1]
+        pvalues = np.zeros(n_features)
+        taus = np.zeros(n_features)
+
+        X = np.asarray(X)
+        y = np.asarray(y)
+
+        # Compute Kendall tau and p-values
+        for i in range(n_features):
+            tau, p = kendalltau(X[:, i], y)
+            taus[i] = tau
+            pvalues[i] = p
+
+        self.scores_ = taus
+        self.pvalues_ = pvalues
+
+        # Select all significant features
+        significant = pvalues < self.alpha
+
+        if significant.any():
+            self.support_ = significant
+        else:
+            # Select only the most significant feature
+            best_feature = np.argmin(pvalues)
+            support = np.zeros(n_features, dtype=bool)
+            support[best_feature] = True
+            self.support_ = support
+
+        return np.array(self.support_)
 
 
 if __name__ == "__main__":
@@ -326,6 +393,12 @@ if __name__ == "__main__":
     X_train = train.drop(columns=["XR"])
     y_train = train["XR"]
 
+    # Kendall selector
+    kendall = KendallSignificanceSelector(alpha=0.1).fit(X_train, y_train)
+    print(f"Kendall significance alpha 0.1: {kendall.get_feature_names_out()}")
+    kendall = KendallSignificanceSelector(alpha=0.01).fit(X_train, y_train)
+    print(f"Kendall significance alpha 0.01: {kendall.get_feature_names_out()}")
+                                              
     # LARS selector
     lars = LarsSelector(n_factors=2).fit(X_train, y_train)
     print(f"LARS 2-factors, no intercept: {lars.get_feature_names_out()}")
