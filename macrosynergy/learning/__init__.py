@@ -57,6 +57,8 @@ from .forecasting import (
     GlobalLocalRegression,
     CountryByCountryRegression,
     PLSTransformer,
+    LinearMultiTargetRegression,
+    TimeWeightedWrapper,
 )
 
 from .random_effects import RandomEffects
@@ -113,6 +115,8 @@ __all__ = [
     "VotingRegressor",
     "VotingClassifier",
     "GlobalLocalRegression",
+    "TimeWeightedWrapper",
+    "LinearMultiTargetRegression",
     # market beta estimation
     "BetaEstimator",
     # regression system
