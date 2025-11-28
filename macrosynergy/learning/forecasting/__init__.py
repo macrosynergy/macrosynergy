@@ -8,6 +8,7 @@ from .linear_model import (
     ModifiedSignWeightedLinearRegression,
     ModifiedTimeWeightedLinearRegression,
     GlobalLocalRegression,
+    LinearMultiTargetRegression,
 )
 
 from .model_systems import (
@@ -57,4 +58,5 @@ __all__ = [
     "CountryByCountryRegression",
     "TimeWeightedWrapper",
     "PLSTransformer",
+    "LinearMultiTargetRegression",
 ]
