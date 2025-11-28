@@ -4,15 +4,15 @@ from .metrics import (
     panel_significance_probability,
     sharpe_ratio,
     sortino_ratio,
-    multi_output_sharpe,
-    multi_output_sortino,
     correlation_coefficient,
     create_panel_metric,
     regression_mcc
 )
 
 from .scorers import (
-    neg_mean_abs_corr
+    neg_mean_abs_corr,
+    multi_output_sharpe,
+    multi_output_sortino,
 )
 
 __all__ = [
