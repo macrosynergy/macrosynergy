@@ -4,6 +4,8 @@ from .metrics import (
     panel_significance_probability,
     sharpe_ratio,
     sortino_ratio,
+    multi_output_sharpe,
+    multi_output_sortino,
     correlation_coefficient,
     create_panel_metric,
     regression_mcc
@@ -20,6 +22,8 @@ __all__ = [
     "neg_mean_abs_corr",
     "sharpe_ratio",
     "sortino_ratio",
+    "multi_output_sharpe",
+    "multi_output_sortino",
     "correlation_coefficient",
     "create_panel_metric",
     "regression_mcc"
