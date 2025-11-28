@@ -394,6 +394,7 @@ class BetaEstimator(BasePanelLearner):
         optimal_model_name,
         optimal_model_score,
         optimal_model_params,
+        optimal_model_additional_data,
         inner_splitters_adj,
         X_train,
         y_train,
