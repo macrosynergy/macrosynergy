@@ -4,6 +4,7 @@ import pandas as pd
 import scipy.stats as stats
 
 from sklearn.ensemble import VotingRegressor
+from sklearn.base import RegressorMixin, ClassifierMixin
 
 from macrosynergy.learning.forecasting.model_systems import BaseRegressionSystem
 
@@ -170,6 +171,29 @@ def neg_mean_abs_corr(
         return np.nan
     else:
         return -running_sum / xs_count
+    
+def multi_output_sortino(estimator, X_test, y_test):
+    """
+    Sortino ratio of a naive long-short directional strategy based on multi-output model predictions.
+    """
+    if not isinstance(estimator, (RegressorMixin, ClassifierMixin)):
+        raise TypeError("estimator must be a scikit-learn regressor or classifier.")
+    # TODO: add check that estimator is a multi-output model
+    if not isinstance(X_test, pd.DataFrame):
+        raise TypeError("X_test must be a pandas DataFrame.")
+    if not isinstance(y_test, pd.DataFrame):
+        raise TypeError("y_test must be a pandas DataFrame.")
+    if X_test.shape[0] != y_test.shape[0]:
+        raise ValueError("X_test and y_test must have the same number of rows.")
+    
+    preds = pd.DataFrame(
+        estimator.predict(X_test), index=y_test.index, columns=y_test.columns
+    )
+    signals = np.sign(preds)
+    returns = signals * y_test
+    portfolio_returns = returns.sum(axis=1)
+
+    return portfolio_returns.mean() / portfolio_returns[portfolio_returns < 0].std()
 
 
 if __name__ == "__main__":
