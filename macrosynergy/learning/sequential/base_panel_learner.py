@@ -505,10 +505,13 @@ class BasePanelLearner(ABC):
             optim_model = models[optim_name].fit(X_train, y_train)
             optim_score = np.ubyte(0) # For memory efficiency
             optim_params = {}
-            optim_additional_data = {
-                attr: getattr(optim_model, attr, None)
-                for attr in store_additional_data
-            }
+            if store_additional_data is not None:
+                optim_additional_data = {
+                    attr: getattr(optim_model, attr, None)
+                    for attr in store_additional_data
+                }
+            else:
+                optim_additional_data = {}
             inner_splitters_adj = None
 
         split_results = self._get_split_results(
@@ -1619,6 +1622,8 @@ class BasePanelLearner(ABC):
         if store_additional_data is not None:
             if not isinstance(store_additional_data, list):
                 raise TypeError("store_additional_data must be a list.")
+            if len(store_additional_data) == 0:
+                raise ValueError("store_additional_data cannot be an empty list.")
             for element in store_additional_data:
                 if not isinstance(element, str):
                     raise ValueError(
