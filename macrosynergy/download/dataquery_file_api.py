@@ -162,6 +162,7 @@ import traceback as tb
 import uuid
 from typing import Dict, Any, Optional, List, Tuple, Union, Sequence
 from tqdm import tqdm
+import json
 
 import requests
 from macrosynergy.compat import PD_2_0_OR_LATER, PYTHON_3_8_OR_LATER
@@ -686,7 +687,7 @@ class DataQueryFileAPIClient:
         filename: Optional[str] = None,
         out_dir: Optional[str] = None,
         overwrite: bool = False,
-        qdf: bool = True,
+        qdf: bool = False,
         as_csv: bool = False,
         keep_raw_data: bool = False,
         chunk_size: Optional[int] = None,
@@ -714,7 +715,7 @@ class DataQueryFileAPIClient:
             If True, overwrites the file if it already exists. Default is False.
         qdf : bool
             If True, converts the DataFrame to a QuantamentalDataFrame. If False, files
-            are saved as-is in the ticker-based Parquet format. Default is True.
+            are saved as-is in the ticker-based Parquet format. Default is False.
         as_csv : bool
             If True, saves the downloaded datasets as CSV files. Default is False, with
             Parquet as the default format.
@@ -776,6 +777,9 @@ class DataQueryFileAPIClient:
         )
 
         is_small_file = any(x in file_group_id.lower() for x in ["delta", "metadata"])
+        if "_DELTA" in file_group_id:
+            is_small_file = file_datetime not in large_delta_file_datetimes()
+
         is_catalog_file = file_group_id == self.catalog_file_group_id
         if is_small_file:
             request_wrapper_stream_bytes_to_disk(**download_args)
@@ -813,12 +817,48 @@ class DataQueryFileAPIClient:
             logger.info(msg_str)
         return str(file_path)
 
+    def delete_corrupt_files(
+        self,
+        out_dir: Optional[str] = None,
+        files: Optional[List[str]] = None,
+    ) -> List[str]:
+        """
+        Deletes corrupt files from the provided list based on file integrity checks.
+
+        Parameters
+        ----------
+        out_dir : Optional[str]
+            The directory to scan for corrupt files. If None, uses the client's default
+            output directory.
+        files : Optional[List[str]]
+            A list of file paths to check for corruption. If None, scans all downloaded
+            files in the specified output directory.
+
+        Returns
+        -------
+        List[str]
+            A list of file paths that were identified as corrupt and deleted.
+        """
+        out_dir = self._get_save_dir(out_dir)
+        avail_files = self.list_downloaded_files(out_dir=out_dir)
+        if avail_files.empty:
+            return []
+        if files is not None:
+            if not all(isinstance(f, str) for f in files):
+                raise ValueError(
+                    "All items in `files` must be strings representing file paths."
+                )
+            avail_files = avail_files[avail_files["file-name"].isin(files)]
+        files = sorted(set(map(str, avail_files["path"])))
+        extensions = sorted(set(Path(f).suffix.rsplit(".", 1)[-1] for f in files))
+        return _delete_corrupt_files(files=files, extensions=extensions)
+
     def download_multiple_files(
         self,
         filenames: List[str],
         out_dir: Optional[str] = None,
         overwrite: bool = False,
-        qdf: bool = True,
+        qdf: bool = False,
         as_csv: bool = False,
         keep_raw_data: bool = False,
         max_retries: int = 3,
@@ -840,7 +880,7 @@ class DataQueryFileAPIClient:
             If True, overwrites files if they already exist. Default is False.
         qdf : bool
             If True, converts the DataFrame to a QuantamentalDataFrame. If False, files
-            are saved as-is in the ticker-based Parquet format. Default is True.
+            are saved as-is in the ticker-based Parquet format. Default is False.
         as_csv : bool
             If True, saves the DataFrame as a CSV file. Default is False.
         keep_raw_data : bool
@@ -900,7 +940,10 @@ class DataQueryFileAPIClient:
                 except Exception as e:
                     logger.error(f"Failed to download {fname}: {e}")
                     failed_files.append(fname)
-
+        found_corrupt_files = self.delete_corrupt_files(
+            out_dir=out_dir, files=filenames
+        )
+        failed_files = sorted(set(failed_files + found_corrupt_files))
         if not failed_files:
             total_time = time.time() - start_time
             logger.info(
@@ -978,7 +1021,7 @@ class DataQueryFileAPIClient:
             csv_file_path = Path(file_path).with_suffix(".csv")
             df.to_csv(csv_file_path, index=False)
             if not keep_raw_data:
-                Path(file_path).unlink(missing_ok=True)
+                Path(file_path).unlink()
             file_path = str(csv_file_path)
         else:
             df.to_parquet(file_path, index=False)
@@ -1073,7 +1116,7 @@ class DataQueryFileAPIClient:
         to_datetime: Optional[str] = None,
         file_datetime: Optional[str] = None,
         overwrite: bool = False,
-        qdf: bool = True,
+        qdf: bool = False,
         as_csv: bool = False,
         keep_raw_data: bool = False,
         chunk_size: Optional[int] = None,
@@ -1106,7 +1149,7 @@ class DataQueryFileAPIClient:
             If True, overwrites files if they already exist. Default is False.
         qdf : bool
             If True, converts the DataFrame to a QuantamentalDataFrame. If False, files
-            are saved as-is in the ticker-based Parquet format. Default is True.
+            are saved as-is in the ticker-based Parquet format. Default is False.
         as_csv : bool
             If True, saves the downloaded datasets as CSV files. Default is False, with
             Parquet as the default format.
@@ -1212,7 +1255,7 @@ class DataQueryFileAPIClient:
         show_progress: bool = True,
         out_dir: Optional[str] = None,
         overwrite: bool = False,
-        qdf: bool = True,
+        qdf: bool = False,
         keep_raw_data: bool = False,
         as_csv: bool = False,
     ) -> Union[pd.DataFrame, pl.DataFrame, pl.LazyFrame]:
@@ -1260,7 +1303,9 @@ class DataQueryFileAPIClient:
         overwrite : bool
             If True, overwrites files if they already exist. Default is False.
         qdf : bool
-            If True, the data will be returned as a QuantamentalDataFrame. Default is True.
+            If True, each downloaded dataframe will be saved as a QuantamentalDataFrame,
+            otherwise files are saved as-is in the ticker-based Parquet format.
+            Default is False.
         keep_raw_data : bool
             If True, keeps the raw data files after conversion. Default is False.
         as_csv : bool
@@ -1379,6 +1424,62 @@ def get_client_id_secret() -> Optional[Tuple[str, str]]:
             return client_id, client_secret
 
     return None, None
+
+
+@functools.lru_cache(maxsize=1)
+def large_delta_file_datetimes(as_str: bool = True) -> List[str]:
+    """
+    Plausible file datetimes for large delta files, which are typically
+    generated at the end of each month and on business month ends, with timestamps of
+    end-of-day (23:59:59).
+    """
+    sd, ed = JPMAQS_EARLIEST_FILE_DATE, pd.Timestamp.today()
+    dt1 = list(pd.date_range(start=sd, end=ed, freq="M"))
+    dt2 = list(pd.date_range(start=sd, end=ed, freq="BM"))
+    all_dates = sorted(set(dt1 + dt2))
+    all_dates = [
+        d.normalize() + pd.Timedelta(hours=23, minutes=59, seconds=59)
+        for d in all_dates
+    ]
+    if not as_str:
+        return all_dates
+    return [d.strftime("%Y%m%dT%H%M%S") for d in all_dates]
+
+
+def _delete_corrupt_files(
+    files: List[Path],
+    extensions: List[str] = ["parquet", "json"],
+    allow_empty: bool = False,
+) -> List[Path]:
+    """Deletes corrupt files based on their extensions."""
+    removed_files = []
+    for file_path in map(Path, files):
+        if not file_path.exists():
+            continue
+        if file_path.suffix.lower() not in [
+            f".{ext.strip('.').lower()}" for ext in extensions
+        ]:
+            continue
+        try:
+            if file_path.suffix.lower() == ".parquet":
+                head = pl.scan_parquet(file_path).head().collect()
+                if not allow_empty and head.is_empty():
+                    raise ValueError("File is empty")
+            elif file_path.suffix.lower() == ".json":
+                with open(file_path, "r", encoding="utf-8") as f:
+                    js = json.load(f)
+                    if not allow_empty and not js:
+                        raise ValueError("File is empty")
+            else:
+                continue
+        except KeyboardInterrupt:
+            raise
+        except Exception:
+            logger.warning(f"Deleting corrupt file: {file_path}")
+            file_path.unlink()
+            removed_files.append(file_path)
+
+    return sorted(map(str, removed_files))
 
 
 class SegmentedFileDownloader:
@@ -1933,13 +2034,12 @@ def lazy_load_from_parquets(
     if cids:
         tickers += [f"{c}_{x}" for c in cids for x in xcats]
 
-    qdf = dataframe_format == "qdf"
     lf: pl.LazyFrame = _lazy_load_filtered_parquets(
         paths=sorted(available_files_df["path"]),
         tickers=tickers,
         start_date=start_date,
         end_date=end_date,
-        return_qdf=qdf,
+        return_qdf=(dataframe_format == "qdf"),
     )
     if metrics and set(metrics) != set(JPMAQS_METRICS):
         cols_to_keep = ["real_date", "cid", "xcat", "ticker"] + metrics

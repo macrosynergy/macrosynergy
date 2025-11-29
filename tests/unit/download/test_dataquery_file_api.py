@@ -678,7 +678,7 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
         client.download_catalog_file(as_csv=True, keep_raw_data=False)
         mock_read_parquet.assert_called_once_with(fake_path_str)
         mock_df.to_csv.assert_called_once()
-        mock_path_instance.unlink.assert_called_once_with(missing_ok=True)
+        mock_path_instance.unlink.assert_called_once_with()
 
         # error case
         mock_list_files.return_value = pd.DataFrame()
@@ -727,7 +727,7 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
             filenames=expected_order,
             out_dir=os.path.join(class_dir, "jpmaqs-download"),
             overwrite=False,
-            qdf=True,
+            qdf=False,
             as_csv=False,
             keep_raw_data=False,
             chunk_size=None,
@@ -746,7 +746,7 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
             filenames=expected_order,
             out_dir=os.path.join(method_dir, "jpmaqs-download"),
             overwrite=False,
-            qdf=True,
+            qdf=False,
             as_csv=False,
             keep_raw_data=False,
             chunk_size=None,
