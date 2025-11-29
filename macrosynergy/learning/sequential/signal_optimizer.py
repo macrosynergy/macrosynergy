@@ -30,11 +30,14 @@ class SignalOptimizer(BasePanelLearner):
         Daily quantamental dataframe in JPMaQS format containing a panel of features, as
         well as a panel of returns.
     xcats : list
-        List comprising feature names, with the last element being the response variable
-        name. The features and the response variable must be categories in the dataframe.
+        List comprising feature names, with the last n_targets elements being the response
+        variable name(s). The features and the response variable(s) must be categories in the
+        dataframe.
     cids : list
         List of cross-section identifiers for consideration in the panel. Default is None,
         in which case all cross-sections in `df` are considered.
+    n_targets : int
+        Number of response variables to consider. Default is 1.
     start : str
         Start date for considered data in subsequent analysis in ISO 8601 format.
         Default is None i.e. the earliest date in the dataframe.
@@ -61,11 +64,11 @@ class SignalOptimizer(BasePanelLearner):
 
     Notes
     -----
-    The `SignalOptimizer` class is used to predict the response variable, usually a panel
+    The `SignalOptimizer` class is used to predict the response variable(s), usually a panel
     of asset class returns, based on a panel of features that are lagged by a specified
     number of periods. This is done in a sequential manner, by specifying the size of an
     initial training set, choosing an optimal model out of a provided collection
-    (with associated hyperparameters), forecasting the return panel, and then expanding
+    (with associated hyperparameters), forecasting the return panel(s), and then expanding
     the training set to include the now-realized returns. The process continues until the
     end of the dataset is reached.
 
@@ -101,6 +104,7 @@ class SignalOptimizer(BasePanelLearner):
         df,
         xcats,
         cids=None,
+        n_targets=1,
         start=None,
         end=None,
         blacklist=None,
@@ -115,6 +119,7 @@ class SignalOptimizer(BasePanelLearner):
             df=df,
             xcats=xcats,
             cids=cids,
+            n_targets=n_targets,
             start=start,
             end=end,
             blacklist=blacklist,
@@ -208,6 +213,7 @@ class SignalOptimizer(BasePanelLearner):
         test_size=1,
         max_periods=None,
         split_functions=None,
+        store_additional_data=None,
         n_iter=None,
         n_jobs_outer=-1,
         n_jobs_inner=1,
@@ -276,6 +282,9 @@ class SignalOptimizer(BasePanelLearner):
             correspond to the keys in `inner_splitters` and should be set to None for any
             splitters that do not require splitter adjustment. Default is None. If no
             hyperparameter tuning is required, this parameter can be disregarded.
+        store_additional_data : list, optional
+            List of optimal model attributes to store from each optimal model at each
+            retraining date. Default is None.
         n_iter : int, optional
             Number of iterations to run in random hyperparameter search. Default is None.
             If no hyperparameter tuning is required, this parameter can be disregarded.
@@ -327,6 +336,7 @@ class SignalOptimizer(BasePanelLearner):
             cv_summary=cv_summary,
             include_train_folds=include_train_folds,
             split_functions=split_functions,
+            store_additional_data=store_additional_data,
             n_iter=n_iter,
             n_jobs_outer=n_jobs_outer,
             n_jobs_inner=n_jobs_inner,
@@ -352,12 +362,20 @@ class SignalOptimizer(BasePanelLearner):
             ftr_corr_data.extend(split_result["ftr_corr"])
 
         # First create pandas dataframes to store the forecasts
-        forecasts_df = pd.DataFrame(
-            index=self.forecast_idxs, columns=[name], data=np.nan, dtype="float32"
-        )
+        if self.n_targets == 1:
+            forecasts_df = pd.DataFrame(
+                index=self.forecast_idxs, columns=[name], data=np.nan, dtype="float32"
+            )
+        else:
+            forecasts_df = pd.DataFrame(
+                index=self.forecast_idxs,
+                columns=[f"{target}_{name}" for target in self.xcats[-self.n_targets :]],
+                data=np.nan,
+                dtype="float32",
+            )
         # Create quantamental dataframe of forecasts
         for idx, forecasts in prediction_data:
-            forecasts_df.loc[idx, name] = forecasts
+            forecasts_df.loc[idx, :] = forecasts
 
         forecasts_df = forecasts_df.groupby(level=0).ffill().dropna()
 
@@ -453,6 +471,7 @@ class SignalOptimizer(BasePanelLearner):
         optimal_model_score,
         optimal_model_params,
         inner_splitters_adj,
+        optimal_model_additional_data,
         X_train,
         y_train,
         X_test,
@@ -475,6 +494,8 @@ class SignalOptimizer(BasePanelLearner):
             Cross-validation score for the optimal model.
         optimal_model_params : dict
             Chosen hyperparameters for the optimal model.
+        optimal_model_additional_data : dict
+            Additional attributes of the optimal model to store.
         inner_splitters_adj : dict
             Dictionary of adjusted inner splitters.
         X_train : pd.DataFrame
@@ -533,6 +554,8 @@ class SignalOptimizer(BasePanelLearner):
             elif coef.ndim == 2:
                 if coef.shape[0] == 1:
                     coefs = coef.flatten()
+                elif self.n_targets > 1 and coef.shape[0] == self.n_targets:
+                    coefs = coef.mean(axis=0)
 
         coef_ftr_map = {ftr: coef for ftr, coef in zip(feature_names, coefs)}
         coefs = [
@@ -541,9 +564,11 @@ class SignalOptimizer(BasePanelLearner):
         ]
         if hasattr(final_estimator, "intercept_"):
             if isinstance(final_estimator.intercept_, np.ndarray):
-                # Store the intercept if it has length one
                 if len(final_estimator.intercept_) == 1:
                     intercepts = final_estimator.intercept_[0]
+                elif self.n_targets > 1 and len(final_estimator.intercept_) == self.n_targets:
+                    # Use average intercept if multiple targets
+                    intercepts = final_estimator.intercept_.mean()
                 else:
                     intercepts = np.nan
             else:
@@ -1732,17 +1757,17 @@ class SignalOptimizer(BasePanelLearner):
 
 
 if __name__ == "__main__":
-    from sklearn.linear_model import Ridge, Lasso
+    from sklearn.linear_model import LinearRegression
+    from sklearn.ensemble import RandomForestRegressor
     from sklearn.metrics import make_scorer, r2_score, mean_absolute_error
     from macrosynergy.learning import (
         ExpandingKFoldPanelSplit,
-        TimeWeightedLinearRegression,
     )
     from macrosynergy.management.simulate import make_qdf
     from macrosynergy.management.types import QuantamentalDataFrame
 
     cids = ["AUD", "CAD", "GBP", "USD"]
-    xcats = ["XR", "CRY", "GROWTH", "INFL"]
+    xcats = ["XR1", "CRY", "GROWTH", "XR2"]
     cols = ["earliest", "latest", "mean_add", "sd_mult", "ar_coef", "back_coef"]
 
     df_cids = pd.DataFrame(
@@ -1754,10 +1779,10 @@ if __name__ == "__main__":
     df_cids.loc["USD"] = ["2012-01-01", "2020-12-31", 0, 1]
 
     df_xcats = pd.DataFrame(index=xcats, columns=cols)
-    df_xcats.loc["XR"] = ["2012-01-01", "2020-12-31", 0.1, 1, 0, 0.3]
+    df_xcats.loc["XR1"] = ["2012-01-01", "2020-12-31", 0.1, 1, 0, 0.3]
     df_xcats.loc["CRY"] = ["2012-01-01", "2020-12-31", 1, 2, 0.95, 1]
     df_xcats.loc["GROWTH"] = ["2012-01-01", "2020-12-31", 1, 2, 0.9, 1]
-    df_xcats.loc["INFL"] = ["2015-01-01", "2020-12-31", -0.1, 2, 0.8, 0.3]
+    df_xcats.loc["XR2"] = ["2015-01-01", "2020-12-31", -0.1, 2, 0.8, 0.3]
 
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
     dfd["grading"] = np.ones(dfd.shape[0])
@@ -1774,31 +1799,25 @@ if __name__ == "__main__":
 
     so = SignalOptimizer(
         df=dfd,
-        xcats=["CRY", "GROWTH", "INFL", "XR"],
+        xcats=["CRY", "GROWTH", "XR1", "XR2"],
         cids=cids,
         blacklist=black,
-        drop_nas = True
+        drop_nas = True,
+        n_targets=2,
     )
 
     so.calculate_predictions(
         name="LR",
         models={
-            "Ridge": Ridge(),
-            "Lasso": Lasso(),
-            "TWLS": TimeWeightedLinearRegression(),
+            "LR": LinearRegression(),
+            "RF": RandomForestRegressor(oob_score=True),
         },
         hyperparameters={
-            "Ridge": {
+            "LR": {
                 "fit_intercept": [True, False],
-                "alpha": [1e-4, 1e-3, 1e-2, 1e-1, 1, 10, 100, 1000, 10000],
             },
-            "Lasso": {
-                "fit_intercept": [True, False],
-                "alpha": [1e-4, 1e-3, 1e-2, 1e-1, 1, 10, 100, 1000, 10000],
-            },
-            "TWLS": {
-                "half_life": [24, 36, 60, 120, 240],
-                "fit_intercept": [True, False],
+            "RF": {
+                "n_estimators": [5, 10], # just for speed not statistical sense
             },
         },
         scorers={
@@ -1813,13 +1832,17 @@ if __name__ == "__main__":
         #n_iter=6,
         cv_summary="mean-std-ge",
         include_train_folds=True,
-        n_jobs_outer=1,
+        n_jobs_outer=-1,
         n_jobs_inner=1,
         normalize_fold_results=True,
         split_functions={
             "ExpandingKFold": lambda n: n // 12,
             "SecondSplit": None,
         },
+        store_additional_data=[
+            "oob_score_",
+            "feature_importances_"
+        ]
     )
 
     so.models_heatmap("LR")
@@ -1836,7 +1859,6 @@ if __name__ == "__main__":
         xcats=["CRY", "GROWTH", "INFL", "XR"],
         cids=cids,
         blacklist=black,
-        drop_nas = False
     )
 
     so.calculate_predictions(
