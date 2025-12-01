@@ -17,12 +17,15 @@ from .preprocessing import (
     BasePanelScaler,
     BasePanelSelector,
     PanelPCA,
+    KendallSignificanceSelector,
 )
 from .model_evaluation import (
     neg_mean_abs_corr,
     panel_significance_probability,
     sharpe_ratio,
     sortino_ratio,
+    multi_output_sharpe,
+    multi_output_sortino,
     regression_accuracy,
     regression_balanced_accuracy,
     correlation_coefficient,
@@ -54,6 +57,8 @@ from .forecasting import (
     GlobalLocalRegression,
     CountryByCountryRegression,
     PLSTransformer,
+    LinearMultiTargetRegression,
+    TimeWeightedWrapper,
 )
 
 from .random_effects import RandomEffects
@@ -73,6 +78,7 @@ __all__ = [
     "LassoSelector",
     "LarsSelector",
     "MapSelector",
+    "KendallSignificanceSelector",
     # transformers
     "BasePanelScaler",
     "PanelMinMaxScaler",
@@ -85,6 +91,8 @@ __all__ = [
     "panel_significance_probability",
     "sharpe_ratio",
     "sortino_ratio",
+    "multi_output_sharpe",
+    "multi_output_sortino",
     "regression_accuracy",
     "regression_balanced_accuracy",
     "create_panel_metric",
@@ -107,6 +115,8 @@ __all__ = [
     "VotingRegressor",
     "VotingClassifier",
     "GlobalLocalRegression",
+    "TimeWeightedWrapper",
+    "LinearMultiTargetRegression",
     # market beta estimation
     "BetaEstimator",
     # regression system
