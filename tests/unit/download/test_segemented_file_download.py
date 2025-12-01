@@ -213,12 +213,14 @@ class TestSegmentedFileDownloaderOrchestration(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
+        if Path("./test_output").exists():
+            shutil.rmtree("./test_output")
         logging.disable(logging.NOTSET)
 
     def setUp(self):
         self.downloader = SegmentedFileDownloader(
             # using a random filename - as the user is allowed to do
-            filename="./output/file.dat",
+            filename="./test_output/file.dat",
             url="some.sort.of/url",
             headers={"Auth": "token"},
             params={"file-group-id": "g1", "file-datetime": "dt1"},
@@ -233,7 +235,7 @@ class TestSegmentedFileDownloaderOrchestration(unittest.TestCase):
         self, mock_stat, mock_copy, mock_open, mock_exists, mock_mkdir, mock_rmtree
     ):
         mock_stat.return_value.st_size = 999
-        final_path = Path("/final/output.dat")
+        final_path = Path("./test_output/final/output.dat")
         num_parts = 3
 
         self.downloader._assemble_parts(final_path, num_parts)

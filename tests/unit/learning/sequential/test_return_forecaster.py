@@ -144,6 +144,7 @@ class TestReturnForecaster(unittest.TestCase):
                     "Rolling": RollingKFoldPanelSplit(5),
                 },
                 store_correlations=True if i==3 else False,
+                store_additional_data=None,
             )
 
             # For each pipeline, run a forecast on November 30th 2020

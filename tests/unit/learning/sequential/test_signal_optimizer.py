@@ -262,6 +262,7 @@ class TestAll(unittest.TestCase):
                     "model_type",
                     "score",
                     "hparams",
+                    "additional_data",
                     "n_splits_used",
                 ]
             ).astype(
@@ -271,6 +272,7 @@ class TestAll(unittest.TestCase):
                     "model_type": "category",
                     "score": "float32",
                     "hparams": "object",
+                    "additional_data": "object",
                     "n_splits_used": "object",
                 }
             ),
@@ -616,6 +618,7 @@ class TestAll(unittest.TestCase):
                 n_jobs_outer=1,
                 n_jobs_inner=1,
                 inner_splitters=self.single_inner_splitter,
+                store_additional_data=None,
             )
         # check hyperparameter dict is a nested dict
         with self.assertRaises(ValueError):
@@ -628,6 +631,7 @@ class TestAll(unittest.TestCase):
                 n_jobs_outer=1,
                 n_jobs_inner=1,
                 inner_splitters=self.single_inner_splitter,
+                store_additional_data=None,
             )
         with self.assertRaises(ValueError):
             self.so_with_calculated_preds.calculate_predictions(
@@ -642,6 +646,7 @@ class TestAll(unittest.TestCase):
                 n_jobs_outer=1,
                 n_jobs_inner=1,
                 inner_splitters=self.single_inner_splitter,
+                store_additional_data=None,
             )
         with self.assertRaises(ValueError):
             self.so_with_calculated_preds.calculate_predictions(
@@ -656,6 +661,7 @@ class TestAll(unittest.TestCase):
                 n_jobs_outer=1,
                 n_jobs_inner=1,
                 inner_splitters=self.single_inner_splitter,
+                store_additional_data=None,
             )
         with self.assertRaises(ValueError):
             self.so_with_calculated_preds.calculate_predictions(
@@ -670,6 +676,7 @@ class TestAll(unittest.TestCase):
                 n_jobs_outer=1,
                 n_jobs_inner=1,
                 inner_splitters=self.single_inner_splitter,
+                store_additional_data=None,
             )
         # Check inner hparam dictionaries specify a grid
         with self.assertRaises(ValueError):
@@ -685,6 +692,7 @@ class TestAll(unittest.TestCase):
                 n_jobs_outer=1,
                 n_jobs_inner=1,
                 inner_splitters=self.single_inner_splitter,
+                store_additional_data=None,
             )
         with self.assertRaises(ValueError):
             self.so_with_calculated_preds.calculate_predictions(
@@ -699,6 +707,7 @@ class TestAll(unittest.TestCase):
                 n_jobs_outer=1,
                 n_jobs_inner=1,
                 inner_splitters=self.single_inner_splitter,
+                store_additional_data=None,
             )
         with self.assertRaises(ValueError):
             self.so_with_calculated_preds.calculate_predictions(
@@ -713,6 +722,7 @@ class TestAll(unittest.TestCase):
                 n_jobs_outer=1,
                 n_jobs_inner=1,
                 inner_splitters=self.single_inner_splitter,
+                store_additional_data=None,
             )
         # Scorers should be a dict
         with self.assertRaises(TypeError):
@@ -725,6 +735,7 @@ class TestAll(unittest.TestCase):
                 n_jobs_outer=1,
                 n_jobs_inner=1,
                 inner_splitters=self.single_inner_splitter,
+                store_additional_data=None,
             )
         # Scorers dict shouldn't be empty
         with self.assertRaises(ValueError):
@@ -737,6 +748,7 @@ class TestAll(unittest.TestCase):
                 n_jobs_outer=1,
                 n_jobs_inner=1,
                 inner_splitters=self.single_inner_splitter,
+                store_additional_data=None,
             )
         # Scorer keys should be strings
         with self.assertRaises(ValueError):
@@ -749,6 +761,7 @@ class TestAll(unittest.TestCase):
                 n_jobs_outer=1,
                 n_jobs_inner=1,
                 inner_splitters=self.single_inner_splitter,
+                store_additional_data=None,
             )
         with self.assertRaises(ValueError):
             self.so_with_calculated_preds.calculate_predictions(
@@ -760,6 +773,7 @@ class TestAll(unittest.TestCase):
                 n_jobs_outer=1,
                 n_jobs_inner=1,
                 inner_splitters=self.single_inner_splitter,
+                store_additional_data=None,
             )
         # Scorer values should be scorers
         with self.assertRaises(ValueError):
@@ -772,6 +786,7 @@ class TestAll(unittest.TestCase):
                 n_jobs_outer=1,
                 n_jobs_inner=1,
                 inner_splitters=self.single_inner_splitter,
+                store_additional_data=None,
             )
         # with self.assertRaises(ValueError):
         #     self.so_with_calculated_preds.calculate_predictions(
@@ -795,6 +810,7 @@ class TestAll(unittest.TestCase):
                 n_jobs_outer=1,
                 n_jobs_inner=1,
                 inner_splitters=1,
+                store_additional_data=None,
             )
         with self.assertRaises(TypeError):
             self.so_with_calculated_preds.calculate_predictions(
@@ -806,6 +822,7 @@ class TestAll(unittest.TestCase):
                 n_jobs_outer=1,
                 n_jobs_inner=1,
                 inner_splitters=ExpandingKFoldPanelSplit(),
+                store_additional_data=None,
             )
         # Inner splitters dict shouldn't be empty
         with self.assertRaises(ValueError):
@@ -818,6 +835,7 @@ class TestAll(unittest.TestCase):
                 n_jobs_outer=1,
                 n_jobs_inner=1,
                 inner_splitters={},
+                store_additional_data=None,
             )
         # Inner splitters keys should be strings
         with self.assertRaises(ValueError):
@@ -830,6 +848,7 @@ class TestAll(unittest.TestCase):
                 n_jobs_outer=1,
                 n_jobs_inner=1,
                 inner_splitters={1: ExpandingKFoldPanelSplit()},
+                store_additional_data=None,
             )
         with self.assertRaises(ValueError):
             self.so_with_calculated_preds.calculate_predictions(
@@ -844,6 +863,7 @@ class TestAll(unittest.TestCase):
                     "ExpandingKFold": ExpandingKFoldPanelSplit(n_splits=5),
                     1: ExpandingKFoldPanelSplit(n_splits=10),
                 },
+                store_additional_data=None,
             )
         # Inner splitters values should be splitters
         with self.assertRaises(ValueError):
@@ -856,6 +876,7 @@ class TestAll(unittest.TestCase):
                 n_jobs_outer=1,
                 n_jobs_inner=1,
                 inner_splitters={"ExpandingKFold": 1},
+                store_additional_data=None,
             )
         # Search type should be a string
         with self.assertRaises(TypeError):
@@ -868,6 +889,7 @@ class TestAll(unittest.TestCase):
                 n_jobs_outer=1,
                 n_jobs_inner=1,
                 inner_splitters=self.single_inner_splitter,
+                store_additional_data=None,
             )
         # Search type should be either "grid" or "prior"
         with self.assertRaises(ValueError):
@@ -880,6 +902,7 @@ class TestAll(unittest.TestCase):
                 n_jobs_outer=1,
                 n_jobs_inner=1,
                 inner_splitters=self.single_inner_splitter,
+                store_additional_data=None,
             )
         with self.assertRaises(NotImplementedError):
             self.so_with_calculated_preds.calculate_predictions(
@@ -891,6 +914,7 @@ class TestAll(unittest.TestCase):
                 n_jobs_outer=1,
                 n_jobs_inner=1,
                 inner_splitters=self.single_inner_splitter,
+                store_additional_data=None,
             )
         # Normalize_fold_results should be a boolean
         with self.assertRaises(TypeError):
@@ -904,6 +928,7 @@ class TestAll(unittest.TestCase):
                 n_jobs_inner=1,
                 inner_splitters=self.single_inner_splitter,
                 normalize_fold_results=1,
+                store_additional_data=None,
             )
         # If normalize_fold_results is True, then at least 2 hparams should
         # be provided for each model
@@ -921,6 +946,7 @@ class TestAll(unittest.TestCase):
                 n_jobs_inner=1,
                 inner_splitters=self.single_inner_splitter,
                 normalize_fold_results=True,
+                store_additional_data=None,
             )
         with self.assertRaises(ValueError):
             self.so_with_calculated_preds.calculate_predictions(
@@ -936,6 +962,7 @@ class TestAll(unittest.TestCase):
                 n_jobs_inner=1,
                 inner_splitters=self.single_inner_splitter,
                 normalize_fold_results=True,
+                store_additional_data=None,
             )
         with self.assertRaises(ValueError):
             self.so_with_calculated_preds.calculate_predictions(
@@ -951,6 +978,7 @@ class TestAll(unittest.TestCase):
                 n_jobs_inner=1,
                 inner_splitters=self.single_inner_splitter,
                 normalize_fold_results=True,
+                store_additional_data=None,
             )
         # Test structure of the hyperparameter grid when
         # search_type is "prior"
@@ -964,6 +992,7 @@ class TestAll(unittest.TestCase):
                 n_jobs_outer=1,
                 n_jobs_inner=1,
                 inner_splitters=self.single_inner_splitter,
+                store_additional_data=None,
             )
         with self.assertRaises(ValueError):
             self.so_with_calculated_preds.calculate_predictions(
@@ -975,6 +1004,7 @@ class TestAll(unittest.TestCase):
                 n_jobs_outer=1,
                 n_jobs_inner=1,
                 inner_splitters=self.single_inner_splitter,
+                store_additional_data=None,
             )
         # wrong length of hyperparameter dict
         with self.assertRaises(ValueError):
@@ -987,6 +1017,7 @@ class TestAll(unittest.TestCase):
                 n_jobs_outer=1,
                 n_jobs_inner=1,
                 inner_splitters=self.single_inner_splitter,
+                store_additional_data=None,
             )
         # wrong model names in hyperparameter dict
         with self.assertRaises(ValueError):
@@ -999,6 +1030,7 @@ class TestAll(unittest.TestCase):
                 n_jobs_outer=1,
                 n_jobs_inner=1,
                 inner_splitters=self.single_inner_splitter,
+                store_additional_data=None,
             )
         # invalid hyperparameter dictionary
         with self.assertRaises(ValueError):
@@ -1011,6 +1043,7 @@ class TestAll(unittest.TestCase):
                 n_jobs_outer=1,
                 n_jobs_inner=1,
                 inner_splitters=self.single_inner_splitter,
+                store_additional_data=None,
             )
         with self.assertRaises(ValueError):
             self.so_with_calculated_preds.calculate_predictions(
@@ -1022,6 +1055,7 @@ class TestAll(unittest.TestCase):
                 n_jobs_outer=1,
                 n_jobs_inner=1,
                 inner_splitters=self.single_inner_splitter,
+                store_additional_data=None,
             )
         # hyperparameter values are neither grids nor distributions
         with self.assertRaises(ValueError):
@@ -1037,6 +1071,7 @@ class TestAll(unittest.TestCase):
                 n_jobs_outer=1,
                 n_jobs_inner=1,
                 inner_splitters=self.single_inner_splitter,
+                store_additional_data=None,
             )
         with self.assertRaises(ValueError):
             self.so_with_calculated_preds.calculate_predictions(
@@ -1051,6 +1086,7 @@ class TestAll(unittest.TestCase):
                 n_jobs_outer=1,
                 n_jobs_inner=1,
                 inner_splitters=self.single_inner_splitter,
+                store_additional_data=None,
             )
         # cv_summary should be str or callable
         with self.assertRaises(TypeError):
@@ -1064,6 +1100,7 @@ class TestAll(unittest.TestCase):
                 n_jobs_inner=1,
                 inner_splitters=self.single_inner_splitter,
                 cv_summary=1,
+                store_additional_data=None,
             )
         with self.assertRaises(ValueError):
             self.so_with_calculated_preds.calculate_predictions(
@@ -1076,6 +1113,7 @@ class TestAll(unittest.TestCase):
                 n_jobs_inner=1,
                 inner_splitters=self.single_inner_splitter,
                 cv_summary="invalid",
+                store_additional_data=None,
             )
         # include_train_folds should be a boolean
         with self.assertRaises(TypeError):
@@ -1089,6 +1127,7 @@ class TestAll(unittest.TestCase):
                 n_jobs_inner=1,
                 inner_splitters=self.single_inner_splitter,
                 include_train_folds="hello",
+                store_additional_data=None,
             )
         # If cv_summary is "mean-std-ge", then include_train_folds should be True
         with self.assertRaises(ValueError):
@@ -1103,6 +1142,7 @@ class TestAll(unittest.TestCase):
                 inner_splitters=self.single_inner_splitter,
                 cv_summary="mean-std-ge",
                 include_train_folds=False,
+                store_additional_data=None,
             )
         # min_cids should be an int
         with self.assertRaises(TypeError):
@@ -1116,6 +1156,7 @@ class TestAll(unittest.TestCase):
                 n_jobs_inner=1,
                 inner_splitters=self.single_inner_splitter,
                 min_cids="invalid",
+                store_additional_data=None,
             )
         with self.assertRaises(TypeError):
             self.so_with_calculated_preds.calculate_predictions(
@@ -1128,6 +1169,7 @@ class TestAll(unittest.TestCase):
                 n_jobs_inner=1,
                 inner_splitters=self.single_inner_splitter,
                 min_cids=7.2,
+                store_additional_data=None,
             )
         with self.assertRaises(ValueError):
             self.so_with_calculated_preds.calculate_predictions(
@@ -1140,6 +1182,7 @@ class TestAll(unittest.TestCase):
                 n_jobs_inner=1,
                 inner_splitters=self.single_inner_splitter,
                 min_cids=-2,
+                store_additional_data=None,
             )
         # min_periods should be an int
         with self.assertRaises(TypeError):
@@ -1153,6 +1196,7 @@ class TestAll(unittest.TestCase):
                 n_jobs_inner=1,
                 inner_splitters=self.single_inner_splitter,
                 min_periods="invalid",
+                store_additional_data=None,
             )
         with self.assertRaises(TypeError):
             self.so_with_calculated_preds.calculate_predictions(
@@ -1165,6 +1209,7 @@ class TestAll(unittest.TestCase):
                 n_jobs_inner=1,
                 inner_splitters=self.single_inner_splitter,
                 min_periods=7.2,
+                store_additional_data=None,
             )
         with self.assertRaises(ValueError):
             self.so_with_calculated_preds.calculate_predictions(
@@ -1177,6 +1222,7 @@ class TestAll(unittest.TestCase):
                 n_jobs_inner=1,
                 inner_splitters=self.single_inner_splitter,
                 min_periods=-2,
+                store_additional_data=None,
             )
         # test size should be a positive int
         with self.assertRaises(TypeError):
@@ -1190,6 +1236,7 @@ class TestAll(unittest.TestCase):
                 n_jobs_inner=1,
                 inner_splitters=self.single_inner_splitter,
                 test_size="invalid",
+                store_additional_data=None,
             )
         with self.assertRaises(TypeError):
             self.so_with_calculated_preds.calculate_predictions(
@@ -1202,6 +1249,7 @@ class TestAll(unittest.TestCase):
                 n_jobs_inner=1,
                 inner_splitters=self.single_inner_splitter,
                 test_size=7.2,
+                store_additional_data=None,
             )
         with self.assertRaises(ValueError):
             self.so_with_calculated_preds.calculate_predictions(
@@ -1214,6 +1262,7 @@ class TestAll(unittest.TestCase):
                 n_jobs_inner=1,
                 inner_splitters=self.single_inner_splitter,
                 test_size=-2,
+                store_additional_data=None,
             )
         # max periods should be a positive int, if not None
         with self.assertRaises(TypeError):
@@ -1227,6 +1276,7 @@ class TestAll(unittest.TestCase):
                 n_jobs_inner=1,
                 inner_splitters=self.single_inner_splitter,
                 max_periods="invalid",
+                store_additional_data=None,
             )
         with self.assertRaises(TypeError):
             self.so_with_calculated_preds.calculate_predictions(
@@ -1239,6 +1289,7 @@ class TestAll(unittest.TestCase):
                 n_jobs_inner=1,
                 inner_splitters=self.single_inner_splitter,
                 max_periods=7.2,
+                store_additional_data=None,
             )
         with self.assertRaises(ValueError):
             self.so_with_calculated_preds.calculate_predictions(
@@ -1251,6 +1302,7 @@ class TestAll(unittest.TestCase):
                 n_jobs_inner=1,
                 inner_splitters=self.single_inner_splitter,
                 max_periods=-2,
+                store_additional_data=None,
             )
         # n_iter should be a positive int, if not None
         with self.assertRaises(TypeError):
@@ -1264,6 +1316,7 @@ class TestAll(unittest.TestCase):
                 n_jobs_inner=1,
                 inner_splitters=self.single_inner_splitter,
                 n_iter="invalid",
+                store_additional_data=None,
             )
         with self.assertRaises(TypeError):
             self.so_with_calculated_preds.calculate_predictions(
@@ -1276,6 +1329,7 @@ class TestAll(unittest.TestCase):
                 n_jobs_inner=1,
                 inner_splitters=self.single_inner_splitter,
                 n_iter=None,
+                store_additional_data=None,
             )
         with self.assertRaises(TypeError):
             self.so_with_calculated_preds.calculate_predictions(
@@ -1288,6 +1342,7 @@ class TestAll(unittest.TestCase):
                 n_jobs_inner=1,
                 inner_splitters=self.single_inner_splitter,
                 n_iter=3.4,
+                store_additional_data=None,
             )
         with self.assertRaises(TypeError):
             self.so_with_calculated_preds.calculate_predictions(
@@ -1300,6 +1355,7 @@ class TestAll(unittest.TestCase):
                 n_jobs_inner=1,
                 inner_splitters=self.single_inner_splitter,
                 n_iter=3.4,
+                store_additional_data=None,
             )
         with self.assertRaises(ValueError):
             self.so_with_calculated_preds.calculate_predictions(
@@ -1312,6 +1368,7 @@ class TestAll(unittest.TestCase):
                 n_jobs_inner=1,
                 inner_splitters=self.single_inner_splitter,
                 n_iter=-3,
+                store_additional_data=None,
             )
         # n_jobs should be an integer >= -1
         with self.assertRaises(TypeError):
@@ -1324,6 +1381,7 @@ class TestAll(unittest.TestCase):
                 n_jobs_outer="invalid",
                 n_jobs_inner=1,
                 inner_splitters=self.single_inner_splitter,
+                store_additional_data=None,
             )
         with self.assertRaises(ValueError):
             self.so_with_calculated_preds.calculate_predictions(
@@ -1335,6 +1393,7 @@ class TestAll(unittest.TestCase):
                 n_jobs_outer=-2,
                 n_jobs_inner=1,
                 inner_splitters=self.single_inner_splitter,
+                store_additional_data=None,
             )
         with self.assertRaises(TypeError):
             self.so_with_calculated_preds.calculate_predictions(
@@ -1346,6 +1405,7 @@ class TestAll(unittest.TestCase):
                 n_jobs_inner="invalid",
                 n_jobs_outer=1,
                 inner_splitters=self.single_inner_splitter,
+                store_additional_data=None,
             )
         with self.assertRaises(ValueError):
             self.so_with_calculated_preds.calculate_predictions(
@@ -1357,6 +1417,7 @@ class TestAll(unittest.TestCase):
                 n_jobs_inner=-2,
                 n_jobs_outer=1,
                 inner_splitters=self.single_inner_splitter,
+                store_additional_data=None,
             )
 
         # split_functions should be a dict with keys matching inner_splitters
@@ -1371,6 +1432,7 @@ class TestAll(unittest.TestCase):
                 n_jobs_inner=1,
                 inner_splitters=self.single_inner_splitter,
                 split_functions=1,
+                store_additional_data=None,
             )
 
         with self.assertRaises(ValueError):
@@ -1384,6 +1446,7 @@ class TestAll(unittest.TestCase):
                 n_jobs_inner=1,
                 inner_splitters=self.single_inner_splitter,
                 split_functions={"ExpandingKFold": 1},
+                store_additional_data=None,
             )
 
         with self.assertRaises(TypeError):
@@ -1397,6 +1460,7 @@ class TestAll(unittest.TestCase):
                 n_jobs_inner=1,
                 inner_splitters=self.single_inner_splitter,
                 store_correlations=1,
+                store_additional_data=None,
             )
 
         # If store_correlations is True, then models must be pipelines
@@ -1411,6 +1475,7 @@ class TestAll(unittest.TestCase):
                 n_jobs_inner=1,
                 inner_splitters=self.single_inner_splitter,
                 store_correlations=True,
+                store_additional_data=None,
             )
 
     def test_valid_calculate_predictions(self):
@@ -1928,6 +1993,7 @@ class TestAll(unittest.TestCase):
             "include_train_folds": False,
             "n_iter": 5,
             "split_functions": None,
+            "store_additional_data": ["linreg__model__coef_", "ridge__model__coef_"],
             "n_jobs_outer": 1,
             "n_jobs_inner": 1,
         }
@@ -2019,6 +2085,7 @@ class TestAll(unittest.TestCase):
                     cv_summary="median",
                     include_train_folds=False,
                     base_splits=None,
+                    store_additional_data=None,
                 )
 
             except Exception as e:
@@ -2114,6 +2181,7 @@ class TestAll(unittest.TestCase):
                     cv_summary="median",
                     include_train_folds=False,
                     base_splits=None,
+                    store_additional_data=None,
                 )
 
             except Exception as e:
@@ -3440,6 +3508,7 @@ def _get_X_y(so: SignalOptimizer, drop_nas: bool):
     if drop_nas:
         df_long = df_long.dropna()
     else:
+        df_long = df_long.dropna(subset=so.xcats[:-1], how="all")
         df_long = df_long.dropna(subset=[so.xcats[-1]])
 
     df_long = df_long.sort_index()

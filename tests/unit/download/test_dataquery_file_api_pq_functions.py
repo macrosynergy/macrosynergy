@@ -23,6 +23,7 @@ from macrosynergy.download.dataquery_file_api import (
     _ensure_columns,
     _to_output_schema,
     _filter_lazy_frame_by_tickers,
+    _delete_corrupt_files,
 )
 from macrosynergy.compat import PYTHON_3_8_OR_LATER
 
@@ -507,6 +508,40 @@ class TestLazyLoad(unittest.TestCase):
                 "pandas",
                 True,
             )
+
+
+class TestCorruptedFilesHandling(unittest.TestCase):
+    def setUp(self):
+        # _make_sample_parquet with 4 paths
+        self.tmpdir = Path(tempfile.mkdtemp())
+        self.created_filenames = [
+            "good1.parquet",
+            "good2.parquet",
+            "corrupted.parquet",
+            "good3.parquet",
+        ]
+        for fname in self.created_filenames:
+            path = self.tmpdir / fname
+            if "corrupted" in fname:
+                with open(path, "wb") as f:
+                    f.write(b"not a parquet file")
+            else:
+                _make_sample_parquet(path)
+
+    def tearDown(self):
+        shutil.rmtree(self.tmpdir)
+
+    def test_delete_corrupt_files(self):
+        corrupt_file = "corrupted.parquet"
+        corrupt_file_path = self.tmpdir / corrupt_file
+        self.assertTrue(corrupt_file_path.exists())
+        parquet_files = list(Path(self.tmpdir).glob("*.parquet"))
+        _delete_corrupt_files(parquet_files)
+
+        self.assertFalse(corrupt_file_path.exists())
+        current_files = list(Path(self.tmpdir).glob("*.parquet"))
+        self.assertEqual(len(current_files), 3)
+        self.assertFalse(corrupt_file_path in current_files)
 
 
 if __name__ == "__main__":

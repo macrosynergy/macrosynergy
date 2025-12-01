@@ -79,6 +79,7 @@ class ReturnForecaster(BasePanelLearner):
             df=df,
             xcats=xcats,
             cids=cids,
+            n_targets=1,
             start=None,
             end=None,
             blacklist=blacklist,
@@ -278,6 +279,7 @@ class ReturnForecaster(BasePanelLearner):
             split_functions=None,
             n_jobs_outer=n_jobs_cv,
             n_jobs_inner=n_jobs_model,
+            store_additional_data=None,
         )
         if not isinstance(store_correlations, bool):
             raise TypeError("The store_correlations argument must be a boolean.")
@@ -311,6 +313,7 @@ class ReturnForecaster(BasePanelLearner):
             base_splits=base_splits,
             n_splits_add=None,
             timestamp=self.real_date,
+            store_additional_data=None,
         )
 
         self._check_duplicate_results(name)
@@ -433,6 +436,7 @@ class ReturnForecaster(BasePanelLearner):
         optimal_model_name,
         optimal_model_score,
         optimal_model_params,
+        optimal_model_additional_data,
         inner_splitters_adj,
         X_train,
         y_train,
@@ -456,6 +460,8 @@ class ReturnForecaster(BasePanelLearner):
             Cross-validation score for the optimal model.
         optimal_model_params : dict
             Chosen hyperparameters for the optimal model.
+        optimal_model_additional_data : dict
+            Additional data returned by the hyperparameter optimization process.
         inner_splitters_adj : dict
             Dictionary of adjusted inner splitters.
         X_train : pd.DataFrame
