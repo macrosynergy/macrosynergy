@@ -1072,7 +1072,7 @@ class NaivePnL:
             .rename(columns={"sig": "value"})
         )
 
-    def get_returns_data(self) -> pd.DataFrame:
+    def get_asset_returns_data(self) -> pd.DataFrame:
         """
         Returns a DataFrame containing the returns used to generate the PnLs.
 
@@ -1085,7 +1085,7 @@ class NaivePnL:
             cids=self.cids, xcats=[self.ret]
         )
 
-    def get_pnls_data(self) -> pd.DataFrame:
+    def get_pnls_returns_data(self) -> pd.DataFrame:
         """
         Returns a DataFrame containing the PnLs generated.
 
