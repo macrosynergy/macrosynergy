@@ -1251,13 +1251,17 @@ class DataQueryFileAPIClient:
         dataframe_format: str = "qdf",
         dataframe_type: str = "pandas",
         categorical_dataframe: bool = True,
-        include_delta_files: bool = False,
+        include_delta_files: bool = True,
+        include_metadata_files: bool = True,
+        delta_treatment: str = "latest",
         show_progress: bool = True,
         out_dir: Optional[str] = None,
         overwrite: bool = False,
         qdf: bool = False,
         keep_raw_data: bool = False,
         as_csv: bool = False,
+        since_datetime: Optional[str] = None,
+        skip_download: bool = False,
     ) -> Union[pd.DataFrame, pl.DataFrame, pl.LazyFrame]:
         """
         A method to download data and load it as a DataFrame based on specified
@@ -1294,7 +1298,15 @@ class DataQueryFileAPIClient:
             If True and `dataframe_type` is "pandas", the returned DataFrame will use
             categorical dtypes for object columns. Default is True.
         include_delta_files : bool
-            If True, delta files will be included in the download. Default is False.
+            If True, delta files will be included in the download. Default is True.
+        include_metadata_files : bool
+            If True, metadata files will be included in the download. Default is True.
+        delta_treatment : str
+            Specifies how to treat new or updated entries across files from different
+            dates. Options are:
+                - 'latest': Use the latest available entry for each (ticker, real_date) pair (default).
+                - 'earliest': Use the earliest available entry for each (ticker, real_date) pair.
+                - 'all': Keep all entries.
         show_progress : bool
             If True, displays a progress bar during downloads. Default is True.
         out_dir : Optional[str]
@@ -1317,28 +1329,30 @@ class DataQueryFileAPIClient:
         Union[pd.DataFrame, pl.DataFrame, pl.LazyFrame]
             A DataFrame containing the requested data.
         """
-        if include_delta_files:
-            raise NotImplementedError(
-                "Downloading delta files is not implemented in this method."
-            )
 
         out_dir = self._get_save_dir(out_dir)
+
         datasets_to_download = self.get_datasets_for_indicators(
             tickers=tickers, cids=cids, xcats=xcats
         )
-        self.download_full_snapshot(
-            out_dir=out_dir,
-            since_datetime=pd.Timestamp.utcnow().strftime("%Y%m%d"),
-            file_group_ids=datasets_to_download,
-            overwrite=overwrite,
-            qdf=qdf,
-            as_csv=as_csv,
-            keep_raw_data=keep_raw_data,
-            show_progress=show_progress,
-            include_full_snapshots=True,
-            include_delta=include_delta_files,
-            include_metadata=False,
-        )
+        if datasets_to_download and include_delta_files:
+            datasets_to_download += [f"{ds}_DELTA" for ds in datasets_to_download]
+        since_datetime = since_datetime or pd.Timestamp.today().strftime("%Y%m%d")
+        if not skip_download:
+            self.download_full_snapshot(
+                out_dir=out_dir,
+                since_datetime=since_datetime,
+                file_group_ids=datasets_to_download,
+                overwrite=overwrite,
+                qdf=qdf,
+                as_csv=as_csv,
+                keep_raw_data=keep_raw_data,
+                show_progress=show_progress,
+                include_full_snapshots=True,
+                include_delta=include_delta_files,
+                include_metadata=include_metadata_files,
+            )
+
         return lazy_load_from_parquets(
             files_dir=out_dir,
             tickers=tickers,
@@ -1347,6 +1361,9 @@ class DataQueryFileAPIClient:
             metrics=metrics,
             start_date=start_date,
             end_date=end_date,
+            include_delta_files=include_delta_files,
+            delta_treatment=delta_treatment,
+            since_datetime=since_datetime,
             dataframe_format=dataframe_format,
             dataframe_type=dataframe_type,
             categorical_dataframe=categorical_dataframe,
