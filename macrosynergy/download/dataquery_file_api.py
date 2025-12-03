@@ -1879,6 +1879,9 @@ def _check_lazy_load_inputs(
     metrics: Optional[List[str]],
     start_date: Optional[Union[str, pd.Timestamp]],
     end_date: Optional[Union[str, pd.Timestamp]],
+    min_last_updated: Optional[Union[str, pd.Timestamp]],
+    max_last_updated: Optional[Union[str, pd.Timestamp]],
+    delta_treatment: str,
     dataframe_format: str,
     dataframe_type: str,
     categorical_dataframe: bool,
@@ -1896,6 +1899,10 @@ def _check_lazy_load_inputs(
     if not _list_downloaded_files(files_dir, file_format):
         raise FileNotFoundError(
             f"No {file_format} files found in directory: {files_dir}"
+        )
+    if delta_treatment not in ["latest", "earliest", "all"]:
+        raise ValueError(
+            "`delta_treatment` must be one of 'latest', 'earliest', or 'all'."
         )
 
     for param, name in [
@@ -1918,9 +1925,19 @@ def _check_lazy_load_inputs(
     for param, name in [
         (start_date, "start_date"),
         (end_date, "end_date"),
+        (min_last_updated, "min_last_updated"),
+        (max_last_updated, "max_last_updated"),
     ]:
         if param is not None and not isinstance(param, (str, pd.Timestamp)):
             raise ValueError(f"`{name}` must be a string or pandas Timestamp.")
+        if isinstance(param, str):
+            try:
+                pd_to_datetime_compat(param, utc=True)
+            except ValueError:
+                raise ValueError(
+                    f"`{name}` has invalid timestamp format. Use YYYY-MM-DD or a "
+                    "recognized timestamp format with timezone."
+                )
 
     if dataframe_format not in ["qdf", "wide", "tickers"]:
         raise ValueError("`dataframe_format` must be one of 'qdf', 'wide', 'tickers'.")
@@ -1945,6 +1962,7 @@ def _list_downloaded_files(files_dir: Path, file_format: str = "parquet") -> Lis
 def _downloaded_files_df(
     files_dir: Path,
     file_format: str = "parquet",
+    include_effective_dataset_column: bool = True,
     include_metadata_files: bool = False,
 ) -> pd.DataFrame:
     if not Path(files_dir).is_dir():
@@ -1966,32 +1984,37 @@ def _downloaded_files_df(
         lambda x: str(x).split(".")[0].rsplit("_", 1)[-1]
     )
     df["file-timestamp"] = df["file-datetime"].apply(lambda x: pd_to_datetime_compat(x))
+    if include_effective_dataset_column:
+        df["e-dataset"] = df["dataset"].str.rstrip("_DELTA")
     df = df.reset_index(drop=True)
     return df
 
 
 def _filter_to_latest_files(
     files_df: pd.DataFrame,
-    include_delta_files: bool = False,
+    since_datetime: Optional[Union[str, pd.Timestamp]] = None,
+    include_delta_files: bool = True,
 ) -> pd.DataFrame:
-    if include_delta_files:
-        raise NotImplementedError(
-            "Filtering to latest files including delta files is not implemented."
-        )
-
+    """
+    Filter to files from the day with the last full-snapshot.
+    full-snapshot files are those that don't have '_DELTA' in their filename.
+    """
     if files_df.empty:
         return files_df
-
+    non_delta_mask = ~files_df["filename"].str.contains("_DELTA")
     if not include_delta_files:
-        files_df = files_df[~files_df["filename"].str.contains("_DELTA")].copy()
+        files_df = files_df[non_delta_mask].copy()
+
+    if since_datetime is not None:
+        since_dt = pd_to_datetime_compat(since_datetime)
+    else:
+        since_dt = files_df.loc[non_delta_mask, "file-timestamp"].max()
 
     # Filter to rows where file-timestamp == per-dataset max
-    latest_mask = files_df["file-timestamp"].eq(
-        files_df.groupby("dataset")["file-timestamp"].transform("max")
-    )
+    latest_full_snap_mask = files_df["file-timestamp"].ge(since_dt)
 
     latest_files = (
-        files_df.loc[latest_mask]
+        files_df.loc[latest_full_snap_mask]
         .sort_values(["dataset", "file-timestamp", "filename"])
         .reset_index(drop=True)
     )
@@ -2008,38 +2031,48 @@ def lazy_load_from_parquets(
     metrics: Optional[List[str]] = None,
     start_date: Optional[Union[str, pd.Timestamp]] = None,
     end_date: Optional[Union[str, pd.Timestamp]] = None,
+    min_last_updated: Optional[Union[str, pd.Timestamp]] = None,
+    max_last_updated: Optional[Union[str, pd.Timestamp]] = None,
     dataframe_format: str = "qdf",
     dataframe_type: str = "pandas",
     categorical_dataframe: bool = True,
     datasets: Optional[List[str]] = None,
-    include_delta_files: bool = False,
-    include_metadata_files: bool = False,
+    include_delta_files: bool = True,
+    delta_treatment: str = "latest",
+    since_datetime: Optional[Union[str, pd.Timestamp]] = None,
+    include_file_column: bool = True,
 ) -> pd.DataFrame:
     files_dir = Path(files_dir)
     if (not metrics) or (metrics == "all") or ("all" in metrics):
         metrics = JPMAQS_METRICS
 
+    delta_treatment = delta_treatment.lower()
+
     _check_lazy_load_inputs(
-        files_dir,
-        file_format,
-        tickers,
-        cids,
-        xcats,
-        metrics,
-        start_date,
-        end_date,
-        dataframe_format,
-        dataframe_type,
-        categorical_dataframe,
+        files_dir=files_dir,
+        file_format=file_format,
+        tickers=tickers,
+        cids=cids,
+        xcats=xcats,
+        metrics=metrics,
+        start_date=start_date,
+        end_date=end_date,
+        min_last_updated=min_last_updated,
+        max_last_updated=max_last_updated,
+        delta_treatment=delta_treatment,
+        dataframe_format=dataframe_format,
+        dataframe_type=dataframe_type,
+        categorical_dataframe=categorical_dataframe,
     )
 
     available_files_df: pd.DataFrame = _downloaded_files_df(
         files_dir=files_dir,
         file_format=file_format,
-        include_metadata_files=include_metadata_files,
+        include_metadata_files=False,
     )
     available_files_df: pd.DataFrame = _filter_to_latest_files(
         files_df=available_files_df,
+        since_datetime=since_datetime,
         include_delta_files=include_delta_files,
     )
     if datasets:
@@ -2051,15 +2084,24 @@ def lazy_load_from_parquets(
     if cids:
         tickers += [f"{c}_{x}" for c in cids for x in xcats]
 
+    if include_file_column:
+        include_file_column = "source_file"
+
     lf: pl.LazyFrame = _lazy_load_filtered_parquets(
         paths=sorted(available_files_df["path"]),
         tickers=tickers,
         start_date=start_date,
         end_date=end_date,
+        delta_treatment=delta_treatment,
+        min_last_updated=min_last_updated,
+        max_last_updated=max_last_updated,
         return_qdf=(dataframe_format == "qdf"),
+        include_file_column=include_file_column,
     )
-    if metrics and set(metrics) != set(JPMAQS_METRICS):
+    if (metrics and set(metrics) != set(JPMAQS_METRICS)) or include_file_column:
         cols_to_keep = ["real_date", "cid", "xcat", "ticker"] + metrics
+        if include_file_column:
+            cols_to_keep.append(include_file_column)
         if PYTHON_3_8_OR_LATER:
             lf = lf.select(
                 [pl.col(c) for c in cols_to_keep if c in lf.collect_schema().names()]
@@ -2069,7 +2111,7 @@ def lazy_load_from_parquets(
     if dataframe_type == "polars-lazy":
         return lf
 
-    cat_cols = ["cid", "xcat", "ticker"]
+    cat_cols = ["cid", "xcat", "ticker", "source_file"]
     if dataframe_type == "polars":
         if categorical_dataframe:
             cols = None
@@ -2141,31 +2183,52 @@ def _filter_lazy_frame_by_tickers(
     tickers: Sequence[str],
     start_date: Optional[Union[str, pd.Timestamp]],
     end_date: Optional[Union[str, pd.Timestamp]],
+    min_last_updated: Optional[Union[str, pd.Timestamp]],
+    max_last_updated: Optional[Union[str, pd.Timestamp]],
 ) -> pl.LazyFrame:
     tickers_list = [t for t in tickers if t]
     if kind is JPMaQSParquetSchemaKind.TICKER:
-        return lf.filter(pl.col("ticker").is_in(tickers_list))
-    lf = (
-        lf.with_columns(
-            _ticker=pl.concat_str([pl.col("cid"), pl.lit("_"), pl.col("xcat")])
+        lf = lf.filter(pl.col("ticker").is_in(tickers_list))
+    else:
+        lf = (
+            lf.with_columns(
+                _ticker=pl.concat_str([pl.col("cid"), pl.lit("_"), pl.col("xcat")])
+            )
+            .filter(pl.col("_ticker").is_in(tickers_list))
+            .drop("_ticker")
         )
-        .filter(pl.col("_ticker").is_in(tickers_list))
-        .drop("_ticker")
-    )
     if start_date:
         start_date = pd_to_datetime_compat(start_date).strftime("%Y-%m-%d")
         lf = lf.filter(pl.col("real_date") >= pl.lit(start_date).str.to_date())
     if end_date:
         end_date = pd_to_datetime_compat(end_date).strftime("%Y-%m-%d")
         lf = lf.filter(pl.col("real_date") <= pl.lit(end_date).str.to_date())
+    if min_last_updated:
+        min_last_updated = pd_to_datetime_compat(min_last_updated).to_datetime64()
+        lf = lf.filter(pl.col("last_updated") >= pl.lit(min_last_updated))
+    if max_last_updated:
+        max_last_updated = pd_to_datetime_compat(max_last_updated).to_datetime64()
+        lf = lf.filter(pl.col("last_updated") <= pl.lit(max_last_updated))
+
     return lf
 
 
 def _to_output_schema(
-    lf: pl.LazyFrame, src_kind: JPMaQSParquetSchemaKind, want_qdf: bool
+    lf: pl.LazyFrame,
+    src_kind: JPMaQSParquetSchemaKind,
+    include_file_column: Optional[str],
+    want_qdf: bool,
 ) -> pl.LazyFrame:
     """Normalize columns to qdf or ticker-based shape."""
     cols = "real_date.ticker.value.eop_lag.mop_lag.grading.last_updated"
+    if include_file_column:
+        cols += f".{include_file_column}.file_name"
+        lf = lf.with_columns(
+            file_name=pl.col(include_file_column)
+            .str.replace(r"\\", "/")
+            .str.split("/")
+            .list.last()
+        )
     ticker_cols = cols.split(".")
     qdf_cols = cols.replace("ticker", "cid.xcat").split(".")
 
@@ -2184,31 +2247,15 @@ def _to_output_schema(
     return lf.select(ticker_cols)
 
 
-def _scan_and_prepare_single_parquet(
-    path: str,
-    tickers: Sequence[str],
-    start_date: Optional[Union[str, pd.Timestamp]],
-    end_date: Optional[Union[str, pd.Timestamp]],
-    return_qdf: bool,
-) -> pl.LazyFrame:
-    lf = pl.scan_parquet(path)
-    kind = _identify_schema_type(lf)
-    lf = _filter_lazy_frame_by_tickers(
-        lf=lf,
-        kind=kind,
-        tickers=tickers,
-        start_date=start_date,
-        end_date=end_date,
-    )
-    lf = _to_output_schema(lf, kind, return_qdf)
-    return lf
-
-
 def _lazy_load_filtered_parquets(
     paths: List[str],
     tickers: List[str],
     start_date: Optional[Union[str, pd.Timestamp]],
     end_date: Optional[Union[str, pd.Timestamp]],
+    min_last_updated: Optional[Union[str, pd.Timestamp]],
+    max_last_updated: Optional[Union[str, pd.Timestamp]],
+    delta_treatment: str,
+    include_file_column: Optional[str],
     return_qdf: bool = True,
 ) -> pl.LazyFrame:
     if not paths:
@@ -2216,18 +2263,52 @@ def _lazy_load_filtered_parquets(
 
     tickers_list: List[str] = list(dict.fromkeys(tickers))
 
-    lazy_parts: List[pl.LazyFrame] = [
-        _scan_and_prepare_single_parquet(
-            path=p,
+    lazy_parts: List[pl.LazyFrame] = []
+    for pth in paths:
+        lf = pl.scan_parquet(pth, include_file_paths=include_file_column)
+        kind = _identify_schema_type(lf)
+        lf = _filter_lazy_frame_by_tickers(
+            lf=lf,
+            kind=kind,
             tickers=tickers_list,
             start_date=start_date,
             end_date=end_date,
-            return_qdf=return_qdf,
+            min_last_updated=min_last_updated,
+            max_last_updated=max_last_updated,
         )
-        for p in paths
-    ]
+        lf = _to_output_schema(
+            lf=lf,
+            src_kind=kind,
+            include_file_column=include_file_column,
+            want_qdf=return_qdf,
+        )
+        lazy_parts.append(lf)
 
     out = pl.concat(lazy_parts, how="vertical")
+
+    key_cols = ["cid", "xcat"] if return_qdf else ["ticker"]
+
+    if delta_treatment != "all":
+        group_keys = key_cols + ["real_date"]
+        agg_col = "last_updated_extreme"
+
+        if delta_treatment == "latest":
+            agg_expr = pl.col("last_updated").max().alias(agg_col)
+        else:
+            assert delta_treatment == "earliest"
+            agg_expr = pl.col("last_updated").min().alias(agg_col)
+
+        per_key_extreme = lf.group_by(group_keys).agg(agg_expr)
+
+        lf = (
+            lf.join(per_key_extreme, on=group_keys, how="inner")
+            .filter(pl.col("last_updated") == pl.col(agg_col))
+            .drop(agg_col)
+        )
+
+    sort_cols = ["cid", "xcat"] if return_qdf else ["ticker"]
+    out = out.sort(sort_cols + ["real_date"])
+
     return out
 
 
