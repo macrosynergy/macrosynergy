@@ -1261,6 +1261,7 @@ class DataQueryFileAPIClient:
         keep_raw_data: bool = False,
         as_csv: bool = False,
         since_datetime: Optional[str] = None,
+        to_datetime: Optional[str] = None,
         skip_download: bool = False,
     ) -> Union[pd.DataFrame, pl.DataFrame, pl.LazyFrame]:
         """
@@ -1323,6 +1324,11 @@ class DataQueryFileAPIClient:
         as_csv : bool
             If True, saves the downloaded datasets as CSV files. Default is False, with
             Parquet as the default format.
+        since_datetime : Optional[str]
+            Download files modified since this timestamp (inclusive).
+            Defaults to the start of the current day (UTC) if `file_datetime` is not set.
+        to_datetime : Optional[str]
+            Download files modified up to this timestamp (inclusive).
 
         Returns
         -------
@@ -1342,6 +1348,7 @@ class DataQueryFileAPIClient:
             self.download_full_snapshot(
                 out_dir=out_dir,
                 since_datetime=since_datetime,
+                to_datetime=to_datetime,
                 file_group_ids=datasets_to_download,
                 overwrite=overwrite,
                 qdf=qdf,
@@ -1364,6 +1371,7 @@ class DataQueryFileAPIClient:
             include_delta_files=include_delta_files,
             delta_treatment=delta_treatment,
             since_datetime=since_datetime,
+            to_datetime=to_datetime,
             dataframe_format=dataframe_format,
             dataframe_type=dataframe_type,
             categorical_dataframe=categorical_dataframe,
@@ -1993,6 +2001,7 @@ def _downloaded_files_df(
 def _filter_to_latest_files(
     files_df: pd.DataFrame,
     since_datetime: Optional[Union[str, pd.Timestamp]] = None,
+    to_datetime: Optional[Union[str, pd.Timestamp]] = None,
     include_delta_files: bool = True,
 ) -> pd.DataFrame:
     """
@@ -2006,12 +2015,20 @@ def _filter_to_latest_files(
         files_df = files_df[non_delta_mask].copy()
 
     if since_datetime is not None:
-        since_dt = pd_to_datetime_compat(since_datetime)
+        since_datetime = pd_to_datetime_compat(since_datetime)
     else:
-        since_dt = files_df.loc[non_delta_mask, "file-timestamp"].max()
+        since_datetime = files_df.loc[non_delta_mask, "file-timestamp"].max()
+    if to_datetime is not None:
+        to_datetime = pd_to_datetime_compat(to_datetime)
+    else:
+        to_datetime = files_df["file-timestamp"].max()
 
     # Filter to rows where file-timestamp == per-dataset max
-    latest_full_snap_mask = files_df["file-timestamp"].ge(since_dt)
+    if since_datetime > to_datetime:
+        since_datetime, to_datetime = to_datetime, since_datetime
+    since_mask = files_df["file-timestamp"].ge(since_datetime)
+    to_mask = files_df["file-timestamp"].le(to_datetime)
+    latest_full_snap_mask = since_mask & to_mask
 
     latest_files = (
         files_df.loc[latest_full_snap_mask]
@@ -2040,6 +2057,7 @@ def lazy_load_from_parquets(
     include_delta_files: bool = True,
     delta_treatment: str = "latest",
     since_datetime: Optional[Union[str, pd.Timestamp]] = None,
+    to_datetime: Optional[Union[str, pd.Timestamp]] = None,
     include_file_column: bool = True,
 ) -> pd.DataFrame:
     files_dir = Path(files_dir)
@@ -2073,6 +2091,7 @@ def lazy_load_from_parquets(
     available_files_df: pd.DataFrame = _filter_to_latest_files(
         files_df=available_files_df,
         since_datetime=since_datetime,
+        to_datetime=to_datetime,
         include_delta_files=include_delta_files,
     )
     if datasets:
