@@ -2003,6 +2003,7 @@ def _filter_to_latest_files(
     since_datetime: Optional[Union[str, pd.Timestamp]] = None,
     to_datetime: Optional[Union[str, pd.Timestamp]] = None,
     include_delta_files: bool = True,
+    delta_treatment: str = "all",
 ) -> pd.DataFrame:
     """
     Filter to files from the day with the last full-snapshot.
@@ -2022,6 +2023,11 @@ def _filter_to_latest_files(
         to_datetime = pd_to_datetime_compat(to_datetime)
     else:
         to_datetime = files_df["file-timestamp"].max()
+
+    if delta_treatment == "latest":
+        files_df = files_df.sort_values(
+            by=["dataset", "file-timestamp"]
+        ).drop_duplicates(subset=["dataset"], keep="last")
 
     # Filter to rows where file-timestamp == per-dataset max
     if since_datetime > to_datetime:
@@ -2093,6 +2099,7 @@ def lazy_load_from_parquets(
         since_datetime=since_datetime,
         to_datetime=to_datetime,
         include_delta_files=include_delta_files,
+        delta_treatment=delta_treatment,
     )
     if datasets:
         available_files_df = available_files_df.loc[
@@ -2104,7 +2111,7 @@ def lazy_load_from_parquets(
         tickers += [f"{c}_{x}" for c in cids for x in xcats]
 
     if include_file_column:
-        include_file_column = "source_file"
+        include_file_column = "file_name"
 
     lf: pl.LazyFrame = _lazy_load_filtered_parquets(
         paths=sorted(available_files_df["path"]),
@@ -2241,10 +2248,10 @@ def _to_output_schema(
     """Normalize columns to qdf or ticker-based shape."""
     cols = "real_date.ticker.value.eop_lag.mop_lag.grading.last_updated"
     if include_file_column:
-        cols += f".{include_file_column}.file_name"
+        cols += "." + include_file_column
         lf = lf.with_columns(
             file_name=pl.col(include_file_column)
-            .str.replace(r"\\", "/")
+            .str.replace_all(r"\\", "/")
             .str.split("/")
             .list.last()
         )
@@ -2306,25 +2313,20 @@ def _lazy_load_filtered_parquets(
     out = pl.concat(lazy_parts, how="vertical")
 
     key_cols = ["cid", "xcat"] if return_qdf else ["ticker"]
+    full_key = key_cols + ["real_date"]
 
     if delta_treatment != "all":
-        group_keys = key_cols + ["real_date"]
-        agg_col = "last_updated_extreme"
-
         if delta_treatment == "latest":
-            agg_expr = pl.col("last_updated").max().alias(agg_col)
+            out = out.sort(
+                full_key + ["last_updated"], descending=[False] * len(full_key) + [True]
+            ).unique(subset=full_key, keep="first")
+        elif delta_treatment == "earliest":
+            out = out.sort(
+                full_key + ["last_updated"],
+                descending=[False] * len(full_key) + [False],
+            ).unique(subset=full_key, keep="first")
         else:
-            assert delta_treatment == "earliest"
-            agg_expr = pl.col("last_updated").min().alias(agg_col)
-
-        per_key_extreme = lf.group_by(group_keys).agg(agg_expr)
-
-        lf = (
-            lf.join(per_key_extreme, on=group_keys, how="inner")
-            .filter(pl.col("last_updated") == pl.col(agg_col))
-            .drop(agg_col)
-        )
-
+            raise ValueError(f"Unknown delta_treatment: {delta_treatment}")
     sort_cols = ["cid", "xcat"] if return_qdf else ["ticker"]
     out = out.sort(sort_cols + ["real_date"])
 
