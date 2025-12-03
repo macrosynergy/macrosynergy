@@ -1248,6 +1248,7 @@ class DataQueryFileAPIClient:
         metrics: Optional[List[str]] = None,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
+        include_file_column: bool = True,
         dataframe_format: str = "qdf",
         dataframe_type: str = "pandas",
         categorical_dataframe: bool = True,
@@ -1288,6 +1289,9 @@ class DataQueryFileAPIClient:
         end_date : Optional[str]
             The end date for the returned data in the ISO format "YYYY-MM-DD".
             If None, data is returned up to the latest available date.
+        include_file_column : bool
+            If True, includes a column indicating the source file for each data point.
+            Default is True.
         dataframe_format : str
             The format of the returned DataFrame. Options are "qdf" for QuantamentalDataFrame
             or "tickers" for a standard DataFrame with tickers as columns. Default is "qdf".
@@ -1376,6 +1380,7 @@ class DataQueryFileAPIClient:
             dataframe_type=dataframe_type,
             categorical_dataframe=categorical_dataframe,
             datasets=datasets_to_download,
+            include_file_column=include_file_column,
         )
 
 
@@ -2110,8 +2115,7 @@ def lazy_load_from_parquets(
     if cids:
         tickers += [f"{c}_{x}" for c in cids for x in xcats]
 
-    if include_file_column:
-        include_file_column = "file_name"
+    include_file_column = "source_file" if include_file_column else None
 
     lf: pl.LazyFrame = _lazy_load_filtered_parquets(
         paths=sorted(available_files_df["path"]),
