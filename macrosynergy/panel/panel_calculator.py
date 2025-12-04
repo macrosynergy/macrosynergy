@@ -7,12 +7,12 @@ import numpy as np
 import pandas as pd
 from typing import List, Tuple
 from macrosynergy.management.simulate import make_qdf
-from macrosynergy.management.utils import reduce_df
-from macrosynergy.management.utils import drop_nan_series
+from macrosynergy.management.utils import reduce_df, drop_nan_series, get_cid, get_xcat
 from macrosynergy.management.types import QuantamentalDataFrame
 from macrosynergy import PYTHON_3_8_OR_LATER
 import re
 import random
+import string
 
 
 def panel_calculator(
@@ -122,8 +122,8 @@ def panel_calculator(
 
     _check_calcs(calcs)
 
-    safe_globals = {'np': np, 'pd': pd, **external_func}
-    
+    safe_globals = {"np": np, "pd": pd, **external_func}
+
     # B. Collect new category names and their formulas.
 
     ops = {}
@@ -236,33 +236,60 @@ def time_series_check(formula: str, index: int):
     return i, clause
 
 
-def xcat_isolator(expression: str, start_index: str, index: int) -> Tuple[str, int]:
+def is_valid_xcat(xcat_str: str) -> bool:
     """
-    Split the category from the time-series operation. The function will return the
-    respective category.
+    Heuristic to determine if a string is a valid category (`xcat`).
+    Conditions:
+        - Only composed of alphanumeric characters and underscores
+        - Must contain at least one uppercase letter
+        - If starts with "i", must be a ticker, i.e containing an underscore
 
     Parameters
     ----------
-    expression : str
-
-    start_index : str
-        starting index to search over.
-    index : int
-        defines the end of the search space over the expression.
+    xcat_str : str
+        The string to check.
 
     Returns
     -------
-    Tuple[str, int]
-        xcat string, and the string index where the xcat ends.
+    bool
+        True if the string is a valid category (`xcat`), False otherwise.
     """
+    xcat_chars = string.ascii_letters + string.digits + "_"
+    if xcat_str.startswith("i"):
+        if (get_cid(xcat_str) + "_" + get_xcat(xcat_str)) != xcat_str:
+            return False
+    if len(set(xcat_str) - set(xcat_chars)) > 0:
+        return False
+    if not any(c in string.ascii_uppercase for c in xcat_str):
+        return False
+    return True
 
-    op_copy = expression[start_index : index + 1]
 
-    start = next(i for i, elem in enumerate(op_copy) if elem.isupper())
+def xcat_isolator(calc_rhs_str: str) -> List[str]:
+    """
+    Split the category from the right hand side (RHS) of the panel calculation formula.
+    The function will return a list of categories found in the RHS string.
 
-    xcat = op_copy[start : index + 1]
+    Parameters
+    ----------
+    calc_rhs_str : str
+        right hand side of the panel calculation formula.
+    """
+    xcat_chars = string.ascii_letters + string.digits + "_"
+    mask = [c in xcat_chars for c in calc_rhs_str]
+    found_xcats = [""]
+    for ic, char in enumerate(calc_rhs_str):
+        if mask[ic]:
+            found_xcats[-1] += char
+        elif found_xcats[-1] != "":
+            found_xcats.append("")
 
-    return xcat, start_index + start + len(xcat)
+    found_xcats = list(filter(is_valid_xcat, found_xcats))
+    if not found_xcats:
+        raise ValueError(
+            f"This calculation does not contain any valid categories (XCATs).\n\t:{calc_rhs_str}"
+        )
+    return found_xcats
 
 
 def _get_xcats_used(ops: dict) -> Tuple[List[str], List[str]]:
@@ -276,28 +303,26 @@ def _get_xcats_used(ops: dict) -> Tuple[List[str], List[str]]:
 
     Returns
     -------
-    Tuple[List[str], List[str]]
-        all_xcats_used, singles_used.
+    Tuple[List[str], List[str], List[str]]
+        all_xcats_used, singles_used, single_cids
     """
 
     xcats_used: List[str] = []
     singles_used: List[str] = []
     for op in ops.values():
-        index, clause = time_series_check(formula=op, index=0)
-        start_index = 0
-        if clause:
-            while clause:
-                xcat, end_ = xcat_isolator(op, start_index, index)
-                xcats_used.append(xcat)
-                index, clause = time_series_check(op, index=end_)
-                start_index = end_
-        else:
-            op_list = op.split(" ")
-            xcats_used += [x for x in op_list if re.match("^[A-Z]", x)]
-            singles_used += [s for s in op_list if re.match("^i", s)]
+        xcats_found = xcat_isolator(op)
+        new_single_tickers = [x for x in xcats_found if x.startswith("i")]
+        new_xcats_used = [x for x in xcats_found if x not in new_single_tickers]
 
-    single_xcats = [x.split("_", 1)[1] for x in singles_used]
-    single_cids = [x.split("_", 1)[0] for x in single_xcats]
+        singles_used += new_single_tickers
+        xcats_used += new_xcats_used
+
+    single_xcats = get_xcat(singles_used)
+    single_cids = get_cid(singles_used)
+
+    # removing the "i" prefix from single_cids
+    single_cids = [x.lstrip("i") for x in single_cids]
+
     all_xcats_used = xcats_used + single_xcats
     return all_xcats_used, singles_used, single_cids
 
@@ -344,7 +369,7 @@ def _replace_zeros(df: pd.DataFrame):
         cleaned dataframe.
     """
 
-    if not PYTHON_3_8_OR_LATER: # pragma: no cover
+    if not PYTHON_3_8_OR_LATER:  # pragma: no cover
         for col in df.columns:
             df[col] = df[col].replace(pd.NA, np.nan)
             df[col] = df[col].astype("float64")
