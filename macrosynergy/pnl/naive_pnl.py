@@ -1041,14 +1041,14 @@ class NaivePnL:
             return fg
         plt.show()
 
-    def get_input_data(self) -> pd.DataFrame:
+    def get_input_signals(self) -> pd.DataFrame:
         """
         Returns a DataFrame containing the input tickers (post any filtering).
 
         Returns
         -------
         ~pandas.DataFrame
-            DataFrame containing the input tickers
+            DataFrame containing the input signals (post any filtering).
         """
         return QuantamentalDataFrame(self.df, self._as_categorical).reduce_df(
             cids=self.cids, xcats=list(set(self.xcats) - set([self.ret]))
@@ -1112,7 +1112,7 @@ class NaivePnL:
         y_label: str = "",
         figsize: Optional[Tuple[float, float]] = None,
         tick_fontsize: int = None,
-        return_fig: bool = False
+        return_fig: bool = False,
     ):
         """
         Display heatmap of signals across times and cross-sections.
@@ -1515,10 +1515,7 @@ class NaivePnL:
 
 
 def create_results_dataframe(
-    title: str,
-    pnl: NaivePnL,
-    sigs_renamed: dict = None,
-    **srr_kwargs
+    title: str, pnl: NaivePnL, sigs_renamed: dict = None, **srr_kwargs
 ):
     """
     Create a DataFrame with key performance metrics for signals and PnLs
@@ -1556,7 +1553,9 @@ def create_results_dataframe(
     bms = list(pnl._bm_dict.keys())
 
     if pnl.pnl_params is None:
-        raise ValueError("PnL parameters not found. Ensure pnl.make_pnl() has been run.")
+        raise ValueError(
+            "PnL parameters not found. Ensure pnl.make_pnl() has been run."
+        )
 
     for pnl_name, params in pnl.pnl_params.items():
         sigs.append(params.signal)
@@ -1747,7 +1746,13 @@ if __name__ == "__main__":
         end="2020-12-31",
     )
 
-    heatmap = pnl.signal_heatmap(pnl_name="PNL_GROWTH_NEG", pnl_cids=cids, freq="m", return_fig=True, title="Heatmap Example")
+    heatmap = pnl.signal_heatmap(
+        pnl_name="PNL_GROWTH_NEG",
+        pnl_cids=cids,
+        freq="m",
+        return_fig=True,
+        title="Heatmap Example",
+    )
 
     print(df_eval)
 

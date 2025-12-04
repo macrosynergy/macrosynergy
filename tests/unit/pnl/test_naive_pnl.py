@@ -899,7 +899,7 @@ class TestAll(unittest.TestCase):
             thresh=None,
         )
 
-        input_df = pnl.get_input_data()
+        input_df = pnl.get_input_signals()
         self.assertSetEqual(set(input_df["xcat"].unique()), set(sigs))
         self.assertSetEqual(set(input_df["cid"].unique()), set(self.cids))
         expected_input_df = reduce_df(pnl.df, xcats=sigs, cids=self.cids)
