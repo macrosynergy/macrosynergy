@@ -336,7 +336,7 @@ class SignalReturnRelations:
         sigs: Union[str, List[str]] = None,
         freq: str = None,
         agg_sig: str = None,
-        type: str = "cross_section",
+        view: str = "cross_section",
         title: str = None,
         title_fontsize: int = 16,
         size: Tuple[float, float] = None,
@@ -344,6 +344,7 @@ class SignalReturnRelations:
         x_labels: Dict = None,
         x_labels_rotate: int = 0,
         return_fig: bool = False,
+        **kwargs,
     ):
         """
         Plot bar chart for the overall and balanced accuracy metrics. For types:
@@ -362,7 +363,7 @@ class SignalReturnRelations:
         agg_sig : str, optional
             aggregation method to be used in analysis. Default is None, in which case the
             first aggregation method will be used.
-        type : str, optional
+        view : str, optional
             type of segment over which bars are drawn. Either "cross_section" (default),
             "years" or "signals".
         title : str, optional
@@ -380,8 +381,17 @@ class SignalReturnRelations:
         x_labels_rotate : int
             rotation of x-axis labels. Default is 0.
         """
-
-        assert type in ["cross_section", "years", "signals"]
+        if "type" in kwargs:
+            warnings.warn(
+                "`type` parameter is deprecated; use `view` instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            view = kwargs["type"]
+        if view not in ["cross_section", "years", "signals"]:
+            raise ValueError(
+                "View parameter must be either 'cross_section', 'years' or 'signals'."
+            )
 
         if sigs is None:
             sigs = self.sigs
@@ -418,9 +428,9 @@ class SignalReturnRelations:
             if not sigs[i] in self.sigs:
                 sigs[i] = sigs[i] + "_NEG"
 
-        if type == "cross_section":
+        if view == "cross_section":
             df_xs = self.__output_table__(cs_type="cids", ret=ret, sig=sigs[0])
-        elif type == "years":
+        elif view == "years":
             df_xs = self.__output_table__(cs_type="years", ret=ret, sig=sigs[0])
         else:
             df_xs = self.__rival_sigs__(ret, sigs)
@@ -428,7 +438,7 @@ class SignalReturnRelations:
         dfx = df_xs[~df_xs.index.isin(["PosRatio"])]
 
         if title is None:
-            refsig = "various signals" if type == "signals" else sigs[0]
+            refsig = "various signals" if view == "signals" else sigs[0]
             title = (
                 f"Accuracy for sign prediction of {ret} based on {refsig} "
                 f"at {self.dic_freq[self.freqs[0]]} frequency."
@@ -458,11 +468,16 @@ class SignalReturnRelations:
 
         if x_labels:
             validated_labels = {}
-            for key, value in x_labels.items():
-                if key in self.sigs:
-                    validated_labels[key] = value
-                elif key + "_NEG" in self.sigs:
-                    validated_labels[key + "_NEG"] = value
+            if view == "signals":
+                for key, value in x_labels.items():
+                    if key in self.sigs:
+                        validated_labels[key] = value
+                    elif key + "_NEG" in self.sigs:
+                        validated_labels[key + "_NEG"] = value
+            elif view == "cross_section":
+                for key, value in x_labels.items():
+                    if key in self.cids:
+                        validated_labels[key] = value
             labels = [validated_labels.get(xcat, xcat) for xcat in dfx.index]
         else:
             labels = dfx.index
@@ -1852,7 +1867,7 @@ if __name__ == "__main__":
     print(dfsum)
 
     srn.accuracy_bars(
-        type="signals",
+        view="signals",
         title="Accuracy",
         x_labels={"CRY": "Cry", "INFL": "Inflation", "GROWTH": "Growth"},
         x_labels_rotate=45,
@@ -1897,7 +1912,7 @@ if __name__ == "__main__":
         blacklist=black,
     )
 
-    sr.accuracy_bars(sigs=["CRY", "INFL_NEG"], type="signals", title="Accuracy")
+    sr.accuracy_bars(sigs=["CRY", "INFL_NEG"], view="signals", title="Accuracy")
     sr.correlation_bars(sigs=["CRY", "INFL_NEG"], type="signals", title="Correlation")
 
     srt = sr.single_relation_table(
