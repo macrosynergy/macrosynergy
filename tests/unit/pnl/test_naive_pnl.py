@@ -917,7 +917,7 @@ class TestAll(unittest.TestCase):
             QuantamentalDataFrame(expected_returns_df),
         )
 
-        signals_df = pnl.get_signals_data()
+        signals_df = pnl.get_generated_signals()
         self.assertFalse(signals_df.empty)
         self.assertSetEqual(set(signals_df["xcat"].unique()), {pnl_name})
         self.assertTrue(set(signals_df["cid"].unique()).issubset(set(self.cids)))
