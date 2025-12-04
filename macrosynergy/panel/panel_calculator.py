@@ -276,19 +276,51 @@ def xcat_isolator(calc_rhs_str: str) -> List[str]:
         right hand side of the panel calculation formula.
     """
     xcat_chars = string.ascii_letters + string.digits + "_"
-    mask = [c in xcat_chars for c in calc_rhs_str]
-    found_xcats = [""]
-    for ic, char in enumerate(calc_rhs_str):
-        if mask[ic]:
-            found_xcats[-1] += char
-        elif found_xcats[-1] != "":
-            found_xcats.append("")
+    # keep original calc_rhs_str for for later
+    rhs_chars = [c for c in calc_rhs_str if not c.isspace()]
+    mask = [c in xcat_chars for c in rhs_chars]
 
-    found_xcats = list(filter(is_valid_xcat, found_xcats))
+    found_xcats_with_pos = []
+    current = ""
+    start_idx = None
+
+    for ic, char in enumerate(rhs_chars):
+        if mask[ic]:
+            if current == "":
+                start_idx = ic
+            current += char
+        elif current != "":
+            found_xcats_with_pos.append((current, start_idx))
+            current = ""
+            start_idx = None
+
+    if current != "":
+        found_xcats_with_pos.append((current, start_idx))
+
+    found_xcats: List[str] = []
+    n = len(rhs_chars)
+
+    for xcat, start in found_xcats_with_pos:
+        if start is None:
+            continue
+
+        end = start + len(xcat) - 1
+
+        has_eq_left = start > 0 and rhs_chars[start - 1] == "="
+        has_eq_right = end < n - 1 and rhs_chars[end + 1] == "="
+
+        if has_eq_left or has_eq_right:
+            continue
+
+        if is_valid_xcat(xcat):
+            found_xcats.append(xcat)
+
     if not found_xcats:
         raise ValueError(
-            f"This calculation does not contain any valid categories (XCATs).\n\t:{calc_rhs_str}"
+            "This calculation does not contain any valid categories (XCATs).\n\t:"
+            f"{calc_rhs_str}"
         )
+
     return found_xcats
 
 
@@ -317,8 +349,8 @@ def _get_xcats_used(ops: dict) -> Tuple[List[str], List[str]]:
         singles_used += new_single_tickers
         xcats_used += new_xcats_used
 
-    single_xcats = get_xcat(singles_used)
-    single_cids = get_cid(singles_used)
+    single_xcats = [get_xcat(x) for x in singles_used]
+    single_cids = [get_cid(x) for x in singles_used]
 
     # removing the "i" prefix from single_cids
     single_cids = [x.lstrip("i") for x in single_cids]
