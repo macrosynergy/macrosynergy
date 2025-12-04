@@ -5,9 +5,10 @@ import unittest
 from unittest.mock import patch
 import numpy as np
 import pandas as pd
-from typing import List, Dict, Tuple, Union
+from typing import List, Dict
 import matplotlib
 from matplotlib import pyplot as plt
+from macrosynergy.management.types import QuantamentalDataFrame
 
 
 class TestAll(unittest.TestCase):
@@ -349,7 +350,6 @@ class TestAll(unittest.TestCase):
             self.assertTrue(round(float(test_data), 4) == round(pnl_return_date, 4))
 
     def test_make_pnl_args(self):
-
         def _random_func(): ...
 
         ret = "EQXR"
@@ -599,7 +599,6 @@ class TestAll(unittest.TestCase):
         with self.assertRaises(ValueError):
             pnl.evaluate_pnls(pnl_cats=["banana"])
 
-
     def test_plotting_methods(self):
         plt.close("all")
         mock_plt = patch("matplotlib.pyplot.show").start()
@@ -676,7 +675,6 @@ class TestAll(unittest.TestCase):
         matplotlib.use(mpl_backend)
 
     def test_validation_of_create_results_dataframe(self):
-
         ret = 1
         sigs = ["CRY", "GROWTH", "INFL"]
 
@@ -827,7 +825,6 @@ class TestAll(unittest.TestCase):
             )
 
     def test_result_of_create_results_dataframe(self):
-
         ret = "EQXR"
         sigs = ["CRY", "GROWTH", "INFL"]
         sig_negs = [True, False, False]
@@ -874,6 +871,77 @@ class TestAll(unittest.TestCase):
         self.assertEqual(set(results.index), set(negative_sigs))
 
         self.assertEqual(len(results.columns), 8)
+
+    def test_data_accessors(self):
+        ret = "EQXR"
+        sigs = ["CRY", "GROWTH"]
+        pnl = NaivePnL(
+            self.dfd,
+            ret=ret,
+            sigs=sigs,
+            cids=self.cids,
+            start="2000-01-01",
+            blacklist=self.blacklist,
+        )
+
+        pnl_name = "PNL_CRY"
+        pnl.make_pnl(
+            sig="CRY",
+            sig_op="zn_score_pan",
+            rebal_freq="daily",
+            vol_scale=None,
+            rebal_slip=0,
+            pnl_name=pnl_name,
+            min_obs=252,
+            iis=True,
+            sequential=True,
+            neutral="zero",
+            thresh=None,
+        )
+
+        input_df = pnl.get_input_data()
+        self.assertSetEqual(set(input_df["xcat"].unique()), set(sigs))
+        self.assertSetEqual(set(input_df["cid"].unique()), set(self.cids))
+        expected_input_df = reduce_df(pnl.df, xcats=sigs, cids=self.cids)
+        pd.testing.assert_frame_equal(
+            QuantamentalDataFrame(input_df),
+            QuantamentalDataFrame(expected_input_df),
+        )
+
+        returns_df = pnl.get_asset_returns_data()
+        self.assertSetEqual(set(returns_df["xcat"].unique()), {ret})
+        self.assertSetEqual(set(returns_df["cid"].unique()), set(self.cids))
+        expected_returns_df = reduce_df(pnl.df, xcats=[ret], cids=self.cids)
+        pd.testing.assert_frame_equal(
+            QuantamentalDataFrame(returns_df),
+            QuantamentalDataFrame(expected_returns_df),
+        )
+
+        signals_df = pnl.get_signals_data()
+        self.assertFalse(signals_df.empty)
+        self.assertSetEqual(set(signals_df["xcat"].unique()), {pnl_name})
+        self.assertTrue(set(signals_df["cid"].unique()).issubset(set(self.cids)))
+        self.assertIn("value", signals_df.columns)
+        expected_signals_df = (
+            pd.concat([pnl.signal_df[pnl_name].assign(xcat=pnl_name)])
+            .dropna()
+            .reset_index(drop=True)
+            .rename(columns={"sig": "value"})
+        )
+        pd.testing.assert_frame_equal(
+            QuantamentalDataFrame(signals_df),
+            QuantamentalDataFrame(expected_signals_df),
+        )
+
+        pnls_df = pnl.get_pnls_returns_data()
+        self.assertFalse(pnls_df.empty)
+        self.assertSetEqual(set(pnls_df["xcat"].unique()), {pnl_name})
+        self.assertTrue(set(pnls_df["cid"].unique()).issubset(set(self.cids)))
+        expected_pnls_df = reduce_df(pnl.df, xcats=[pnl_name], cids=self.cids)
+        pd.testing.assert_frame_equal(
+            QuantamentalDataFrame(pnls_df),
+            QuantamentalDataFrame(expected_pnls_df),
+        )
 
 
 if __name__ == "__main__":
