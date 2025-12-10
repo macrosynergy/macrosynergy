@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 
-from macrosynergy.learning import LinearMultiTargetRegression
+from macrosynergy.learning import LinearMultiTargetRegression, LarsSelector
 
 import unittest
 
@@ -49,17 +49,20 @@ class TestLMTR(unittest.TestCase):
         self.y_nan.iloc[0] = np.nan
 
     def test_init_types(self):
-        # fit_intercept
+        """
+        Test inputs of the init method are checked for correctness.
+        """
+        # fit_intercept must be boolean
         self.assertRaises(TypeError, LinearMultiTargetRegression, fit_intercept="True")
-        # seemingly unrelated
+        # seemingly unrelated must be boolean
         self.assertRaises(TypeError, LinearMultiTargetRegression, seemingly_unrelated="False")
-        # ewm_covariance
+        # ewm_covariance must be boolean
         self.assertRaises(TypeError, LinearMultiTargetRegression, ewm_covariance="True")
-        # span 
+        # span should be a positive integer when ewm_covariance is True
         self.assertRaises(TypeError, LinearMultiTargetRegression, span="5")
         self.assertRaises(ValueError, LinearMultiTargetRegression, span=0)
         self.assertRaises(ValueError, LinearMultiTargetRegression, span=-3)
-        # feature_selection
+        # feature_selection must inherit from SelectorMixin
         self.assertRaises(
             TypeError,
             LinearMultiTargetRegression,
@@ -67,7 +70,32 @@ class TestLMTR(unittest.TestCase):
         )
 
     def test_init_valid(self):
-        pass
+        """"
+        Test validity of the init method
+        """
+        # Test defaults set correctly
+        model = LinearMultiTargetRegression()
+        self.assertIsInstance(model, LinearMultiTargetRegression)
+        self.assertTrue(model.fit_intercept)
+        self.assertFalse(model.seemingly_unrelated)
+        self.assertTrue(model.ewm_covariance)
+        self.assertEqual(model.span, 60)
+        self.assertIsNone(model.feature_selection)
+
+        # Test with custom valid parameters
+        model = LinearMultiTargetRegression(
+            fit_intercept=False,
+            seemingly_unrelated=True,
+            ewm_covariance=False,
+            span=32,
+            feature_selection=LarsSelector(n_factors = 1),
+        )
+        self.assertIsInstance(model, LinearMultiTargetRegression)
+        self.assertFalse(model.fit_intercept)
+        self.assertTrue(model.seemingly_unrelated)
+        self.assertFalse(model.ewm_covariance)
+        self.assertEqual(model.span, 32)
+        self.assertIsInstance(model.feature_selection, LarsSelector)
 
     def test_fit_types(self):
         pass

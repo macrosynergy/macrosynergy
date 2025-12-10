@@ -58,6 +58,7 @@ class LinearMultiTargetRegression(BaseEstimator, RegressorMixin):
         # Attributes
         self.fit_intercept = fit_intercept
         self.seemingly_unrelated = seemingly_unrelated
+        self.ewm_covariance = ewm_covariance
         self.span = span
         self.feature_selection = feature_selection
 
