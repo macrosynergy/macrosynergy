@@ -12,6 +12,7 @@ Submodules
 .. toctree::
    :maxdepth: 2
 
+   macrosynergy.visuals.acf
    macrosynergy.visuals.correlation
    macrosynergy.visuals.facetplot
    macrosynergy.visuals.grades
