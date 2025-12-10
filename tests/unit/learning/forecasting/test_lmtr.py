@@ -190,8 +190,29 @@ class TestLMTR(unittest.TestCase):
             np.testing.assert_array_almost_equal(lmtr_su.intercepts_["XR"], 0.0)
             np.testing.assert_array_almost_equal(lmtr_su.intercepts_["XR2"], 0.0)
 
-    def test_predict_types(self):
-        pass
+    @parameterized.expand([True, False])
+    def test_predict_types(self, seemingly_unrelated):
+        """
+        Test inputs of the fit method are checked for correctness.
+        """
+        model = LinearMultiTargetRegression(seemingly_unrelated=seemingly_unrelated).fit(X=self.X, y=self.y)
+        # Test type of 'X' parameter
+        self.assertRaises(TypeError, model.predict, X=1)
+        self.assertRaises(TypeError, model.predict, X="X")
+        self.assertRaises(TypeError, model.predict, X=self.X.values)
+        self.assertRaises(ValueError, model.predict, X=self.X_nan)
+        self.assertRaises(ValueError, model.predict, X=self.X.reset_index())
 
     def test_predict_valid(self):
-        pass
+        """
+        Test that the predict method works as expected
+        """
+        # Test it returns correct shape and numpy array
+        lmtr = LinearMultiTargetRegression(
+            fit_intercept=True,
+            seemingly_unrelated=True,
+            feature_selection=LarsSelector(n_factors=1),
+        ).fit(X=self.X, y=self.y)
+        y_pred = lmtr.predict(X=self.X)
+        self.assertIsInstance(y_pred, np.ndarray)
+        self.assertEqual(y_pred.shape, (self.X.shape[0], self.y.shape[1]))
