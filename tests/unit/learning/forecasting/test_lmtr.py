@@ -5,12 +5,14 @@ from macrosynergy.learning import LinearMultiTargetRegression, LarsSelector
 
 import unittest
 
+from macrosynergy.learning.preprocessing.panel_selectors.panel_selectors import KendallSignificanceSelector
+
 class TestLMTR(unittest.TestCase):
     @classmethod
     def setUpClass(self):
         # Generate data with true linear relationship
         cids = ["AUD", "CAD", "GBP", "USD"]
-        xcats = ["XR", "CPI", "GROWTH", "RIR"]
+        xcats = ["XR", "XR2", "GROWTH", "RIR"]
 
         df_cids = pd.DataFrame(index=cids, columns=["earliest", "latest"])
         df_cids.loc["AUD"] = ["2019-01-01", "2020-12-31"]
@@ -30,20 +32,21 @@ class TestLMTR(unittest.TestCase):
                 tuples.append((cid, work_day))
 
         n_samples = len(tuples)
-        ftrs = np.random.normal(loc=0, scale=1, size=(n_samples, 3))
-        labels = np.matmul(ftrs, [1, 2, -1]) + np.random.normal(0, 0.5, len(ftrs))
+        ftrs = np.random.normal(loc=0, scale=1, size=(n_samples, 2))
+        labels1 = np.matmul(ftrs, [1, 2]) + np.random.normal(0, 0.5, len(ftrs))
+        labels2 = np.matmul(ftrs, [-1,3]) + np.random.normal(0, 0.5, len(ftrs))
         df = pd.DataFrame(
-            data=np.concatenate((np.reshape(labels, (-1, 1)), ftrs), axis=1),
+            data=np.concatenate((np.reshape(labels1, (-1, 1)), np.reshape(labels2, (-1, 1)), ftrs), axis=1),
             index=pd.MultiIndex.from_tuples(tuples, names=["cid", "real_date"]),
             columns=xcats,
             dtype=np.float32,
         )
 
-        self.X = df.drop(columns="XR")
+        self.X = df.drop(columns=["XR", "XR2"])
         self.X_numpy = self.X.values
         self.X_nan = self.X.copy()
         self.X_nan["nan_col"] = np.nan
-        self.y = df["XR"]
+        self.y = df[["XR", "XR2"]]
         self.y_numpy = self.y.values
         self.y_nan = self.y.copy()
         self.y_nan.iloc[0] = np.nan
@@ -98,7 +101,29 @@ class TestLMTR(unittest.TestCase):
         self.assertIsInstance(model.feature_selection, LarsSelector)
 
     def test_fit_types(self):
-        pass
+        """
+        Test inputs of the fit method are checked for correctness.
+        """
+        model = LinearMultiTargetRegression()
+        # Test type of 'X' parameter
+        self.assertRaises(TypeError, model.fit, X=1, y=self.y)
+        self.assertRaises(TypeError, model.fit, X="X", y=self.y)
+        self.assertRaises(TypeError, model.fit, X=self.X.values, y=self.y)
+        self.assertRaises(ValueError, model.fit, X=self.X_nan, y=self.y)
+        self.assertRaises(ValueError, model.fit, X=self.X.reset_index(), y=self.y)
+        # Test type of 'y' parameter
+        self.assertRaises(TypeError, model.fit, X=self.X, y=1)
+        self.assertRaises(TypeError, model.fit, X=self.X, y="y")
+        self.assertRaises(TypeError, model.fit, X=self.X, y=self.y.values)
+        self.assertRaises(ValueError, model.fit, X=self.X, y=self.y.reset_index())
+        self.assertRaises(ValueError, model.fit, X=self.X, y=self.y_nan)
+        # Test type of sample_weight
+        self.assertRaises(TypeError, model.fit, X=self.X, y=self.y, sample_weight="weight")
+        self.assertRaises(TypeError, model.fit, X=self.X, y=self.y, sample_weight=["weight"] * len(self.X))
+        self.assertRaises(ValueError, model.fit, X=self.X, y=self.y, sample_weight=[1.0, 2.0])
+        self.assertRaises(TypeError, model.fit, X=self.X, y=self.y, sample_weight=[1.0, "two", 3.0] * (len(self.X)//3))
+        self.assertRaises(ValueError, model.fit, X=self.X, y=self.y, sample_weight=[1.0, -2.0, 3.0] * (len(self.X)//3))
+
 
     def test_fit_valid(self):
         pass

@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+import numbers 
 
 from sklearn.linear_model import LinearRegression
 from sklearn.base import BaseEstimator, RegressorMixin
@@ -352,6 +353,13 @@ class LinearMultiTargetRegression(BaseEstimator, RegressorMixin):
             raise TypeError("X must be a pandas DataFrame.")
         if not isinstance(y, (pd.DataFrame, pd.Series)):
             raise TypeError("y must be a pandas DataFrame or Series.")
+        # The dataframe must be multi indexed by asset and real date
+        if not isinstance(X.index, pd.MultiIndex):
+            raise ValueError("X must be multi-indexed by asset and real date.")
+        if not isinstance(y.index, pd.MultiIndex):
+            raise ValueError("y must be multi-indexed by asset and real date.")
+        if not X.index.equals(y.index):
+            raise ValueError("X and y must have the same multi-index.")
         # This model can't handle NAs.
         if X.isna().sum().sum() > 0:
             raise ValueError("X must not contain missing values.")
@@ -366,6 +374,11 @@ class LinearMultiTargetRegression(BaseEstimator, RegressorMixin):
                 raise TypeError("sample_weight must be a numpy array or list.")
             if len(sample_weight) != X.shape[0]:
                 raise ValueError("sample_weight must have the same number of samples as X and y.")
+            for weight in sample_weight:
+                if not isinstance(weight, numbers.Number):
+                    raise TypeError("All entries in sample_weight must be numeric.")
+                if weight < 0:
+                    raise ValueError("All entries in sample_weight must be non-negative.")
 
     def _check_predict_params(self, X):
         # Type checks for X
