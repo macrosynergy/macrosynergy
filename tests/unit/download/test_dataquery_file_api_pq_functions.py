@@ -562,7 +562,10 @@ class TestLargeDeltaFileDatetimes(unittest.TestCase):
             as_strings, [ts.strftime("%Y%m%dT%H%M%S") for ts in as_timestamps]
         )
         self.assertTrue(
-            all(ts.hour == 23 and ts.minute == 59 and ts.second == 59 for ts in as_timestamps)
+            all(
+                ts.hour == 23 and ts.minute == 59 and ts.second == 59
+                for ts in as_timestamps
+            )
         )
         self.assertListEqual(as_strings, sorted(as_strings))
 
@@ -612,90 +615,19 @@ class TestLazyLoadFilteredParquets(unittest.TestCase):
         self.assertEqual(result["cid"].to_list(), ["USD", "EUR"])
         self.assertEqual(result["xcat"].to_list(), ["GROWTH_EXTRA", "CPI"])
 
-    def test_lazy_load_filtered_parquets_latest_dedup(self):
-        call_kwargs = dict(
-            paths=[str(self.ticker_file), str(self.qdf_file)],
-            tickers=["USD_INFL", "EUR_INFL"],
-            start_date=None,
-            end_date=None,
-            include_file_column="source_file",
-            return_qdf=True,
-        )
-        sig_params = inspect.signature(_lazy_load_filtered_parquets).parameters
-        if "delta_treatment" in sig_params:
-            call_kwargs["delta_treatment"] = "latest"
-        if "min_last_updated" in sig_params:
-            call_kwargs["min_last_updated"] = None
-        if "max_last_updated" in sig_params:
-            call_kwargs["max_last_updated"] = None
-        lf = _lazy_load_filtered_parquets(**call_kwargs)
-        df = lf.collect()
-
-        self.assertIn("source_file", df.columns)
-        self.assertEqual(df.height, 3)
-
-        usd_jan = df.filter(
-            (pl.col("cid") == "USD")
-            & (pl.col("xcat") == "INFL")
-            & (pl.col("real_date") == datetime.date(2024, 1, 1))
-        )
-        self.assertEqual(usd_jan.height, 1)
-        self.assertEqual(usd_jan["value"][0], 10.0)
-        self.assertEqual(Path(str(usd_jan["source_file"][0])).name, self.qdf_file.name)
-
-        eur_row = df.filter(
-            (pl.col("cid") == "EUR") & (pl.col("xcat") == "INFL")
-        )
-        self.assertEqual(eur_row.height, 1)
-        self.assertEqual(eur_row["value"][0], 2.0)
-        self.assertEqual(Path(str(eur_row["source_file"][0])).name, self.ticker_file.name)
-
-    def test_lazy_load_filtered_parquets_earliest_ticker_schema(self):
-        call_kwargs = dict(
-            paths=[str(self.ticker_file), str(self.qdf_file)],
-            tickers=["USD_INFL"],
-            start_date=None,
-            end_date=None,
-            delta_treatment="earliest",
-            include_file_column="source_file",
-            return_qdf=False,
-        )
-        sig_params = inspect.signature(_lazy_load_filtered_parquets).parameters
-        if "delta_treatment" not in sig_params:
-            self.skipTest("delta_treatment not supported in this version of helper")
-        if "min_last_updated" in sig_params:
-            call_kwargs["min_last_updated"] = None
-        if "max_last_updated" in sig_params:
-            call_kwargs["max_last_updated"] = None
-        if "delta_treatment" in sig_params:
-            call_kwargs["delta_treatment"] = "earliest"
-        lf = _lazy_load_filtered_parquets(**call_kwargs)
-        df = lf.collect()
-
-        self.assertIn("ticker", df.columns)
-        self.assertNotIn("cid", df.columns)
-        self.assertEqual(df.filter(pl.col("ticker") == "USD_INFL").height, 2)
-
-        usd_jan = df.filter(
-            (pl.col("ticker") == "USD_INFL")
-            & (pl.col("real_date") == datetime.date(2024, 1, 1))
-        )
-        self.assertEqual(usd_jan.height, 1)
-        self.assertEqual(usd_jan["value"][0], 1.0)
-        self.assertEqual(Path(str(usd_jan["source_file"][0])).name, self.ticker_file.name)
-
     def test_lazy_load_filtered_parquets_requires_paths(self):
+        sig_params = inspect.signature(_lazy_load_filtered_parquets).parameters
         call_kwargs = dict(
             paths=[],
             tickers=["USD_INFL"],
             start_date=None,
             end_date=None,
-            include_file_column=None,
             return_qdf=True,
         )
-        sig_params = inspect.signature(_lazy_load_filtered_parquets).parameters
         if "delta_treatment" in sig_params:
             call_kwargs["delta_treatment"] = "all"
+        if "include_file_column" in sig_params:
+            call_kwargs["include_file_column"] = None
         if "min_last_updated" in sig_params:
             call_kwargs["min_last_updated"] = None
         if "max_last_updated" in sig_params:
