@@ -174,6 +174,22 @@ class TestLMTR(unittest.TestCase):
                     0.0,
                 )
 
+        # If seemingly_unrelated is True and all independent variables are the same across equations,
+        # should reduce to separate OLS on each equation.
+        lmtr_su = LinearMultiTargetRegression(
+            fit_intercept=fit_intercept,
+            seemingly_unrelated=True,
+        ).fit(X=self.X, y=self.y)
+        lr = LinearRegression(fit_intercept=fit_intercept).fit(X=self.X_numpy, y=self.y_numpy)
+        np.testing.assert_array_almost_equal(lmtr_su.coefs_["XR"], lr.coef_[0,:])
+        np.testing.assert_array_almost_equal(lmtr_su.coefs_["XR2"], lr.coef_[1,:])
+        if fit_intercept:
+            np.testing.assert_array_almost_equal(lmtr_su.intercepts_["XR"], lr.intercept_[0])
+            np.testing.assert_array_almost_equal(lmtr_su.intercepts_["XR2"], lr.intercept_[1])
+        else:
+            np.testing.assert_array_almost_equal(lmtr_su.intercepts_["XR"], 0.0)
+            np.testing.assert_array_almost_equal(lmtr_su.intercepts_["XR2"], 0.0)
+            
     def test_predict_types(self):
         pass
 
