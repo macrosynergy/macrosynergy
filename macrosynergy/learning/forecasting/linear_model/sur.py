@@ -18,7 +18,10 @@ class LinearMultiTargetRegression(BaseEstimator, RegressorMixin):
         Whether to include an intercept term in the regression.
     seemingly_unrelated : bool, default=False
         Whether to make the regression seemingly unrelated.
-    span : int, default=60
+    ewm_covariance : bool, default=True
+        Whether to use exponentially weighted moving covariance for residual covariance
+        estimation.
+    span : int, default=None
         Span parameter for exponentially weighted covariance estimation of residuals.
     feature_selection : object, default=None
         A feature selection object inheriting from scikit-learn's `SelectorMixin` base
@@ -29,6 +32,7 @@ class LinearMultiTargetRegression(BaseEstimator, RegressorMixin):
         self,
         fit_intercept=True,
         seemingly_unrelated=False,
+        ewm_covariance = True,
         span=60,
         feature_selection=None,
     ):
@@ -37,8 +41,13 @@ class LinearMultiTargetRegression(BaseEstimator, RegressorMixin):
             raise TypeError("The 'fit_intercept' parameter must be a boolean.")
         if not isinstance(seemingly_unrelated, bool):
             raise TypeError("The 'seemingly_unrelated' parameter must be a boolean.")
-        if not isinstance(span, int) or span <= 0:
-            raise ValueError("The 'span' parameter must be a positive integer.")
+        if not isinstance(ewm_covariance, bool):
+            raise TypeError("The 'ewm_covariance' parameter must be a boolean.")
+        if ewm_covariance:
+            if not isinstance(span, int):
+                raise TypeError("The 'span' parameter must be a positive integer.")
+            if span <= 0:
+                raise ValueError("The 'span' parameter must be a positive integer.")
         if feature_selection is not None and not isinstance(
             feature_selection, SelectorMixin
         ):
