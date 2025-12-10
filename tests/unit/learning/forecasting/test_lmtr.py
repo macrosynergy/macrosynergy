@@ -35,7 +35,7 @@ class TestLMTR(unittest.TestCase):
         n_samples = len(tuples)
         ftrs = np.random.normal(loc=0, scale=1, size=(n_samples, 2))
         labels1 = np.matmul(ftrs, [1, 2]) + np.random.normal(0, 0.5, len(ftrs))
-        labels2 = np.matmul(ftrs, [-1,3]) + np.random.normal(0, 0.5, len(ftrs))
+        labels2 = 0.1 - 0.75 * labels1 + np.random.normal(0, 0.5, len(ftrs))
         df = pd.DataFrame(
             data=np.concatenate((np.reshape(labels1, (-1, 1)), np.reshape(labels2, (-1, 1)), ftrs), axis=1),
             index=pd.MultiIndex.from_tuples(tuples, names=["cid", "real_date"]),
@@ -189,7 +189,7 @@ class TestLMTR(unittest.TestCase):
         else:
             np.testing.assert_array_almost_equal(lmtr_su.intercepts_["XR"], 0.0)
             np.testing.assert_array_almost_equal(lmtr_su.intercepts_["XR2"], 0.0)
-            
+
     def test_predict_types(self):
         pass
 
