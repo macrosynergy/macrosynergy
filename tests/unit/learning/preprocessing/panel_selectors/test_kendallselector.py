@@ -116,8 +116,8 @@ class TestKendallSelector(unittest.TestCase):
         scaler = KendallSignificanceSelector().fit(self.X, self.y)
         
         # Check that the features from kendalltau match those from kendall selector
-        pvals = np.array([kendalltau(self.X.iloc[:,i], self.y).pvalue for i in range(self.X.shape[1])])
-        scores = np.array([kendalltau(self.X.iloc[:,i], self.y).statistic for i in range(self.X.shape[1])])
+        pvals = np.array([kendalltau(self.X.iloc[:,i], self.y)[1] for i in range(self.X.shape[1])])
+        scores = np.array([kendalltau(self.X.iloc[:,i], self.y)[0] for i in range(self.X.shape[1])])
         support = pvals < 0.05
         np.testing.assert_array_equal(support, scaler.support_)
         np.testing.assert_array_equal(scores, scaler.scores_)
