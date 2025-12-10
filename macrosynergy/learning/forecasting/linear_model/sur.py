@@ -384,6 +384,9 @@ class LinearMultiTargetRegression(BaseEstimator, RegressorMixin):
         # Type checks for X
         if not isinstance(X, pd.DataFrame):
             raise TypeError("X must be a pandas DataFrame.")
+        # The dataframe must be multi indexed by asset and real date
+        if not isinstance(X.index, pd.MultiIndex):
+            raise ValueError("X must be multi-indexed by asset and real date.")
         # This model can't handle NAs.
         if X.isna().sum().sum() > 0:
             raise ValueError("X must not contain missing values.")
