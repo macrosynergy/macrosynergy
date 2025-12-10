@@ -8,6 +8,7 @@ import logging
 import polars as pl
 import pandas as pd
 import shutil
+import inspect
 
 from macrosynergy.download.dataquery_file_api import (
     _atomic_sink_csv,
@@ -24,6 +25,9 @@ from macrosynergy.download.dataquery_file_api import (
     _to_output_schema,
     _filter_lazy_frame_by_tickers,
     _delete_corrupt_files,
+    large_delta_file_datetimes,
+    _expr_split_ticker,
+    _lazy_load_filtered_parquets,
 )
 from macrosynergy.compat import PYTHON_3_8_OR_LATER
 
@@ -542,6 +546,162 @@ class TestCorruptedFilesHandling(unittest.TestCase):
         current_files = list(Path(self.tmpdir).glob("*.parquet"))
         self.assertEqual(len(current_files), 3)
         self.assertFalse(corrupt_file_path in current_files)
+
+
+class TestLargeDeltaFileDatetimes(unittest.TestCase):
+    def test_large_delta_datetimes_formatting(self):
+        as_strings = large_delta_file_datetimes()
+        as_timestamps = large_delta_file_datetimes(as_str=False)
+
+        self.assertGreater(len(as_strings), 0)
+        self.assertEqual(len(as_strings), len(as_timestamps))
+        self.assertEqual(len(as_strings), len(set(as_strings)))
+        self.assertTrue(all(isinstance(x, str) for x in as_strings))
+        self.assertTrue(all(isinstance(x, pd.Timestamp) for x in as_timestamps))
+        self.assertListEqual(
+            as_strings, [ts.strftime("%Y%m%dT%H%M%S") for ts in as_timestamps]
+        )
+        self.assertTrue(
+            all(ts.hour == 23 and ts.minute == 59 and ts.second == 59 for ts in as_timestamps)
+        )
+        self.assertListEqual(as_strings, sorted(as_strings))
+
+
+@unittest.skipUnless(PYTHON_3_8_OR_LATER, "Requires Python 3.8+")
+class TestLazyLoadFilteredParquets(unittest.TestCase):
+    def setUp(self):
+        self.tmpdir = Path(tempfile.mkdtemp())
+        self.ticker_file = self.tmpdir / "DATASETX_20240101.parquet"
+        self.qdf_file = self.tmpdir / "DATASETX_20240102.parquet"
+
+        ticker_df = pl.DataFrame(
+            {
+                "ticker": ["USD_INFL", "EUR_INFL"],
+                "real_date": [datetime.date(2024, 1, 1), datetime.date(2024, 1, 1)],
+                "value": [1.0, 2.0],
+                "last_updated": [
+                    datetime.datetime(2024, 1, 2, 0, 0),
+                    datetime.datetime(2024, 1, 2, 0, 0),
+                ],
+            }
+        )
+        ticker_df.write_parquet(self.ticker_file)
+
+        qdf_df = pl.DataFrame(
+            {
+                "cid": ["USD", "USD"],
+                "xcat": ["INFL", "INFL"],
+                "real_date": [datetime.date(2024, 1, 1), datetime.date(2024, 2, 1)],
+                "value": [10.0, 20.0],
+                "last_updated": [
+                    datetime.datetime(2024, 1, 3, 0, 0),
+                    datetime.datetime(2024, 2, 2, 0, 0),
+                ],
+            }
+        )
+        qdf_df.write_parquet(self.qdf_file)
+
+    def tearDown(self):
+        shutil.rmtree(self.tmpdir)
+
+    def test_expr_split_ticker_handles_extra_segments(self):
+        cid_expr, xcat_expr = _expr_split_ticker(pl.col("ticker"))
+        lf = pl.LazyFrame({"ticker": ["USD_GROWTH_EXTRA", "EUR_CPI"]})
+        result = lf.select(cid_expr.alias("cid"), xcat_expr.alias("xcat")).collect()
+
+        self.assertEqual(result["cid"].to_list(), ["USD", "EUR"])
+        self.assertEqual(result["xcat"].to_list(), ["GROWTH_EXTRA", "CPI"])
+
+    def test_lazy_load_filtered_parquets_latest_dedup(self):
+        call_kwargs = dict(
+            paths=[str(self.ticker_file), str(self.qdf_file)],
+            tickers=["USD_INFL", "EUR_INFL"],
+            start_date=None,
+            end_date=None,
+            include_file_column="source_file",
+            return_qdf=True,
+        )
+        sig_params = inspect.signature(_lazy_load_filtered_parquets).parameters
+        if "delta_treatment" in sig_params:
+            call_kwargs["delta_treatment"] = "latest"
+        if "min_last_updated" in sig_params:
+            call_kwargs["min_last_updated"] = None
+        if "max_last_updated" in sig_params:
+            call_kwargs["max_last_updated"] = None
+        lf = _lazy_load_filtered_parquets(**call_kwargs)
+        df = lf.collect()
+
+        self.assertIn("source_file", df.columns)
+        self.assertEqual(df.height, 3)
+
+        usd_jan = df.filter(
+            (pl.col("cid") == "USD")
+            & (pl.col("xcat") == "INFL")
+            & (pl.col("real_date") == datetime.date(2024, 1, 1))
+        )
+        self.assertEqual(usd_jan.height, 1)
+        self.assertEqual(usd_jan["value"][0], 10.0)
+        self.assertEqual(Path(str(usd_jan["source_file"][0])).name, self.qdf_file.name)
+
+        eur_row = df.filter(
+            (pl.col("cid") == "EUR") & (pl.col("xcat") == "INFL")
+        )
+        self.assertEqual(eur_row.height, 1)
+        self.assertEqual(eur_row["value"][0], 2.0)
+        self.assertEqual(Path(str(eur_row["source_file"][0])).name, self.ticker_file.name)
+
+    def test_lazy_load_filtered_parquets_earliest_ticker_schema(self):
+        call_kwargs = dict(
+            paths=[str(self.ticker_file), str(self.qdf_file)],
+            tickers=["USD_INFL"],
+            start_date=None,
+            end_date=None,
+            delta_treatment="earliest",
+            include_file_column="source_file",
+            return_qdf=False,
+        )
+        sig_params = inspect.signature(_lazy_load_filtered_parquets).parameters
+        if "delta_treatment" not in sig_params:
+            self.skipTest("delta_treatment not supported in this version of helper")
+        if "min_last_updated" in sig_params:
+            call_kwargs["min_last_updated"] = None
+        if "max_last_updated" in sig_params:
+            call_kwargs["max_last_updated"] = None
+        if "delta_treatment" in sig_params:
+            call_kwargs["delta_treatment"] = "earliest"
+        lf = _lazy_load_filtered_parquets(**call_kwargs)
+        df = lf.collect()
+
+        self.assertIn("ticker", df.columns)
+        self.assertNotIn("cid", df.columns)
+        self.assertEqual(df.filter(pl.col("ticker") == "USD_INFL").height, 2)
+
+        usd_jan = df.filter(
+            (pl.col("ticker") == "USD_INFL")
+            & (pl.col("real_date") == datetime.date(2024, 1, 1))
+        )
+        self.assertEqual(usd_jan.height, 1)
+        self.assertEqual(usd_jan["value"][0], 1.0)
+        self.assertEqual(Path(str(usd_jan["source_file"][0])).name, self.ticker_file.name)
+
+    def test_lazy_load_filtered_parquets_requires_paths(self):
+        call_kwargs = dict(
+            paths=[],
+            tickers=["USD_INFL"],
+            start_date=None,
+            end_date=None,
+            include_file_column=None,
+            return_qdf=True,
+        )
+        sig_params = inspect.signature(_lazy_load_filtered_parquets).parameters
+        if "delta_treatment" in sig_params:
+            call_kwargs["delta_treatment"] = "all"
+        if "min_last_updated" in sig_params:
+            call_kwargs["min_last_updated"] = None
+        if "max_last_updated" in sig_params:
+            call_kwargs["max_last_updated"] = None
+        with self.assertRaises(ValueError):
+            _lazy_load_filtered_parquets(**call_kwargs)
 
 
 if __name__ == "__main__":
