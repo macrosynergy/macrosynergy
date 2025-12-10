@@ -1,11 +1,12 @@
 import numpy as np
 import pandas as pd
 
+from sklearn.linear_model import LinearRegression
+
 from macrosynergy.learning import LinearMultiTargetRegression, LarsSelector
 
 import unittest
-
-from macrosynergy.learning.preprocessing.panel_selectors.panel_selectors import KendallSignificanceSelector
+from parameterized import parameterized
 
 class TestLMTR(unittest.TestCase):
     @classmethod
@@ -125,8 +126,53 @@ class TestLMTR(unittest.TestCase):
         self.assertRaises(ValueError, model.fit, X=self.X, y=self.y, sample_weight=[1.0, -2.0, 3.0] * (len(self.X)//3))
 
 
-    def test_fit_valid(self):
-        pass
+    @parameterized.expand([True, False])
+    def test_fit_valid(self, fit_intercept):
+        """
+        Test that the fit method works as expected
+        """
+        # If seemingly_unrelated is False, should reduce to multiple independent OLS
+        lmtr = LinearMultiTargetRegression(
+            fit_intercept=fit_intercept,
+            seemingly_unrelated=False,
+        ).fit(X=self.X, y=self.y)
+        lr = LinearRegression(fit_intercept=fit_intercept).fit(X=self.X_numpy, y=self.y_numpy)
+        np.testing.assert_array_almost_equal(lmtr.coefs_["XR"], lr.coef_[0,:])
+        np.testing.assert_array_almost_equal(lmtr.coefs_["XR2"], lr.coef_[1,:])
+        if fit_intercept:
+            np.testing.assert_array_almost_equal(lmtr.intercepts_["XR"], lr.intercept_[0])
+            np.testing.assert_array_almost_equal(lmtr.intercepts_["XR2"], lr.intercept_[1])
+        else:
+            np.testing.assert_array_almost_equal(lmtr.intercepts_["XR"], 0.0)
+            np.testing.assert_array_almost_equal(lmtr.intercepts_["XR2"], 0.0)
+
+        # If seemingly_unrelated is False and a selector is provided, should reduce to
+        # independent OLS with feature selection
+        lmtr_fs = LinearMultiTargetRegression(
+            fit_intercept=fit_intercept,
+            seemingly_unrelated=False,
+            feature_selection=LarsSelector(n_factors=1),
+        ).fit(X=self.X, y=self.y)
+        for target in ["XR", "XR2"]:
+            X_new = LarsSelector(n_factors=1).fit_transform(X=self.X, y=self.y[target])
+            lr_fs = LinearRegression(fit_intercept=fit_intercept).fit(
+                X=X_new,
+                y=self.y[target],
+            )
+            np.testing.assert_array_almost_equal(
+                lmtr_fs.coefs_[target],
+                lr_fs.coef_,
+            )
+            if fit_intercept:
+                np.testing.assert_array_almost_equal(
+                    lmtr_fs.intercepts_[target],
+                    lr_fs.intercept_,
+                )
+            else:
+                np.testing.assert_array_almost_equal(
+                    lmtr_fs.intercepts_[target],
+                    0.0,
+                )
 
     def test_predict_types(self):
         pass
