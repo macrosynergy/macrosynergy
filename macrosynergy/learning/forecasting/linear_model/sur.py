@@ -23,7 +23,7 @@ class LinearMultiTargetRegression(BaseEstimator, RegressorMixin):
         Choice of covariance estimator. Options are "ml" for maximum likelihood, 
         "ewm" for exponentially weighted moving covariance, or a custom `scikit-learn`
         compatible covariance estimator.
-    span : int, default=None
+    span : int, default=60
         Span parameter for exponentially weighted covariance estimation of residuals.
     feature_selection : object, default=None
         A feature selection object inheriting from scikit-learn's `SelectorMixin` base
