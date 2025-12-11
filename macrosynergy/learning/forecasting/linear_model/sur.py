@@ -19,9 +19,10 @@ class LinearMultiTargetRegression(BaseEstimator, RegressorMixin):
         Whether to include an intercept term in the regression.
     seemingly_unrelated : bool, default=False
         Whether to make the regression seemingly unrelated.
-    ewm_covariance : bool, default=True
-        Whether to use exponentially weighted moving covariance for residual covariance
-        estimation.
+    covariance_estimator : Union[str, BaseEstimator], default="ewm"
+        Choice of covariance estimator. Options are "ml" for maximum likelihood, 
+        "ewm" for exponentially weighted moving covariance, or a custom `scikit-learn`
+        compatible covariance estimator.
     span : int, default=None
         Span parameter for exponentially weighted covariance estimation of residuals.
     feature_selection : object, default=None
@@ -33,7 +34,7 @@ class LinearMultiTargetRegression(BaseEstimator, RegressorMixin):
         self,
         fit_intercept=True,
         seemingly_unrelated=False,
-        ewm_covariance = True,
+        covariance_estimator = "ewm",
         span=60,
         feature_selection=None,
     ):
@@ -42,13 +43,17 @@ class LinearMultiTargetRegression(BaseEstimator, RegressorMixin):
             raise TypeError("The 'fit_intercept' parameter must be a boolean.")
         if not isinstance(seemingly_unrelated, bool):
             raise TypeError("The 'seemingly_unrelated' parameter must be a boolean.")
-        if not isinstance(ewm_covariance, bool):
-            raise TypeError("The 'ewm_covariance' parameter must be a boolean.")
-        if ewm_covariance:
-            if not isinstance(span, int):
-                raise TypeError("The 'span' parameter must be a positive integer.")
+            
+        if not isinstance(covariance_estimator, (str, BaseEstimator)):
+            raise TypeError("The 'covariance_estimator' parameter must be a string or a BaseEstimator instance.")
+        if isinstance(covariance_estimator, str) and covariance_estimator not in ["ml", "ewm"]:
+            raise ValueError("If `covariance_estimator` is a string, it must be either 'ml' or 'ewm'.")
+        # TODO: add checks for custom covariance estimator when inheriting from BaseEstimator
+        if covariance_estimator == "ewm":
+            if not isinstance(span, numbers.Integral):
+                raise TypeError("The 'span' parameter must be an integer.")
             if span <= 0:
-                raise ValueError("The 'span' parameter must be a positive integer.")
+                raise ValueError("The 'span' parameter must be positive.")
         if feature_selection is not None and not isinstance(
             feature_selection, SelectorMixin
         ):
@@ -59,7 +64,7 @@ class LinearMultiTargetRegression(BaseEstimator, RegressorMixin):
         # Attributes
         self.fit_intercept = fit_intercept
         self.seemingly_unrelated = seemingly_unrelated
-        self.ewm_covariance = ewm_covariance
+        self.covariance_estimator = covariance_estimator
         self.span = span
         self.feature_selection = feature_selection
 
@@ -138,7 +143,7 @@ class LinearMultiTargetRegression(BaseEstimator, RegressorMixin):
                 asset: W[:, idx] for idx, asset in enumerate(self.assets)
             }
 
-        # If not SUR_SELECT, job is done here
+        # If not sur, job is done here
         # Just store OLS coefficients
         if not self.seemingly_unrelated:
             self.coefs_ = {}
@@ -155,7 +160,7 @@ class LinearMultiTargetRegression(BaseEstimator, RegressorMixin):
 
             return self
 
-        # If SUR_SELECT, first calculate covariance of residuals
+        # If sur, calculate covariance of residuals
         resids = pd.DataFrame(
             data=np.column_stack(
                 [
@@ -170,17 +175,24 @@ class LinearMultiTargetRegression(BaseEstimator, RegressorMixin):
         )
 
         # Estimate covariance matrix
-        if self.ewm_covariance:
+        if self.covariance_estimator == "ewm":
             weights = np.array(
                 [(1 - 2 / (self.span + 1)) ** i for i in range(len(y))][::-1]
             )
             cov = np.cov(resids.values.T, aweights=weights)
-        else:
+        elif self.covariance_estimator == "ml":
             cov = np.cov(resids.values.T)
+        else:
+            self.covariance_estimator.fit(resids)
+            cov = self.covariance_estimator.covariance_
         
         # Invert matrix 
-        # TODO: apply graphical lasso to cov when # of assets gets big
-        invcov = np.linalg.inv(cov)
+        if isinstance(self.covariance_estimator, BaseEstimator) and hasattr(
+            self.covariance_estimator, "precision_"
+        ):
+            invcov = self.covariance_estimator.precision_
+        else:
+            invcov = np.linalg.inv(cov)
 
         # FGLS optimization
         # Due to feature selection, create a full matrix but pack/unpack the matrix 
