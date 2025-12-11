@@ -163,7 +163,8 @@ import uuid
 from typing import Dict, Any, Optional, List, Tuple, Union, Sequence
 from tqdm import tqdm
 import json
-
+import calendar
+import datetime
 import requests
 from macrosynergy.compat import PD_2_0_OR_LATER, PYTHON_3_8_OR_LATER
 from macrosynergy.management.constants import JPMAQS_METRICS
@@ -778,7 +779,7 @@ class DataQueryFileAPIClient:
 
         is_small_file = any(x in file_group_id.lower() for x in ["delta", "metadata"])
         if "_DELTA" in file_group_id:
-            is_small_file = file_datetime not in large_delta_file_datetimes()
+            is_small_file = file_datetime not in _large_delta_file_datetimes()
 
         is_catalog_file = file_group_id == self.catalog_file_group_id
         if is_small_file:
@@ -1456,24 +1457,50 @@ def get_client_id_secret() -> Optional[Tuple[str, str]]:
     return None, None
 
 
+def _month_ends_between(
+    start: datetime.date,
+    end: datetime.date,
+) -> List[datetime.date]:
+    year, month = start.year, start.month
+    out = []
+    while (year, month) <= (end.year, end.month):
+        dtx = datetime.date(year, month, calendar.monthrange(year, month)[1])
+        if start <= dtx <= end:
+            out.append(dtx)
+        if month == 12:
+            year, month = year + 1, 1
+        else:
+            month += 1
+    return out
+
+
+def _previous_business_day(d: datetime.date) -> datetime.date:
+    if isinstance(d, datetime.datetime):
+        d = d.date()
+    while d.weekday() >= 5:  # 5=Sat, 6=Sun
+        d -= datetime.timedelta(days=1)
+    return d
+
+
 @functools.lru_cache(maxsize=1)
-def large_delta_file_datetimes(as_str: bool = True) -> List[str]:
-    """
-    Plausible file datetimes for large delta files, which are typically
-    generated at the end of each month and on business month ends, with timestamps of
-    end-of-day (23:59:59).
-    """
-    sd, ed = JPMAQS_EARLIEST_FILE_DATE, pd.Timestamp.today()
-    dt1 = list(pd.date_range(start=sd, end=ed, freq="M"))
-    dt2 = list(pd.date_range(start=sd, end=ed, freq="BM"))
-    all_dates = sorted(set(dt1 + dt2))
-    all_dates = [
-        d.normalize() + pd.Timedelta(hours=23, minutes=59, seconds=59)
-        for d in all_dates
+def _large_delta_file_datetimes(as_str: bool = True) -> List[str]:
+    sd = pd_to_datetime_compat(JPMAQS_EARLIEST_FILE_DATE).date()
+    if isinstance(sd, datetime.datetime):
+        sd = sd.date()
+    ed = datetime.date.today()
+
+    listA = _month_ends_between(sd, ed)
+    listB = [_previous_business_day(d) for d in listA]
+
+    all_dates = sorted(set(listA + listB))
+    dt_list = [
+        datetime.datetime.combine(d, datetime.time(23, 59, 59)) for d in all_dates
     ]
+    dt_list = sorted(map(pd_to_datetime_compat, dt_list))
     if not as_str:
-        return all_dates
-    return [d.strftime("%Y%m%dT%H%M%S") for d in all_dates]
+        return dt_list
+
+    return [d.strftime("%Y%m%dT%H%M%S") for d in dt_list]
 
 
 def _delete_corrupt_files(

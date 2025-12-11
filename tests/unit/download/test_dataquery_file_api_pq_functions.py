@@ -24,7 +24,7 @@ from macrosynergy.download.dataquery_file_api import (
     _to_output_schema,
     _filter_lazy_frame_by_tickers,
     _delete_corrupt_files,
-    large_delta_file_datetimes,
+    _large_delta_file_datetimes,
     _expr_split_ticker,
     _lazy_load_filtered_parquets,
 )
@@ -599,8 +599,8 @@ class TestCorruptedFilesHandling(unittest.TestCase):
 
 class TestLargeDeltaFileDatetimes(unittest.TestCase):
     def test_large_delta_datetimes_formatting(self):
-        as_strings = large_delta_file_datetimes()
-        as_timestamps = large_delta_file_datetimes(as_str=False)
+        as_strings = _large_delta_file_datetimes()
+        as_timestamps = _large_delta_file_datetimes(as_str=False)
 
         self.assertGreater(len(as_strings), 0)
         self.assertEqual(len(as_strings), len(as_timestamps))
