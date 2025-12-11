@@ -35,7 +35,8 @@ class TestLMTR(unittest.TestCase):
         n_samples = len(tuples)
         ftrs = np.random.normal(loc=0, scale=1, size=(n_samples, 2))
         labels1 = np.matmul(ftrs, [1, 2]) + np.random.normal(0, 0.5, len(ftrs))
-        labels2 = 0.1 - 0.75 * labels1 + np.random.normal(0, 0.5, len(ftrs))
+        labels2 = np.matmul(ftrs, [-1, 0.5]) + np.random.normal(0, 0.5, len(ftrs))
+        labels2 += 0.1 - 0.75 * labels1 + np.random.normal(0, 0.5, len(ftrs))
         df = pd.DataFrame(
             data=np.concatenate((np.reshape(labels1, (-1, 1)), np.reshape(labels2, (-1, 1)), ftrs), axis=1),
             index=pd.MultiIndex.from_tuples(tuples, names=["cid", "real_date"]),
@@ -189,6 +190,23 @@ class TestLMTR(unittest.TestCase):
         else:
             np.testing.assert_array_almost_equal(lmtr_su.intercepts_["XR"], 0.0)
             np.testing.assert_array_almost_equal(lmtr_su.intercepts_["XR2"], 0.0)
+
+        # If seemingly_unrelated is True and a selector is provided,
+        # this should not give the same as without seemingly unrelated 
+        lmtr_su_fs = LinearMultiTargetRegression(
+            fit_intercept=fit_intercept,
+            seemingly_unrelated=True,
+            feature_selection=LarsSelector(n_factors=1),
+        ).fit(X=self.X, y=self.y)
+        lmtr_fs = LinearMultiTargetRegression(
+            fit_intercept=fit_intercept,
+            seemingly_unrelated=False,
+            feature_selection=LarsSelector(n_factors=1),
+        ).fit(X=self.X, y=self.y)
+        with self.assertRaises(AssertionError):
+            np.testing.assert_array_almost_equal(lmtr_su_fs.coefs_["XR"], lmtr_fs.coefs_["XR"])
+        with self.assertRaises(AssertionError):
+            np.testing.assert_array_almost_equal(lmtr_su_fs.coefs_["XR2"], lmtr_fs.coefs_["XR2"])
 
     @parameterized.expand([True, False])
     def test_predict_types(self, seemingly_unrelated):

@@ -169,11 +169,14 @@ class LinearMultiTargetRegression(BaseEstimator, RegressorMixin):
             columns=y.columns,
         )
 
-        # Calculate time decay weights for EWM covariance
-        weights = np.array(
-            [(1 - 2 / (self.span + 1)) ** i for i in range(len(y))][::-1]
-        )
-        cov = np.cov(resids.values.T, aweights=weights)
+        # Estimate covariance matrix
+        if self.ewm_covariance:
+            weights = np.array(
+                [(1 - 2 / (self.span + 1)) ** i for i in range(len(y))][::-1]
+            )
+            cov = np.cov(resids.values.T, aweights=weights)
+        else:
+            cov = np.cov(resids.values.T)
         
         # Invert matrix 
         # TODO: apply graphical lasso to cov when # of assets gets big
