@@ -1088,6 +1088,7 @@ class DataQueryFileAPIClient:
     def list_downloaded_files(
         self,
         out_dir: Optional[str] = None,
+        include_last_modified_columns: bool = True,
     ) -> pd.DataFrame:
         out_dir = self._get_save_dir()
         col_order = [
@@ -1110,6 +1111,14 @@ class DataQueryFileAPIClient:
             return files_df
 
         files_df = files_df[col_order].rename(columns={"filename": "file-name"})
+        
+        if include_last_modified_columns:
+            dq_files_df = self.list_available_files_for_all_file_groups()
+            dq_files_df = dq_files_df[dq_files_df["file-name"].isin(files_df["file-name"])]
+            files_df = files_df.merge(
+                dq_files_df[["file-name", "last-modified"]],
+                on="file-name",
+            )
         return files_df
 
     def download_full_snapshot(
