@@ -2,6 +2,8 @@ import numpy as np
 import pandas as pd
 
 from sklearn.linear_model import LinearRegression
+from sklearn.covariance import EmpiricalCovariance
+from sklearn.base import BaseEstimator
 
 from macrosynergy.learning import LinearMultiTargetRegression, LarsSelector
 
@@ -61,9 +63,10 @@ class TestLMTR(unittest.TestCase):
         self.assertRaises(TypeError, LinearMultiTargetRegression, fit_intercept="True")
         # seemingly unrelated must be boolean
         self.assertRaises(TypeError, LinearMultiTargetRegression, seemingly_unrelated="False")
-        # ewm_covariance must be boolean
-        self.assertRaises(TypeError, LinearMultiTargetRegression, ewm_covariance="True")
-        # span should be a positive integer when ewm_covariance is True
+        # covariance_estimator must be a string ("ml" or "ewm") or BaseEstimator subclass
+        self.assertRaises(TypeError, LinearMultiTargetRegression, covariance_estimator=True)
+        self.assertRaises(ValueError, LinearMultiTargetRegression, covariance_estimator="invalid_string")
+        # span should be a positive integer when covariance_estimator is "ewm"
         self.assertRaises(TypeError, LinearMultiTargetRegression, span="5")
         self.assertRaises(ValueError, LinearMultiTargetRegression, span=0)
         self.assertRaises(ValueError, LinearMultiTargetRegression, span=-3)
@@ -83,7 +86,7 @@ class TestLMTR(unittest.TestCase):
         self.assertIsInstance(model, LinearMultiTargetRegression)
         self.assertTrue(model.fit_intercept)
         self.assertFalse(model.seemingly_unrelated)
-        self.assertTrue(model.ewm_covariance)
+        self.assertEqual(model.covariance_estimator, "ewm")
         self.assertEqual(model.span, 60)
         self.assertIsNone(model.feature_selection)
 
@@ -91,15 +94,30 @@ class TestLMTR(unittest.TestCase):
         model = LinearMultiTargetRegression(
             fit_intercept=False,
             seemingly_unrelated=True,
-            ewm_covariance=False,
+            covariance_estimator="ml",
             span=32,
             feature_selection=LarsSelector(n_factors = 1),
         )
         self.assertIsInstance(model, LinearMultiTargetRegression)
         self.assertFalse(model.fit_intercept)
         self.assertTrue(model.seemingly_unrelated)
-        self.assertFalse(model.ewm_covariance)
+        self.assertEqual(model.covariance_estimator, "ml")
         self.assertEqual(model.span, 32)
+        self.assertIsInstance(model.feature_selection, LarsSelector)
+
+        model = LinearMultiTargetRegression(
+            fit_intercept=False,
+            seemingly_unrelated=True,
+            covariance_estimator=EmpiricalCovariance(),
+            span=1,
+            feature_selection=LarsSelector(n_factors = 1),
+        )
+        self.assertIsInstance(model, LinearMultiTargetRegression)
+        self.assertFalse(model.fit_intercept)
+        self.assertTrue(model.seemingly_unrelated)
+        self.assertIsInstance(model.covariance_estimator, EmpiricalCovariance)
+        self.assertIsInstance(model.covariance_estimator, BaseEstimator)
+        self.assertEqual(model.span, 1)
         self.assertIsInstance(model.feature_selection, LarsSelector)
 
     def test_fit_types(self):
@@ -192,7 +210,8 @@ class TestLMTR(unittest.TestCase):
             np.testing.assert_array_almost_equal(lmtr_su.intercepts_["XR2"], 0.0)
 
         # If seemingly_unrelated is True and a selector is provided,
-        # this should not give the same as without seemingly unrelated 
+        # this should not give the same as without seemingly unrelated
+        # EWM
         lmtr_su_fs = LinearMultiTargetRegression(
             fit_intercept=fit_intercept,
             seemingly_unrelated=True,
@@ -207,7 +226,41 @@ class TestLMTR(unittest.TestCase):
             np.testing.assert_array_almost_equal(lmtr_su_fs.coefs_["XR"], lmtr_fs.coefs_["XR"])
         with self.assertRaises(AssertionError):
             np.testing.assert_array_almost_equal(lmtr_su_fs.coefs_["XR2"], lmtr_fs.coefs_["XR2"])
+        # ML
+        lmtr_su_fs = LinearMultiTargetRegression(
+            fit_intercept=fit_intercept,
+            seemingly_unrelated=True,
+            covariance_estimator="ml",
+            feature_selection=LarsSelector(n_factors=1),
+        ).fit(X=self.X, y=self.y)
+        lmtr_fs = LinearMultiTargetRegression(
+            fit_intercept=fit_intercept,
+            seemingly_unrelated=False,
+            covariance_estimator="ml",
+            feature_selection=LarsSelector(n_factors=1),
+        ).fit(X=self.X, y=self.y)
 
+        with self.assertRaises(AssertionError):
+            np.testing.assert_array_almost_equal(lmtr_su_fs.coefs_["XR"], lmtr_fs.coefs_["XR"])
+        with self.assertRaises(AssertionError):
+            np.testing.assert_array_almost_equal(lmtr_su_fs.coefs_["XR2"], lmtr_fs.coefs_["XR2"])
+
+        # Check that ML gives the same results as EmpiricalCovariance 
+        lmtr_su_ml = LinearMultiTargetRegression(
+            fit_intercept=fit_intercept,
+            seemingly_unrelated=True,
+            covariance_estimator="ml",
+        ).fit(X=self.X, y=self.y)
+        lmtr_su_emp = LinearMultiTargetRegression(
+            fit_intercept=fit_intercept,
+            seemingly_unrelated=True,
+            covariance_estimator=EmpiricalCovariance(),
+        ).fit(X=self.X, y=self.y)
+        np.testing.assert_array_almost_equal(lmtr_su_ml.coefs_["XR"], lmtr_su_emp.coefs_["XR"])
+        np.testing.assert_array_almost_equal(lmtr_su_ml.coefs_["XR2"], lmtr_su_emp.coefs_["XR2"])
+        if fit_intercept:
+            np.testing.assert_array_almost_equal(lmtr_su_ml.intercepts_["XR"], lmtr_su_emp.intercepts_["XR"])
+            np.testing.assert_array_almost_equal(lmtr_su_ml.intercepts_["XR2"], lmtr_su_emp.intercepts_["XR2"])
     @parameterized.expand([True, False])
     def test_predict_types(self, seemingly_unrelated):
         """
