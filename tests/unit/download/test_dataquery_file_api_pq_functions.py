@@ -349,9 +349,8 @@ class TestLazyLoad(unittest.TestCase):
     def test_filter_to_latest_files(self):
         df = _downloaded_files_df(self.tmpdir, file_format="parquet")
         latest = _filter_to_latest_files(df)
-        self.assertEqual(len(latest), 2)
+        self.assertEqual(len(latest), 1)
         filenames = latest["filename"].to_list()
-        self.assertIn("DATASET1_20240102.parquet", filenames)
         self.assertIn("DATASET2_20240103.parquet", filenames)
         self.assertNotIn("DATASET1_20240102_DELTA.parquet", filenames)
 
@@ -378,7 +377,10 @@ class TestLazyLoad(unittest.TestCase):
     def test_to_output_schema(self):
         lf_ticker = pl.LazyFrame({"ticker": ["A_B"], "value": [1]})
         df_qdf = _to_output_schema(
-            lf_ticker, JPMaQSParquetSchemaKind.TICKER, want_qdf=True
+            lf_ticker,
+            JPMaQSParquetSchemaKind.TICKER,
+            include_file_column=None,
+            want_qdf=True,
         ).collect()
         self.assertIn("cid", df_qdf.columns)
         self.assertIn("xcat", df_qdf.columns)
@@ -386,7 +388,10 @@ class TestLazyLoad(unittest.TestCase):
 
         lf_qdf = pl.LazyFrame({"cid": ["C"], "xcat": ["D"], "value": [2]})
         df_ticker = _to_output_schema(
-            lf_qdf, JPMaQSParquetSchemaKind.QDF, want_qdf=False
+            lf_qdf,
+            JPMaQSParquetSchemaKind.QDF,
+            include_file_column=None,
+            want_qdf=False,
         ).collect()
         self.assertIn("ticker", df_ticker.columns)
         self.assertNotIn("cid", df_ticker.columns)
@@ -400,27 +405,43 @@ class TestLazyLoad(unittest.TestCase):
             }
         )
         filt = _filter_lazy_frame_by_tickers(
-            lf, JPMaQSParquetSchemaKind.TICKER, ["A_B"], None, None
+            lf,
+            JPMaQSParquetSchemaKind.TICKER,
+            ["A_B"],
+            None,
+            None,
+            None,
+            None,
         )
         self.assertEqual(filt.collect().shape[0], 1)
         self.assertEqual(filt.collect()["ticker"][0], "A_B")
 
         filt_date = _filter_lazy_frame_by_tickers(
-            lf, JPMaQSParquetSchemaKind.TICKER, ["A_B", "C_D"], "2023-01-15", None
+            lf,
+            JPMaQSParquetSchemaKind.TICKER,
+            ["A_B", "C_D"],
+            "2023-01-15",
+            None,
+            None,
+            None,
         )
-        self.assertEqual(filt_date.collect().shape[0], 2)
+        self.assertEqual(filt_date.collect().shape[0], 1)
 
     @patch(
         "macrosynergy.download.dataquery_file_api.pd_to_datetime_compat",
         pd_to_datetime_compat,
     )
     def test_lazy_load_basic_filtering(self):
-        df = lazy_load_from_parquets(self.tmpdir, tickers=["JPY_INFL"])
+        df = lazy_load_from_parquets(
+            self.tmpdir, tickers=["JPY_INFL"], since_datetime="20240101"
+        )
         self.assertEqual(len(df), 1)
         self.assertEqual(df.iloc[0]["cid"], "JPY")
         self.assertEqual(df.iloc[0]["value"], 3.1)
 
-        df_qdf = lazy_load_from_parquets(self.tmpdir, cids=["USD"], xcats=["GROWTH"])
+        df_qdf = lazy_load_from_parquets(
+            self.tmpdir, cids=["USD"], xcats=["GROWTH"], since_datetime="20240101"
+        )
         self.assertEqual(len(df_qdf), 1)
         self.assertEqual(df_qdf.iloc[0]["cid"], "USD")
         self.assertEqual(df_qdf.iloc[0]["xcat"], "GROWTH")
@@ -451,19 +472,29 @@ class TestLazyLoad(unittest.TestCase):
     )
     def test_lazy_load_output_formats(self):
         pl_df = lazy_load_from_parquets(
-            self.tmpdir, tickers=["USD_INFL"], dataframe_type="polars"
+            self.tmpdir,
+            tickers=["USD_INFL"],
+            dataframe_type="polars",
+            since_datetime="20240101",
         )
         self.assertIsInstance(pl_df, pl.DataFrame)
         self.assertEqual(pl_df.shape[0], 1)
 
         lazy_df = lazy_load_from_parquets(
-            self.tmpdir, tickers=["USD_INFL"], dataframe_type="polars-lazy"
+            self.tmpdir,
+            tickers=["USD_INFL"],
+            dataframe_type="polars-lazy",
+            since_datetime="20240101",
         )
         self.assertIsInstance(lazy_df, pl.LazyFrame)
         self.assertEqual(lazy_df.collect().shape[0], 1)
 
         df_wide = lazy_load_from_parquets(
-            self.tmpdir, cids=["USD"], xcats=["GROWTH"], dataframe_format="tickers"
+            self.tmpdir,
+            cids=["USD"],
+            xcats=["GROWTH"],
+            dataframe_format="tickers",
+            since_datetime="20240101",
         )
         self.assertIn("ticker", df_wide.columns)
         self.assertNotIn("cid", df_wide.columns)
@@ -480,6 +511,9 @@ class TestLazyLoad(unittest.TestCase):
                 [],
                 None,
                 None,
+                None,
+                None,
+                "latest",
                 "qdf",
                 "pandas",
                 True,
@@ -494,6 +528,9 @@ class TestLazyLoad(unittest.TestCase):
                 [],
                 None,
                 None,
+                None,
+                None,
+                "latest",
                 "qdf",
                 "pandas",
                 True,
@@ -508,6 +545,9 @@ class TestLazyLoad(unittest.TestCase):
                 [],
                 None,
                 None,
+                None,
+                None,
+                "latest",
                 "bad",
                 "pandas",
                 True,
