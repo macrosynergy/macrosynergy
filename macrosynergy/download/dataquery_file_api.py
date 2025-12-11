@@ -174,6 +174,7 @@ from macrosynergy.download.fusion_interface import (
     request_wrapper_stream_bytes_to_disk,
     _wait_for_api_call,
     convert_ticker_based_parquet_file_to_qdf,
+    cache_decorator,
 )
 from macrosynergy.download.dataquery import OAUTH_TOKEN_URL
 from macrosynergy.download.exceptions import DownloadError, InvalidResponseError
@@ -379,7 +380,7 @@ class DataQueryFileAPIClient:
         payload = self._get(endpoint, {"keywords": keywords})
         return pd.json_normalize(payload, record_path=["groups"])
 
-    @functools.lru_cache(maxsize=None)
+    @cache_decorator(ttl=60)
     def list_group_files(
         self,
         group_id: str = JPMAQS_GROUP_ID,
