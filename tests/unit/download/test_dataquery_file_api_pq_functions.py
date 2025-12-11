@@ -8,7 +8,6 @@ import logging
 import polars as pl
 import pandas as pd
 import shutil
-import inspect
 
 from macrosynergy.download.dataquery_file_api import (
     _atomic_sink_csv,
@@ -433,14 +432,21 @@ class TestLazyLoad(unittest.TestCase):
     )
     def test_lazy_load_basic_filtering(self):
         df = lazy_load_from_parquets(
-            self.tmpdir, tickers=["JPY_INFL"], since_datetime="20240101"
+            self.tmpdir,
+            tickers=["JPY_INFL"],
+            since_datetime="20240101",
+            include_delta_files=False,
         )
         self.assertEqual(len(df), 1)
         self.assertEqual(df.iloc[0]["cid"], "JPY")
         self.assertEqual(df.iloc[0]["value"], 3.1)
 
         df_qdf = lazy_load_from_parquets(
-            self.tmpdir, cids=["USD"], xcats=["GROWTH"], since_datetime="20240101"
+            self.tmpdir,
+            cids=["USD"],
+            xcats=["GROWTH"],
+            since_datetime="20240101",
+            include_delta_files=False,
         )
         self.assertEqual(len(df_qdf), 1)
         self.assertEqual(df_qdf.iloc[0]["cid"], "USD")
@@ -476,6 +482,7 @@ class TestLazyLoad(unittest.TestCase):
             tickers=["USD_INFL"],
             dataframe_type="polars",
             since_datetime="20240101",
+            include_delta_files=False,
         )
         self.assertIsInstance(pl_df, pl.DataFrame)
         self.assertEqual(pl_df.shape[0], 1)
@@ -485,6 +492,7 @@ class TestLazyLoad(unittest.TestCase):
             tickers=["USD_INFL"],
             dataframe_type="polars-lazy",
             since_datetime="20240101",
+            include_delta_files=False,
         )
         self.assertIsInstance(lazy_df, pl.LazyFrame)
         self.assertEqual(lazy_df.collect().shape[0], 1)
@@ -495,6 +503,7 @@ class TestLazyLoad(unittest.TestCase):
             xcats=["GROWTH"],
             dataframe_format="tickers",
             since_datetime="20240101",
+            include_delta_files=False,
         )
         self.assertIn("ticker", df_wide.columns)
         self.assertNotIn("cid", df_wide.columns)
@@ -655,23 +664,79 @@ class TestLazyLoadFilteredParquets(unittest.TestCase):
         self.assertEqual(result["cid"].to_list(), ["USD", "EUR"])
         self.assertEqual(result["xcat"].to_list(), ["GROWTH_EXTRA", "CPI"])
 
+    def test_lazy_load_filtered_parquets_latest_dedup(self):
+        lf = _lazy_load_filtered_parquets(
+            paths=[str(self.ticker_file), str(self.qdf_file)],
+            tickers=["USD_INFL", "EUR_INFL"],
+            start_date=None,
+            end_date=None,
+            min_last_updated=None,
+            max_last_updated=None,
+            delta_treatment="latest",
+            include_file_column="source_file",
+            return_qdf=True,
+        )
+        df = lf.collect()
+
+        self.assertIn("source_file", df.columns)
+        self.assertEqual(df.height, 3)
+
+        usd_jan = df.filter(
+            (pl.col("cid") == "USD")
+            & (pl.col("xcat") == "INFL")
+            & (pl.col("real_date") == datetime.date(2024, 1, 1))
+        )
+        self.assertEqual(usd_jan.height, 1)
+        self.assertEqual(usd_jan["value"][0], 10.0)
+        self.assertEqual(Path(str(usd_jan["source_file"][0])).name, self.qdf_file.name)
+
+        eur_row = df.filter((pl.col("cid") == "EUR") & (pl.col("xcat") == "INFL"))
+        self.assertEqual(eur_row.height, 1)
+        self.assertEqual(eur_row["value"][0], 2.0)
+        self.assertEqual(
+            Path(str(eur_row["source_file"][0])).name, self.ticker_file.name
+        )
+
+    def test_lazy_load_filtered_parquets_earliest_ticker_schema(self):
+        lf = _lazy_load_filtered_parquets(
+            paths=[str(self.ticker_file), str(self.qdf_file)],
+            tickers=["USD_INFL"],
+            start_date=None,
+            end_date=None,
+            min_last_updated=None,
+            max_last_updated=None,
+            delta_treatment="earliest",
+            include_file_column="source_file",
+            return_qdf=False,
+        )
+        df = lf.collect()
+
+        self.assertIn("ticker", df.columns)
+        self.assertNotIn("cid", df.columns)
+        self.assertEqual(df.filter(pl.col("ticker") == "USD_INFL").height, 2)
+
+        usd_jan = df.filter(
+            (pl.col("ticker") == "USD_INFL")
+            & (pl.col("real_date") == datetime.date(2024, 1, 1))
+        )
+        self.assertEqual(usd_jan.height, 1)
+        self.assertEqual(usd_jan["value"][0], 1.0)
+        self.assertEqual(
+            Path(str(usd_jan["source_file"][0])).name, self.ticker_file.name
+        )
+
     def test_lazy_load_filtered_parquets_requires_paths(self):
-        sig_params = inspect.signature(_lazy_load_filtered_parquets).parameters
         call_kwargs = dict(
             paths=[],
             tickers=["USD_INFL"],
             start_date=None,
             end_date=None,
+            min_last_updated=None,
+            max_last_updated=None,
+            delta_treatment="all",
+            include_file_column=None,
             return_qdf=True,
         )
-        if "delta_treatment" in sig_params:
-            call_kwargs["delta_treatment"] = "all"
-        if "include_file_column" in sig_params:
-            call_kwargs["include_file_column"] = None
-        if "min_last_updated" in sig_params:
-            call_kwargs["min_last_updated"] = None
-        if "max_last_updated" in sig_params:
-            call_kwargs["max_last_updated"] = None
         with self.assertRaises(ValueError):
             _lazy_load_filtered_parquets(**call_kwargs)
 
