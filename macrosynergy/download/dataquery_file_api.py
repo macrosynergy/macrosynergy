@@ -434,6 +434,7 @@ class DataQueryFileAPIClient:
 
         return df
 
+    @cache_decorator(ttl=60)
     def list_available_files(
         self,
         file_group_id: str,
