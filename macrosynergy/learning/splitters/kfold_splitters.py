@@ -303,18 +303,18 @@ if __name__ == "__main__":
     y = dfd["XR"]    
 
     """ Single validation set example """
-    splitter = RecencyKFoldPanelSplit(n_splits=1, n_periods=21*12, purged_dates = 3)
+    splitter = RecencyKFoldPanelSplit(n_splits=1, n_periods=21*12, purged_dates = 21 * 12)
     splitter.visualise_splits(X, y, show_title=False, tick_fontsize=12, label_fontsize=12)
 
     """ Cross-validation examples """
     # ExpandingKFoldPanelSplit
-    splitter = ExpandingKFoldPanelSplit(n_splits=5, purged_dates=3)
+    splitter = ExpandingKFoldPanelSplit(n_splits=5, purged_dates=21 * 12)
     splitter.visualise_splits(X, y, tick_fontsize=12, label_fontsize=12, subtitle_fontsize=14)
 
     # RollingKFoldPanelSplit
-    splitter = RollingKFoldPanelSplit(n_splits=5, purged_dates=3)
+    splitter = RollingKFoldPanelSplit(n_splits=5, purged_dates=21 * 12)
     splitter.visualise_splits(X, y, tick_fontsize=12, label_fontsize=12, subtitle_fontsize=14)
 
     # RecencyKFoldPanelSplit
-    splitter = RecencyKFoldPanelSplit(n_splits=4, n_periods=21 * 3, purged_dates=3)
+    splitter = RecencyKFoldPanelSplit(n_splits=4, n_periods=21 * 3, purged_dates=21 * 12)
     splitter.visualise_splits(X, y, tick_fontsize=8, label_fontsize=8, subtitle_fontsize=20)
