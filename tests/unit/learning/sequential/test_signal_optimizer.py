@@ -486,6 +486,26 @@ class TestAll(unittest.TestCase):
                 drop_nas="sdf",
             )
 
+        # n_targets should be a positive integer
+        with self.assertRaises(TypeError):
+            so = SignalOptimizer(
+                df=self.df,
+                xcats=self.xcats,
+                n_targets="invalid",
+            )
+        with self.assertRaises(ValueError):
+            so = SignalOptimizer(
+                df=self.df,
+                xcats=self.xcats,
+                n_targets=0,
+            )
+        with self.assertRaises(ValueError):
+            so = SignalOptimizer(
+                df=self.df,
+                xcats=self.xcats,
+                n_targets=-1,
+            )
+
     def test_types_calculate_predictions(self):
         # Name
         with self.assertRaises(TypeError):
