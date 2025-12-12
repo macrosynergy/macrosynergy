@@ -254,6 +254,9 @@ class RecencyKFoldPanelSplit(KFoldPanelSplit):
         test_split = np.array(splits[n_split], dtype=np.datetime64)
         train_split = unique_dates[unique_dates < test_split[0]]
 
+        if self.purged_dates > 0:
+            train_split = train_split[:-self.purged_dates]
+            
         train_indices = np.where(dates.isin(train_split))[0]
         test_indices = np.where(dates.isin(test_split))[0]
 
