@@ -182,6 +182,9 @@ class RecencyKFoldPanelSplit(KFoldPanelSplit):
     n_periods : int
         Number of time periods, in units of native dataset frequency, to comprise each
         test set. Default is 252 (1 year for daily data).
+    purged_dates : int
+        Number of most recent dates to purge from the training set to safeguard against
+        leakage from auto-correlation effects. Default is 0.
 
     Notes
     -----
@@ -192,10 +195,14 @@ class RecencyKFoldPanelSplit(KFoldPanelSplit):
     training set is comprised of all samples with timestamps earlier than its test set.
     Consequently, this is a K-Fold walk-forward cross-validator, but with test folds
     concentrated on the most recent information.
+
+    When `purged_dates` is specified, the most recent `purged_dates` timestamps
+    are removed from the training set to prevent accidental leakage from temporal
+    proximity.
     """
 
-    def __init__(self, n_splits=5, n_periods=252):
-        super().__init__(n_splits=n_splits, min_n_splits=1)
+    def __init__(self, n_splits=5, n_periods=252, purged_dates=0):
+        super().__init__(n_splits=n_splits, min_n_splits=1, purged_dates=purged_dates)
 
         # Additional checks
         if not isinstance(n_periods, int):
@@ -256,7 +263,7 @@ class RecencyKFoldPanelSplit(KFoldPanelSplit):
 
         if self.purged_dates > 0:
             train_split = train_split[:-self.purged_dates]
-            
+
         train_indices = np.where(dates.isin(train_split))[0]
         test_indices = np.where(dates.isin(test_split))[0]
 
@@ -296,18 +303,18 @@ if __name__ == "__main__":
     y = dfd["XR"]    
 
     """ Single validation set example """
-    splitter = RecencyKFoldPanelSplit(n_splits=1, n_periods=21*12)
+    splitter = RecencyKFoldPanelSplit(n_splits=1, n_periods=21*12, purged_dates = 3)
     splitter.visualise_splits(X, y, show_title=False, tick_fontsize=12, label_fontsize=12)
 
     """ Cross-validation examples """
     # ExpandingKFoldPanelSplit
-    splitter = ExpandingKFoldPanelSplit(n_splits=5)
+    splitter = ExpandingKFoldPanelSplit(n_splits=5, purged_dates=3)
     splitter.visualise_splits(X, y, tick_fontsize=12, label_fontsize=12, subtitle_fontsize=14)
 
     # RollingKFoldPanelSplit
-    splitter = RollingKFoldPanelSplit(n_splits=5)
+    splitter = RollingKFoldPanelSplit(n_splits=5, purged_dates=3)
     splitter.visualise_splits(X, y, tick_fontsize=12, label_fontsize=12, subtitle_fontsize=14)
 
     # RecencyKFoldPanelSplit
-    splitter = RecencyKFoldPanelSplit(n_splits=4, n_periods=21 * 3)
+    splitter = RecencyKFoldPanelSplit(n_splits=4, n_periods=21 * 3, purged_dates=3)
     splitter.visualise_splits(X, y, tick_fontsize=8, label_fontsize=8, subtitle_fontsize=20)
