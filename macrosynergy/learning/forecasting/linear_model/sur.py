@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+import numbers 
 
 from sklearn.linear_model import LinearRegression
 from sklearn.base import BaseEstimator, RegressorMixin
@@ -18,6 +19,10 @@ class LinearMultiTargetRegression(BaseEstimator, RegressorMixin):
         Whether to include an intercept term in the regression.
     seemingly_unrelated : bool, default=False
         Whether to make the regression seemingly unrelated.
+    covariance_estimator : Union[str, BaseEstimator], default="ewm"
+        Choice of covariance estimator. Options are "ml" for maximum likelihood, 
+        "ewm" for exponentially weighted moving covariance, or a custom `scikit-learn`
+        compatible covariance estimator.
     span : int, default=60
         Span parameter for exponentially weighted covariance estimation of residuals.
     feature_selection : object, default=None
@@ -29,6 +34,7 @@ class LinearMultiTargetRegression(BaseEstimator, RegressorMixin):
         self,
         fit_intercept=True,
         seemingly_unrelated=False,
+        covariance_estimator = "ewm",
         span=60,
         feature_selection=None,
     ):
@@ -37,8 +43,17 @@ class LinearMultiTargetRegression(BaseEstimator, RegressorMixin):
             raise TypeError("The 'fit_intercept' parameter must be a boolean.")
         if not isinstance(seemingly_unrelated, bool):
             raise TypeError("The 'seemingly_unrelated' parameter must be a boolean.")
-        if not isinstance(span, int) or span <= 0:
-            raise ValueError("The 'span' parameter must be a positive integer.")
+            
+        if not isinstance(covariance_estimator, (str, BaseEstimator)):
+            raise TypeError("The 'covariance_estimator' parameter must be a string or a BaseEstimator instance.")
+        if isinstance(covariance_estimator, str) and covariance_estimator not in ["ml", "ewm"]:
+            raise ValueError("If `covariance_estimator` is a string, it must be either 'ml' or 'ewm'.")
+        # TODO: add checks for custom covariance estimator when inheriting from BaseEstimator
+        if covariance_estimator == "ewm":
+            if not isinstance(span, numbers.Integral):
+                raise TypeError("The 'span' parameter must be an integer.")
+            if span <= 0:
+                raise ValueError("The 'span' parameter must be positive.")
         if feature_selection is not None and not isinstance(
             feature_selection, SelectorMixin
         ):
@@ -49,6 +64,7 @@ class LinearMultiTargetRegression(BaseEstimator, RegressorMixin):
         # Attributes
         self.fit_intercept = fit_intercept
         self.seemingly_unrelated = seemingly_unrelated
+        self.covariance_estimator = covariance_estimator
         self.span = span
         self.feature_selection = feature_selection
 
@@ -127,7 +143,7 @@ class LinearMultiTargetRegression(BaseEstimator, RegressorMixin):
                 asset: W[:, idx] for idx, asset in enumerate(self.assets)
             }
 
-        # If not SUR_SELECT, job is done here
+        # If not sur, job is done here
         # Just store OLS coefficients
         if not self.seemingly_unrelated:
             self.coefs_ = {}
@@ -144,7 +160,7 @@ class LinearMultiTargetRegression(BaseEstimator, RegressorMixin):
 
             return self
 
-        # If SUR_SELECT, first calculate covariance of residuals
+        # If sur, calculate covariance of residuals
         resids = pd.DataFrame(
             data=np.column_stack(
                 [
@@ -158,15 +174,25 @@ class LinearMultiTargetRegression(BaseEstimator, RegressorMixin):
             columns=y.columns,
         )
 
-        # Calculate time decay weights for EWM covariance
-        weights = np.array(
-            [(1 - 2 / (self.span + 1)) ** i for i in range(len(y))][::-1]
-        )
-        cov = np.cov(resids.values.T, aweights=weights)
+        # Estimate covariance matrix
+        if self.covariance_estimator == "ewm":
+            weights = np.array(
+                [(1 - 2 / (self.span + 1)) ** i for i in range(len(y))][::-1]
+            )
+            cov = np.cov(resids.values.T, aweights=weights)
+        elif self.covariance_estimator == "ml":
+            cov = np.cov(resids.values.T)
+        else:
+            self.covariance_estimator.fit(resids)
+            cov = self.covariance_estimator.covariance_
         
         # Invert matrix 
-        # TODO: apply graphical lasso to cov when # of assets gets big
-        invcov = np.linalg.inv(cov)
+        if isinstance(self.covariance_estimator, BaseEstimator) and hasattr(
+            self.covariance_estimator, "precision_"
+        ):
+            invcov = self.covariance_estimator.precision_
+        else:
+            invcov = np.linalg.inv(cov)
 
         # FGLS optimization
         # Due to feature selection, create a full matrix but pack/unpack the matrix 
@@ -342,6 +368,13 @@ class LinearMultiTargetRegression(BaseEstimator, RegressorMixin):
             raise TypeError("X must be a pandas DataFrame.")
         if not isinstance(y, (pd.DataFrame, pd.Series)):
             raise TypeError("y must be a pandas DataFrame or Series.")
+        # The dataframe must be multi indexed by asset and real date
+        if not isinstance(X.index, pd.MultiIndex):
+            raise ValueError("X must be multi-indexed by asset and real date.")
+        if not isinstance(y.index, pd.MultiIndex):
+            raise ValueError("y must be multi-indexed by asset and real date.")
+        if not X.index.equals(y.index):
+            raise ValueError("X and y must have the same multi-index.")
         # This model can't handle NAs.
         if X.isna().sum().sum() > 0:
             raise ValueError("X must not contain missing values.")
@@ -356,11 +389,19 @@ class LinearMultiTargetRegression(BaseEstimator, RegressorMixin):
                 raise TypeError("sample_weight must be a numpy array or list.")
             if len(sample_weight) != X.shape[0]:
                 raise ValueError("sample_weight must have the same number of samples as X and y.")
+            for weight in sample_weight:
+                if not isinstance(weight, numbers.Number):
+                    raise TypeError("All entries in sample_weight must be numeric.")
+                if weight < 0:
+                    raise ValueError("All entries in sample_weight must be non-negative.")
 
     def _check_predict_params(self, X):
         # Type checks for X
         if not isinstance(X, pd.DataFrame):
             raise TypeError("X must be a pandas DataFrame.")
+        # The dataframe must be multi indexed by asset and real date
+        if not isinstance(X.index, pd.MultiIndex):
+            raise ValueError("X must be multi-indexed by asset and real date.")
         # This model can't handle NAs.
         if X.isna().sum().sum() > 0:
             raise ValueError("X must not contain missing values.")
