@@ -17,6 +17,9 @@ class ExpandingKFoldPanelSplit(KFoldPanelSplit):
     n_splits : int
         Number of folds i.e. (training set, test set) pairs. Default is 5.
         Must be at least 2.
+    purged_dates : int
+        Number of most recent dates to purge from the training set to safeguard against
+        leakage from auto-correlation effects. Default is 0.
 
     Notes
     -----
@@ -26,7 +29,9 @@ class ExpandingKFoldPanelSplit(KFoldPanelSplit):
     Unique dates in the panel are divided into 'n_splits + 1' sequential and
     non-overlapping intervals, resulting in 'n_splits' pairs of training and test sets.
     The 'i'th training set is the union of the first 'i' intervals, and the 'i'th test set
-    is the 'i+1'th interval.
+    is the 'i+1'th interval. If 'purged_dates' is specified, the most recent 'purged_dates'
+    dates are removed from the training set to prevent accidental leakage from temporal
+    proximity.
     """
 
     def _determine_splits(self, unique_dates, n_splits):
@@ -73,6 +78,8 @@ class ExpandingKFoldPanelSplit(KFoldPanelSplit):
             The testing set indices for that split.
         """
         train_split = np.concatenate(splits[: n_split + 1])
+        if self.purged_dates > 0:
+            train_split = train_split[:-self.purged_dates]
         train_indices = np.where(dates.isin(train_split))[0]
         test_indices = np.where(dates.isin(splits[n_split + 1]))[0]
 
@@ -87,7 +94,9 @@ class RollingKFoldPanelSplit(KFoldPanelSplit):
     ----------
     n_splits : int
         Number of folds. Default is 5. Must be at least 2.
-
+    purged_dates : int
+        Number of dates to purge from the training set, before the test set, to safeguard
+        against leakage from auto-correlation effects. Default is 0.
     Notes
     -----
     This splitter can be considered to be a panel data analogue to the `KFold` splitter
@@ -97,7 +106,9 @@ class RollingKFoldPanelSplit(KFoldPanelSplit):
     Unique dates in the panel are divided into 'n_splits' sequential and non-overlapping
     intervals of equal size, resulting in 'n_splits' pairs of training and test sets.
     The 'i'th test set is the 'i'th interval, and the 'i'th training set is all other
-    intervals.
+    intervals. If 'purged_dates' is specified, the 'purged_dates' dates before the test set
+    are removed from the training set to prevent accidental leakage from temporal
+    proximity.
     """
 
     def _determine_splits(self, unique_dates, n_splits):
@@ -144,7 +155,14 @@ class RollingKFoldPanelSplit(KFoldPanelSplit):
             The testing set indices for that split.
         """
         test_split = splits[n_split]
-        train_split = np.concatenate(splits[:n_split] + splits[n_split + 1 :])
+        if n_split > 0 and self.purged_dates > 0:
+            early_train_split =  splits[:n_split]
+            early_train_split[-1] = early_train_split[-1][:-self.purged_dates]
+            late_train_split = splits[n_split + 1 :]
+            train_split = np.concatenate(early_train_split + late_train_split)
+        else:
+            train_split = np.concatenate(splits[:n_split] + splits[n_split + 1 :])
+            
         train_indices = np.where(dates.isin(train_split))[0]
         test_indices = np.where(dates.isin(test_split))[0]
 

@@ -506,7 +506,7 @@ class WalkForwardPanelSplit(BasePanelSplit, ABC):
 
 
 class KFoldPanelSplit(BasePanelSplit, ABC):
-    def __init__(self, n_splits=5, min_n_splits=2):
+    def __init__(self, n_splits=5, min_n_splits=2, purged_dates=0):
         """
         Generic K-Fold cross-validator for panel data.
 
@@ -516,6 +516,9 @@ class KFoldPanelSplit(BasePanelSplit, ABC):
             Number of splits to generate.
         min_n_splits : int
             Minimum number of splits allowed.
+        purged_dates : int
+            Number of dates to purge between training and test sets to avoid leakage
+            caused by autocorrelation.
 
         Notes
         -----
@@ -530,9 +533,16 @@ class KFoldPanelSplit(BasePanelSplit, ABC):
             raise ValueError(
                 f"Cannot have number of splits less than {min_n_splits}. Got n_splits = {n_splits}."
             )
+        if not isinstance(purged_dates, int):
+            raise TypeError(f"purged_dates must be an integer. Got {type(purged_dates)}.")
+        if purged_dates < 0:
+            raise ValueError(
+                f"purged_dates must be positive. Got purged_dates = {purged_dates}."
+            )
 
         # Attributes
         self.n_splits = n_splits
+        self.purged_dates = purged_dates
 
     def split(self, X, y, groups=None):
         """
@@ -566,7 +576,7 @@ class KFoldPanelSplit(BasePanelSplit, ABC):
 
         # Store necessary quantities
         Xy = pd.concat([X, y], axis=1)
-        Xy.dropna(inplace=True)
+        Xy.dropna(inplace=True) # TODO: relax this in future to support models that handle missing values
         dates = Xy.index.get_level_values(1)
         unique_dates = dates.unique().sort_values()
 
