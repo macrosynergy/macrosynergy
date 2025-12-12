@@ -1260,7 +1260,7 @@ class DataQueryFileAPIClient:
         metrics: Optional[List[str]] = None,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
-        include_file_column: bool = True,
+        include_file_column: bool = False,
         dataframe_format: str = "qdf",
         dataframe_type: str = "pandas",
         categorical_dataframe: bool = True,
