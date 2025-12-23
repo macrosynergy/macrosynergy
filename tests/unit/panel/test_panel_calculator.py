@@ -6,7 +6,11 @@ from tests.simulate import make_qdf
 from macrosynergy.compat import PD_OLD_RESAMPLE
 from macrosynergy.management.simulate import make_test_df
 from macrosynergy.management.utils import qdf_to_ticker_df
-from macrosynergy.panel.panel_calculator import panel_calculator, _check_calcs
+from macrosynergy.panel.panel_calculator import (
+    panel_calculator,
+    _check_calcs,
+    _get_xcats_used,
+)
 import warnings
 from random import choice
 from typing import List, Dict, Set
@@ -410,7 +414,6 @@ class TestAll(unittest.TestCase):
         self.assertTrue(round(growth, 5) == round(row_value_cad, 5))
 
     def test_check_calcs(self):
-
         invalid_calcs = ["NEW1 = GROWTH + INFL)"]
         self.assertRaises(ValueError, _check_calcs, invalid_calcs)
 
@@ -419,6 +422,135 @@ class TestAll(unittest.TestCase):
 
         invalid_calcs = ["NEW1 = GROWTH - INFL", "NEW1 = (GROWTH ) - INFL"]
         self.assertRaises(ValueError, _check_calcs, invalid_calcs)
+
+
+class TestPanelCalculatorCalcStrings(unittest.TestCase):
+    # test_cases = [
+    #     "NEW1 = XR + CRY",
+    #     "NEW2 = XR - CRY",
+    #     "NEW3 = XR * CRY",
+    #     "NEW4 = XR / CRY",
+    #     "NEW5 = ( XR + CRY ) / 2",
+    #     "NEW6 = ( XR - CRY ) * 100",
+    #     "NEW7 = XR ** 2",
+    #     "NEW8 = np.abs( XR )",
+    #     "NEW9 = np.sign( XR )",
+    #     "NEW10 = np.sqrt( np.abs( XR ) )",
+    #     "NEW11 = np.log( np.abs( XR ) + 1 )",
+    #     "NEW12 = np.exp( XR / 10 )",
+    #     "NEW13 = np.tanh( XR )",
+    #     "NEW14 = np.sin( XR )",
+    #     "NEW15 = np.cos( XR )",
+    #     "NEW16 = np.arctan( XR )",
+    #     "NEW17 = np.maximum( XR , 0 )",
+    #     "NEW18 = np.minimum( XR , 0 )",
+    #     "NEW19 = np.maximum( XR , CRY )",
+    #     "NEW20 = np.minimum( XR , CRY )",
+    #     "NEW21 = ( XR + 0.5 ) * CRY",
+    #     "NEW22 = ( XR - 0.5 ) / ( np.abs( CRY ) + 1 )",
+    #     "NEW23 = ( XR * CRY ) / ( np.abs( XR ) + np.abs( CRY ) + 1 )",
+    #     "NEW24 = ( XR - CRY ) / ( np.abs( XR - CRY ) + 1 )",
+    #     "NEW25 = ( GROWTH - INFL )",
+    #     "NEW26 = ( GROWTH - INFL ) / ( np.abs( INFL ) + 1 )",
+    #     "NEW27 = ( CARRY + VALUE + MOM ) / 3",
+    #     "NEW28 = ( CARRY * 0.5 ) + ( VALUE * 0.3 ) + ( MOM * 0.2 )",
+    #     "NEW29 = ( CARRY - VALUE ) / ( np.abs( CARRY ) + np.abs( VALUE ) + 1 )",
+    #     "NEW30 = ( MOM - VOL )",
+    #     "NEW31 = MOM / ( VOL + 1 )",
+    #     "NEW32 = np.abs( MOM ) / ( np.abs( VOL ) + 1 )",
+    #     "NEW33 = ( RET > 0 ) * 1",
+    #     "NEW34 = ( RET < 0 ) * 1",
+    #     "NEW35 = ( RET >= 0 ) * 2 - 1",
+    #     "NEW36 = ( XR > CRY ) * 1",
+    #     "NEW37 = ( XR > 0 ) & ( CRY > 0 )",
+    #     "NEW38 = ( XR > 0 ) | ( CRY > 0 )",
+    #     "NEW39 = ~( XR > 0 )",
+    #     "NEW40 = ( np.abs( XR ) > 2 ) * 1",
+    #     "SINGLE1 = XR - iUSD_XR",
+    #     "SINGLE2 = GROWTH - iEUR_GROWTH",
+    #     "SINGLE3 = INFL - iJPY_INFL",
+    #     "SINGLE4 = np.sqrt( np.abs( iUSD_XR ) )",
+    #     "SINGLE5 = np.log( np.abs( iEUR_INFL ) + 1 )",
+    #     "SINGLE6 = ( XR + iUSD_XR ) / 2",
+    #     "SINGLE7 = ( CRY - iUSD_CRY ) / ( np.abs( iUSD_CRY ) + 1 )",
+    #     "SINGLE8 = ( XR - iUSD_XR ) / ( np.abs( XR ) + 1 )",
+    #     "SINGLE9 = ( XR - iUSD_XR ) / ( np.abs( iUSD_XR ) + 1 )",
+    #     "SINGLE10 = ( XR - iUSD_XR ) / ( np.abs( XR - iUSD_XR ) + 1 )",
+    #     "CPIH_SJA_P3M3ML3ARX = CPIH_SJA_P3M3ML3AR - INFTARGET_NSA",
+    #     "CPIC_SJA_P6M6ML6ARX = CPIC_SJA_P6M6ML6AR - INFTARGET_NSA",
+    #     "FXBLACK = ( FXTARGETED_NSA + FXUNTRADABLE_NSA ) > 0",
+    #     "TS1 = XR.shift( 1 )",
+    #     "TS2 = XR.shift( 1 ) - XR.shift( 5 )",
+    #     "TS3 = XR.diff( 1 )",
+    #     "TS4 = XR.pct_change( 5 )",
+    #     "TS5 = ( XR.shift( 1 ) + CRY.shift( 1 ) ) / 2",
+    #     "TS6 = ( XR.shift( 1 ) - CRY.shift( 1 ) ) / ( np.abs( CRY.shift( 1 ) ) + 1 )",
+    #     "TS7 = XR.rolling( 20 ).mean()",
+    #     "TS8 = XR.rolling( 20 ).std()",
+    #     "TS9 = ( XR.rolling( 20 ).mean() ) / ( np.abs( XR.rolling( 252 ).mean() ) + 1 )",
+    #     "TS10 = ( XR - XR.rolling( 252 ).mean() ) / ( XR.rolling( 252 ).std() + 1e-9 )",
+    #     "TS11 = XR.ewm( span=20 ).mean()",
+    #     "TS12 = ( XR.ewm( span=20 ).mean() - XR.ewm( span=60 ).mean() )",
+    #     "TS13 = SIGNAL.rank( axis=1 , pct=True )",
+    #     "TS14 = ( SIGNAL - SIGNAL.mean( axis=1 ) ) / ( SIGNAL.std( axis=1 ) + 1e-9 )",
+    #     "TS15 = SIGNAL.clip( lower=-2 , upper=2 )",
+    #     "TS16 = SIGNAL.fillna( 0 )",
+    #     "TS17 = SIGNAL.where( np.abs( SIGNAL ) < 3 )",
+    #     "TS18 = ( SIGNAL.where( SIGNAL > 0 ) ).fillna( 0 )",
+    #     "TS19 = ( XR.shift( 1 ) > XR.shift( 252 ) ) * 1",
+    #     "TS20 = ( XR.shift( 1 ) > 0 ) & ( CRY.shift( 1 ) > 0 )",
+    # ]
+
+    # test_cases = [
+    #     "NEW1 = XR + CRY",
+    #     "NEW2 = XR - CRY",
+    #     "SINGLE1 = XR - iUSD_INFL",
+
+    test_cases = {
+        1: {
+            "calc_str": "NEW1 = XR + CRY",
+            "output": {
+                "all_xcats_used": ["XR", "CRY"],
+                "singles_used": [],
+                "single_cids": [],
+            },
+        },
+        2: {
+            "calc_str": "NEW2 = XR - CRY",
+            "output": {
+                "all_xcats_used": ["XR", "CRY"],
+                "singles_used": [],
+                "single_cids": [],
+            },
+        },
+        3: {
+            "calc_str": "SINGLE1 = XR - iUSD_INFL",
+            "output": {
+                "all_xcats_used": ["XR", "INFL"],
+                "singles_used": {"iUSD_INFL"},
+                "single_cids": {"USD"},
+            },
+        },
+    }
+
+    def test_get_xcats_used(self):
+        for key in self.test_cases:
+            calc_str = self.test_cases[key]["calc_str"]
+            expected_output = self.test_cases[key]["output"]
+            lhs, rhs = calc_str.split("=")
+            ops = {lhs.strip(): rhs.strip()}
+
+            (
+                all_xcats_used,
+                singles_used,
+                single_cids,
+            ) = _get_xcats_used(ops)
+
+            self.assertEqual(
+                set(all_xcats_used), set(expected_output["all_xcats_used"])
+            )
+            self.assertEqual(set(singles_used), set(expected_output["singles_used"]))
+            self.assertEqual(set(single_cids), set(expected_output["single_cids"]))
 
 
 if __name__ == "__main__":
