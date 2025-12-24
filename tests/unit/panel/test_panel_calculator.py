@@ -10,6 +10,7 @@ from macrosynergy.panel.panel_calculator import (
     panel_calculator,
     _check_calcs,
     _get_xcats_used,
+    xcat_isolator,
 )
 import warnings
 from random import choice
@@ -422,6 +423,80 @@ class TestAll(unittest.TestCase):
 
         invalid_calcs = ["NEW1 = GROWTH - INFL", "NEW1 = (GROWTH ) - INFL"]
         self.assertRaises(ValueError, _check_calcs, invalid_calcs)
+
+
+class TestPanelCalculatorParserHelpers(unittest.TestCase):
+    def test_xcat_isolator_extracts_expected_xcats(self):
+        test_cases = [
+            ("XR + CRY", {"XR", "CRY"}),
+            ("np.abs( XR ) + 1", {"XR"}),
+            ("XR.shift(periods=1, axis=0) - CRY.shift(5)", {"XR", "CRY"}),
+            (
+                "CPIH_SJA_P3M3ML3AR - INFTARGET_NSA",
+                {"CPIH_SJA_P3M3ML3AR", "INFTARGET_NSA"},
+            ),
+            ("XR.rolling(window=20, min_periods=5).std(ddof=0)", {"XR"}),
+            ("XR.pct_change(periods=5, fill_method='pad')", {"XR"}),
+            ("( XR > 0 ) & ( CRY > 0 )", {"XR", "CRY"}),
+            ("X2R_1 + CRY2", {"X2R_1", "CRY2"}),
+            ("np.where(XR > 0, XR, np.nan)", {"XR"}),
+            ("XR.eq(CRY)", {"XR", "CRY"}),
+            ("np.equal(XR, CRY)", {"XR", "CRY"}),
+        ]
+
+        for rhs, expected in test_cases:
+            with self.subTest(rhs=rhs):
+                self.assertEqual(set(xcat_isolator(rhs)), expected)
+
+    def test_xcat_isolator_includes_repeats(self):
+        rhs = "XR + XR - CRY + XR"
+        extracted = xcat_isolator(rhs)
+        self.assertEqual(extracted.count("XR"), 3)
+        self.assertEqual(extracted.count("CRY"), 1)
+
+    def test_xcat_isolator_handles_single_tickers(self):
+        rhs = "( XR + iUSD_XR ) / 2 + np.abs( iEUR_INFL )"
+        self.assertEqual(set(xcat_isolator(rhs)), {"XR", "iUSD_XR", "iEUR_INFL"})
+
+    def test_xcat_isolator_raises_on_no_xcats(self):
+        for rhs in ["0 + 1", "np.nan", "foo_bar + 1"]:
+            with self.subTest(rhs=rhs):
+                self.assertRaises(ValueError, xcat_isolator, rhs)
+
+    def test_xcat_isolator_ignores_tokens_adjacent_to_equals(self):
+        # `=` is used for formula assignment; RHS strings should not contain it.
+        for rhs in ["XR = CRY", "SIGNAL=0"]:
+            with self.subTest(rhs=rhs):
+                self.assertRaises(ValueError, xcat_isolator, rhs)
+
+    def test_get_xcats_used_collects_singles_and_xcats(self):
+        ops = {
+            "NEW1": "XR + CRY",
+            "NEW2": "( GROWTH - iUSD_INFL ) / ( np.abs( INFL ) + 1 )",
+            "NEW3": "iEUR_GROWTH - XR",
+        }
+
+        all_xcats_used, singles_used, single_cids = _get_xcats_used(ops)
+
+        self.assertIsInstance(all_xcats_used, list)
+        self.assertIsInstance(singles_used, list)
+        self.assertIsInstance(single_cids, list)
+
+        self.assertEqual(set(singles_used), {"iUSD_INFL", "iEUR_GROWTH"})
+        self.assertEqual(set(single_cids), {"USD", "EUR"})
+        self.assertTrue({"XR", "CRY", "GROWTH", "INFL"}.issubset(set(all_xcats_used)))
+
+    def test_get_xcats_used_with_only_single_tickers(self):
+        ops = {"NEW": "iUSD_XR + iEUR_INFL"}
+        all_xcats_used, singles_used, single_cids = _get_xcats_used(ops)
+
+        self.assertEqual(set(all_xcats_used), {"XR", "INFL"})
+        self.assertEqual(set(singles_used), {"iUSD_XR", "iEUR_INFL"})
+        self.assertEqual(set(single_cids), {"USD", "EUR"})
+
+    def test_get_xcats_used_raises_if_any_op_has_no_xcats(self):
+        ops = {"NEW1": "XR + 1", "NEW2": "0"}
+        self.assertRaises(ValueError, _get_xcats_used, ops)
 
 
 if __name__ == "__main__":
