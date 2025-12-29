@@ -173,7 +173,6 @@ from macrosynergy.download.fusion_interface import (
     request_wrapper,
     request_wrapper_stream_bytes_to_disk,
     _wait_for_api_call,
-    convert_ticker_based_parquet_file_to_qdf,
     cache_decorator,
 )
 from macrosynergy.download.dataquery import OAUTH_TOKEN_URL
@@ -690,9 +689,6 @@ class DataQueryFileAPIClient:
         filename: Optional[str] = None,
         out_dir: Optional[str] = None,
         overwrite: bool = False,
-        qdf: bool = False,
-        as_csv: bool = False,
-        keep_raw_data: bool = False,
         chunk_size: Optional[int] = None,
         timeout: Optional[float] = DQ_FILE_API_TIMEOUT,
         max_retries: int = 3,
@@ -716,14 +712,6 @@ class DataQueryFileAPIClient:
             The directory where the file will be saved.
         overwrite : bool
             If True, overwrites the file if it already exists. Default is False.
-        qdf : bool
-            If True, converts the DataFrame to a QuantamentalDataFrame. If False, files
-            are saved as-is in the ticker-based Parquet format. Default is False.
-        as_csv : bool
-            If True, saves the downloaded datasets as CSV files. Default is False, with
-            Parquet as the default format.
-        keep_raw_data : bool
-            If True, keeps the raw data files after conversion. Default is False.
         chunk_size : Optional[int]
             The chunk size for streaming downloads (in bytes).
         timeout : Optional[float]
@@ -783,7 +771,6 @@ class DataQueryFileAPIClient:
         if "_DELTA" in file_group_id:
             is_small_file = file_datetime not in _large_delta_file_datetimes()
 
-        is_catalog_file = file_group_id == self.catalog_file_group_id
         if is_small_file:
             request_wrapper_stream_bytes_to_disk(**download_args)
         else:
@@ -797,27 +784,6 @@ class DataQueryFileAPIClient:
         logger.info(
             f"Downloaded {file_name} in {time_taken:.2f} seconds to {file_path}"
         )
-        if not (qdf or as_csv) or is_catalog_file or not file_path.suffix == ".parquet":
-            return str(file_path)
-
-        convert_args = dict(
-            filename=str(file_path),
-            as_csv=as_csv,
-            qdf=qdf,
-            keep_raw_data=keep_raw_data,
-        )
-
-        if PYTHON_3_8_OR_LATER:
-            convert_ticker_based_parquet_file_to_qdf_pl(**convert_args)
-        else:
-            convert_ticker_based_parquet_file_to_qdf(**convert_args)
-        if qdf:
-            msg_str = (
-                f"Successfully converted {filename} to Quantamental Data Format (QDF)"
-            )
-            if as_csv:
-                msg_str += " and saved as CSV"
-            logger.info(msg_str)
         return str(file_path)
 
     def delete_corrupt_files(
@@ -861,9 +827,6 @@ class DataQueryFileAPIClient:
         filenames: List[str],
         out_dir: Optional[str] = None,
         overwrite: bool = False,
-        qdf: bool = False,
-        as_csv: bool = False,
-        keep_raw_data: bool = False,
         max_retries: int = 3,
         n_jobs: int = None,
         chunk_size: Optional[int] = None,
@@ -881,13 +844,6 @@ class DataQueryFileAPIClient:
             The directory to save the downloaded files.
         overwrite : bool
             If True, overwrites files if they already exist. Default is False.
-        qdf : bool
-            If True, converts the DataFrame to a QuantamentalDataFrame. If False, files
-            are saved as-is in the ticker-based Parquet format. Default is False.
-        as_csv : bool
-            If True, saves the DataFrame as a CSV file. Default is False.
-        keep_raw_data : bool
-            If True, keeps the raw data files after conversion. Default is False.
         max_retries : int
             The number of times to retry downloading the entire list of failed files.
         n_jobs : int
@@ -919,9 +875,6 @@ class DataQueryFileAPIClient:
                         filename=filename,
                         out_dir=out_dir,
                         overwrite=overwrite,
-                        qdf=qdf,
-                        as_csv=as_csv,
-                        keep_raw_data=keep_raw_data,
                         chunk_size=chunk_size,
                         timeout=timeout,
                     )
@@ -977,10 +930,7 @@ class DataQueryFileAPIClient:
     def download_catalog_file(
         self,
         out_dir: Optional[str] = None,
-        add_dataset_column: bool = False,
-        as_csv: bool = False,
         overwrite: bool = False,
-        keep_raw_data: bool = False,
         timeout: Optional[float] = DQ_FILE_API_TIMEOUT,
     ) -> str:
         out_dir = self._get_save_dir(out_dir)
@@ -1009,25 +959,6 @@ class DataQueryFileAPIClient:
                 overwrite=overwrite,
                 timeout=timeout,
             )
-
-        if not (add_dataset_column or as_csv):
-            return file_path
-
-        df = pd.read_parquet(file_path)
-
-        if add_dataset_column:
-            df.loc[:, "Dataset"] = df["Theme"].apply(
-                lambda x: "JPMAQS_" + str(x).upper().replace(" ", "_")
-            )
-
-        if as_csv:
-            csv_file_path = Path(file_path).with_suffix(".csv")
-            df.to_csv(csv_file_path, index=False)
-            if not keep_raw_data:
-                Path(file_path).unlink()
-            file_path = str(csv_file_path)
-        else:
-            df.to_parquet(file_path, index=False)
 
         return file_path
 
@@ -1067,13 +998,11 @@ class DataQueryFileAPIClient:
         if not tickers or not any(t.strip() for t in tickers):
             raise ValueError("No valid tickers to search for.")
 
-        catalog_file = self.download_catalog_file(
-            out_dir=out_dir,
-            add_dataset_column=True,
-            as_csv=False,
-        )
-
+        catalog_file = self.download_catalog_file(out_dir=out_dir)
         catalog_df = pd.read_parquet(catalog_file)
+        catalog_df.loc[:, "Dataset"] = catalog_df["Theme"].apply(
+            lambda x: "JPMAQS_" + str(x).upper().replace(" ", "_")
+        )
 
         if case_sensitive:
             catalog_df = catalog_df[catalog_df["Ticker"].isin(tickers)]
@@ -1090,7 +1019,7 @@ class DataQueryFileAPIClient:
         out_dir: Optional[str] = None,
         include_last_modified_columns: bool = True,
     ) -> pd.DataFrame:
-        out_dir = self._get_save_dir()
+        out_dir = self._get_save_dir(out_dir)
         col_order = [
             "filename",
             "file-datetime",
@@ -1101,9 +1030,9 @@ class DataQueryFileAPIClient:
         ]
         dfs = [
             _downloaded_files_df(out_dir, file_format=fmt, include_metadata_files=True)
-            for fmt in ["parquet", "csv", "json"]
+            for fmt in ["parquet", "json"]
         ]
-        dfs = [_ for _ in dfs if _ is not _.empty]
+        dfs = [df for df in dfs if not df.empty]
         if not dfs:
             return pd.DataFrame(columns=col_order)
         files_df = pd.concat(dfs).reset_index(drop=True)
@@ -1111,10 +1040,12 @@ class DataQueryFileAPIClient:
             return files_df
 
         files_df = files_df[col_order].rename(columns={"filename": "file-name"})
-        
+
         if include_last_modified_columns:
             dq_files_df = self.list_available_files_for_all_file_groups()
-            dq_files_df = dq_files_df[dq_files_df["file-name"].isin(files_df["file-name"])]
+            dq_files_df = dq_files_df[
+                dq_files_df["file-name"].isin(files_df["file-name"])
+            ]
             files_df = files_df.merge(
                 dq_files_df[["file-name", "last-modified"]],
                 on="file-name",
@@ -1128,9 +1059,6 @@ class DataQueryFileAPIClient:
         to_datetime: Optional[str] = None,
         file_datetime: Optional[str] = None,
         overwrite: bool = False,
-        qdf: bool = False,
-        as_csv: bool = False,
-        keep_raw_data: bool = False,
         chunk_size: Optional[int] = None,
         timeout: Optional[float] = DQ_FILE_API_TIMEOUT,
         include_full_snapshots: bool = True,
@@ -1159,14 +1087,6 @@ class DataQueryFileAPIClient:
             A specific file date to check for. Overrides `since_datetime`.
         overwrite : bool
             If True, overwrites files if they already exist. Default is False.
-        qdf : bool
-            If True, converts the DataFrame to a QuantamentalDataFrame. If False, files
-            are saved as-is in the ticker-based Parquet format. Default is False.
-        as_csv : bool
-            If True, saves the downloaded datasets as CSV files. Default is False, with
-            Parquet as the default format.
-        keep_raw_data : bool
-            If True, keeps the raw data files after conversion. Default is False.
         chunk_size : Optional[int]
             The chunk size for streaming downloads (in bytes).
         timeout : Optional[float]
@@ -1241,9 +1161,6 @@ class DataQueryFileAPIClient:
             filenames=download_order,
             out_dir=out_dir,
             overwrite=overwrite,
-            qdf=qdf,
-            as_csv=as_csv,
-            keep_raw_data=keep_raw_data,
             chunk_size=chunk_size,
             timeout=timeout,
             show_progress=show_progress,
@@ -1270,9 +1187,6 @@ class DataQueryFileAPIClient:
         show_progress: bool = True,
         out_dir: Optional[str] = None,
         overwrite: bool = False,
-        qdf: bool = False,
-        keep_raw_data: bool = False,
-        as_csv: bool = False,
         since_datetime: Optional[str] = None,
         to_datetime: Optional[str] = None,
         skip_download: bool = False,
@@ -1331,15 +1245,6 @@ class DataQueryFileAPIClient:
             by the DataQueryFileAPI instance is used if None.
         overwrite : bool
             If True, overwrites files if they already exist. Default is False.
-        qdf : bool
-            If True, each downloaded dataframe will be saved as a QuantamentalDataFrame,
-            otherwise files are saved as-is in the ticker-based Parquet format.
-            Default is False.
-        keep_raw_data : bool
-            If True, keeps the raw data files after conversion. Default is False.
-        as_csv : bool
-            If True, saves the downloaded datasets as CSV files. Default is False, with
-            Parquet as the default format.
         since_datetime : Optional[str]
             Download files modified since this timestamp (inclusive).
             Defaults to the start of the current day (UTC) if `file_datetime` is not set.
@@ -1367,9 +1272,6 @@ class DataQueryFileAPIClient:
                 to_datetime=to_datetime,
                 file_group_ids=datasets_to_download,
                 overwrite=overwrite,
-                qdf=qdf,
-                as_csv=as_csv,
-                keep_raw_data=keep_raw_data,
                 show_progress=show_progress,
                 include_full_snapshots=True,
                 include_delta=include_delta_files,
@@ -1638,7 +1540,7 @@ class SegmentedFileDownloader:
             self.temp_dir.mkdir(exist_ok=True, parents=True)
 
             total_size = self._get_file_size()
-            self.log(f"File size: {total_size / (1024*1024):.2f} MB")
+            self.log(f"File size: {total_size / (1024 * 1024):.2f} MB")
 
             chunk_size = int(self.segment_size_mb * 1024 * 1024)
             chunks = range(0, total_size, chunk_size)
@@ -1776,7 +1678,7 @@ class SegmentedFileDownloader:
                 with open(part_path, "rb") as part_file:
                     shutil.copyfileobj(part_file, final_file)
         final_size = final_path.stat().st_size
-        self.log(f"Assembled file size: {final_size / (1024*1024):.2f} MB")
+        self.log(f"Assembled file size: {final_size / (1024 * 1024):.2f} MB")
         self.cleanup()
 
     def cleanup(self):
@@ -1784,141 +1686,6 @@ class SegmentedFileDownloader:
         if self.temp_dir.exists():
             shutil.rmtree(self.temp_dir)
             self.log("Cleaned up temporary files.")
-
-
-def _atomic_sink_csv(lf: pl.LazyFrame, final_out: Path, sidecar: Path) -> None:
-    """Atomic sink for CSV files - ensures complete writes/cleans up on failure."""
-    try:
-        sidecar.unlink()
-    except FileNotFoundError:
-        pass
-
-    try:
-        lf.sink_csv(str(sidecar))
-        os.replace(sidecar, final_out)
-    except BaseException:
-        try:
-            sidecar.unlink()
-        except FileNotFoundError:
-            pass
-        raise
-
-
-def _atomic_sink_parquet(
-    lf: pl.LazyFrame, final_out: Path, sidecar: Path, *, compression: str
-) -> None:
-    """Atomic sink for Parquet files - ensures complete writes/cleans up on failure."""
-    try:
-        sidecar.unlink()
-    except FileNotFoundError:
-        pass
-
-    try:
-        lf.sink_parquet(str(sidecar), compression=compression)
-        os.replace(sidecar, final_out)
-    except BaseException:
-        try:
-            sidecar.unlink()
-        except FileNotFoundError:
-            pass
-        raise
-
-
-def _convert_ticker_based_parquet_file_to_qdf_pl(
-    filename: str,
-    compression: str = "zstd",
-    as_csv: bool = False,
-    qdf: bool = False,
-    keep_raw_data: bool = False,
-) -> None:
-    src = Path(filename)
-    if not src.is_file():
-        raise FileNotFoundError(f"No such file: {filename}")
-
-    base = src.with_suffix("")
-    dirpath = src.parent
-
-    # passthrough to CSV from sink_csv
-    if as_csv and not qdf:
-        final_out = base.with_suffix(".csv")
-        sidecar = dirpath / f".{final_out.name}.inprogress"
-        _atomic_sink_csv(pl.scan_parquet(str(src)), final_out, sidecar)
-        if not keep_raw_data:
-            src.unlink(missing_ok=True)
-        return
-
-    if not qdf:
-        return
-
-    lf = pl.scan_parquet(str(src))
-    parts = pl.col("ticker").str.splitn("_", 2)
-    lf = lf.with_columns(
-        cid=parts.struct.field("field_0"),
-        xcat=parts.struct.field("field_1"),
-    )
-
-    wanted = ["real_date", "value", "grading", "eop_lag", "mop_lag", "last_updated"]
-    present = [c for c in wanted if c in lf.collect_schema().names()]
-    lf = lf.select(present + ["cid", "xcat"])
-
-    if as_csv:
-        final_out = (
-            base.with_suffix(".csv")
-            if not keep_raw_data
-            else dirpath / f"{base.name}_qdf.csv"
-        )
-        sidecar = dirpath / f".{final_out.name}.inprogress"
-        _atomic_sink_csv(lf, final_out, sidecar)
-        if not keep_raw_data:
-            src.unlink(missing_ok=True)
-    else:
-        if keep_raw_data:
-            final_out = dirpath / f"{base.name}_qdf.parquet"
-        else:
-            final_out = src
-        sidecar = dirpath / f".{final_out.name}.inprogress"
-        _atomic_sink_parquet(lf, final_out, sidecar, compression=compression)
-        if not keep_raw_data and final_out is not src:
-            src.unlink(missing_ok=True)
-
-
-def convert_ticker_based_parquet_file_to_qdf_pl(
-    filename: str,
-    compression: str = "zstd",
-    as_csv: bool = False,
-    qdf: bool = True,
-    keep_raw_data: bool = False,
-) -> None:
-    try:
-        _convert_ticker_based_parquet_file_to_qdf_pl(
-            filename=filename,
-            compression=compression,
-            as_csv=as_csv,
-            qdf=qdf,
-            keep_raw_data=keep_raw_data,
-        )
-    except Exception as e:
-        logger.error(f"Error converting file {filename}: {e}")
-        try:
-            p = Path(filename)
-            for cand in [
-                f".{p.with_suffix('.csv').name}.inprogress",
-                f".{p.name}.inprogress",
-                f".{p.with_suffix('').name}_qdf.csv.inprogress",
-                f".{p.with_suffix('').name}_qdf.parquet.inprogress",
-            ]:
-                try:
-                    (p.parent / cand).unlink()
-                except FileNotFoundError:
-                    pass
-        except Exception:
-            pass
-
-        if not Path(filename).is_file():
-            raise FileNotFoundError(
-                f"Conversion failed and file not found: {filename}"
-            ) from e
-        raise
 
 
 def _check_lazy_load_inputs(
@@ -1942,10 +1709,8 @@ def _check_lazy_load_inputs(
     if not files_dir.is_dir():
         raise FileNotFoundError(f"No such directory: {files_dir}")
 
-    if file_format not in ["parquet", "csv"]:
-        raise ValueError("`file_format` must be one of 'parquet' or 'csv'.")
-    if file_format == "csv":
-        raise NotImplementedError("CSV file format is not yet supported.")
+    if file_format != "parquet":
+        raise ValueError("`file_format` must be 'parquet'.")
     # check whether or not there are any parquet files in the glob directory -recursive
     if not _list_downloaded_files(files_dir, file_format):
         raise FileNotFoundError(
@@ -2004,8 +1769,8 @@ def _check_lazy_load_inputs(
 def _list_downloaded_files(files_dir: Path, file_format: str = "parquet") -> List[Path]:
     files_dir = Path(files_dir)
     assert files_dir.is_dir(), f"No such directory: {files_dir}"
-    if file_format not in ["parquet", "csv", "json"]:
-        raise ValueError("`file_format` must be one of 'parquet', 'csv', or 'json'.")
+    if file_format not in ["parquet", "json"]:
+        raise ValueError("`file_format` must be one of 'parquet' or 'json'.")
     files = sorted(files_dir.glob(f"**/*.{file_format}"))
     return files
 
