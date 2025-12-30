@@ -98,7 +98,7 @@ class TestLazyLoad(unittest.TestCase):
                 "value": [1.1, 2.1, 3.1],
             },
         )
-        (self.tmpdir / "DATASET1_20240102_DELTA.parquet").touch()
+        (self.tmpdir / "DATASET1_DELTA_20240102.parquet").touch()
 
         sub_dir = self.tmpdir / "subdir"
         _make_qdf_parquet(
@@ -121,7 +121,7 @@ class TestLazyLoad(unittest.TestCase):
         filenames = sorted([p.name for p in files])
         self.assertIn("DATASET1_20240101.parquet", filenames)
         self.assertIn("DATASET1_20240102.parquet", filenames)
-        self.assertIn("DATASET1_20240102_DELTA.parquet", filenames)
+        self.assertIn("DATASET1_DELTA_20240102.parquet", filenames)
         self.assertIn("DATASET2_20240103.parquet", filenames)
 
     @patch(
@@ -135,6 +135,31 @@ class TestLazyLoad(unittest.TestCase):
         ds1_latest = df[df["filename"] == "DATASET1_20240102.parquet"].iloc[0]
         self.assertEqual(ds1_latest["dataset"], "DATASET1")
         self.assertEqual(ds1_latest["file-timestamp"], pd.Timestamp("2024-01-02"))
+
+    @patch(
+        "macrosynergy.download.dataquery_file_api.pd_to_datetime_compat",
+        pd_to_datetime_compat,
+    )
+    def test_downloaded_files_df_effective_dataset_delta_and_non_delta(self):
+        _make_ticker_parquet(
+            self.tmpdir / "BETA_20240101.parquet",
+            {
+                "ticker": ["USD_INFL"],
+                "real_date": [datetime.date(2024, 1, 1)],
+                "value": [1.0],
+            },
+        )
+        (self.tmpdir / "BETA_DELTA_20240101T010101.parquet").touch()
+
+        df = _downloaded_files_df(self.tmpdir, file_format="parquet")
+
+        non_delta = df[df["filename"] == "BETA_20240101.parquet"].iloc[0]
+        self.assertEqual(non_delta["dataset"], "BETA")
+        self.assertEqual(non_delta["e-dataset"], "BETA")
+
+        delta = df[df["filename"] == "BETA_DELTA_20240101T010101.parquet"].iloc[0]
+        self.assertEqual(delta["dataset"], "BETA_DELTA")
+        self.assertEqual(delta["e-dataset"], "BETA")
 
     @patch(
         "macrosynergy.download.dataquery_file_api.pd_to_datetime_compat",

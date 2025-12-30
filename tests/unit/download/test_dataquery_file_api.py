@@ -375,9 +375,36 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
             {"file-group-id": "FG", "file-datetime": "20230101"},
         )
 
-        client.check_file_availability(filename="file.parquet")
+        client.check_file_availability(filename="FG_20230101.parquet")
         mock_get.assert_called_with(
-            "/group/file/availability", {"file-group-id": None, "file-datetime": None}
+            "/group/file/availability",
+            {"file-group-id": "FG", "file-datetime": "20230101"},
+        )
+
+        client.check_file_availability(filename="FG_20230101")
+        mock_get.assert_called_with(
+            "/group/file/availability",
+            {"file-group-id": "FG", "file-datetime": "20230101"},
+        )
+
+        client.check_file_availability(
+            filename=os.path.join("some", "nested", "dir", "FG_20230101.parquet")
+        )
+        mock_get.assert_called_with(
+            "/group/file/availability",
+            {"file-group-id": "FG", "file-datetime": "20230101"},
+        )
+
+        # Matches real naming: <dataset>_DELTA_<YYYYMMDDTHHMMSS>.parquet
+        client.check_file_availability(
+            filename="JPMAQS_GENERIC_RETURNS_DELTA_20251223T080402.parquet"
+        )
+        mock_get.assert_called_with(
+            "/group/file/availability",
+            {
+                "file-group-id": "JPMAQS_GENERIC_RETURNS_DELTA",
+                "file-datetime": "20251223T080402",
+            },
         )
 
         # Invalid cases
@@ -388,6 +415,9 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
             client.check_file_availability(
                 filename="f.pq", file_group_id="FG", file_datetime="20230101"
             )
+
+        with self.assertRaisesRegex(ValueError, "Invalid filename format"):
+            client.check_file_availability(filename="badformat.parquet")
 
     @suppress_logging
     @patch("macrosynergy.download.dataquery_file_api.Path")
