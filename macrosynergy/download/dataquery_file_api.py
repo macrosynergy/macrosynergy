@@ -677,6 +677,12 @@ class DataQueryFileAPIClient:
             raise ValueError(
                 "One of `file_group_id` & `file_datetime`, or `filename` must be provided."
             )
+        if filename:
+            try:
+                file_group_id, _fdt_with_ext = Path(filename).name.rsplit("_", 1)
+                file_datetime = _fdt_with_ext.split(".")[0]
+            except ValueError as e:
+                raise ValueError(f"Invalid filename format: {filename}") from e
         endpoint = "/group/file/availability"
         params = {"file-group-id": file_group_id, "file-datetime": file_datetime}
         payload = self._get(endpoint, params)
@@ -960,7 +966,7 @@ class DataQueryFileAPIClient:
                 timeout=timeout,
             )
 
-        return file_path
+        return str(file_path)
 
     def get_datasets_for_indicators(
         self,
@@ -1781,6 +1787,17 @@ def _downloaded_files_df(
     include_effective_dataset_column: bool = True,
     include_metadata_files: bool = False,
 ) -> pd.DataFrame:
+    """
+    Build a DataFrame of locally downloaded DataQuery files.
+
+    Notes
+    -----
+    - `dataset` is the DataQuery "file-group-id" part of the filename (everything before
+      the trailing timestamp segment).
+    - `e-dataset` ("effective dataset") maps delta datasets back to their base dataset:
+      delta file-groups (those ending with `_DELTA`) are treated as updates to the base
+      dataset, not a separate dataset in their own right.
+    """
     if not Path(files_dir).is_dir():
         return pd.DataFrame(columns=["path", "filename", "filetype", "dataset"])
     files_list = _list_downloaded_files(files_dir, file_format)
@@ -1801,7 +1818,7 @@ def _downloaded_files_df(
     )
     df["file-timestamp"] = df["file-datetime"].apply(lambda x: pd_to_datetime_compat(x))
     if include_effective_dataset_column:
-        df["e-dataset"] = df["dataset"].str.rstrip("_DELTA")
+        df["e-dataset"] = df["dataset"].str.replace(r"_DELTA$", "", regex=True)
     df = df.reset_index(drop=True)
     return df
 
