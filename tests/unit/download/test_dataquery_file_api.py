@@ -561,6 +561,45 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
                 res = spy.call_args_list[1][1]["filenames"]
             self.assertEqual(res, expected)
 
+    @suppress_logging
+    @patch.object(DataQueryFileAPIClient, "delete_corrupt_files")
+    @patch("macrosynergy.download.dataquery_file_api.cf.as_completed")
+    @patch("macrosynergy.download.dataquery_file_api.cf.ThreadPoolExecutor")
+    @patch("macrosynergy.download.dataquery_file_api.DataQueryFileAPIOauth")
+    def test_download_multiple_files_retries_corrupt_files_as_filenames(
+        self, mock_oauth, mock_executor_cls, mock_as_completed, mock_delete_corrupt_files
+    ):
+        client = DataQueryFileAPIClient(
+            client_id="id", client_secret="secret", out_dir=self.test_dir
+        )
+        mock_executor = mock_executor_cls.return_value.__enter__.return_value
+        # Simulate "successful" futures, but corruption detected after download.
+        # Use a factory so recursive retries can submit again.
+        mock_executor.submit.side_effect = lambda *args, **kwargs: MagicMock()
+        mock_as_completed.side_effect = lambda futures_dict: list(futures_dict.keys())
+        # delete_corrupt_files returns filesystem paths, not filenames
+        mock_delete_corrupt_files.return_value = [
+            os.path.join(self.test_dir, "jpmaqs-download", "2023-01-01", "f2.parquet")
+        ]
+
+        with patch.object(
+            client,
+            "download_multiple_files",
+            wraps=client.download_multiple_files,
+        ) as spy:
+            with self.assertRaises(DownloadError):
+                client.download_multiple_files(
+                    filenames=["f1.parquet", "f2.parquet"],
+                    max_retries=1,
+                    show_progress=False,
+                )
+            # Second call should retry just the basename, not the full path.
+            if PD_2_0_OR_LATER:
+                res = spy.call_args_list[1].kwargs["filenames"]
+            else:
+                res = spy.call_args_list[1][1]["filenames"]
+            self.assertEqual(res, ["f2.parquet"])
+
     @patch("macrosynergy.download.dataquery_file_api.cf.as_completed")
     @patch("macrosynergy.download.dataquery_file_api.cf.ThreadPoolExecutor")
     @suppress_logging

@@ -905,7 +905,8 @@ class DataQueryFileAPIClient:
         found_corrupt_files = self.delete_corrupt_files(
             out_dir=out_dir, files=filenames
         )
-        failed_files = sorted(set(failed_files + found_corrupt_files))
+        corrupt_filenames = [Path(p).name for p in found_corrupt_files]
+        failed_files = sorted(set(failed_files + corrupt_filenames))
         if not failed_files:
             total_time = time.time() - start_time
             logger.info(
