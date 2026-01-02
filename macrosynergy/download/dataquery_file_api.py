@@ -1831,43 +1831,87 @@ def _filter_to_latest_files(
     delta_treatment: str = "all",
 ) -> pd.DataFrame:
     """
-    Filter to files from the day with the last full-snapshot.
-    full-snapshot files are those that don't have '_DELTA' in their filename.
+    Reduce a set of local files to:
+      - the latest available full snapshot per dataset (within the optional window), and
+      - delta files that are newer than that snapshot (within the optional window).
     """
     if files_df.empty:
         return files_df
-    non_delta_mask = ~files_df["filename"].str.contains("_DELTA")
-    if not include_delta_files:
-        files_df = files_df[non_delta_mask].copy()
 
-    if since_datetime is not None:
-        since_datetime = pd_to_datetime_compat(since_datetime)
+    df = files_df.copy()
+
+    if "e-dataset" in df.columns:
+        group_col = "e-dataset"
     else:
-        since_datetime = files_df.loc[non_delta_mask, "file-timestamp"].max()
+        group_col = "dataset"
+        if group_col not in df.columns:
+            raise ValueError("Expected column 'dataset' in files_df")
+        df[group_col] = df[group_col].astype(str).str.replace(r"_DELTA$", "", regex=True)
+
+    if "file-timestamp" not in df.columns:
+        raise ValueError("Expected column 'file-timestamp' in files_df")
+
+    def _is_date_only_string(x: Any) -> bool:
+        if not isinstance(x, str):
+            return False
+        return ("T" not in x) and (":" not in x)
+
+    since_ts = pd_to_datetime_compat(since_datetime) if since_datetime is not None else None
     if to_datetime is not None:
-        to_datetime = pd_to_datetime_compat(to_datetime)
+        to_ts = pd_to_datetime_compat(to_datetime)
+        if _is_date_only_string(to_datetime):
+            to_ts = to_ts.normalize() + pd.DateOffset(days=1) - pd.Timedelta(nanoseconds=1)
     else:
-        to_datetime = files_df["file-timestamp"].max()
+        to_ts = df["file-timestamp"].max()
 
-    if delta_treatment == "latest":
-        files_df = files_df.sort_values(
-            by=["dataset", "file-timestamp"]
-        ).drop_duplicates(subset=["dataset"], keep="last")
+    if since_ts is not None and since_ts > to_ts:
+        since_ts, to_ts = to_ts, since_ts
 
-    # Filter to rows where file-timestamp == per-dataset max
-    if since_datetime > to_datetime:
-        since_datetime, to_datetime = to_datetime, since_datetime
-    since_mask = files_df["file-timestamp"].ge(since_datetime)
-    to_mask = files_df["file-timestamp"].le(to_datetime)
-    latest_full_snap_mask = since_mask & to_mask
+    if since_ts is not None:
+        df = df[df["file-timestamp"].between(since_ts, to_ts)].copy()
+    else:
+        df = df[df["file-timestamp"].le(to_ts)].copy()
 
-    latest_files = (
-        files_df.loc[latest_full_snap_mask]
-        .sort_values(["dataset", "file-timestamp", "filename"])
-        .reset_index(drop=True)
+    if df.empty:
+        return df
+
+    is_delta = df["filename"].astype(str).str.contains("_DELTA")
+
+    snapshots = df.loc[~is_delta].copy()
+    if snapshots.empty:
+        # only possible to return delta files if no snapshots exist
+        return (
+            df.loc[is_delta].copy().reset_index(drop=True)
+            if include_delta_files
+            else df.iloc[0:0].copy()
+        )
+
+    latest_snapshot_ts = snapshots.groupby(group_col)["file-timestamp"].max().rename(
+        "_latest_snapshot_ts"
+    )
+    snapshots = snapshots.merge(
+        latest_snapshot_ts.reset_index(), on=group_col, how="inner"
+    )
+    snapshots = snapshots[snapshots["file-timestamp"] == snapshots["_latest_snapshot_ts"]].drop(
+        columns="_latest_snapshot_ts"
     )
 
-    return latest_files
+    if not include_delta_files:
+        return snapshots.sort_values([group_col, "file-timestamp", "filename"]).reset_index(
+            drop=True
+        )
+
+    deltas = df.loc[is_delta].copy()
+    deltas = deltas.merge(latest_snapshot_ts.reset_index(), on=group_col, how="left")
+
+    deltas = deltas[
+        deltas["_latest_snapshot_ts"].isna()
+        | (deltas["file-timestamp"] > deltas["_latest_snapshot_ts"])
+    ].drop(columns="_latest_snapshot_ts")
+
+    out = pd.concat([snapshots, deltas], ignore_index=True)
+    out = out.sort_values([group_col, "file-timestamp", "filename"]).reset_index(drop=True)
+    return out
 
 
 def lazy_load_from_parquets(

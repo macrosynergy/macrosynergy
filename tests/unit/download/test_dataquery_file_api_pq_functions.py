@@ -168,10 +168,12 @@ class TestLazyLoad(unittest.TestCase):
     def test_filter_to_latest_files(self):
         df = _downloaded_files_df(self.tmpdir, file_format="parquet")
         latest = _filter_to_latest_files(df)
-        self.assertEqual(len(latest), 1)
+        self.assertEqual(len(latest), 2)
         filenames = latest["filename"].to_list()
+        self.assertIn("DATASET1_20240102.parquet", filenames)
         self.assertIn("DATASET2_20240103.parquet", filenames)
-        self.assertNotIn("DATASET1_20240102_DELTA.parquet", filenames)
+        # Delta is older than the latest snapshot for DATASET1 and should not be selected.
+        self.assertNotIn("DATASET1_DELTA_20240102.parquet", filenames)
 
     def test_identify_schema_type(self):
         lf_ticker = pl.LazyFrame({"ticker": ["A_B"], "value": [1]})
