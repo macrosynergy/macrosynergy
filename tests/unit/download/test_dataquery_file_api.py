@@ -690,7 +690,7 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
 
     @patch.object(DataQueryFileAPIClient, "download_multiple_files")
     @patch.object(DataQueryFileAPIClient, "filter_available_files_by_datetime")
-    def test_download_full_snapshot_with_file_datetime(
+    def test_download_full_snapshot_with_since_datetime(
         self, mock_filter_files, mock_download_multi
     ):
         client = DataQueryFileAPIClient(

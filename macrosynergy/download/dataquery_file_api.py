@@ -1063,7 +1063,6 @@ class DataQueryFileAPIClient:
         out_dir: Optional[str] = None,
         since_datetime: Optional[str] = None,
         to_datetime: Optional[str] = None,
-        file_datetime: Optional[str] = None,
         overwrite: bool = False,
         chunk_size: Optional[int] = None,
         timeout: Optional[float] = DQ_FILE_API_TIMEOUT,
@@ -1086,11 +1085,9 @@ class DataQueryFileAPIClient:
             The directory where files will be saved.
         since_datetime : Optional[str]
             Download files modified since this timestamp (inclusive).
-            Defaults to the start of the current day (UTC) if `file_datetime` is not set.
+            Defaults to the start of the current day (UTC).
         to_datetime : Optional[str]
             Download files modified up to this timestamp (inclusive).
-        file_datetime : Optional[str]
-            A specific file date to check for. Overrides `since_datetime`.
         overwrite : bool
             If True, overwrites files if they already exist. Default is False.
         chunk_size : Optional[int]
@@ -1113,18 +1110,14 @@ class DataQueryFileAPIClient:
         Path(out_dir).mkdir(parents=True, exist_ok=True)
         start_time = time.time()
 
-        if file_datetime is None and since_datetime is None:
+        if since_datetime is None:
             since_datetime = pd.Timestamp.utcnow().strftime("%Y%m%d")
 
-        effective_ts = file_datetime or since_datetime
         logger.info(
-            f"Starting snapshot download to '{out_dir}' for files since {effective_ts}."
+            f"Starting snapshot download to '{out_dir}' for files since {since_datetime}."
         )
 
-        validate_dq_timestamp(
-            effective_ts,
-            var_name="file_datetime" if file_datetime else "since_datetime",
-        )
+        validate_dq_timestamp(since_datetime, var_name="since_datetime")
 
         files_df = self.filter_available_files_by_datetime(
             since_datetime=since_datetime,
@@ -1253,7 +1246,7 @@ class DataQueryFileAPIClient:
             If True, overwrites files if they already exist. Default is False.
         since_datetime : Optional[str]
             Download files modified since this timestamp (inclusive).
-            Defaults to the start of the current day (UTC) if `file_datetime` is not set.
+            Defaults to the start of the current day (UTC).
         to_datetime : Optional[str]
             Download files modified up to this timestamp (inclusive).
 
