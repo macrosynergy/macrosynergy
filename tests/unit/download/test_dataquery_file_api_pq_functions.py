@@ -294,6 +294,32 @@ class TestLazyLoad(unittest.TestCase):
         self.assertEqual(len(df_ds), 2)
         self.assertTrue(set(df_ds["cid"].to_list()) == {"USD", "GBP"})
 
+    def test_lazy_load_raises_when_no_indicators(self):
+        with self.assertRaisesRegex(ValueError, "No tickers specified"):
+            lazy_load_from_parquets(self.tmpdir, include_delta_files=False)
+
+    def test_lazy_load_raises_when_tickers_not_found(self):
+        # Add a local JPMaQS catalog file so validation uses the catalog (not per-parquet scans).
+        _make_qdf_parquet(
+            self.tmpdir / "JPMAQS_METADATA_CATALOG_20240101.parquet",
+            {
+                "Ticker": [
+                    "USD_INFL",
+                    "EUR_INFL",
+                    "JPY_INFL",
+                    "USD_GROWTH",
+                    "GBP_GROWTH",
+                ],
+                "Theme": ["DATASET1"] * 5,
+            },
+        )
+        with self.assertRaisesRegex(ValueError, "JPMaQS catalog"):
+            lazy_load_from_parquets(
+                self.tmpdir,
+                tickers=["ZZZ_DOES_NOT_EXIST"],
+                include_delta_files=False,
+            )
+
     @patch(
         "macrosynergy.download.dataquery_file_api.pd_to_datetime_compat",
         pd_to_datetime_compat,
@@ -332,7 +358,7 @@ class TestLazyLoad(unittest.TestCase):
         self.assertEqual(df_wide.iloc[0]["ticker"], "USD_GROWTH")
 
     def test_lazy_load_datasets_type_validation(self):
-        with self.assertRaisesRegex(ValueError, r"`datasets` must be a list of strings"):
+        with self.assertRaisesRegex(ValueError, "`datasets` must be a list of strings"):
             lazy_load_from_parquets(
                 self.tmpdir,
                 tickers=["USD_INFL"],

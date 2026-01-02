@@ -1021,6 +1021,34 @@ class DataQueryFileAPIClient:
         datasets_to_keep = sorted(set(catalog_df["Dataset"]))
         return datasets_to_keep
 
+    def filter_to_valid_tickers(
+        self,
+        tickers: List[str],
+        case_sensitive: bool = False,
+    ) -> List[str]:
+        """
+        Filters a list of tickers to only those that are valid according to the catalog.
+
+        Parameters
+        ----------
+        tickers : List[str]
+            A list of tickers to validate.
+        case_sensitive : bool
+            If True, performs case-sensitive matching. Default is False.
+        """
+        catalog_df = pd.read_parquet(self.download_catalog_file())
+        catalog_tickers: List[str] = catalog_df["Ticker"].unique().tolist()
+        if not isinstance(tickers, list) or not all(
+            isinstance(x, str) for x in tickers
+        ):
+            raise ValueError("`tickers` must be a list of strings.")
+        if not case_sensitive:
+            catalog_tickers = map(str.lower, catalog_tickers)
+            tickers = map(str.lower, tickers)
+
+        valid_tickers = sorted(set(catalog_tickers) & set(tickers))
+        return valid_tickers
+
     def list_downloaded_files(
         self,
         out_dir: Optional[str] = None,
@@ -1739,6 +1767,16 @@ def _check_lazy_load_inputs(
             "Both `cids` and `xcats` must be provided together, or neither."
         )
 
+    tickers_list = [
+        t.strip() for t in (tickers or []) if isinstance(t, str) and t.strip()
+    ]
+    if not (bool(tickers_list) or (bool(cids) and bool(xcats))):
+        raise ValueError(
+            "No tickers specified. Provide `tickers=[...]` (or `cids` and `xcats`). "
+            "If you want to load all tickers, pass `tickers` as a list of all tickers "
+            "you want to load."
+        )
+
     for param, name in [
         (start_date, "start_date"),
         (end_date, "end_date"),
@@ -1987,8 +2025,18 @@ def lazy_load_from_parquets(
 
     include_file_column = "source_file" if include_file_column else None
 
+    paths = sorted(available_files_df["path"])
+    tickers = [t.strip() for t in tickers if isinstance(t, str) and t.strip()]
+
+    if not tickers:
+        raise ValueError(
+            "No tickers specified. Provide `tickers=[...]` (or `cids` and `xcats`). "
+            "If you want to load all tickers, pass `tickers` as a list of all tickers "
+            "you want to load."
+        )
+
     lf: pl.LazyFrame = _lazy_load_filtered_parquets(
-        paths=sorted(available_files_df["path"]),
+        paths=paths,
         tickers=tickers,
         start_date=start_date,
         end_date=end_date,
