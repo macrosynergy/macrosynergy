@@ -184,7 +184,7 @@ DQ_FILE_API_BASE_URL: str = (
 )
 DQ_FILE_API_SCOPE: str = "JPMC:URI:RS-06785-DataQueryExternalApi-PROD"
 DQ_FILE_API_TIMEOUT: float = 300.0
-DQ_FILE_API_HEADERS_TIMEOUT: float = DQ_FILE_API_TIMEOUT / 10.0
+DQ_FILE_API_HEADERS_TIMEOUT: float = 60.0
 DQ_FILE_API_DELAY_PARAM: float = 0.04  # =1/25 ; 25 transactions per second
 DQ_FILE_API_DELAY_MARGIN: float = 1.1  # 10% safety margin
 DQ_FILE_API_SEGMENT_SIZE_MB: float = 8.0  # 8 MB
@@ -1584,6 +1584,7 @@ class SegmentedFileDownloader:
             params=self.params,
             headers=self.headers,
             proxies=self.proxies,
+            timeout=self.headers_timeout,
             verify=self.verify_ssl,
         )
         response.raise_for_status()
@@ -1840,7 +1841,9 @@ def _filter_to_latest_files(
         group_col = "dataset"
         if group_col not in df.columns:
             raise ValueError("Expected column 'dataset' in files_df")
-        df[group_col] = df[group_col].astype(str).str.replace(r"_DELTA$", "", regex=True)
+        df[group_col] = (
+            df[group_col].astype(str).str.replace(r"_DELTA$", "", regex=True)
+        )
 
     if "file-timestamp" not in df.columns:
         raise ValueError("Expected column 'file-timestamp' in files_df")
@@ -1850,11 +1853,15 @@ def _filter_to_latest_files(
             return False
         return ("T" not in x) and (":" not in x)
 
-    since_ts = pd_to_datetime_compat(since_datetime) if since_datetime is not None else None
+    since_ts = (
+        pd_to_datetime_compat(since_datetime) if since_datetime is not None else None
+    )
     if to_datetime is not None:
         to_ts = pd_to_datetime_compat(to_datetime)
         if _is_date_only_string(to_datetime):
-            to_ts = to_ts.normalize() + pd.DateOffset(days=1) - pd.Timedelta(nanoseconds=1)
+            to_ts = (
+                to_ts.normalize() + pd.DateOffset(days=1) - pd.Timedelta(nanoseconds=1)
+            )
     else:
         to_ts = df["file-timestamp"].max()
 
@@ -1880,20 +1887,22 @@ def _filter_to_latest_files(
             else df.iloc[0:0].copy()
         )
 
-    latest_snapshot_ts = snapshots.groupby(group_col)["file-timestamp"].max().rename(
-        "_latest_snapshot_ts"
+    latest_snapshot_ts = (
+        snapshots.groupby(group_col)["file-timestamp"]
+        .max()
+        .rename("_latest_snapshot_ts")
     )
     snapshots = snapshots.merge(
         latest_snapshot_ts.reset_index(), on=group_col, how="inner"
     )
-    snapshots = snapshots[snapshots["file-timestamp"] == snapshots["_latest_snapshot_ts"]].drop(
-        columns="_latest_snapshot_ts"
-    )
+    snapshots = snapshots[
+        snapshots["file-timestamp"] == snapshots["_latest_snapshot_ts"]
+    ].drop(columns="_latest_snapshot_ts")
 
     if not include_delta_files:
-        return snapshots.sort_values([group_col, "file-timestamp", "filename"]).reset_index(
-            drop=True
-        )
+        return snapshots.sort_values(
+            [group_col, "file-timestamp", "filename"]
+        ).reset_index(drop=True)
 
     deltas = df.loc[is_delta].copy()
     deltas = deltas.merge(latest_snapshot_ts.reset_index(), on=group_col, how="left")
@@ -1904,7 +1913,9 @@ def _filter_to_latest_files(
     ].drop(columns="_latest_snapshot_ts")
 
     out = pd.concat([snapshots, deltas], ignore_index=True)
-    out = out.sort_values([group_col, "file-timestamp", "filename"]).reset_index(drop=True)
+    out = out.sort_values([group_col, "file-timestamp", "filename"]).reset_index(
+        drop=True
+    )
     return out
 
 
@@ -2199,7 +2210,7 @@ if __name__ == "__main__":
     print("Current time UTC:", pd.Timestamp.utcnow().isoformat())
 
     start = time.time()
-    since_datetime = pd.Timestamp.now() - pd.offsets.BDay(5)
+    since_datetime = pd.Timestamp.now() - pd.offsets.BDay(7)
     print(
         f"Downloading full-snapshots, delta-files, and metadata files published since {since_datetime}"
     )

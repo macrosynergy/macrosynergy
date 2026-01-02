@@ -10,6 +10,7 @@ from macrosynergy.download.dataquery_file_api import (
     validate_dq_timestamp,
     get_client_id_secret,
     DataQueryFileAPIClient,
+    SegmentedFileDownloader,
     DownloadError,
     InvalidResponseError,
     DQ_FILE_API_SCOPE,
@@ -361,6 +362,26 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
         )
         mock_logger.warning.assert_called_once()
         self.assertIn("Swapping values", mock_logger.warning.call_args[0][0])
+
+    @patch("macrosynergy.download.dataquery_file_api._wait_for_api_call", MagicMock())
+    @patch("macrosynergy.download.dataquery_file_api.requests.head")
+    def test_segmented_downloader_head_uses_headers_timeout(self, mock_head):
+        response = MagicMock()
+        response.headers = {"Content-Length": "123"}
+        mock_head.return_value = response
+
+        downloader = SegmentedFileDownloader(
+            filename=os.path.join(self.test_dir, "out.parquet"),
+            url="https://example.invalid/file",
+            headers={"Authorization": "Bearer t"},
+            params={"file-group-id": "FG", "file-datetime": "20240101"},
+            headers_timeout=7,
+        )
+
+        size = downloader._get_file_size()
+        self.assertEqual(size, 123)
+        mock_head.assert_called_once()
+        self.assertEqual(mock_head.call_args.kwargs.get("timeout"), 7)
 
     @patch.object(DataQueryFileAPIClient, "_get")
     def test_check_file_availability(self, mock_get):
