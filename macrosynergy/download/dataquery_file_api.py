@@ -1292,7 +1292,7 @@ class DataQueryFileAPIClient:
         )
         if datasets_to_download and include_delta_files:
             datasets_to_download += [f"{ds}_DELTA" for ds in datasets_to_download]
-        since_datetime = since_datetime or pd.Timestamp.today().strftime("%Y%m%d")
+        since_datetime = since_datetime or pd.Timestamp.utcnow().strftime("%Y%m%d")
         if not skip_download:
             self.download_full_snapshot(
                 out_dir=out_dir,

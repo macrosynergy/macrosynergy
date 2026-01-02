@@ -817,6 +817,30 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
                 since_datetime="20230101", file_group_ids="not-a-list"
             )
 
+    @patch("pandas.Timestamp.utcnow")
+    @patch.object(DataQueryFileAPIClient, "download_full_snapshot")
+    @patch("macrosynergy.download.dataquery_file_api.lazy_load_from_parquets")
+    @patch.object(DataQueryFileAPIClient, "get_datasets_for_indicators")
+    def test_download_defaults_since_datetime_uses_utc(
+        self,
+        mock_get_datasets_for_indicators,
+        mock_lazy_load,
+        mock_download_full_snapshot,
+        mock_utcnow,
+    ):
+        client = DataQueryFileAPIClient(
+            client_id="id", client_secret="secret", out_dir=self.test_dir
+        )
+        mock_get_datasets_for_indicators.return_value = []
+        mock_lazy_load.return_value = pd.DataFrame()
+        mock_utcnow.return_value = pd.Timestamp("2023-01-05T01:02:03Z")
+
+        client.download(tickers=["USD_GROWTH"], since_datetime=None, show_progress=False)
+
+        mock_download_full_snapshot.assert_called_once()
+        called_since = mock_download_full_snapshot.call_args.kwargs["since_datetime"]
+        self.assertEqual(called_since, "20230105")
+
 
 if __name__ == "__main__":
     unittest.main()
