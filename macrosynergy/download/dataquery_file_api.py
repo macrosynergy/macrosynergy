@@ -1961,6 +1961,7 @@ def lazy_load_from_parquets(
         dataframe_format=dataframe_format,
         dataframe_type=dataframe_type,
         categorical_dataframe=categorical_dataframe,
+        datasets=datasets,
     )
 
     available_files_df: pd.DataFrame = _downloaded_files_df(

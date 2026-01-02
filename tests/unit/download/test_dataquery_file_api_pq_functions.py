@@ -331,6 +331,15 @@ class TestLazyLoad(unittest.TestCase):
         self.assertNotIn("cid", df_wide.columns)
         self.assertEqual(df_wide.iloc[0]["ticker"], "USD_GROWTH")
 
+    def test_lazy_load_datasets_type_validation(self):
+        with self.assertRaisesRegex(ValueError, r"`datasets` must be a list of strings"):
+            lazy_load_from_parquets(
+                self.tmpdir,
+                tickers=["USD_INFL"],
+                datasets="DATASET2",  # invalid type: should be list[str]
+                include_delta_files=False,
+            )
+
     def test_check_lazy_load_inputs_raises(self):
         with self.assertRaises(FileNotFoundError):
             _check_lazy_load_inputs(
