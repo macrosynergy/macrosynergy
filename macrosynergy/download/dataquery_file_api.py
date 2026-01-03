@@ -587,10 +587,11 @@ class DataQueryFileAPIClient:
         Parameters
         ----------
         since_datetime : Optional[str]
-            The start of the time window (inclusive). Format "YYYYMMDD" or "YYYYMMDDTHHMMSS".
+            The start of the time window (inclusive). Format "YYYYMMDD", "YYYYMMDDTHHMMSS",
+            or an ISO 8601 datetime string (for example "YYYY-MM-DDTHH:MM:SSZ").
             Defaults to the start of the current day (UTC).
         to_datetime : Optional[str]
-            The end of the time window (inclusive). Format "YYYYMMDD" or "YYYYMMDDTHHMMSS".
+            The end of the time window (inclusive). Uses the same formats as `since_datetime`.
             Defaults to the current timestamp (UTC).
         include_full_snapshots : bool
             If True, include full snapshot files in the search.
@@ -1238,14 +1239,14 @@ class DataQueryFileAPIClient:
             are also defined in `macrosynergy.constants.JPMAQS_METRICS`. The default
             is None, in which case all metrics are returned.
         start_date : Optional[str]
-            The start date for the returned data in the ISO format "YYYY-MM-DD".
+            The start date for the returned data in "YYYY-MM-DD" (or "YYYYMMDD") format.
             If None, data is returned from the earliest available date.
         end_date : Optional[str]
-            The end date for the returned data in the ISO format "YYYY-MM-DD".
+            The end date for the returned data in "YYYY-MM-DD" (or "YYYYMMDD") format.
             If None, data is returned up to the latest available date.
         include_file_column : bool
             If True, includes a column indicating the source file for each data point.
-            Default is True.
+            Default is False.
         dataframe_format : str
             The format of the returned DataFrame. Options are "qdf" for QuantamentalDataFrame
             or "tickers" for a standard DataFrame with tickers as columns. Default is "qdf".
