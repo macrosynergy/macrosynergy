@@ -25,6 +25,7 @@ from macrosynergy.pnl.transaction_costs import (
     _plot_costs_func,
     SparseCosts,
     TransactionCosts,
+    TransactionCostsDictAdapter,
 )
 
 from macrosynergy.management.utils import qdf_to_ticker_df
@@ -454,6 +455,54 @@ class TestTransactionCosts(unittest.TestCase):
             _plot_costs_func(tco=tc, **good_args)
         matplotlib.pyplot.close("all")
         matplotlib.use(curr_backend)
+
+
+class TestTransactionCostsDictAdapter(unittest.TestCase):
+    def test_adapter_costs(self):
+        cost_dict = {
+            "USD_FX": {
+                "median_cost": 0.2,
+                "median_size": 35,
+                "pct90_cost": 0.4,
+                "pct90_size": 90,
+            },
+            "EUR_FX": {
+                "median_cost": 0.1,
+                "median_size": 30,
+                "pct90_cost": 0.2,
+                "pct90_size": 80,
+            },
+        }
+        adapter = TransactionCostsDictAdapter(
+            cost_dict=cost_dict,
+            fids=["USD_FX", "EUR_FX"],
+        )
+        trade_size = 50
+        expected = extrapolate_cost(
+            trade_size=trade_size,
+            median_size=cost_dict["USD_FX"]["median_size"],
+            median_cost=cost_dict["USD_FX"]["median_cost"],
+            pct90_size=cost_dict["USD_FX"]["pct90_size"],
+            pct90_cost=cost_dict["USD_FX"]["pct90_cost"],
+        )
+        self.assertAlmostEqual(
+            adapter.bidoffer("USD_FX", trade_size, "2020-01-01"), expected
+        )
+        self.assertAlmostEqual(
+            adapter.rollcost("USD_FX", trade_size, "2020-01-01"), expected
+        )
+
+    def test_adapter_missing_fid(self):
+        cost_dict = {
+            "USD_FX": {
+                "median_cost": 0.2,
+                "median_size": 35,
+                "pct90_cost": 0.4,
+                "pct90_size": 90,
+            }
+        }
+        with self.assertRaises(ValueError):
+            TransactionCostsDictAdapter(cost_dict=cost_dict, fids=["USD_FX", "EUR_FX"])
 
 
 if __name__ == "__main__":
