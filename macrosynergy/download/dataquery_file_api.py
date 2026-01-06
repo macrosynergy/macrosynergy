@@ -976,6 +976,7 @@ class DataQueryFileAPIClient:
         cids: Optional[List[str]] = None,
         xcats: Optional[List[str]] = None,
         case_sensitive: bool = False,
+        catalog_file: Optional[str] = None,
         out_dir: Optional[str] = None,
     ) -> List[str]:
         for param, name in zip(
@@ -1006,7 +1007,7 @@ class DataQueryFileAPIClient:
         if not tickers or not any(t.strip() for t in tickers):
             raise ValueError("No valid tickers to search for.")
 
-        catalog_file = self.download_catalog_file(out_dir=out_dir)
+        catalog_file = catalog_file or self.download_catalog_file(out_dir=out_dir)
         catalog_df = pd.read_parquet(catalog_file)
         catalog_df.loc[:, "Dataset"] = catalog_df["Theme"].apply(
             lambda x: "JPMAQS_" + str(x).upper().replace(" ", "_")
@@ -1026,6 +1027,7 @@ class DataQueryFileAPIClient:
         self,
         tickers: List[str],
         case_sensitive: bool = False,
+        catalog_file: Optional[str] = None,
     ) -> List[str]:
         """
         Filters a list of tickers to only those that are valid according to the catalog.
@@ -1037,17 +1039,24 @@ class DataQueryFileAPIClient:
         case_sensitive : bool
             If True, performs case-sensitive matching. Default is False.
         """
-        catalog_df = pd.read_parquet(self.download_catalog_file())
-        catalog_tickers: List[str] = catalog_df["Ticker"].unique().tolist()
+        catalog_file = catalog_file or self.download_catalog_file()
+        catalog_df = pd.read_parquet(catalog_file)
+        catalog_tickers: List[str] = (
+            catalog_df["Ticker"].dropna().astype(str).unique().tolist()
+        )
         if not isinstance(tickers, list) or not all(
             isinstance(x, str) for x in tickers
         ):
             raise ValueError("`tickers` must be a list of strings.")
         if not case_sensitive:
-            catalog_tickers = map(str.lower, catalog_tickers)
-            tickers = map(str.lower, tickers)
+            catalog_set = {t.lower() for t in catalog_tickers}
+            valid_tickers = sorted(
+                {t for t in tickers if t.lower() in catalog_set and t.strip()}
+            )
+            return valid_tickers
 
-        valid_tickers = sorted(set(catalog_tickers) & set(tickers))
+        catalog_set = set(catalog_tickers)
+        valid_tickers = sorted({t for t in tickers if t in catalog_set and t.strip()})
         return valid_tickers
 
     def list_downloaded_files(
@@ -1118,6 +1127,8 @@ class DataQueryFileAPIClient:
             Defaults to the start of the current day (UTC).
         to_datetime : Optional[str]
             Download files modified up to this timestamp (inclusive).
+            Note: `since_datetime` and `to_datetime` only affect which files are downloaded.
+            Loading uses all locally available cached snapshot/delta files.
         overwrite : bool
             If True, overwrites files if they already exist. Default is False.
         chunk_size : Optional[int]
@@ -1288,16 +1299,32 @@ class DataQueryFileAPIClient:
 
         out_dir = self._get_save_dir(out_dir)
 
+        catalog_file = self.download_catalog_file(out_dir=out_dir)
+
+        if tickers:
+            valid_tickers = self.filter_to_valid_tickers(
+                tickers=tickers, catalog_file=catalog_file, case_sensitive=False
+            )
+            valid_norm = {t.lower() for t in valid_tickers}
+            missing = sorted({t for t in tickers if t.lower() not in valid_norm})
+            if missing:
+                raise ValueError(
+                    f"Ticker(s) not present in JPMaQS catalog: {', '.join(missing)}."
+                )
+            tickers = valid_tickers
+
         datasets_to_download = self.get_datasets_for_indicators(
-            tickers=tickers, cids=cids, xcats=xcats
+            tickers=tickers, cids=cids, xcats=xcats, catalog_file=catalog_file
         )
         if datasets_to_download and include_delta_files:
             datasets_to_download += [f"{ds}_DELTA" for ds in datasets_to_download]
-        since_datetime = since_datetime or pd.Timestamp.utcnow().strftime("%Y%m%d")
         if not skip_download:
+            download_since_datetime = since_datetime or pd.Timestamp.utcnow().strftime(
+                "%Y%m%d"
+            )
             self.download_full_snapshot(
                 out_dir=out_dir,
-                since_datetime=since_datetime,
+                since_datetime=download_since_datetime,
                 to_datetime=to_datetime,
                 file_group_ids=datasets_to_download,
                 overwrite=overwrite,
@@ -1317,13 +1344,12 @@ class DataQueryFileAPIClient:
             end_date=end_date,
             include_delta_files=include_delta_files,
             delta_treatment=delta_treatment,
-            since_datetime=since_datetime,
-            to_datetime=to_datetime,
             dataframe_format=dataframe_format,
             dataframe_type=dataframe_type,
             categorical_dataframe=categorical_dataframe,
             datasets=datasets_to_download,
             include_file_column=include_file_column,
+            catalog_file=catalog_file,
         )
 
 
@@ -1978,6 +2004,7 @@ def lazy_load_from_parquets(
     since_datetime: Optional[Union[str, pd.Timestamp]] = None,
     to_datetime: Optional[Union[str, pd.Timestamp]] = None,
     include_file_column: bool = True,
+    catalog_file: Optional[str] = None,
 ) -> pd.DataFrame:
     files_dir = Path(files_dir)
     if (not metrics) or (metrics == "all") or ("all" in metrics):
@@ -2006,7 +2033,7 @@ def lazy_load_from_parquets(
     available_files_df: pd.DataFrame = _downloaded_files_df(
         files_dir=files_dir,
         file_format=file_format,
-        include_metadata_files=False,
+        include_metadata_files=False,  # no metadata files - cannot scan with QDF like schema
     )
     available_files_df: pd.DataFrame = _filter_to_latest_files(
         files_df=available_files_df,
@@ -2035,6 +2062,32 @@ def lazy_load_from_parquets(
             "If you want to load all tickers, pass `tickers` as a list of all tickers "
             "you want to load."
         )
+
+    if catalog_file:
+        catalog_path = Path(catalog_file)
+        if not catalog_path.is_file():
+            raise FileNotFoundError(f"No such file: {catalog_path}")
+
+        catalog_lf = pl.scan_parquet(str(catalog_path))
+        schema_cols = catalog_lf.collect_schema().names()
+        ticker_col = "Ticker" if "Ticker" in schema_cols else "ticker"
+        if ticker_col in schema_cols:
+            catalog_tickers = (
+                catalog_lf.select(pl.col(ticker_col))
+                .collect()
+                .get_column(ticker_col)
+                .drop_nulls()
+                .cast(pl.Utf8)
+                .unique()
+                .to_list()
+            )
+            if catalog_tickers:
+                catalog_set = {str(t).lower() for t in catalog_tickers}
+                missing = sorted({t for t in tickers if t.lower() not in catalog_set})
+                if missing:
+                    raise ValueError(
+                        f"Ticker(s) not present in JPMaQS catalog: {', '.join(missing)}."
+                    )
 
     lf: pl.LazyFrame = _lazy_load_filtered_parquets(
         paths=paths,
