@@ -1,7 +1,8 @@
 import numpy as np
 import pandas as pd 
 
-from sklearn.base import BaseEstimator, RegressorMixin
+from sklearn.base import BaseEstimator, RegressorMixin, ClassifierMixin
+from sklearn.pipeline import Pipeline
 
 class TimeWeightedWrapper(BaseEstimator, RegressorMixin):
     """
@@ -71,21 +72,23 @@ class TimeWeightedWrapper(BaseEstimator, RegressorMixin):
     
     def _check_init_params(self, model, half_life):
         if not isinstance(model, BaseEstimator):
-            raise ValueError("The 'model' parameter must be a scikit-learn compatible estimator.")
+            raise TypeError("The 'model' parameter must be a scikit-learn compatible estimator.")
+        if not isinstance(model, (RegressorMixin, ClassifierMixin, Pipeline)):
+            raise TypeError("The 'model' parameter must be a regressor, classifier or sklearn pipeline.")
         if half_life <= 0:
             raise ValueError("The 'half_life' parameter must be a positive number.")
         
     def _check_fit_params(self, X, y):
         if not isinstance(X, (np.ndarray, pd.DataFrame)):
-            raise ValueError("X must be a numpy array or pandas DataFrame.")
+            raise TypeError("X must be a numpy array or pandas DataFrame.")
         if not isinstance(y, (np.ndarray, pd.Series, pd.DataFrame)):
-            raise ValueError("y must be a numpy array, pandas Series, or pandas DataFrame.")
+            raise TypeError("y must be a numpy array, pandas Series, or pandas DataFrame.")
         if X.shape[0] != y.shape[0]:
             raise ValueError("The number of samples in X and y must be the same.")
         
     def _check_predict_params(self, X):
         if not isinstance(X, (np.ndarray, pd.DataFrame)):
-            raise ValueError("X must be a numpy array or pandas DataFrame.")
+            raise TypeError("X must be a numpy array or pandas DataFrame.")
         
 if __name__ == "__main__":
     import macrosynergy.management as msm
