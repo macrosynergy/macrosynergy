@@ -711,13 +711,48 @@ if __name__ == "__main__":
 
     dfx = pd.read_pickle("data/dfxn.pkl")
 
+    spos = "STRAT_POS"
+    rstring = "XR_NSA"
     df_all = proxy_pnl_calc(
         df=dfx,
-        spos="STRAT_POS",
-        rstring="XR_NSA",
+        spos=spos,
+        rstring=rstring,
         start="2001-01-01",
         end="2020-01-01",
         transaction_costs_object=tx,
+        portfolio_name="GLB",
+        pnl_name="PNL",
+        tc_name="TCOST",
+        return_pnl_excl_costs=True,
+        return_costs=True,
+        # concat_dfs=True,
+    )
+
+    # Example: dict-based transaction costs
+    pos_tickers = [
+        t for t in QuantamentalDataFrame(dfx).list_tickers() if t.endswith(f"_{spos}")
+    ]
+    traded_fids = sorted(set(_replace_strs(pos_tickers, f"_{spos}")))
+    cost_date = tx.change_index[0]
+    cost_dict = {}
+    for fid in traded_fids:
+        row = tx.get_costs(fid=fid, real_date=cost_date)
+        if row is None:
+            raise ValueError(f"Missing transaction costs for {fid}")
+        cost_dict[fid] = {
+            "median_cost": row[f"{fid}BIDOFFER_MEDIAN"],
+            "median_size": row[f"{fid}SIZE_MEDIAN"],
+            "pct90_cost": row[f"{fid}BIDOFFER_90PCTL"],
+            "pct90_size": row[f"{fid}SIZE_90PCTL"],
+        }
+
+    df_all_dict = proxy_pnl_calc(
+        df=dfx,
+        spos=spos,
+        rstring=rstring,
+        start="2001-01-01",
+        end="2020-01-01",
+        transaction_costs_object=cost_dict,
         portfolio_name="GLB",
         pnl_name="PNL",
         tc_name="TCOST",

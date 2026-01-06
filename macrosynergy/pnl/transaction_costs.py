@@ -570,4 +570,20 @@ if __name__ == "__main__":
     for k, v in test_dict.items():
         assert np.isclose(found_costs[k], v)
 
+    # Example: dict-based transaction costs adapter
+    cost_dict = {
+        "GBP_FX": {
+            "median_cost": found_costs["GBP_FXBIDOFFER_MEDIAN"],
+            "median_size": found_costs["GBP_FXSIZE_MEDIAN"],
+            "pct90_cost": found_costs["GBP_FXBIDOFFER_90PCTL"],
+            "pct90_size": found_costs["GBP_FXSIZE_90PCTL"],
+        }
+    }
+    dict_adapter = TransactionCostsDictAdapter(cost_dict=cost_dict, fids=["GBP_FX"])
+    trade_size = 50
+    assert np.isclose(
+        dict_adapter.bidoffer("GBP_FX", trade_size, "2011-01-01"),
+        txn_costs_obj.bidoffer("GBP_FX", trade_size, "2011-01-01"),
+    )
+
     txn_costs_obj.plot_costs(cost_type="ROLLCOST", fids=txn_costs_obj.fids[:16], ncol=4)
