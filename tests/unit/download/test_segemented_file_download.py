@@ -133,6 +133,7 @@ class TestSegmentedFileDownloaderNetworking(unittest.TestCase):
             params=self.downloader.params,
             headers=self.downloader.headers,
             proxies=self.downloader.proxies,
+            timeout=self.downloader.headers_timeout,
             verify=self.downloader.verify_ssl,
         )
         mock_response.raise_for_status.assert_called_once()
@@ -214,7 +215,7 @@ class TestSegmentedFileDownloaderOrchestration(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         if Path("./test_output").exists():
-            shutil.rmtree("./test_output")
+            shutil.rmtree("./test_output", ignore_errors=True)
         logging.disable(logging.NOTSET)
 
     def setUp(self):
