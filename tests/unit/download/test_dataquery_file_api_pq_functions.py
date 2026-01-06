@@ -300,8 +300,9 @@ class TestLazyLoad(unittest.TestCase):
 
     def test_lazy_load_raises_when_tickers_not_found(self):
         # Add a local JPMaQS catalog file so validation uses the catalog (not per-parquet scans).
+        catalog_file = self.tmpdir / "JPMAQS_METADATA_CATALOG_20240101.parquet"
         _make_qdf_parquet(
-            self.tmpdir / "JPMAQS_METADATA_CATALOG_20240101.parquet",
+            catalog_file,
             {
                 "Ticker": [
                     "USD_INFL",
@@ -318,6 +319,7 @@ class TestLazyLoad(unittest.TestCase):
                 self.tmpdir,
                 tickers=["ZZZ_DOES_NOT_EXIST"],
                 include_delta_files=False,
+                catalog_file=str(catalog_file),
             )
 
     @patch(

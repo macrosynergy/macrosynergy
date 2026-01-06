@@ -819,12 +819,16 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
 
     @patch("pandas.Timestamp.utcnow")
     @patch.object(DataQueryFileAPIClient, "download_full_snapshot")
+    @patch.object(DataQueryFileAPIClient, "filter_to_valid_tickers")
+    @patch.object(DataQueryFileAPIClient, "download_catalog_file")
     @patch("macrosynergy.download.dataquery_file_api.lazy_load_from_parquets")
     @patch.object(DataQueryFileAPIClient, "get_datasets_for_indicators")
     def test_download_defaults_since_datetime_uses_utc(
         self,
         mock_get_datasets_for_indicators,
         mock_lazy_load,
+        mock_download_catalog_file,
+        mock_filter_to_valid_tickers,
         mock_download_full_snapshot,
         mock_utcnow,
     ):
@@ -833,6 +837,8 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
         )
         mock_get_datasets_for_indicators.return_value = []
         mock_lazy_load.return_value = pd.DataFrame()
+        mock_download_catalog_file.return_value = "JPMAQS_METADATA_CATALOG_20230101.parquet"
+        mock_filter_to_valid_tickers.return_value = ["USD_GROWTH"]
         mock_utcnow.return_value = pd.Timestamp("2023-01-05T01:02:03Z")
 
         client.download(tickers=["USD_GROWTH"], since_datetime=None, show_progress=False)
@@ -840,6 +846,8 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
         mock_download_full_snapshot.assert_called_once()
         called_since = mock_download_full_snapshot.call_args.kwargs["since_datetime"]
         self.assertEqual(called_since, "20230105")
+        self.assertNotIn("since_datetime", mock_lazy_load.call_args.kwargs)
+        self.assertNotIn("to_datetime", mock_lazy_load.call_args.kwargs)
 
 
 if __name__ == "__main__":
