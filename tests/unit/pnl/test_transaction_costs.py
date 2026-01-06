@@ -504,6 +504,45 @@ class TestTransactionCostsDictAdapter(unittest.TestCase):
         with self.assertRaises(ValueError):
             TransactionCostsDictAdapter(cost_dict=cost_dict, fids=["USD_FX", "EUR_FX"])
 
+    def test_adapter_matches_constant_series(self):
+        np.random.seed(1)
+        fids = ["USD_FX", "EUR_FX"]
+        dates = pd.bdate_range(start="2022-01-03", end="2022-01-14")
+        cost_template = {
+            "median_cost": 0.2,
+            "median_size": 35,
+            "pct90_cost": 0.4,
+            "pct90_size": 90,
+        }
+        df_const = pd.DataFrame(index=dates)
+        for fid in fids:
+            df_const[f"{fid}BIDOFFER_MEDIAN"] = cost_template["median_cost"]
+            df_const[f"{fid}BIDOFFER_90PCTL"] = cost_template["pct90_cost"]
+            df_const[f"{fid}ROLLCOST_MEDIAN"] = cost_template["median_cost"]
+            df_const[f"{fid}ROLLCOST_90PCTL"] = cost_template["pct90_cost"]
+            df_const[f"{fid}SIZE_MEDIAN"] = cost_template["median_size"]
+            df_const[f"{fid}SIZE_90PCTL"] = cost_template["pct90_size"]
+        df_const.index.name = "real_date"
+
+        qdf = QuantamentalDataFrame.from_wide(df_const)
+        tc_obj = TransactionCosts(df=qdf, fids=fids)
+        cost_dict = {fid: dict(cost_template) for fid in fids}
+        tc_dict = TransactionCostsDictAdapter(cost_dict=cost_dict, fids=fids)
+
+        trade_sizes = [5, 35, 50, 120]
+        test_dates = [dates[0], dates[len(dates) // 2], dates[-1]]
+        for fid in fids:
+            for trade_size in trade_sizes:
+                for dt in test_dates:
+                    self.assertAlmostEqual(
+                        tc_obj.bidoffer(fid, trade_size, dt),
+                        tc_dict.bidoffer(fid, trade_size, dt),
+                    )
+                    self.assertAlmostEqual(
+                        tc_obj.rollcost(fid, trade_size, dt),
+                        tc_dict.rollcost(fid, trade_size, dt),
+                    )
+
 
 if __name__ == "__main__":
     unittest.main()
