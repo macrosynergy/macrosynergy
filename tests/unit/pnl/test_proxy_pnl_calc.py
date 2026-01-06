@@ -605,7 +605,7 @@ class TestProxyPNLCalc(unittest.TestCase):
         _tickers = [f"{cid}_{xcat}" for cid in self.cids for xcat in self.xcats]
         self.spos = "SNAME_POS"
         self.rstring = "RETURNS"
-        self.tickers: List = [f"{tk}_{self.spos}" for tk in _tickers]
+        self.tickers: List[str] = [f"{tk}_{self.spos}" for tk in _tickers]
         self.tickers += [f"{tk}{self.rstring}" for tk in _tickers]
         self.fids = [
             f"{cid}_{xcat}" for cid in self.cids for xcat in self.xcats if xcat != "EQ"
