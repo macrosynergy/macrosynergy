@@ -979,31 +979,7 @@ class DataQueryFileAPIClient:
         catalog_file: Optional[str] = None,
         out_dir: Optional[str] = None,
     ) -> List[str]:
-        for param, name in zip(
-            [tickers, cids, xcats],
-            ["tickers", "cids", "xcats"],
-        ):
-            if param is not None:
-                if not isinstance(param, list) or not all(
-                    isinstance(x, str) for x in param
-                ):
-                    raise ValueError(f"`{name}` must be a list of strings.")
-
-        if not any(bool(x) for x in [tickers, cids, xcats]):
-            raise ValueError(
-                "At least one of `tickers`, `cids`, or `xcats` must be set."
-            )
-
-        if tickers is None:
-            tickers = []
-
-        if bool(cids) ^ bool(xcats):
-            raise ValueError("Either both `cids` and `xcats` must be set, or neither.")
-
-        if cids is None:
-            cids, xcats = [], []
-
-        tickers = sorted(set(tickers + [f"{c}_{x}" for c in cids for x in xcats]))
+        tickers = _construct_all_tickers_list(tickers=tickers, cids=cids, xcats=xcats)
         if not tickers or not any(t.strip() for t in tickers):
             raise ValueError("No valid tickers to search for.")
 
@@ -1301,17 +1277,24 @@ class DataQueryFileAPIClient:
 
         catalog_file = self.download_catalog_file(out_dir=out_dir)
 
-        if tickers:
+        rqstd_tickers = _construct_all_tickers_list(
+            tickers=tickers, cids=cids, xcats=xcats
+        )
+        if rqstd_tickers:
             valid_tickers = self.filter_to_valid_tickers(
-                tickers=tickers, catalog_file=catalog_file, case_sensitive=False
+                tickers=rqstd_tickers, catalog_file=catalog_file
             )
             valid_norm = {t.lower() for t in valid_tickers}
-            missing = sorted({t for t in tickers if t.lower() not in valid_norm})
-            if missing:
+            missing = sorted({t for t in rqstd_tickers if t.lower() not in valid_norm})
+            if not valid_tickers:
                 raise ValueError(
-                    f"Ticker(s) not present in JPMaQS catalog: {', '.join(missing)}."
+                    "No valid tickers found with the provided `tickers`, `cids`, and `xcats`."
                 )
-            tickers = valid_tickers
+            if missing:
+                lmissing = min(5, len(missing))
+                miss_str = "[" + ", ".join(missing[:lmissing]) + "...]"
+                miss_str = f"{len(missing)} tickers requested do not exist in the catalog, these are: {miss_str}"
+                logger.warning(miss_str)
 
         datasets_to_download = self.get_datasets_for_indicators(
             tickers=tickers, cids=cids, xcats=xcats, catalog_file=catalog_file
@@ -1355,6 +1338,38 @@ class DataQueryFileAPIClient:
             since_datetime=since_datetime,
             to_datetime=to_datetime,
         )
+
+
+def _construct_all_tickers_list(
+    tickers: Optional[List[str]] = None,
+    cids: Optional[List[str]] = None,
+    xcats: Optional[List[str]] = None,
+) -> List[str]:
+
+    for param, name in zip(
+        [tickers, cids, xcats],
+        ["tickers", "cids", "xcats"],
+    ):
+        if param is not None:
+            if not isinstance(param, list) or not all(
+                isinstance(x, str) for x in param
+            ):
+                raise ValueError(f"`{name}` must be a list of strings.")
+
+    if not any(bool(x) for x in [tickers, cids, xcats]):
+        raise ValueError("At least one of `tickers`, `cids`, or `xcats` must be set.")
+
+    if tickers is None:
+        tickers = []
+
+    if bool(cids) ^ bool(xcats):
+        raise ValueError("Either both `cids` and `xcats` must be set, or neither.")
+
+    if cids is None:
+        cids, xcats = [], []
+
+    tickers = sorted(set(tickers + [f"{c}_{x}" for c in cids for x in xcats]))
+    return tickers
 
 
 def _pd_to_datetime_compat(ts: str, utc: bool):
@@ -2069,7 +2084,11 @@ def lazy_load_from_parquets(
         include_metadata_files=False,  # no metadata files - cannot scan with QDF like schema
     )
     effective_to_datetime = to_datetime
-    if warn_if_no_full_snapshots and (since_datetime is not None) and (to_datetime is None):
+    if (
+        warn_if_no_full_snapshots
+        and (since_datetime is not None)
+        and (to_datetime is None)
+    ):
         effective_to_datetime = pd.Timestamp.utcnow().strftime("%Y%m%dT%H%M%S")
     available_files_df: pd.DataFrame = _filter_to_latest_files(
         files_df=available_files_df,
@@ -2084,9 +2103,7 @@ def lazy_load_from_parquets(
             available_files_df["dataset"].isin(datasets)
         ]
 
-    tickers = tickers or []
-    if cids:
-        tickers += [f"{c}_{x}" for c in cids for x in xcats]
+    tickers = _construct_all_tickers_list(tickers=tickers, cids=cids, xcats=xcats)
 
     include_file_column = "source_file" if include_file_column else None
 
