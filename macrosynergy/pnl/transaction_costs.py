@@ -573,10 +573,10 @@ if __name__ == "__main__":
     # Example: dict-based transaction costs adapter
     cost_dict = {
         "GBP_FX": {
-            "median_cost": found_costs["GBP_FXBIDOFFER_MEDIAN"],
-            "median_size": found_costs["GBP_FXSIZE_MEDIAN"],
-            "pct90_cost": found_costs["GBP_FXBIDOFFER_90PCTL"],
-            "pct90_size": found_costs["GBP_FXSIZE_90PCTL"],
+            "median_cost": 0.02247071536967229,
+            "median_size": 50.0,
+            "pct90_cost": 0.04494143073934458,
+            "pct90_size": 200.0,
         }
     }
     dict_adapter = TransactionCostsDictAdapter(cost_dict=cost_dict, fids=["GBP_FX"])
