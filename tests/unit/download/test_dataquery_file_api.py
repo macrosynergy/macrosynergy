@@ -883,9 +883,8 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
             "[BAD1, BAD2, BAD3, BAD4, BAD5...1 more]"
         )
         mock_get_datasets_for_indicators.assert_called_once()
-        self.assertCountEqual(
-            mock_get_datasets_for_indicators.call_args.kwargs["tickers"],
-            ["USD_GROWTH", "BAD1", "BAD2", "BAD3", "BAD4", "BAD5", "BAD6"],
+        self.assertEqual(
+            mock_get_datasets_for_indicators.call_args.kwargs["tickers"], ["USD_GROWTH"]
         )
 
     @patch.object(DataQueryFileAPIClient, "download_catalog_file")

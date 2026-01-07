@@ -1015,25 +1015,32 @@ class DataQueryFileAPIClient:
         case_sensitive : bool
             If True, performs case-sensitive matching. Default is False.
         """
-        catalog_file = catalog_file or self.download_catalog_file()
-        catalog_df = pd.read_parquet(catalog_file)
-        catalog_tickers: List[str] = (
-            catalog_df["Ticker"].dropna().astype(str).unique().tolist()
-        )
         if not isinstance(tickers, list) or not all(
             isinstance(x, str) for x in tickers
         ):
             raise ValueError("`tickers` must be a list of strings.")
-        if not case_sensitive:
-            catalog_set = {t.lower() for t in catalog_tickers}
-            valid_tickers = sorted(
-                {t for t in tickers if t.lower() in catalog_set and t.strip()}
-            )
-            return valid_tickers
 
-        catalog_set = set(catalog_tickers)
-        valid_tickers = sorted({t for t in tickers if t in catalog_set and t.strip()})
-        return valid_tickers
+        catalog_file = catalog_file or self.download_catalog_file()
+
+        catalog_tickers: List[str] = list(
+            set(pd.read_parquet(catalog_file)["Ticker"].dropna().astype(str))
+        )
+
+        if case_sensitive:
+            catalog_set = set(catalog_tickers)
+            valid = {t for t in catalog_tickers if t in catalog_set and t in tickers}
+            return sorted(valid)
+
+        # case-insensitive - build canonical ticker name lookup
+        canonical_map = {t.lower(): t for t in catalog_tickers}
+
+        valid = {
+            canonical_map[t.strip().lower()]
+            for t in tickers
+            if t.strip() and t.strip().lower() in canonical_map
+        }
+
+        return sorted(valid)
 
     def list_downloaded_files(
         self,
@@ -1300,6 +1307,8 @@ class DataQueryFileAPIClient:
                 miss_str = "[" + ", ".join(missing[:lmiss]) + "..." + nmore + "]"
                 miss_str = f"{len(missing)} tickers requested do not exist in the catalog, these are: {miss_str}"
                 logger.warning(miss_str)
+
+            rqstd_tickers = valid_tickers
 
         datasets_to_download = self.get_datasets_for_indicators(
             tickers=rqstd_tickers, catalog_file=catalog_file
