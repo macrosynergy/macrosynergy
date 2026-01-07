@@ -298,8 +298,7 @@ class TestLazyLoad(unittest.TestCase):
 
         df_qdf = lazy_load_from_parquets(
             self.tmpdir,
-            cids=["USD"],
-            xcats=["GROWTH"],
+            tickers=["USD_GROWTH"],
             since_datetime="20240101",
             include_delta_files=False,
         )
@@ -321,8 +320,7 @@ class TestLazyLoad(unittest.TestCase):
         df_ds = lazy_load_from_parquets(
             self.tmpdir,
             datasets=["DATASET2"],
-            cids=["USD", "GBP"],
-            xcats=["GROWTH"],
+            tickers=["USD_GROWTH", "GBP_GROWTH"],
         )
         self.assertEqual(len(df_ds), 2)
         self.assertTrue(set(df_ds["cid"].to_list()) == {"USD", "GBP"})
@@ -382,8 +380,7 @@ class TestLazyLoad(unittest.TestCase):
 
         df_wide = lazy_load_from_parquets(
             self.tmpdir,
-            cids=["USD"],
-            xcats=["GROWTH"],
+            tickers=["USD_GROWTH"],
             dataframe_format="tickers",
             since_datetime="20240101",
             include_delta_files=False,

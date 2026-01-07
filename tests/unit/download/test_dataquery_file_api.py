@@ -851,6 +851,58 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
         self.assertIn("to_datetime", mock_lazy_load.call_args.kwargs)
         self.assertIsNone(mock_lazy_load.call_args.kwargs["to_datetime"])
 
+    @patch("macrosynergy.download.dataquery_file_api.logger")
+    @patch.object(DataQueryFileAPIClient, "download_catalog_file")
+    @patch.object(DataQueryFileAPIClient, "filter_to_valid_tickers")
+    @patch.object(DataQueryFileAPIClient, "get_datasets_for_indicators")
+    @patch("macrosynergy.download.dataquery_file_api.lazy_load_from_parquets")
+    def test_download_warns_for_missing_tickers_but_loads_valid(
+        self,
+        mock_lazy_load,
+        mock_get_datasets_for_indicators,
+        mock_filter_to_valid_tickers,
+        mock_download_catalog_file,
+        mock_logger,
+    ):
+        client = DataQueryFileAPIClient(
+            client_id="id", client_secret="secret", out_dir=self.test_dir
+        )
+        mock_download_catalog_file.return_value = "JPMAQS_METADATA_CATALOG_20230101.parquet"
+        mock_filter_to_valid_tickers.return_value = ["USD_GROWTH"]
+        mock_get_datasets_for_indicators.return_value = []
+        mock_lazy_load.return_value = pd.DataFrame()
+
+        client.download(
+            tickers=["USD_GROWTH", "BAD1", "BAD2", "BAD3", "BAD4", "BAD5", "BAD6"],
+            skip_download=True,
+            show_progress=False,
+        )
+
+        mock_logger.warning.assert_any_call(
+            "6 tickers requested do not exist in the catalog, these are: "
+            "[BAD1, BAD2, BAD3, BAD4, BAD5...1 more]"
+        )
+        mock_get_datasets_for_indicators.assert_called_once()
+        self.assertCountEqual(
+            mock_get_datasets_for_indicators.call_args.kwargs["tickers"],
+            ["USD_GROWTH", "BAD1", "BAD2", "BAD3", "BAD4", "BAD5", "BAD6"],
+        )
+
+    @patch.object(DataQueryFileAPIClient, "download_catalog_file")
+    @patch.object(DataQueryFileAPIClient, "filter_to_valid_tickers")
+    def test_download_raises_when_no_valid_tickers(self, mock_filter, mock_catalog):
+        client = DataQueryFileAPIClient(
+            client_id="id", client_secret="secret", out_dir=self.test_dir
+        )
+        mock_catalog.return_value = "JPMAQS_METADATA_CATALOG_20230101.parquet"
+        mock_filter.return_value = []
+
+        with self.assertRaisesRegex(ValueError, "No valid tickers found"):
+            client.download(
+                tickers=["BAD1", "BAD2"],
+                skip_download=True,
+                show_progress=False,
+            )
 
 if __name__ == "__main__":
     unittest.main()
