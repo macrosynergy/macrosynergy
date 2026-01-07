@@ -1280,7 +1280,11 @@ class DataQueryFileAPIClient:
         rqstd_tickers = _construct_all_tickers_list(
             tickers=tickers, cids=cids, xcats=xcats
         )
-        if rqstd_tickers:
+        if not bool(rqstd_tickers):
+            raise ValueError(
+                "At least one ticker must be specified via `tickers`, or `cids` & `xcats`."
+            )
+        else:
             valid_tickers = self.filter_to_valid_tickers(
                 tickers=rqstd_tickers, catalog_file=catalog_file
             )
@@ -1291,13 +1295,14 @@ class DataQueryFileAPIClient:
                     "No valid tickers found with the provided `tickers`, `cids`, and `xcats`."
                 )
             if missing:
-                lmissing = min(5, len(missing))
-                miss_str = "[" + ", ".join(missing[:lmissing]) + "...]"
+                lmiss = min(5, len(missing))
+                nmore = f"{len(missing) - lmiss} more" if len(missing) > lmiss else ""
+                miss_str = "[" + ", ".join(missing[:lmiss]) + "..." + nmore + "]"
                 miss_str = f"{len(missing)} tickers requested do not exist in the catalog, these are: {miss_str}"
                 logger.warning(miss_str)
 
         datasets_to_download = self.get_datasets_for_indicators(
-            tickers=tickers, cids=cids, xcats=xcats, catalog_file=catalog_file
+            tickers=rqstd_tickers, catalog_file=catalog_file
         )
         if datasets_to_download and include_delta_files:
             datasets_to_download += [f"{ds}_DELTA" for ds in datasets_to_download]
@@ -1320,9 +1325,7 @@ class DataQueryFileAPIClient:
         warn_if_no_full_snapshots = since_datetime is not None
         return lazy_load_from_parquets(
             files_dir=out_dir,
-            tickers=tickers,
-            cids=cids,
-            xcats=xcats,
+            tickers=rqstd_tickers,
             metrics=metrics,
             start_date=start_date,
             end_date=end_date,
@@ -1345,7 +1348,6 @@ def _construct_all_tickers_list(
     cids: Optional[List[str]] = None,
     xcats: Optional[List[str]] = None,
 ) -> List[str]:
-
     for param, name in zip(
         [tickers, cids, xcats],
         ["tickers", "cids", "xcats"],
@@ -2035,8 +2037,6 @@ def lazy_load_from_parquets(
     files_dir: Union[str, Path],
     file_format: str = "parquet",
     tickers: Optional[List[str]] = None,
-    cids: Optional[List[str]] = None,
-    xcats: Optional[List[str]] = None,
     metrics: Optional[List[str]] = None,
     start_date: Optional[Union[str, pd.Timestamp]] = None,
     end_date: Optional[Union[str, pd.Timestamp]] = None,
@@ -2054,6 +2054,10 @@ def lazy_load_from_parquets(
     catalog_file: Optional[str] = None,
     warn_if_no_full_snapshots: bool = False,
 ) -> pd.DataFrame:
+    """
+    This function helps to lazily load JPMaQS parquet files from a specified directory.
+    It operates using the exact ticker names provided.
+    """
     files_dir = Path(files_dir)
     if (not metrics) or (metrics == "all") or ("all" in metrics):
         metrics = JPMAQS_METRICS
@@ -2064,8 +2068,8 @@ def lazy_load_from_parquets(
         files_dir=files_dir,
         file_format=file_format,
         tickers=tickers,
-        cids=cids,
-        xcats=xcats,
+        cids=None,  # intentionally set to None
+        xcats=None,  # intentionally set to None
         metrics=metrics,
         start_date=start_date,
         end_date=end_date,
@@ -2102,8 +2106,6 @@ def lazy_load_from_parquets(
         available_files_df = available_files_df.loc[
             available_files_df["dataset"].isin(datasets)
         ]
-
-    tickers = _construct_all_tickers_list(tickers=tickers, cids=cids, xcats=xcats)
 
     include_file_column = "source_file" if include_file_column else None
 
@@ -2379,9 +2381,9 @@ if __name__ == "__main__":
 
     print(f"Download completed in {end - start:.2f} seconds")
 
-    cids = ["AUD", "BRL", "CAD", "CHF", "CNY", "CZK", "EUR", "GBP", "USD"]
-    xcats = ["RIR_NSA", "FXXR_NSA", "FXXR_VT10", "DU05YXR_NSA", "DU05YXR_VT10"]
-    tickers = [f"{c}_{x}" for c in cids for x in xcats]
+    test_cids = ["AUD", "BRL", "CAD", "CHF", "CNY", "CZK", "EUR", "GBP", "USD"]
+    test_xcats = ["RIR_NSA", "FXXR_NSA", "FXXR_VT10", "DU05YXR_NSA", "DU05YXR_VT10"]
+    tickers = [f"{c}_{x}" for c in test_cids for x in test_xcats]
 
     with DataQueryFileAPIClient(out_dir="./data/jpmaqs-data/") as dq:
         df = dq.download(tickers=tickers)
@@ -2389,8 +2391,8 @@ if __name__ == "__main__":
 
     with DataQueryFileAPIClient(out_dir="./data/jpmaqs-data/") as dq:
         pl_df: pl.DataFrame = dq.download(
-            cids=cids,
-            xcats=xcats,
+            cids=test_cids,
+            xcats=test_xcats,
             dataframe_format="tickers",
             dataframe_type="polars",
         )
