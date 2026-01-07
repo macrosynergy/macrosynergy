@@ -175,6 +175,39 @@ class TestLazyLoad(unittest.TestCase):
         # Delta is older than the latest snapshot for DATASET1 and should not be selected.
         self.assertNotIn("DATASET1_DELTA_20240102.parquet", filenames)
 
+    @patch("macrosynergy.download.dataquery_file_api.logger")
+    def test_filter_to_latest_files_warns_when_window_has_only_deltas(self, mock_logger):
+        df = pd.DataFrame(
+            {
+                "path": [
+                    self.tmpdir / "DATASET1_20231231.parquet",
+                    self.tmpdir / "DATASET1_DELTA_20240101T010101.parquet",
+                ],
+                "filename": [
+                    "DATASET1_20231231.parquet",
+                    "DATASET1_DELTA_20240101T010101.parquet",
+                ],
+                "dataset": ["DATASET1", "DATASET1_DELTA"],
+                "e-dataset": ["DATASET1", "DATASET1"],
+                "file-timestamp": [
+                    pd.Timestamp("2023-12-31T00:00:00Z"),
+                    pd.Timestamp("2024-01-01T01:01:01Z"),
+                ],
+            }
+        )
+        _filter_to_latest_files(
+            files_df=df,
+            include_delta_files=True,
+            warn_if_no_full_snapshots=True,
+            since_datetime="20240101",
+            to_datetime="20240101",
+        )
+        mock_logger.warning.assert_any_call(
+            "No full snapshots available in the requested window "
+            "since=2024-01-01T00:00:00Z to=2024-01-01T23:59:59Z "
+            "earliest_snapshot=2023-12-31T00:00:00Z"
+        )
+
     def test_identify_schema_type(self):
         lf_ticker = pl.LazyFrame({"ticker": ["A_B"], "value": [1]})
         lf_qdf = pl.LazyFrame({"cid": ["A"], "xcat": ["B"], "value": [1]})

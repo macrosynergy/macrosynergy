@@ -1334,6 +1334,7 @@ class DataQueryFileAPIClient:
                 include_metadata=include_metadata_files,
             )
 
+        warn_if_no_full_snapshots = since_datetime is not None
         return lazy_load_from_parquets(
             files_dir=out_dir,
             tickers=tickers,
@@ -1350,6 +1351,9 @@ class DataQueryFileAPIClient:
             datasets=datasets_to_download,
             include_file_column=include_file_column,
             catalog_file=catalog_file,
+            warn_if_no_full_snapshots=warn_if_no_full_snapshots,
+            since_datetime=since_datetime,
+            to_datetime=to_datetime,
         )
 
 
@@ -1889,6 +1893,7 @@ def _filter_to_latest_files(
     to_datetime: Optional[Union[str, pd.Timestamp]] = None,
     include_delta_files: bool = True,
     delta_treatment: str = "all",
+    warn_if_no_full_snapshots: bool = False,
 ) -> pd.DataFrame:
     """
     Reduce a set of local files to:
@@ -1921,6 +1926,8 @@ def _filter_to_latest_files(
     since_ts = (
         pd_to_datetime_compat(since_datetime) if since_datetime is not None else None
     )
+    if since_ts is not None and _is_date_only_string(since_datetime):
+        since_ts = since_ts.normalize()
     if to_datetime is not None:
         to_ts = pd_to_datetime_compat(to_datetime)
         if _is_date_only_string(to_datetime):
@@ -1933,6 +1940,14 @@ def _filter_to_latest_files(
     if since_ts is not None and since_ts > to_ts:
         since_ts, to_ts = to_ts, since_ts
 
+    if warn_if_no_full_snapshots and since_ts is not None:
+        is_delta_all = df["filename"].astype(str).str.contains("_DELTA")
+        is_metadata_all = df["filename"].astype(str).str.contains("_METADATA")
+        snapshots_all = df.loc[~is_delta_all & ~is_metadata_all].copy()
+        earliest_snapshot_ts = (
+            snapshots_all["file-timestamp"].min() if not snapshots_all.empty else None
+        )
+
     if since_ts is not None:
         df = df[df["file-timestamp"].between(since_ts, to_ts)].copy()
     else:
@@ -1942,9 +1957,26 @@ def _filter_to_latest_files(
         return df
 
     is_delta = df["filename"].astype(str).str.contains("_DELTA")
+    is_metadata = df["filename"].astype(str).str.contains("_METADATA")
 
-    snapshots = df.loc[~is_delta].copy()
+    snapshots = df.loc[~is_delta & ~is_metadata].copy()
     if snapshots.empty:
+        if warn_if_no_full_snapshots and since_ts is not None and bool(is_delta.any()):
+            earliest_snapshot_str = None
+            if earliest_snapshot_ts is not None and not pd.isna(earliest_snapshot_ts):
+                earliest_snapshot_str = earliest_snapshot_ts.strftime(
+                    "%Y-%m-%dT%H:%M:%SZ"
+                )
+            else:
+                earliest_snapshot_str = "N/A"
+
+            logger.warning(
+                "No full snapshots available in the requested window "
+                f"since={since_ts.strftime('%Y-%m-%dT%H:%M:%SZ')} "
+                f"to={to_ts.strftime('%Y-%m-%dT%H:%M:%SZ')} "
+                f"earliest_snapshot={earliest_snapshot_str}"
+            )
+
         # only possible to return delta files if no snapshots exist
         return (
             df.loc[is_delta].copy().reset_index(drop=True)
@@ -2005,6 +2037,7 @@ def lazy_load_from_parquets(
     to_datetime: Optional[Union[str, pd.Timestamp]] = None,
     include_file_column: bool = True,
     catalog_file: Optional[str] = None,
+    warn_if_no_full_snapshots: bool = False,
 ) -> pd.DataFrame:
     files_dir = Path(files_dir)
     if (not metrics) or (metrics == "all") or ("all" in metrics):
@@ -2035,12 +2068,16 @@ def lazy_load_from_parquets(
         file_format=file_format,
         include_metadata_files=False,  # no metadata files - cannot scan with QDF like schema
     )
+    effective_to_datetime = to_datetime
+    if warn_if_no_full_snapshots and (since_datetime is not None) and (to_datetime is None):
+        effective_to_datetime = pd.Timestamp.utcnow().strftime("%Y%m%dT%H%M%S")
     available_files_df: pd.DataFrame = _filter_to_latest_files(
         files_df=available_files_df,
         since_datetime=since_datetime,
-        to_datetime=to_datetime,
+        to_datetime=effective_to_datetime,
         include_delta_files=include_delta_files,
         delta_treatment=delta_treatment,
+        warn_if_no_full_snapshots=warn_if_no_full_snapshots,
     )
     if datasets:
         available_files_df = available_files_df.loc[

@@ -846,8 +846,10 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
         mock_download_full_snapshot.assert_called_once()
         called_since = mock_download_full_snapshot.call_args.kwargs["since_datetime"]
         self.assertEqual(called_since, "20230105")
-        self.assertNotIn("since_datetime", mock_lazy_load.call_args.kwargs)
-        self.assertNotIn("to_datetime", mock_lazy_load.call_args.kwargs)
+        self.assertIn("since_datetime", mock_lazy_load.call_args.kwargs)
+        self.assertIsNone(mock_lazy_load.call_args.kwargs["since_datetime"])
+        self.assertIn("to_datetime", mock_lazy_load.call_args.kwargs)
+        self.assertIsNone(mock_lazy_load.call_args.kwargs["to_datetime"])
 
 
 if __name__ == "__main__":
