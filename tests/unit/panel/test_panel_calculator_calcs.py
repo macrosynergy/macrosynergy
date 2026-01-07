@@ -44,7 +44,7 @@ TEST_CASES = {
         },
     },
     6: {
-        "calc_str": "NEW5 = ( XR + CRY ) / 2",
+        "calc_str": "NEW5 = (XR+CRY)/2",
         "output": {
             "all_xcats_used": ["CRY", "XR"],
             "singles_used": [],
@@ -212,7 +212,7 @@ TEST_CASES = {
         },
     },
     27: {
-        "calc_str": "NEW26 = ( GROWTH - INFL ) / ( np.abs( INFL ) + 1 )",
+        "calc_str": "NEW26=(GROWTH-INFL)/(np.abs(INFL)+1)",
         "output": {
             "all_xcats_used": ["GROWTH", "INFL"],
             "singles_used": [],
@@ -236,7 +236,7 @@ TEST_CASES = {
         },
     },
     30: {
-        "calc_str": "NEW29 = ( CARRY - VALUE ) / ( np.abs( CARRY ) + np.abs( VALUE ) + 1 )",
+        "calc_str": "NEW29=(CARRY-VALUE)/(np.abs(CARRY)+np.abs(VALUE)+1)",
         "output": {
             "all_xcats_used": ["CARRY", "VALUE"],
             "singles_used": [],
@@ -372,7 +372,7 @@ TEST_CASES = {
         },
     },
     47: {
-        "calc_str": "SINGLE7 = ( CRY - iUSD_CRY ) / ( np.abs( iUSD_CRY ) + 1 )",
+        "calc_str": "SINGLE7=(CRY-iUSD_CRY)/(np.abs(iUSD_CRY)+1)",
         "output": {
             "all_xcats_used": ["CRY"],
             "singles_used": ["iUSD_CRY"],
@@ -682,6 +682,8 @@ class TestPanelCalculatorCalcStrings(unittest.TestCase):
             )
             self.assertEqual(set(singles_used), set(expected_output["singles_used"]))
             self.assertEqual(set(single_cids), set(expected_output["single_cids"]))
+            
+        print(f'Tested {len(test_cases)} calculation strings successfully.')
 
 
 if __name__ == "__main__":
