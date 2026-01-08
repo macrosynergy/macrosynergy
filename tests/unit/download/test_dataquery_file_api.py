@@ -5,7 +5,7 @@ from unittest.mock import patch, MagicMock
 import functools
 import logging
 import tempfile
-from macrosynergy.compat import PD_2_0_OR_LATER
+from macrosynergy.compat import PD_2_0_OR_LATER, PYTHON_3_8_OR_LATER
 from macrosynergy.download.dataquery_file_api import (
     validate_dq_timestamp,
     get_client_id_secret,
@@ -381,7 +381,11 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
         size = downloader._get_file_size()
         self.assertEqual(size, 123)
         mock_head.assert_called_once()
-        self.assertEqual(mock_head.call_args.kwargs.get("timeout"), 7)
+        # self.assertEqual(mock_head.call_args.kwargs.get("timeout"), 7)
+        if PYTHON_3_8_OR_LATER:
+            self.assertEqual(mock_head.call_args.kwargs.get("timeout"), 7)
+        else:
+            self.assertEqual(mock_head.call_args[1].get("timeout"), 7)
 
     @patch.object(DataQueryFileAPIClient, "_get")
     def test_check_file_availability(self, mock_get):
@@ -844,12 +848,18 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
         client.download(tickers=["USD_GROWTH"], since_datetime=None, show_progress=False)
 
         mock_download_full_snapshot.assert_called_once()
-        called_since = mock_download_full_snapshot.call_args.kwargs["since_datetime"]
+        # called_since = mock_download_full_snapshot.call_args.kwargs["since_datetime"]
+        if PYTHON_3_8_OR_LATER:
+            called_since = mock_download_full_snapshot.call_args.kwargs["since_datetime"]
+            self.assertIsNone(mock_lazy_load.call_args.kwargs["since_datetime"])
+            self.assertIsNone(mock_lazy_load.call_args.kwargs["to_datetime"])
+        else:
+            called_since = mock_download_full_snapshot.call_args[1]["since_datetime"]
+            self.assertIsNone(mock_lazy_load.call_args[1]["since_datetime"])
+            self.assertIsNone(mock_lazy_load.call_args[1]["to_datetime"])   
+
         self.assertEqual(called_since, "20230105")
-        self.assertIn("since_datetime", mock_lazy_load.call_args.kwargs)
-        self.assertIsNone(mock_lazy_load.call_args.kwargs["since_datetime"])
-        self.assertIn("to_datetime", mock_lazy_load.call_args.kwargs)
-        self.assertIsNone(mock_lazy_load.call_args.kwargs["to_datetime"])
+
 
     @patch("macrosynergy.download.dataquery_file_api.logger")
     @patch.object(DataQueryFileAPIClient, "download_catalog_file")
@@ -883,9 +893,13 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
             "[BAD1, BAD2, BAD3, BAD4, BAD5...1 more]"
         )
         mock_get_datasets_for_indicators.assert_called_once()
-        self.assertEqual(
-            mock_get_datasets_for_indicators.call_args.kwargs["tickers"], ["USD_GROWTH"]
-        )
+
+        if PYTHON_3_8_OR_LATER:
+            result = mock_get_datasets_for_indicators.call_args.kwargs["tickers"]
+        else:
+            result = mock_get_datasets_for_indicators.call_args[1]["tickers"]
+        
+        self.assertEqual(result, ["USD_GROWTH"])
 
     @patch.object(DataQueryFileAPIClient, "download_catalog_file")
     @patch.object(DataQueryFileAPIClient, "filter_to_valid_tickers")
