@@ -2032,7 +2032,7 @@ def _filter_to_latest_files(
 
     deltas = deltas[
         deltas["_latest_snapshot_ts"].isna()
-        | (deltas["file-timestamp"] > deltas["_latest_snapshot_ts"])
+        | (deltas["file-timestamp"] >= deltas["_latest_snapshot_ts"])
     ].drop(columns="_latest_snapshot_ts")
 
     out = pd.concat([snapshots, deltas], ignore_index=True)
