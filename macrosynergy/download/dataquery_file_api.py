@@ -2066,6 +2066,12 @@ def lazy_load_from_parquets(
     """
     This function helps to lazily load JPMaQS parquet files from a specified directory.
     It operates using the exact ticker names provided.
+    
+    Notes
+    -----
+    The `datasets` argument applies to
+    the "effective dataset" (e-dataset), meaning that delta datasets (those ending with
+    `_DELTA`) are treated as updates to their base dataset, not as separate datasets.
     """
     files_dir = Path(files_dir)
     if (not metrics) or (metrics == "all") or ("all" in metrics):
@@ -2112,8 +2118,9 @@ def lazy_load_from_parquets(
         warn_if_no_full_snapshots=warn_if_no_full_snapshots,
     )
     if datasets:
+        datasets = [d.replace("_DELTA", "") for d in datasets]
         available_files_df = available_files_df.loc[
-            available_files_df["dataset"].isin(datasets)
+            available_files_df["e-dataset"].isin(set(datasets))
         ]
 
     include_file_column = "source_file" if include_file_column else None

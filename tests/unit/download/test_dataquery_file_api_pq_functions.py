@@ -630,5 +630,83 @@ class TestLazyLoadFilteredParquets(unittest.TestCase):
             _lazy_load_filtered_parquets(**call_kwargs)
 
 
+@unittest.skipUnless(PYTHON_3_8_OR_LATER, "Requires Python 3.8+")
+class TestLazyLoadDatasetsFilterSemantics(unittest.TestCase):
+    @patch(
+        "macrosynergy.download.dataquery_file_api.pd_to_datetime_compat",
+        pd_to_datetime_compat,
+    )
+    def test_datasets_filter_matches_effective_dataset_and_respects_include_delta(self):
+        tmpdir = Path(tempfile.mkdtemp())
+        try:
+            snap_path = tmpdir / "DATASET1_20240102.parquet"
+            delta_path = tmpdir / "DATASET1_DELTA_20240102T010101.parquet"
+
+            _make_ticker_parquet(
+                snap_path,
+                {
+                    "ticker": ["USD_INFL"],
+                    "real_date": [datetime.date(2024, 1, 1)],
+                    "value": [1.0],
+                    "last_updated": [datetime.datetime(2024, 1, 2, 0, 0)],
+                },
+            )
+            _make_ticker_parquet(
+                delta_path,
+                {
+                    "ticker": ["USD_INFL"],
+                    "real_date": [datetime.date(2024, 1, 1)],
+                    "value": [2.0],
+                    "last_updated": [datetime.datetime(2024, 1, 3, 0, 0)],
+                },
+            )
+
+            # Base dataset selection includes delta files when `include_delta_files=True`.
+            df = lazy_load_from_parquets(
+                tmpdir,
+                datasets=["DATASET1"],
+                tickers=["USD_INFL"],
+                include_delta_files=True,
+                delta_treatment="latest",
+            )
+            self.assertEqual(len(df), 1)
+            self.assertEqual(df.iloc[0]["value"], 2.0)
+
+            # Same dataset selection excludes delta files when `include_delta_files=False`.
+            df_no_delta = lazy_load_from_parquets(
+                tmpdir,
+                datasets=["DATASET1"],
+                tickers=["USD_INFL"],
+                include_delta_files=False,
+                delta_treatment="latest",
+            )
+            self.assertEqual(len(df_no_delta), 1)
+            self.assertEqual(df_no_delta.iloc[0]["value"], 1.0)
+
+            # Passing a delta dataset name still filters by the effective (base) dataset;
+            # `include_delta_files` remains the sole control for delta inclusion.
+            df_delta_name = lazy_load_from_parquets(
+                tmpdir,
+                datasets=["DATASET1_DELTA"],
+                tickers=["USD_INFL"],
+                include_delta_files=True,
+                delta_treatment="latest",
+            )
+            self.assertEqual(len(df_delta_name), 1)
+            self.assertEqual(df_delta_name.iloc[0]["value"], 2.0)
+
+            df_delta_name_no_delta = lazy_load_from_parquets(
+                tmpdir,
+                datasets=["DATASET1_DELTA"],
+                tickers=["USD_INFL"],
+                include_delta_files=False,
+                delta_treatment="latest",
+            )
+            self.assertEqual(len(df_delta_name_no_delta), 1)
+            self.assertEqual(df_delta_name_no_delta.iloc[0]["value"], 1.0)
+        finally:
+            shutil.rmtree(tmpdir)
+
+
 if __name__ == "__main__":
     unittest.main()
