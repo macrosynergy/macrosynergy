@@ -496,7 +496,7 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
             mock_path.return_value.__truediv__.return_value.__truediv__.return_value
         ) = mock_file_path
 
-        client.download_file(filename="TEST_DELTA_20230101.parquet")
+        client.download_file(filename="TEST_DELTA_20230101T010101.parquet")
         mock_request_wrapper.assert_called_once()
         mock_segmented_downloader.assert_not_called()
 
