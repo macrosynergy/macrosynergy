@@ -98,7 +98,14 @@ class TestLazyLoad(unittest.TestCase):
                 "value": [1.1, 2.1, 3.1],
             },
         )
-        (self.tmpdir / "DATASET1_DELTA_20240102.parquet").touch()
+        _make_ticker_parquet(
+            self.tmpdir / "DATASET1_DELTA_20240102T010101.parquet",
+            {
+                "ticker": ["USD_INFL"],
+                "real_date": [datetime.date(2023, 1, 2)],
+                "value": [1.2],
+            },
+        )
 
         sub_dir = self.tmpdir / "subdir"
         _make_qdf_parquet(
@@ -121,7 +128,7 @@ class TestLazyLoad(unittest.TestCase):
         filenames = sorted([p.name for p in files])
         self.assertIn("DATASET1_20240101.parquet", filenames)
         self.assertIn("DATASET1_20240102.parquet", filenames)
-        self.assertIn("DATASET1_DELTA_20240102.parquet", filenames)
+        self.assertIn("DATASET1_DELTA_20240102T010101.parquet", filenames)
         self.assertIn("DATASET2_20240103.parquet", filenames)
 
     @patch(
@@ -168,12 +175,12 @@ class TestLazyLoad(unittest.TestCase):
     def test_filter_to_latest_files(self):
         df = _downloaded_files_df(self.tmpdir, file_format="parquet")
         latest = _filter_to_latest_files(df)
-        self.assertEqual(len(latest), 2)
+        self.assertEqual(len(latest), 3)
         filenames = latest["filename"].to_list()
         self.assertIn("DATASET1_20240102.parquet", filenames)
         self.assertIn("DATASET2_20240103.parquet", filenames)
         # Delta is older than the latest snapshot for DATASET1 and should not be selected.
-        self.assertNotIn("DATASET1_DELTA_20240102.parquet", filenames)
+        self.assertIn("DATASET1_DELTA_20240102T010101.parquet", filenames)
 
     @patch("macrosynergy.download.dataquery_file_api.logger")
     def test_filter_to_latest_files_warns_when_window_has_only_deltas(self, mock_logger):
