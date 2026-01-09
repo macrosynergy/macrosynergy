@@ -15,8 +15,6 @@ from macrosynergy.download.dataquery_file_api import (
     _downloaded_files_df,
     _filter_to_latest_files,
     lazy_load_from_parquets,
-    _identify_schema_type,
-    JPMaQSParquetSchemaKind,
     _ensure_columns,
     _to_output_schema,
     _filter_lazy_frame_by_tickers,
@@ -108,11 +106,10 @@ class TestLazyLoad(unittest.TestCase):
         )
 
         sub_dir = self.tmpdir / "subdir"
-        _make_qdf_parquet(
+        _make_ticker_parquet(
             sub_dir / "DATASET2_20240103.parquet",
             {
-                "cid": ["USD", "GBP"],
-                "xcat": ["GROWTH", "GROWTH"],
+                "ticker": ["USD_GROWTH", "GBP_GROWTH"],
                 "real_date": [datetime.date(2023, 2, 1), datetime.date(2023, 2, 1)],
                 "value": [5.0, 6.0],
             },
@@ -183,7 +180,9 @@ class TestLazyLoad(unittest.TestCase):
         self.assertIn("DATASET1_DELTA_20240102T010101.parquet", filenames)
 
     @patch("macrosynergy.download.dataquery_file_api.logger")
-    def test_filter_to_latest_files_warns_when_window_has_only_deltas(self, mock_logger):
+    def test_filter_to_latest_files_warns_when_window_has_only_deltas(
+        self, mock_logger
+    ):
         df = pd.DataFrame(
             {
                 "path": [
@@ -215,17 +214,6 @@ class TestLazyLoad(unittest.TestCase):
             "earliest_snapshot=2023-12-31T00:00:00Z"
         )
 
-    def test_identify_schema_type(self):
-        lf_ticker = pl.LazyFrame({"ticker": ["A_B"], "value": [1]})
-        lf_qdf = pl.LazyFrame({"cid": ["A"], "xcat": ["B"], "value": [1]})
-        lf_bad = pl.LazyFrame({"col1": ["A"], "col2": ["B"]})
-        self.assertEqual(
-            _identify_schema_type(lf_ticker), JPMaQSParquetSchemaKind.TICKER
-        )
-        self.assertEqual(_identify_schema_type(lf_qdf), JPMaQSParquetSchemaKind.QDF)
-        with self.assertRaises(ValueError):
-            _identify_schema_type(lf_bad)
-
     def test_ensure_columns(self):
         lf = pl.LazyFrame({"a": [1], "b": [2]})
         ensured = _ensure_columns(lf, ["a", "c", "d"])
@@ -239,7 +227,6 @@ class TestLazyLoad(unittest.TestCase):
         lf_ticker = pl.LazyFrame({"ticker": ["A_B"], "value": [1]})
         df_qdf = _to_output_schema(
             lf_ticker,
-            JPMaQSParquetSchemaKind.TICKER,
             include_file_column=None,
             want_qdf=True,
         ).collect()
@@ -247,15 +234,15 @@ class TestLazyLoad(unittest.TestCase):
         self.assertIn("xcat", df_qdf.columns)
         self.assertNotIn("ticker", df_qdf.columns)
 
-        lf_qdf = pl.LazyFrame({"cid": ["C"], "xcat": ["D"], "value": [2]})
+        lf_ticker2 = pl.LazyFrame({"ticker": ["C_D"], "value": [2]})
         df_ticker = _to_output_schema(
-            lf_qdf,
-            JPMaQSParquetSchemaKind.QDF,
+            lf_ticker2,
             include_file_column=None,
             want_qdf=False,
         ).collect()
         self.assertIn("ticker", df_ticker.columns)
         self.assertNotIn("cid", df_ticker.columns)
+        self.assertNotIn("xcat", df_ticker.columns)
         self.assertEqual(df_ticker["ticker"][0], "C_D")
 
     def test_filter_lazy_frame_by_tickers(self):
@@ -267,7 +254,6 @@ class TestLazyLoad(unittest.TestCase):
         )
         filt = _filter_lazy_frame_by_tickers(
             lf,
-            JPMaQSParquetSchemaKind.TICKER,
             ["A_B"],
             None,
             None,
@@ -279,7 +265,6 @@ class TestLazyLoad(unittest.TestCase):
 
         filt_date = _filter_lazy_frame_by_tickers(
             lf,
-            JPMaQSParquetSchemaKind.TICKER,
             ["A_B", "C_D"],
             "2023-01-15",
             None,
@@ -537,8 +522,7 @@ class TestLazyLoadFilteredParquets(unittest.TestCase):
 
         qdf_df = pl.DataFrame(
             {
-                "cid": ["USD", "USD"],
-                "xcat": ["INFL", "INFL"],
+                "ticker": ["USD_INFL", "USD_INFL"],
                 "real_date": [datetime.date(2024, 1, 1), datetime.date(2024, 2, 1)],
                 "value": [10.0, 20.0],
                 "last_updated": [
