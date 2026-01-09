@@ -942,6 +942,20 @@ class DataQueryFileAPIClient:
         timeout: Optional[float] = DQ_FILE_API_TIMEOUT,
     ) -> str:
         out_dir = self._get_save_dir(out_dir)
+
+        # check if file already exists
+        file_path = None
+        existing_files = self.list_downloaded_files(out_dir=out_dir)
+        if not overwrite and not existing_files.empty:
+            todayts = pd.Timestamp.utcnow().strftime("%Y%m%d")
+            today_file = f"JPMAQS_METADATA_CATALOG_{todayts}.parquet"
+            if today_file in sorted(existing_files["file-name"]):
+                file_path = existing_files[existing_files["file-name"] == today_file][
+                    "path"
+                ].values[0]
+                logger.info(f"Catalog file already downloaded: {file_path}")
+                return str(file_path)
+
         available_catalogs = self.list_available_files(self.catalog_file_group_id)
         if available_catalogs.empty:
             raise DownloadError("No catalog files available for download.")
@@ -950,15 +964,6 @@ class DataQueryFileAPIClient:
         ).iloc[0]
         latest_filename = latest_catalog["file-name"]
         logger.info(f"Latest catalog file identified: {latest_filename}")
-
-        # check if file already exists
-        file_path = None
-        existing_files = self.list_downloaded_files(out_dir=out_dir)
-        if not overwrite and not existing_files.empty:
-            if latest_filename in sorted(existing_files["file-name"]):
-                file_path = existing_files[
-                    existing_files["file-name"] == latest_filename
-                ]["path"].values[0]
 
         if file_path is None:
             file_path = self.download_file(
