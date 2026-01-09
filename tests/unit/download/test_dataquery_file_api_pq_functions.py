@@ -47,10 +47,13 @@ def _make_sample_parquet(path: Path) -> pl.DataFrame:
                 datetime.date(2024, 2, 29),
             ],
             "value": [1.1, 2.2],
-            "grading": ["A", "B"],
-            "eop_lag": [0, 1],
-            "mop_lag": [0, 1],
-            "last_updated": ["2024-03-01", "2024-03-02"],
+            "grading": [1.0, 3.0],
+            "eop_lag": [0.0, 1.0],
+            "mop_lag": [0.0, 1.0],
+            "last_updated": [
+                datetime.datetime(2024, 3, 1, 12, 0, 0),
+                datetime.datetime(2024, 3, 2, 12, 0, 0),
+            ],
         }
     )
     df.write_parquet(path)
@@ -449,10 +452,11 @@ class TestCorruptedFilesHandling(unittest.TestCase):
         # _make_sample_parquet with 4 paths
         self.tmpdir = Path(tempfile.mkdtemp())
         self.created_filenames = [
-            "good1.parquet",
-            "good2.parquet",
+            "jpmaqs_good1.parquet",
+            "jpmaqs_good2.parquet",
             "corrupted.parquet",
-            "good3.parquet",
+            "jpmaqs_corrupted.parquet",
+            "jpmaqs_good3.parquet",
         ]
         for fname in self.created_filenames:
             path = self.tmpdir / fname

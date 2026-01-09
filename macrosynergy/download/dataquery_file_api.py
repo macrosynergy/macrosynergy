@@ -1506,6 +1506,59 @@ def _large_delta_file_datetimes(as_str: bool = True) -> List[str]:
     return [d.strftime("%Y%m%dT%H%M%S") for d in dt_list]
 
 
+class JPMaQSParquetExpectedColumns(Enum):
+    TICKER = {
+        "ticker": pl.String,
+        "real_date": pl.Date,
+        "value": pl.Float64,
+        "grading": pl.Float64,
+        "eop_lag": pl.Float64,
+        "mop_lag": pl.Float64,
+        "last_updated": pl.Datetime(time_unit="us", time_zone=None),
+    }
+    METADATA = {
+        "Theme": pl.String,
+        "Group": pl.String,
+        "Category": pl.String,
+        "Market Group": pl.String,
+        "Market": pl.String,
+        "Ticker": pl.String,
+        "Definition": pl.String,
+        "Last Updated": pl.Datetime(time_unit="ns", time_zone=None),
+    }
+
+
+def _check_individual_file_parquet_columns(
+    file_path: Path,
+) -> bool:
+    assert isinstance(file_path, Path)
+    base_name = file_path.name.upper()
+    if not base_name.startswith("JPMAQS_") or not base_name.endswith(".PARQUET"):
+        logger.warning(f"File {file_path} is not a recognized JPMAQS parquet file.")
+        return False
+    expected_cols = {}
+    if "_METADATA" in base_name:
+        expected_cols = JPMaQSParquetExpectedColumns.METADATA.value
+    else:
+        expected_cols = JPMaQSParquetExpectedColumns.TICKER.value
+
+    schema = {}
+    try:
+        lf = pl.scan_parquet(file_path)
+        if PYTHON_3_8_OR_LATER:
+            schema = lf.collect_schema()
+        else:
+            schema = lf.schema
+        schema = dict(schema)
+        if lf.head(1).collect().is_empty():
+            return False
+    except Exception as e:
+        logger.warning(f"Failed to read parquet file {file_path}: {e}")
+        return False
+
+    return schema == expected_cols
+
+
 def _delete_corrupt_files(
     files: List[Path],
     extensions: List[str] = ["parquet", "json"],
@@ -1522,9 +1575,10 @@ def _delete_corrupt_files(
             continue
         try:
             if file_path.suffix.lower() == ".parquet":
-                head = pl.scan_parquet(file_path).head().collect()
-                if not allow_empty and head.is_empty():
-                    raise ValueError("File is empty")
+                if not _check_individual_file_parquet_columns(
+                    file_path=file_path,
+                ):
+                    raise ValueError("File is corrupt or has invalid schema")
             elif file_path.suffix.lower() == ".json":
                 with open(file_path, "r", encoding="utf-8") as f:
                     js = json.load(f)
