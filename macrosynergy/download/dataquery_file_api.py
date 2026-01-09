@@ -2212,21 +2212,6 @@ class JPMaQSParquetSchemaKind(Enum):
     QDF = "qdf"
 
 
-def _identify_schema_type(lf: pl.LazyFrame) -> JPMaQSParquetSchemaKind:
-    if PYTHON_3_8_OR_LATER:
-        cols = set(lf.collect_schema().keys())
-    else:
-        cols = set(lf.schema.keys())
-    if "ticker" in cols:
-        return JPMaQSParquetSchemaKind.TICKER
-    if {"cid", "xcat"}.issubset(cols):
-        return JPMaQSParquetSchemaKind.QDF
-    raise ValueError(
-        "Unknown schema: need either 'ticker' or both 'cid' and 'xcat'. "
-        f"Found columns: {sorted(cols)}"
-    )
-
-
 def _expr_split_ticker(ticker_expr: pl.Expr) -> Tuple[pl.Expr, pl.Expr]:
     """
     Robust split of 'CID_XCAT...' into (cid, xcat) WITHOUT using splitn().
@@ -2253,7 +2238,6 @@ def _ensure_columns(lf: pl.LazyFrame, cols: Sequence[str]) -> pl.LazyFrame:
 
 def _filter_lazy_frame_by_tickers(
     lf: pl.LazyFrame,
-    kind: JPMaQSParquetSchemaKind,
     tickers: Sequence[str],
     start_date: Optional[Union[str, pd.Timestamp]],
     end_date: Optional[Union[str, pd.Timestamp]],
@@ -2261,16 +2245,7 @@ def _filter_lazy_frame_by_tickers(
     max_last_updated: Optional[Union[str, pd.Timestamp]],
 ) -> pl.LazyFrame:
     tickers_list = [t for t in tickers if t]
-    if kind is JPMaQSParquetSchemaKind.TICKER:
-        lf = lf.filter(pl.col("ticker").is_in(tickers_list))
-    else:
-        lf = (
-            lf.with_columns(
-                _ticker=pl.concat_str([pl.col("cid"), pl.lit("_"), pl.col("xcat")])
-            )
-            .filter(pl.col("_ticker").is_in(tickers_list))
-            .drop("_ticker")
-        )
+    lf = lf.filter(pl.col("ticker").is_in(tickers_list))
     if start_date:
         start_date = pd_to_datetime_compat(start_date).strftime("%Y-%m-%d")
         lf = lf.filter(pl.col("real_date") >= pl.lit(start_date).str.to_date())
@@ -2289,7 +2264,6 @@ def _filter_lazy_frame_by_tickers(
 
 def _to_output_schema(
     lf: pl.LazyFrame,
-    src_kind: JPMaQSParquetSchemaKind,
     include_file_column: Optional[str],
     want_qdf: bool,
 ) -> pl.LazyFrame:
@@ -2307,16 +2281,11 @@ def _to_output_schema(
     qdf_cols = cols.replace("ticker", "cid.xcat").split(".")
 
     if want_qdf:
-        if src_kind is JPMaQSParquetSchemaKind.TICKER:
-            cid_expr, xcat_expr = _expr_split_ticker(pl.col("ticker"))
-            lf = lf.with_columns(cid=cid_expr, xcat=xcat_expr)
+        cid_expr, xcat_expr = _expr_split_ticker(pl.col("ticker"))
+        lf = lf.with_columns(cid=cid_expr, xcat=xcat_expr)
         lf = _ensure_columns(lf, qdf_cols)
         return lf.select(qdf_cols)
 
-    if src_kind is JPMaQSParquetSchemaKind.QDF:
-        lf = lf.with_columns(
-            ticker=pl.concat_str([pl.col("cid"), pl.lit("_"), pl.col("xcat")])
-        )
     lf = _ensure_columns(lf, ticker_cols)
     return lf.select(ticker_cols)
 
@@ -2340,10 +2309,8 @@ def _lazy_load_filtered_parquets(
     lazy_parts: List[pl.LazyFrame] = []
     for pth in paths:
         lf = pl.scan_parquet(pth, include_file_paths=include_file_column)
-        kind = _identify_schema_type(lf)
         lf = _filter_lazy_frame_by_tickers(
             lf=lf,
-            kind=kind,
             tickers=tickers_list,
             start_date=start_date,
             end_date=end_date,
@@ -2352,7 +2319,6 @@ def _lazy_load_filtered_parquets(
         )
         lf = _to_output_schema(
             lf=lf,
-            src_kind=kind,
             include_file_column=include_file_column,
             want_qdf=return_qdf,
         )
