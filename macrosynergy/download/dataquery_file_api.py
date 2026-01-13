@@ -193,6 +193,16 @@ DQ_FILE_API_STREAM_CHUNK_SIZE: int = 8192  # 8 KB
 
 JPMAQS_EARLIEST_FILE_DATE = "20220101"
 
+JPMAQS_DATASET_THEME_MAPPING = {
+    "Economic surprises": "JPMAQS_ECONOMIC_SURPRISES",
+    "Financial conditions": "JPMAQS_FINANCIAL_CONDITIONS",
+    "Generic returns": "JPMAQS_GENERIC_RETURNS",
+    "Macroeconomic balance sheets": "JPMAQS_MACROECONOMIC_BALANCE_SHEETS",
+    "Macroeconomic trends": "JPMAQS_MACROECONOMIC_TRENDS",
+    "Shocks and risk measures": "JPMAQS_SHOCKS_RISK_MEASURES",
+    "Stylized trading factors": "JPMAQS_STYLIZED_TRADING_FACTORS",
+}
+
 logger = logging.getLogger(__name__)
 
 
@@ -990,10 +1000,17 @@ class DataQueryFileAPIClient:
 
         catalog_file = catalog_file or self.download_catalog_file(out_dir=out_dir)
         catalog_df = pd.read_parquet(catalog_file)
-        catalog_df.loc[:, "Dataset"] = catalog_df["Theme"].apply(
-            lambda x: "JPMAQS_" + str(x).upper().replace(" ", "_")
+        catalog_df.loc[:, "Dataset"] = catalog_df["Theme"].map(
+            JPMAQS_DATASET_THEME_MAPPING
         )
-
+        if not set(catalog_df["Theme"]) == set(JPMAQS_DATASET_THEME_MAPPING.keys()):
+            missing_themes = set(catalog_df["Theme"]) - set(
+                JPMAQS_DATASET_THEME_MAPPING.keys()
+            )
+            logger.warning(
+                f"Catalog file contains unknown themes: {missing_themes}. "
+                "Please check for newer versions of the `macrosynergy` Python package."
+            )
         if case_sensitive:
             catalog_df = catalog_df[catalog_df["Ticker"].isin(tickers)]
         else:
@@ -2121,11 +2138,11 @@ def lazy_load_from_parquets(
     include_file_column: bool = True,
     catalog_file: Optional[str] = None,
     warn_if_no_full_snapshots: bool = False,
-) -> pd.DataFrame:
+) -> Union[pd.DataFrame, pl.DataFrame, pl.LazyFrame]:
     """
     This function helps to lazily load JPMaQS parquet files from a specified directory.
     It operates using the exact ticker names provided.
-    
+
     Notes
     -----
     The `datasets` argument applies to
@@ -2177,9 +2194,9 @@ def lazy_load_from_parquets(
         warn_if_no_full_snapshots=warn_if_no_full_snapshots,
     )
     if datasets:
-        datasets = [d.replace("_DELTA", "") for d in datasets]
+        datasets = sorted(set([d.replace("_DELTA", "") for d in datasets]))
         available_files_df = available_files_df.loc[
-            available_files_df["e-dataset"].isin(set(datasets))
+            available_files_df["e-dataset"].isin(datasets)
         ]
 
     include_file_column = "source_file" if include_file_column else None

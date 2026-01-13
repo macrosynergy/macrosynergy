@@ -14,6 +14,7 @@ from macrosynergy.download.dataquery_file_api import (
     DownloadError,
     InvalidResponseError,
     DQ_FILE_API_SCOPE,
+    JPMAQS_DATASET_THEME_MAPPING,
 )
 
 
@@ -592,7 +593,11 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
     @patch("macrosynergy.download.dataquery_file_api.cf.ThreadPoolExecutor")
     @patch("macrosynergy.download.dataquery_file_api.DataQueryFileAPIOauth")
     def test_download_multiple_files_retries_corrupt_files_as_filenames(
-        self, mock_oauth, mock_executor_cls, mock_as_completed, mock_delete_corrupt_files
+        self,
+        mock_oauth,
+        mock_executor_cls,
+        mock_as_completed,
+        mock_delete_corrupt_files,
     ):
         client = DataQueryFileAPIClient(
             client_id="id", client_secret="secret", out_dir=self.test_dir
@@ -688,6 +693,59 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
         mock_list_files.return_value = pd.DataFrame()
         with self.assertRaises(DownloadError):
             client.download_catalog_file()
+
+    @patch("macrosynergy.download.dataquery_file_api.logger")
+    @patch("macrosynergy.download.dataquery_file_api.pd.read_parquet")
+    @patch("macrosynergy.download.dataquery_file_api.DataQueryFileAPIOauth")
+    def test_get_datasets_for_indicators_maps_themes_to_datasets(
+        self, mock_oauth, mock_read_parquet, mock_logger
+    ):
+        client = DataQueryFileAPIClient(
+            client_id="id", client_secret="secret", out_dir=self.test_dir
+        )
+
+        themes = list(JPMAQS_DATASET_THEME_MAPPING.keys())
+        tickers = [f"TICKER_{i}" for i in range(len(themes))]
+        mock_read_parquet.return_value = pd.DataFrame(
+            {"Theme": themes, "Ticker": tickers}
+        )
+
+        result = client.get_datasets_for_indicators(
+            tickers=[tickers[0].lower()],
+            catalog_file="JPMAQS_METADATA_CATALOG_20230101.parquet",
+        )
+
+        self.assertEqual(result, [JPMAQS_DATASET_THEME_MAPPING[themes[0]]])
+        mock_logger.warning.assert_not_called()
+
+    @patch("macrosynergy.download.dataquery_file_api.logger")
+    @patch("macrosynergy.download.dataquery_file_api.pd.read_parquet")
+    @patch("macrosynergy.download.dataquery_file_api.DataQueryFileAPIOauth")
+    def test_get_datasets_for_indicators_warns_on_unknown_themes(
+        self, mock_oauth, mock_read_parquet, mock_logger
+    ):
+        client = DataQueryFileAPIClient(
+            client_id="id", client_secret="secret", out_dir=self.test_dir
+        )
+
+        themes = list(JPMAQS_DATASET_THEME_MAPPING.keys())
+        tickers = [f"TICKER_{i}" for i in range(len(themes))]
+        unknown_theme = "New unseen theme"
+        mock_read_parquet.return_value = pd.DataFrame(
+            {"Theme": themes + [unknown_theme], "Ticker": tickers + ["BAD_TICKER"]}
+        )
+
+        result = client.get_datasets_for_indicators(
+            tickers=[tickers[0]],
+            catalog_file="JPMAQS_METADATA_CATALOG_20230101.parquet",
+            case_sensitive=True,
+        )
+
+        self.assertEqual(result, [JPMAQS_DATASET_THEME_MAPPING[themes[0]]])
+        mock_logger.warning.assert_called_once()
+        warning_msg = mock_logger.warning.call_args[0][0]
+        self.assertIn("unknown themes", warning_msg.lower())
+        self.assertIn(unknown_theme, warning_msg)
 
     @patch("macrosynergy.download.dataquery_file_api.logger")
     @patch.object(DataQueryFileAPIClient, "download_multiple_files")
@@ -841,25 +899,30 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
         )
         mock_get_datasets_for_indicators.return_value = []
         mock_lazy_load.return_value = pd.DataFrame()
-        mock_download_catalog_file.return_value = "JPMAQS_METADATA_CATALOG_20230101.parquet"
+        mock_download_catalog_file.return_value = (
+            "JPMAQS_METADATA_CATALOG_20230101.parquet"
+        )
         mock_filter_to_valid_tickers.return_value = ["USD_GROWTH"]
         mock_utcnow.return_value = pd.Timestamp("2023-01-05T01:02:03Z")
 
-        client.download(tickers=["USD_GROWTH"], since_datetime=None, show_progress=False)
+        client.download(
+            tickers=["USD_GROWTH"], since_datetime=None, show_progress=False
+        )
 
         mock_download_full_snapshot.assert_called_once()
         # called_since = mock_download_full_snapshot.call_args.kwargs["since_datetime"]
         if PYTHON_3_8_OR_LATER:
-            called_since = mock_download_full_snapshot.call_args.kwargs["since_datetime"]
+            called_since = mock_download_full_snapshot.call_args.kwargs[
+                "since_datetime"
+            ]
             self.assertIsNone(mock_lazy_load.call_args.kwargs["since_datetime"])
             self.assertIsNone(mock_lazy_load.call_args.kwargs["to_datetime"])
         else:
             called_since = mock_download_full_snapshot.call_args[1]["since_datetime"]
             self.assertIsNone(mock_lazy_load.call_args[1]["since_datetime"])
-            self.assertIsNone(mock_lazy_load.call_args[1]["to_datetime"])   
+            self.assertIsNone(mock_lazy_load.call_args[1]["to_datetime"])
 
         self.assertEqual(called_since, "20230105")
-
 
     @patch("macrosynergy.download.dataquery_file_api.logger")
     @patch.object(DataQueryFileAPIClient, "download_catalog_file")
@@ -877,7 +940,9 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
         client = DataQueryFileAPIClient(
             client_id="id", client_secret="secret", out_dir=self.test_dir
         )
-        mock_download_catalog_file.return_value = "JPMAQS_METADATA_CATALOG_20230101.parquet"
+        mock_download_catalog_file.return_value = (
+            "JPMAQS_METADATA_CATALOG_20230101.parquet"
+        )
         mock_filter_to_valid_tickers.return_value = ["USD_GROWTH"]
         mock_get_datasets_for_indicators.return_value = []
         mock_lazy_load.return_value = pd.DataFrame()
@@ -898,7 +963,7 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
             result = mock_get_datasets_for_indicators.call_args.kwargs["tickers"]
         else:
             result = mock_get_datasets_for_indicators.call_args[1]["tickers"]
-        
+
         self.assertEqual(result, ["USD_GROWTH"])
 
     @patch.object(DataQueryFileAPIClient, "download_catalog_file")
@@ -916,6 +981,7 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
                 skip_download=True,
                 show_progress=False,
             )
+
 
 if __name__ == "__main__":
     unittest.main()
