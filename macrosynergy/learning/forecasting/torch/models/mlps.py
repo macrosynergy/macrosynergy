@@ -60,6 +60,13 @@ class BaseMultiLayerPerceptron(nn.Module):
         self.fit_encoder_intercept = fit_encoder_intercept
         self.fit_head_intercept = fit_head_intercept
 
+        self.activation_map = {
+            "tanh": lambda: nn.Tanh(),
+            "relu": lambda: nn.ReLU(inplace=True),
+            "sigmoid": lambda: nn.Sigmoid(),
+            "identity": lambda: nn.Identity(),
+        }
+
         # Encoder
         self.encoder = self._build_encoder(self.n_inputs, self.n_latent, self.encoder_activation, self.fit_encoder_intercept)
 
@@ -170,32 +177,62 @@ class MultiHeadRetNet(BaseMultiLayerPerceptron):
         Whether to fit intercepts in the output head. Default is True.
     """
     def _build_encoder(self, n_inputs, n_latent, encoder_activation, fit_encoder_intercept):
-        activation_map = {
-            "tanh": lambda: nn.Tanh(),
-            "relu": lambda: nn.ReLU(inplace=True),
-            "sigmoid": lambda: nn.Sigmoid(),
-        }
-
-        encoder_modules = [nn.Linear(n_inputs, n_latent[0], bias = fit_encoder_intercept), activation_map[encoder_activation]()]
+        encoder_modules = [nn.Linear(n_inputs, n_latent[0], bias = fit_encoder_intercept), self.activation_map[encoder_activation]()]
         if len(n_latent) > 1:
             for layer_idx in range(1, len(n_latent)):
                 encoder_modules.append(
                     nn.Linear(n_latent[layer_idx - 1], n_latent[layer_idx], bias = fit_encoder_intercept)
                 )
-                encoder_modules.append(activation_map[encoder_activation]())
+                encoder_modules.append(self.activation_map[encoder_activation]())
         
         return nn.Sequential(*encoder_modules)
     
     def _build_head(self, n_latent, n_outputs, head_activation, fit_head_intercept):
-        activation_map = {
-            "tanh": lambda: nn.Tanh(),
-            "relu": lambda: nn.ReLU(inplace=True),
-            "sigmoid": lambda: nn.Sigmoid(),
-            "identity": lambda: nn.Identity(),
-        }
 
-        head_modules = [nn.Linear(n_latent, n_outputs, bias = fit_head_intercept)]
-        if head_activation != "identity":
-            head_modules.append(activation_map[head_activation]())
+        return nn.Linear(n_latent, n_outputs, bias = fit_head_intercept)
+    
+class MultiHeadPANet(BaseMultiLayerPerceptron):
+    """
+    Multi-layer perceptron model with multiple output heads and a shared encoder. The 
+    head is a linear layer with either tanh or sigmoid activation to constrain outputs to
+    bounded ranges that represent trading signal strengths rather than expected returns, 
+    ergo "PANet".
 
-        return nn.Sequential(*head_modules)
+    Parameters
+    ----------
+    n_inputs : int
+        Number of input features. Must be at least 1.
+    n_latent : Union[int, list[int]]
+        Number of latent features in a single hidden layer or list specifying the size of
+        each hidden layer.
+    n_outputs : int
+        Number of output variables. Must be at least 1.
+    encoder_activation : str, optional
+        Activation function for the encoder layers.
+        Default is "tanh". Options include "relu" and "sigmoid".
+    head_activation : str, optional
+        Activation function for the head layers.
+        Default is "identity" for no activation. Options include "tanh", "relu"
+        and "sigmoid".
+    fit_encoder_intercept : bool, optional
+        Whether to fit intercepts in the encoder layers. Default is False.
+    fit_head_intercept : bool, optional
+        Whether to fit intercepts in the output head. Default is True.
+    """
+    def _build_encoder(self, n_inputs, n_latent, encoder_activation, fit_encoder_intercept):
+        encoder_modules = [nn.Linear(n_inputs, n_latent[0], bias = fit_encoder_intercept), self.activation_map[encoder_activation]()]
+        if len(n_latent) > 1:
+            for layer_idx in range(1, len(n_latent)):
+                encoder_modules.append(
+                    nn.Linear(n_latent[layer_idx - 1], n_latent[layer_idx], bias = fit_encoder_intercept)
+                )
+                encoder_modules.append(self.activation_map[encoder_activation]())
+        
+        return nn.Sequential(*encoder_modules)
+    
+    def _build_head(self, n_latent, n_outputs, head_activation, fit_head_intercept):
+        head = nn.Sequential(
+            nn.Linear(n_latent, n_outputs, bias = fit_head_intercept),
+            self.activation_map[head_activation]()
+        )
+        return head
