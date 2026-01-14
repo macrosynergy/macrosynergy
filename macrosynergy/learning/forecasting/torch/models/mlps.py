@@ -4,7 +4,7 @@ import torch.nn as nn
 import numbers
 
 class MultiLayerPerceptron(nn.Module):
-    """
+    r"""
     Multi-layer perceptron models in PyTorch.
 
     Parameters
@@ -30,10 +30,33 @@ class MultiLayerPerceptron(nn.Module):
 
     Notes
     -----
-    A Multi-layer perceptron is a feed-forward neural network that learns a (hopefully)
+    A multi-layer perceptron is a feed-forward neural network that learns a (hopefully)
     optimal representation of the feature set for a prediction task, or for a collection
-    of tasks. One neuron is the composition of a linear combination of inputs and a 
-    (usually) non-linear activation function. Multiple neurons are organized in layers, and multiple
+    of tasks. The intitial set is transformed into a new, "learnt", collection of features.
+    This is the "first hidden layer" of the network. Each learnt feature is the composition
+    of the linear combination of initial features and a non-linear activation function. 
+    The choice of activation is currently "relu" (:math:`f(x) = \max(0, x)`), "tanh" 
+    (:math:`f(x) = \frac{e^x - e^{-x}}{e^x + e^{-x}}`), or "sigmoid"
+    (:math:`f(x) = \frac{1}{1 + e^{-x}}`). This new feature set can be further transformed
+    in the same manner by creating a second hidden layer, and so on. 
+
+    The part of the network that describes how the initial features are transformed into 
+    the final features (before mapping to the outputs) is called the "encoder". The
+    component that maps the final learnt features to the outputs is called the "projection head".
+    When multiple outputs are being modelled, this is usually referred to as having a 
+    "multi-head" architecture.
+
+    What's the advantage of a feedforward neural network over other models on tabular 
+    datasets? Structure and customizability. 32 neurons in a hidden layer means that 32 features
+    are being learnt. I can shrink these features towards priors, if I have any beliefs.
+    I can regularize network outputs to encourage smoothness (temporal regularization)
+    and consistency with known relationships (spatial regularization). I can customize
+    loss functions to optimize economically informed losses rather than generic 
+    distance metrics. I can penalize correlation against existing strategies, if so 
+    desired. People often refer to neural network flexibility in the context of learning
+    an arbitrarily complex function. While this is true, I would use the word "flexibility"
+    to refer to the ability to customize architectures and loss functions to suit
+    a particular problem.
     """
     def __init__(
         self,
@@ -63,7 +86,11 @@ class MultiLayerPerceptron(nn.Module):
         if isinstance(n_latent, numbers.Integral):
             self.n_latent = [n_latent]
         else:
-            self.n_latent = n_latent
+            if len(n_latent) == 1:
+                self.n_latent = n_latent[0]
+            else:
+                self.n_latent = n_latent
+
         self.n_outputs = n_outputs
         self.encoder_activation = encoder_activation
         self.head_activation = head_activation
