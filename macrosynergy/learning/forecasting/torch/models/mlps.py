@@ -172,6 +172,8 @@ class MultiLayerPerceptron(nn.Module):
                 raise TypeError("When n_latent is a list, all elements must be integers.")
             if len(n_latent) <= 1:
                 raise ValueError("When n_latent is a list, it must contain more than one element.")
+            if not all(x >= 1 for x in n_latent):
+                raise ValueError("When n_latent is a list, all elements must be at least 1.")
         else:
             if n_latent < 1:
                 raise ValueError("When n_latent is an integer, it must be at least 1.")
