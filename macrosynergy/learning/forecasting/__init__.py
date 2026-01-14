@@ -34,6 +34,10 @@ from .ensemble import (
 from .factor_models import (
     PLSTransformer,
 )
+
+from .torch import (
+    MultiLayerPerceptron,
+)
 __all__ = [
     "LADRegressor",
     "KNNClassifier",
@@ -59,4 +63,5 @@ __all__ = [
     "TimeWeightedWrapper",
     "PLSTransformer",
     "LinearMultiTargetRegression",
+    "MultiLayerPerceptron",
 ]
