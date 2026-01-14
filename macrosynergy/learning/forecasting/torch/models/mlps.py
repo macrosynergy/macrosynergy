@@ -3,9 +3,9 @@ import torch.nn as nn
 
 import numbers
 
-class BaseMultiLayerPerceptron(nn.Module):
+class MultiLayerPerceptron(nn.Module):
     """
-    Outline for multi-layer perceptron models in PyTorch.
+    Multi-layer perceptron models in PyTorch.
 
     Parameters
     ----------
@@ -16,13 +16,14 @@ class BaseMultiLayerPerceptron(nn.Module):
         each hidden layer.
     n_outputs : int
         Number of output variables. Must be at least 1.
-    encoder_activation : str, optional
+    encoder_activation : Union[str, nn.Module], optional
         Activation function for the encoder layers.
-        Default is "tanh". Options include "relu" and "sigmoid".
+        Default is "tanh". String options include "relu" and "sigmoid".
+        Alternatively, a custom PyTorch activation module can be provided.
     head_activation : str, optional
         Activation function for the head layers.
-        Default is "identity" for no activation. Options include "tanh", "relu"
-        and "sigmoid".
+        Default is "identity" for no activation. String options include "tanh", "relu"
+        and "sigmoid". Alternatively, a custom PyTorch activation module can be provided.
     fit_encoder_intercept : bool, optional
         Whether to fit intercepts in the encoder layers. Default is False.
     fit_head_intercept : bool, optional
@@ -129,19 +130,27 @@ class BaseMultiLayerPerceptron(nn.Module):
         if n_outputs < 1:
             raise ValueError("n_outputs must be at least 1.")
         # encoder_activation
-        if not isinstance(encoder_activation, str):
-            raise TypeError("encoder_activation must be a string.")
-        if encoder_activation not in {"tanh", "relu", "sigmoid"}:
-            raise ValueError(
-                "encoder_activation must be one of 'tanh', 'relu', or 'sigmoid'."
-            )
+        if not (isinstance(encoder_activation, str) or isinstance(encoder_activation, nn.Module)) :
+            raise TypeError("encoder_activation must be a string or PyTorch-compatible activation function.")
+        if isinstance(encoder_activation, str):
+            if encoder_activation not in {"tanh", "relu", "sigmoid"}:
+                raise ValueError(
+                    "encoder_activation must be one of 'tanh', 'relu', or 'sigmoid'."
+                )
+        else:
+            if not hasattr(encoder_activation, "forward"):
+                raise ValueError("encoder_activation must be a valid PyTorch activation module.")
         # head_activation
-        if not isinstance(head_activation, str):
-            raise TypeError("head_activation must be a string.")
-        if head_activation not in {"tanh", "relu", "sigmoid", "identity"}:
-            raise ValueError(
-                "head_activation must be one of 'tanh', 'relu', 'sigmoid', or 'identity'."
-            )
+        if not (isinstance(head_activation, str) or isinstance(head_activation, nn.Module)):
+            raise TypeError("head_activation must be a string or PyTorch-compatible activation function.")
+        if isinstance(head_activation, str):
+            if head_activation not in {"tanh", "relu", "sigmoid", "identity"}:
+                raise ValueError(
+                    "head_activation must be one of 'tanh', 'relu', 'sigmoid', or 'identity'."
+                )
+        else:
+            if not hasattr(head_activation, "forward"):
+                raise ValueError("head_activation must be a valid PyTorch activation module.")
         # fit_encoder_intercept
         if not isinstance(fit_encoder_intercept, bool):
             raise TypeError("fit_encoder_intercept must be a boolean.")
