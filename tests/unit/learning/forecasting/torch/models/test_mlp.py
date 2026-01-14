@@ -297,7 +297,8 @@ class TestMultiLayerPerceptron(TestCase):
 
     def test_build_encoder(self):
         """ Test that the encoder is built correctly """
-        # Single hidden layer, single output
+        """ Single hidden layer, single output """
+        # Tanh
         model_encoder = nn.Sequential(
             nn.Linear(10, 32, bias=False),
             nn.Tanh(),
@@ -305,7 +306,28 @@ class TestMultiLayerPerceptron(TestCase):
         created_encoder = self.single_output_single_layer_mlp._build_encoder(10, [32], "tanh", False)
         self.assertIsInstance(created_encoder, nn.Sequential)
         self.assertEqual(len(model_encoder), len(created_encoder))
-        # Multiple hidden layers, single output
+        self.assertIsInstance(created_encoder[1], nn.Tanh)
+        # ReLU
+        model_encoder = nn.Sequential(
+            nn.Linear(10, 32, bias=False),
+            nn.ReLU(inplace=True),
+        )
+        created_encoder = self.single_output_single_layer_mlp._build_encoder(10, [32], "relu", False)
+        self.assertIsInstance(created_encoder, nn.Sequential)
+        self.assertEqual(len(model_encoder), len(created_encoder))
+        self.assertIsInstance(created_encoder[1], nn.ReLU)
+        # Sigmoid
+        model_encoder = nn.Sequential(
+            nn.Linear(10, 32, bias=False),
+            nn.Sigmoid(),
+        )
+        created_encoder = self.single_output_single_layer_mlp._build_encoder(10, [32], "sigmoid", False)
+        self.assertIsInstance(created_encoder, nn.Sequential)
+        self.assertEqual(len(model_encoder), len(created_encoder))
+        self.assertIsInstance(created_encoder[1], nn.Sigmoid)
+
+        """ Multiple hidden layers, single output """
+        # Tanh
         model_encoder = nn.Sequential(
             nn.Linear(10, 32, bias=False),
             nn.Tanh(),
@@ -315,7 +337,35 @@ class TestMultiLayerPerceptron(TestCase):
         created_encoder = self.single_output_multi_layer_mlp._build_encoder(10, [32, 16], "tanh", False)
         self.assertIsInstance(created_encoder, nn.Sequential)
         self.assertEqual(len(model_encoder), len(created_encoder))
-        # Single hidden layer, multiple output
+        self.assertIsInstance(created_encoder[1], nn.Tanh)
+        self.assertIsInstance(created_encoder[3], nn.Tanh)
+        # Sigmoid
+        model_encoder = nn.Sequential(
+            nn.Linear(10, 32, bias=False),
+            nn.Sigmoid(),
+            nn.Linear(32, 16, bias=False),
+            nn.Sigmoid(),
+        )
+        created_encoder = self.single_output_multi_layer_mlp._build_encoder(10, [32, 16], "sigmoid", False)
+        self.assertIsInstance(created_encoder, nn.Sequential)
+        self.assertEqual(len(model_encoder), len(created_encoder))
+        self.assertIsInstance(created_encoder[1], nn.Sigmoid)
+        self.assertIsInstance(created_encoder[3], nn.Sigmoid)
+        # ReLU
+        model_encoder = nn.Sequential(
+            nn.Linear(10, 32, bias=False),
+            nn.ReLU(inplace=True),
+            nn.Linear(32, 16, bias=False),
+            nn.ReLU(inplace=True),
+        )
+        created_encoder = self.single_output_multi_layer_mlp._build_encoder(10, [32, 16], "relu", False)
+        self.assertIsInstance(created_encoder, nn.Sequential)
+        self.assertEqual(len(model_encoder), len(created_encoder))
+        self.assertIsInstance(created_encoder[1], nn.ReLU)
+        self.assertIsInstance(created_encoder[3], nn.ReLU)
+
+        """ Single hidden layer, multiple output """
+        # Tanh
         model_encoder = nn.Sequential(
             nn.Linear(10, 32, bias=False),
             nn.Tanh(),
@@ -323,7 +373,28 @@ class TestMultiLayerPerceptron(TestCase):
         created_encoder = self.multi_output_single_layer_mlp._build_encoder(10, [32], "tanh", False)
         self.assertIsInstance(created_encoder, nn.Sequential)
         self.assertEqual(len(model_encoder), len(created_encoder))
-        # Multiple hidden layers, multiple output
+        self.assertIsInstance(created_encoder[1], nn.Tanh)
+        # Sigmoid
+        model_encoder = nn.Sequential(
+            nn.Linear(10, 32, bias=False),
+            nn.Sigmoid(),
+        )
+        created_encoder = self.multi_output_single_layer_mlp._build_encoder(10, [32], "sigmoid", False)
+        self.assertIsInstance(created_encoder, nn.Sequential)
+        self.assertEqual(len(model_encoder), len(created_encoder))
+        self.assertIsInstance(created_encoder[1], nn.Sigmoid)
+        # ReLU
+        model_encoder = nn.Sequential(
+            nn.Linear(10, 32, bias=False),
+            nn.ReLU(inplace=True),
+        )
+        created_encoder = self.multi_output_single_layer_mlp._build_encoder(10, [32], "relu", False)
+        self.assertIsInstance(created_encoder, nn.Sequential)
+        self.assertEqual(len(model_encoder), len(created_encoder))
+        self.assertIsInstance(created_encoder[1], nn.ReLU)
+
+        """ Multiple hidden layers, multiple output """
+        # Tanh
         model_encoder = nn.Sequential(
             nn.Linear(10, 32, bias=False),
             nn.Tanh(),
@@ -333,12 +404,69 @@ class TestMultiLayerPerceptron(TestCase):
         created_encoder = self.multi_output_multi_layer_mlp._build_encoder(10, [32, 16], "tanh", False)
         self.assertIsInstance(created_encoder, nn.Sequential)
         self.assertEqual(len(model_encoder), len(created_encoder))
+        self.assertIsInstance(created_encoder[1], nn.Tanh)
+        self.assertIsInstance(created_encoder[3], nn.Tanh)
+        # Sigmoid
+        model_encoder = nn.Sequential(
+            nn.Linear(10, 32, bias=False),
+            nn.Sigmoid(),
+            nn.Linear(32, 16, bias=False),
+            nn.Sigmoid(),
+        )
+        created_encoder = self.multi_output_multi_layer_mlp._build_encoder(10, [32, 16], "sigmoid", False)
+        self.assertIsInstance(created_encoder, nn.Sequential)
+        self.assertEqual(len(model_encoder), len(created_encoder))
+        self.assertIsInstance(created_encoder[1], nn.Sigmoid)
+        self.assertIsInstance(created_encoder[3], nn.Sigmoid)
+        # ReLU
+        model_encoder = nn.Sequential(
+            nn.Linear(10, 32, bias=False),
+            nn.ReLU(inplace=True),
+            nn.Linear(32, 16, bias=False),
+            nn.ReLU(inplace=True),
+        )
+        created_encoder = self.multi_output_multi_layer_mlp._build_encoder(10, [32, 16], "relu", False)
+        self.assertIsInstance(created_encoder, nn.Sequential)
+        self.assertEqual(len(model_encoder), len(created_encoder))
+        self.assertIsInstance(created_encoder[1], nn.ReLU)
+        self.assertIsInstance(created_encoder[3], nn.ReLU)
 
     def test_build_head(self):
-        pass
+        """ Test that the projection head is built correctly """
+        # Single output
+        model_head = nn.Sequential(
+            nn.Linear(32, 1, bias=True),
+            nn.Identity(),
+        )
+        created_head = self.single_output_single_layer_mlp._build_head(32, 1, "identity", True)
+        self.assertIsInstance(created_head, nn.Sequential)
+        self.assertEqual(len(model_head), len(created_head))
+        self.assertIsInstance(created_head[1], nn.Identity)
+        model_head = nn.Sequential(
+            nn.Linear(32, 1, bias=True),
+            nn.Tanh(),
+        )
+        created_head = self.single_output_single_layer_mlp._build_head(32, 1, "tanh", True)
+        self.assertIsInstance(created_head, nn.Sequential)
+        self.assertEqual(len(model_head), len(created_head))
+        self.assertIsInstance(created_head[1], nn.Tanh)
+        # Multiple output
+        model_head = nn.Sequential(
+            nn.Linear(32, 3, bias=True),
+            nn.Identity(),
+        )
+        created_head = self.multi_output_single_layer_mlp._build_head(32, 3, "identity", True)
+        self.assertIsInstance(created_head, nn.Sequential)
+        self.assertEqual(len(model_head), len(created_head))
+        self.assertIsInstance(created_head[1], nn.Identity)
+        model_head = nn.Sequential(
+            nn.Linear(32, 3, bias=True),
+            nn.Tanh(),
+        )
+        created_head = self.multi_output_single_layer_mlp._build_head(32, 3, "tanh", True)
+        self.assertIsInstance(created_head, nn.Sequential)
+        self.assertEqual(len(model_head), len(created_head))
+        self.assertIsInstance(created_head[1], nn.Tanh)
 
     def test_valid_forward(self):
-        pass
-
-    def test_types_forward(self):
         pass
