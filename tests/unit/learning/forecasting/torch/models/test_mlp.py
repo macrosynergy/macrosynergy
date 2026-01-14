@@ -129,7 +129,90 @@ class TestMultiLayerPerceptron(TestCase):
                 n_latent=[16, -32, 64],
                 n_outputs=1,
             )
+
+        """ n_outputs """
+        with self.assertRaises(TypeError):
+            MultiLayerPerceptron(
+                n_inputs=10,
+                n_latent=4,
+                n_outputs="1",
+            )
+        with self.assertRaises(TypeError):
+            MultiLayerPerceptron(
+                n_inputs=10,
+                n_latent=4,
+                n_outputs=1.5,
+            )
+        with self.assertRaises(ValueError):
+            MultiLayerPerceptron(
+                n_inputs=10,
+                n_latent=4,
+                n_outputs=0,
+            )
+        with self.assertRaises(ValueError):
+            MultiLayerPerceptron(
+                n_inputs=10,
+                n_latent=4,
+                n_outputs=-3,
+            )
         
+        """ encoder_activation """
+        with self.assertRaises(TypeError):
+            MultiLayerPerceptron(
+                n_inputs=10,
+                n_latent=4,
+                n_outputs=1,
+                encoder_activation=123,
+            )
+        with self.assertRaises(ValueError):
+            MultiLayerPerceptron(
+                n_inputs=10,
+                n_latent=4,
+                n_outputs=1,
+                encoder_activation="sdfsdfs",
+            )
+        with self.assertRaises(ValueError):
+            MultiLayerPerceptron(
+                n_inputs=10,
+                n_latent=4,
+                n_outputs=1,
+                encoder_activation="identity",
+            )
+            
+        """ head_activation """
+        with self.assertRaises(TypeError):
+            MultiLayerPerceptron(
+                n_inputs=10,
+                n_latent=4,
+                n_outputs=1,
+                head_activation=456,
+            )
+        with self.assertRaises(ValueError):
+            MultiLayerPerceptron(
+                n_inputs=10,
+                n_latent=4,
+                n_outputs=1,
+                head_activation="sdfsdfs",
+            )
+
+        """ fit_encoder_intercept """
+        with self.assertRaises(TypeError):
+            MultiLayerPerceptron(
+                n_inputs=10,
+                n_latent=4,
+                n_outputs=1,
+                fit_encoder_intercept="True",
+            )
+
+        """ fit_head_intercept """
+        with self.assertRaises(TypeError):
+            MultiLayerPerceptron(
+                n_inputs=10,
+                n_latent=4,
+                n_outputs=1,
+                fit_head_intercept="False",
+            )
+    
 
     def test_build_encoder(self):
         pass
