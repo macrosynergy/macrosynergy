@@ -6,6 +6,9 @@ import torch.nn as nn
 
 from macrosynergy.learning.forecasting.torch.models.mlps import MultiLayerPerceptron
 
+from parameterized import parameterized
+import itertools
+
 class TestMultiLayerPerceptron(TestCase):
     @classmethod
     def setUpClass(self):
@@ -69,6 +72,27 @@ class TestMultiLayerPerceptron(TestCase):
         self.assertEqual(self.multi_output_multi_layer_mlp.head_activation, "identity")
         self.assertEqual(self.multi_output_multi_layer_mlp.fit_encoder_intercept, False)
         self.assertEqual(self.multi_output_multi_layer_mlp.fit_head_intercept, True)
+
+    @parameterized.expand(itertools.product([True, False], [True, False], ["tanh", "relu", "sigmoid"], ["identity", "tanh", "relu", "sigmoid"]))
+    def test_valid_init_custom(self, fit_encoder_intercept, fit_head_intercept, encoder_activation, head_activation):
+        """ Test correct model instantiation with varying network structures """
+        model = MultiLayerPerceptron(
+            n_inputs=10,
+            n_latent=[64, 32, 16],
+            n_outputs=2,
+            encoder_activation=encoder_activation,
+            head_activation=head_activation,
+            fit_encoder_intercept=fit_encoder_intercept,
+            fit_head_intercept=fit_head_intercept,
+        )
+        self.assertIsInstance(model, MultiLayerPerceptron)
+        self.assertEqual(model.n_inputs, 10)
+        self.assertEqual(model.n_latent, [64, 32, 16])
+        self.assertEqual(model.n_outputs, 2)
+        self.assertEqual(model.encoder_activation, encoder_activation)
+        self.assertEqual(model.head_activation, head_activation)
+        self.assertEqual(model.fit_encoder_intercept, fit_encoder_intercept)
+        self.assertEqual(model.fit_head_intercept, fit_head_intercept)
 
     def test_types_init(self):
         """ Test correct input validation checks """
