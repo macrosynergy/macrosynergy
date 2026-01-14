@@ -86,9 +86,6 @@ class MultiLayerPerceptron(nn.Module):
         if isinstance(n_latent, numbers.Integral):
             self.n_latent = [n_latent]
         else:
-            if len(n_latent) == 1:
-                self.n_latent = n_latent[0]
-            else:
                 self.n_latent = n_latent
 
         self.n_outputs = n_outputs

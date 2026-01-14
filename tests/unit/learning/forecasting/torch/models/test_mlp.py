@@ -9,10 +9,66 @@ from macrosynergy.learning.forecasting.torch.models.mlps import MultiLayerPercep
 class TestMultiLayerPerceptron(TestCase):
     @classmethod
     def setUpClass(self):
-        pass 
+        self.single_output_single_layer_mlp = MultiLayerPerceptron(
+            n_inputs=10,
+            n_latent=32,
+            n_outputs=1,
+        )
+        self.single_output_multi_layer_mlp = MultiLayerPerceptron(
+            n_inputs=10,
+            n_latent=[32, 16],
+            n_outputs=1,
+        )
+        self.multi_output_single_layer_mlp = MultiLayerPerceptron(
+            n_inputs=10,
+            n_latent=32,
+            n_outputs=3,
+        )
+        self.multi_output_multi_layer_mlp = MultiLayerPerceptron(
+            n_inputs=10,
+            n_latent=[32, 16],
+            n_outputs=3,
+        ) 
+
 
     def test_valid_init(self):
-        pass 
+        """ Test correct model instantiation with valid inputs """
+        # Single output, single hidden layer
+        self.assertIsInstance(self.single_output_single_layer_mlp, MultiLayerPerceptron)
+        self.assertEqual(self.single_output_single_layer_mlp.n_inputs, 10)
+        self.assertEqual(self.single_output_single_layer_mlp.n_latent, [32])
+        self.assertEqual(self.single_output_single_layer_mlp.n_outputs, 1)
+        self.assertEqual(self.single_output_single_layer_mlp.encoder_activation, "tanh")
+        self.assertEqual(self.single_output_single_layer_mlp.head_activation, "identity")
+        self.assertEqual(self.single_output_single_layer_mlp.fit_encoder_intercept, False)
+        self.assertEqual(self.single_output_single_layer_mlp.fit_head_intercept, True)
+        # Single output, multiple hidden layers
+        self.assertIsInstance(self.single_output_multi_layer_mlp, MultiLayerPerceptron)
+        self.assertEqual(self.single_output_multi_layer_mlp.n_inputs, 10)
+        self.assertEqual(self.single_output_multi_layer_mlp.n_latent, [32, 16])
+        self.assertEqual(self.single_output_multi_layer_mlp.n_outputs, 1)
+        self.assertEqual(self.single_output_multi_layer_mlp.encoder_activation, "tanh")
+        self.assertEqual(self.single_output_multi_layer_mlp.head_activation, "identity")
+        self.assertEqual(self.single_output_multi_layer_mlp.fit_encoder_intercept, False)
+        self.assertEqual(self.single_output_multi_layer_mlp.fit_head_intercept, True)
+        # Multiple output, single hidden layer
+        self.assertIsInstance(self.multi_output_single_layer_mlp, MultiLayerPerceptron)
+        self.assertEqual(self.multi_output_single_layer_mlp.n_inputs, 10)
+        self.assertEqual(self.multi_output_single_layer_mlp.n_latent, [32])
+        self.assertEqual(self.multi_output_single_layer_mlp.n_outputs, 3)
+        self.assertEqual(self.multi_output_single_layer_mlp.encoder_activation, "tanh")
+        self.assertEqual(self.multi_output_single_layer_mlp.head_activation, "identity")
+        self.assertEqual(self.multi_output_single_layer_mlp.fit_encoder_intercept, False)
+        self.assertEqual(self.multi_output_single_layer_mlp.fit_head_intercept, True)
+        # Multiple output, multiple hidden layers
+        self.assertIsInstance(self.multi_output_multi_layer_mlp, MultiLayerPerceptron)
+        self.assertEqual(self.multi_output_multi_layer_mlp.n_inputs, 10)
+        self.assertEqual(self.multi_output_multi_layer_mlp.n_latent, [32, 16])
+        self.assertEqual(self.multi_output_multi_layer_mlp.n_outputs, 3)
+        self.assertEqual(self.multi_output_multi_layer_mlp.encoder_activation, "tanh")
+        self.assertEqual(self.multi_output_multi_layer_mlp.head_activation, "identity")
+        self.assertEqual(self.multi_output_multi_layer_mlp.fit_encoder_intercept, False)
+        self.assertEqual(self.multi_output_multi_layer_mlp.fit_head_intercept, True)
 
     def test_types_init(self):
         """ Test correct input validation checks """
@@ -178,7 +234,7 @@ class TestMultiLayerPerceptron(TestCase):
                 n_outputs=1,
                 encoder_activation="identity",
             )
-            
+
         """ head_activation """
         with self.assertRaises(TypeError):
             MultiLayerPerceptron(
