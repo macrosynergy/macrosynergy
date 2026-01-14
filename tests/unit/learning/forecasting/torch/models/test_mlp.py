@@ -12,6 +12,7 @@ import itertools
 class TestMultiLayerPerceptron(TestCase):
     @classmethod
     def setUpClass(self):
+        # Instantiate some models upfront
         self.single_output_single_layer_mlp = MultiLayerPerceptron(
             n_inputs=10,
             n_latent=32,
@@ -295,7 +296,43 @@ class TestMultiLayerPerceptron(TestCase):
     
 
     def test_build_encoder(self):
-        pass
+        """ Test that the encoder is built correctly """
+        # Single hidden layer, single output
+        model_encoder = nn.Sequential(
+            nn.Linear(10, 32, bias=False),
+            nn.Tanh(),
+        )
+        created_encoder = self.single_output_single_layer_mlp._build_encoder(10, [32], "tanh", False)
+        self.assertIsInstance(created_encoder, nn.Sequential)
+        self.assertEqual(len(model_encoder), len(created_encoder))
+        # Multiple hidden layers, single output
+        model_encoder = nn.Sequential(
+            nn.Linear(10, 32, bias=False),
+            nn.Tanh(),
+            nn.Linear(32, 16, bias=False),
+            nn.Tanh(),
+        )
+        created_encoder = self.single_output_multi_layer_mlp._build_encoder(10, [32, 16], "tanh", False)
+        self.assertIsInstance(created_encoder, nn.Sequential)
+        self.assertEqual(len(model_encoder), len(created_encoder))
+        # Single hidden layer, multiple output
+        model_encoder = nn.Sequential(
+            nn.Linear(10, 32, bias=False),
+            nn.Tanh(),
+        )
+        created_encoder = self.multi_output_single_layer_mlp._build_encoder(10, [32], "tanh", False)
+        self.assertIsInstance(created_encoder, nn.Sequential)
+        self.assertEqual(len(model_encoder), len(created_encoder))
+        # Multiple hidden layers, multiple output
+        model_encoder = nn.Sequential(
+            nn.Linear(10, 32, bias=False),
+            nn.Tanh(),
+            nn.Linear(32, 16, bias=False),
+            nn.Tanh(),
+        )
+        created_encoder = self.multi_output_multi_layer_mlp._build_encoder(10, [32, 16], "tanh", False)
+        self.assertIsInstance(created_encoder, nn.Sequential)
+        self.assertEqual(len(model_encoder), len(created_encoder))
 
     def test_build_head(self):
         pass
