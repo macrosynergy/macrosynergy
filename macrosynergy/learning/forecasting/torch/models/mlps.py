@@ -16,18 +16,24 @@ class MultiLayerPerceptron(nn.Module):
         each hidden layer.
     n_outputs : int
         Number of output variables. Must be at least 1.
-    encoder_activation : Union[str, nn.Module], optional
+    encoder_activation : str, optional
         Activation function for the encoder layers.
-        Default is "tanh". String options include "relu" and "sigmoid".
-        Alternatively, a custom PyTorch activation module can be provided.
+        Default is "tanh". Other options include "relu" and "sigmoid".
     head_activation : str, optional
         Activation function for the head layers.
-        Default is "identity" for no activation. String options include "tanh", "relu"
-        and "sigmoid". Alternatively, a custom PyTorch activation module can be provided.
+        Default is "identity" for no activation. Other options include "tanh", "relu"
+        and "sigmoid".
     fit_encoder_intercept : bool, optional
         Whether to fit intercepts in the encoder layers. Default is False.
     fit_head_intercept : bool, optional
         Whether to fit intercepts in the output head. Default is True.
+
+    Notes
+    -----
+    A Multi-layer perceptron is a feed-forward neural network that learns a (hopefully)
+    optimal representation of the feature set for a prediction task, or for a collection
+    of tasks. One neuron is the composition of a linear combination of inputs and a 
+    (usually) non-linear activation function. Multiple neurons are organized in layers, and multiple
     """
     def __init__(
         self,
@@ -54,7 +60,10 @@ class MultiLayerPerceptron(nn.Module):
 
         # Attributes
         self.n_inputs = n_inputs
-        self.n_latent = list(n_latent)
+        if isinstance(n_latent, numbers.Integral):
+            self.n_latent = [n_latent]
+        else:
+            self.n_latent = n_latent
         self.n_outputs = n_outputs
         self.encoder_activation = encoder_activation
         self.head_activation = head_activation
@@ -93,10 +102,25 @@ class MultiLayerPerceptron(nn.Module):
         return output
 
     def _build_encoder(self, n_inputs, n_latent, encoder_activation, fit_encoder_intercept):
-        raise NotImplementedError("Subclasses must implement _build_encoder method.")
+        # Identify encoder activation
+        activation_func = self.activation_map[encoder_activation]
+        # Build encoder
+        encoder_modules = [nn.Linear(n_inputs, n_latent[0], bias = fit_encoder_intercept), activation_func()]
+        if len(n_latent) > 1:
+            for layer_idx in range(1, len(n_latent)):
+                encoder_modules.append(
+                    nn.Linear(n_latent[layer_idx - 1], n_latent[layer_idx], bias = fit_encoder_intercept)
+                )
+                encoder_modules.append(activation_func())
+        
+        return nn.Sequential(*encoder_modules)
     
     def _build_head(self, n_latent, n_outputs, head_activation, fit_head_intercept):
-        raise NotImplementedError("Subclasses must implement _build_head method.")
+        head = nn.Sequential(
+            nn.Linear(n_latent, n_outputs, bias = fit_head_intercept),
+            self.activation_map[head_activation]()
+        )
+        return head
 
     def _check_init_params(
         self,
@@ -130,118 +154,45 @@ class MultiLayerPerceptron(nn.Module):
         if n_outputs < 1:
             raise ValueError("n_outputs must be at least 1.")
         # encoder_activation
-        if not (isinstance(encoder_activation, str) or isinstance(encoder_activation, nn.Module)) :
-            raise TypeError("encoder_activation must be a string or PyTorch-compatible activation function.")
-        if isinstance(encoder_activation, str):
-            if encoder_activation not in {"tanh", "relu", "sigmoid"}:
-                raise ValueError(
-                    "encoder_activation must be one of 'tanh', 'relu', or 'sigmoid'."
-                )
-        else:
-            if not hasattr(encoder_activation, "forward"):
-                raise ValueError("encoder_activation must be a valid PyTorch activation module.")
+        if not isinstance(encoder_activation, str):
+            raise TypeError("encoder_activation must be a string.")
+        if encoder_activation not in {"tanh", "relu", "sigmoid"}:
+            raise ValueError(
+                "encoder_activation must be one of 'tanh', 'relu', or 'sigmoid'."
+            )
         # head_activation
-        if not (isinstance(head_activation, str) or isinstance(head_activation, nn.Module)):
-            raise TypeError("head_activation must be a string or PyTorch-compatible activation function.")
-        if isinstance(head_activation, str):
-            if head_activation not in {"tanh", "relu", "sigmoid", "identity"}:
-                raise ValueError(
-                    "head_activation must be one of 'tanh', 'relu', 'sigmoid', or 'identity'."
-                )
-        else:
-            if not hasattr(head_activation, "forward"):
-                raise ValueError("head_activation must be a valid PyTorch activation module.")
+        if not isinstance(head_activation, str):
+            raise TypeError("head_activation must be a string.")
+        if head_activation not in {"tanh", "relu", "sigmoid", "identity"}:
+            raise ValueError(
+                "head_activation must be one of 'tanh', 'relu', 'sigmoid', or 'identity'."
+            )
         # fit_encoder_intercept
         if not isinstance(fit_encoder_intercept, bool):
             raise TypeError("fit_encoder_intercept must be a boolean.")
         # fit_head_intercept
         if not isinstance(fit_head_intercept, bool):
             raise TypeError("fit_head_intercept must be a boolean.")
-
-class MultiHeadRetNet(BaseMultiLayerPerceptron):
-    """
-    Multi-layer perceptron model with multiple output heads and a shared encoder. The 
-    head is a linear layer without activation, suitable for return forecasting tasks, 
-    ergo "RetNet".
-
-    Parameters
-    ----------
-    n_inputs : int
-        Number of input features. Must be at least 1.
-    n_latent : Union[int, list[int]]
-        Number of latent features in a single hidden layer or list specifying the size of
-        each hidden layer.
-    n_outputs : int
-        Number of output variables. Must be at least 1.
-    encoder_activation : str, optional
-        Activation function for the encoder layers.
-        Default is "tanh". Options include "relu" and "sigmoid".
-    head_activation : str, optional
-        Activation function for the head layers.
-        Default is "identity" for no activation. Options include "tanh", "relu"
-        and "sigmoid".
-    fit_encoder_intercept : bool, optional
-        Whether to fit intercepts in the encoder layers. Default is False.
-    fit_head_intercept : bool, optional
-        Whether to fit intercepts in the output head. Default is True.
-    """
-    def _build_encoder(self, n_inputs, n_latent, encoder_activation, fit_encoder_intercept):
-        encoder_modules = [nn.Linear(n_inputs, n_latent[0], bias = fit_encoder_intercept), self.activation_map[encoder_activation]()]
-        if len(n_latent) > 1:
-            for layer_idx in range(1, len(n_latent)):
-                encoder_modules.append(
-                    nn.Linear(n_latent[layer_idx - 1], n_latent[layer_idx], bias = fit_encoder_intercept)
-                )
-                encoder_modules.append(self.activation_map[encoder_activation]())
         
-        return nn.Sequential(*encoder_modules)
-    
-    def _build_head(self, n_latent, n_outputs, head_activation, fit_head_intercept):
-
-        return nn.Linear(n_latent, n_outputs, bias = fit_head_intercept)
-    
-class MultiHeadPANet(BaseMultiLayerPerceptron):
-    """
-    Multi-layer perceptron model with multiple output heads and a shared encoder. The 
-    head is a linear layer with either tanh or sigmoid activation to constrain outputs to
-    bounded ranges that represent trading signal strengths rather than expected returns, 
-    ergo "PANet".
-
-    Parameters
-    ----------
-    n_inputs : int
-        Number of input features. Must be at least 1.
-    n_latent : Union[int, list[int]]
-        Number of latent features in a single hidden layer or list specifying the size of
-        each hidden layer.
-    n_outputs : int
-        Number of output variables. Must be at least 1.
-    encoder_activation : str, optional
-        Activation function for the encoder layers.
-        Default is "tanh". Options include "relu" and "sigmoid".
-    head_activation : str, optional
-        Activation function for the head layers.
-        Default is "identity" for no activation. Options include "tanh", "relu"
-        and "sigmoid".
-    fit_encoder_intercept : bool, optional
-        Whether to fit intercepts in the encoder layers. Default is False.
-    fit_head_intercept : bool, optional
-        Whether to fit intercepts in the output head. Default is True.
-    """
-    def _build_encoder(self, n_inputs, n_latent, encoder_activation, fit_encoder_intercept):
-        encoder_modules = [nn.Linear(n_inputs, n_latent[0], bias = fit_encoder_intercept), self.activation_map[encoder_activation]()]
-        if len(n_latent) > 1:
-            for layer_idx in range(1, len(n_latent)):
-                encoder_modules.append(
-                    nn.Linear(n_latent[layer_idx - 1], n_latent[layer_idx], bias = fit_encoder_intercept)
-                )
-                encoder_modules.append(self.activation_map[encoder_activation]())
-        
-        return nn.Sequential(*encoder_modules)
-    
-    def _build_head(self, n_latent, n_outputs, head_activation, fit_head_intercept):
-        head = nn.Sequential(
-            nn.Linear(n_latent, n_outputs, bias = fit_head_intercept),
-            self.activation_map[head_activation]()
-        )
-        return head
+if __name__=="__main__":
+    print("========================================")
+    print("MLP: 5-32-1 structure, tanh activation")
+    model = MultiLayerPerceptron(
+        n_inputs=5,
+        n_latent = 32,
+        n_outputs=1,
+    )
+    print(model)
+    print("========================================")
+    print("MLP: 10-[64,32,16]-3 structure, relu activation, sigmoid head, encoder intercept, no head intercept")
+    model = MultiLayerPerceptron(
+        n_inputs=10,
+        n_latent = [64,32,16],
+        n_outputs=3,
+        encoder_activation="relu",
+        head_activation="sigmoid",
+        fit_encoder_intercept=True,
+        fit_head_intercept=False,
+    )
+    print(model)
+    print("========================================")
