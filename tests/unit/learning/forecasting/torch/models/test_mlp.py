@@ -433,7 +433,8 @@ class TestMultiLayerPerceptron(TestCase):
 
     def test_build_head(self):
         """ Test that the projection head is built correctly """
-        # Single output
+        """ Single output """
+        # Identity
         model_head = nn.Sequential(
             nn.Linear(32, 1, bias=True),
             nn.Identity(),
@@ -442,6 +443,7 @@ class TestMultiLayerPerceptron(TestCase):
         self.assertIsInstance(created_head, nn.Sequential)
         self.assertEqual(len(model_head), len(created_head))
         self.assertIsInstance(created_head[1], nn.Identity)
+        # Tanh
         model_head = nn.Sequential(
             nn.Linear(32, 1, bias=True),
             nn.Tanh(),
@@ -450,7 +452,25 @@ class TestMultiLayerPerceptron(TestCase):
         self.assertIsInstance(created_head, nn.Sequential)
         self.assertEqual(len(model_head), len(created_head))
         self.assertIsInstance(created_head[1], nn.Tanh)
-        # Multiple output
+        # Sigmoid
+        model_head = nn.Sequential(
+            nn.Linear(32, 1, bias=True),
+            nn.Sigmoid(),
+        )
+        created_head = self.single_output_single_layer_mlp._build_head(32, 1, "sigmoid", True)
+        self.assertIsInstance(created_head, nn.Sequential)
+        self.assertEqual(len(model_head), len(created_head))
+        self.assertIsInstance(created_head[1], nn.Sigmoid)
+        model_head = nn.Sequential(
+            nn.Linear(32, 1, bias=True),
+            nn.ReLU(inplace=True),
+        )
+        created_head = self.single_output_single_layer_mlp._build_head(32, 1, "relu", True)
+        self.assertIsInstance(created_head, nn.Sequential)
+        self.assertEqual(len(model_head), len(created_head))
+        self.assertIsInstance(created_head[1], nn.ReLU)
+        """ Multiple output """
+        # Identity
         model_head = nn.Sequential(
             nn.Linear(32, 3, bias=True),
             nn.Identity(),
@@ -459,6 +479,7 @@ class TestMultiLayerPerceptron(TestCase):
         self.assertIsInstance(created_head, nn.Sequential)
         self.assertEqual(len(model_head), len(created_head))
         self.assertIsInstance(created_head[1], nn.Identity)
+        # Tanh
         model_head = nn.Sequential(
             nn.Linear(32, 3, bias=True),
             nn.Tanh(),
@@ -467,6 +488,24 @@ class TestMultiLayerPerceptron(TestCase):
         self.assertIsInstance(created_head, nn.Sequential)
         self.assertEqual(len(model_head), len(created_head))
         self.assertIsInstance(created_head[1], nn.Tanh)
+        # Sigmoid
+        model_head = nn.Sequential(
+            nn.Linear(32, 3, bias=True),
+            nn.Sigmoid(),
+        )
+        created_head = self.multi_output_single_layer_mlp._build_head(32, 3, "sigmoid", True)
+        self.assertIsInstance(created_head, nn.Sequential)
+        self.assertEqual(len(model_head), len(created_head))
+        self.assertIsInstance(created_head[1], nn.Sigmoid)
+        # ReLU
+        model_head = nn.Sequential(
+            nn.Linear(32, 3, bias=True),
+            nn.ReLU(inplace=True),
+        )
+        created_head = self.multi_output_single_layer_mlp._build_head(32, 3, "relu", True)
+        self.assertIsInstance(created_head, nn.Sequential)
+        self.assertEqual(len(model_head), len(created_head))
+        self.assertIsInstance(created_head[1], nn.ReLU)
 
     def test_valid_forward(self):
         pass
