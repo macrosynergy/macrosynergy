@@ -132,7 +132,8 @@ class TestTimeSeriesSampler(unittest.TestCase):
                 expected_num_batches = len(self.valid_dataset) // 4 # 64 / 4 is a whole number
 
             self.assertEqual(num_batches, expected_num_batches)
-
+            self.assertEqual(len(sampler), expected_num_batches)
+            
         # Try with a batch size that doesn't divides the dataset size evenly
         if not (aggregate_last and drop_last):
             # Check instantiation works
@@ -165,5 +166,6 @@ class TestTimeSeriesSampler(unittest.TestCase):
                 expected_num_batches = len(self.valid_dataset) // 3 + 1 # 64 / 4 is a whole number
 
             self.assertEqual(num_batches, expected_num_batches)
+            self.assertEqual(len(sampler), expected_num_batches)
 
     
