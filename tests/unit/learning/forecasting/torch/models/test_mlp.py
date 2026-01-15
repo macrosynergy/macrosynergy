@@ -508,4 +508,24 @@ class TestMultiLayerPerceptron(TestCase):
         self.assertIsInstance(created_head[1], nn.ReLU)
 
     def test_valid_forward(self):
-        pass
+        """ Test forward pass produces correct output shapes """
+        # Single output, single hidden layer
+        input_tensor = torch.randn(32, 10)
+        output_tensor = self.single_output_single_layer_mlp(input_tensor)
+        self.assertIsInstance(output_tensor, torch.Tensor)
+        self.assertEqual(output_tensor.shape, (32, 1))
+        # Single output, multiple hidden layers
+        input_tensor = torch.randn(32, 10)
+        output_tensor = self.single_output_multi_layer_mlp(input_tensor)
+        self.assertIsInstance(output_tensor, torch.Tensor)
+        self.assertEqual(output_tensor.shape, (32, 1))
+        # Multiple output, single hidden layer
+        input_tensor = torch.randn(32, 10)
+        output_tensor = self.multi_output_single_layer_mlp(input_tensor)
+        self.assertIsInstance(output_tensor, torch.Tensor)
+        self.assertEqual(output_tensor.shape, (32, 3))
+        # Multiple output, multiple hidden layers
+        input_tensor = torch.randn(32, 10)
+        output_tensor = self.multi_output_multi_layer_mlp(input_tensor)
+        self.assertIsInstance(output_tensor, torch.Tensor)
+        self.assertEqual(output_tensor.shape, (32, 3))
