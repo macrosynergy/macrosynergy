@@ -3,6 +3,8 @@ import unittest
 import torch
 import torch.nn as nn 
 
+import numpy as np
+
 from macrosynergy.learning.forecasting.torch.samplers.timeseries_sampler import TimeSeriesSampler
 
 import itertools
@@ -133,7 +135,7 @@ class TestTimeSeriesSampler(unittest.TestCase):
 
             self.assertEqual(num_batches, expected_num_batches)
             self.assertEqual(len(sampler), expected_num_batches)
-            
+
         # Try with a batch size that doesn't divides the dataset size evenly
         if not (aggregate_last and drop_last):
             # Check instantiation works
@@ -168,4 +170,68 @@ class TestTimeSeriesSampler(unittest.TestCase):
             self.assertEqual(num_batches, expected_num_batches)
             self.assertEqual(len(sampler), expected_num_batches)
 
-    
+    def test_valid_create_batches(self):
+        """ Test the _create_batches method creates the expected batches """
+        # No shuffle, no aggregate_last, no drop_last, batch_size = 3
+        sampler = TimeSeriesSampler(
+            dataset = self.valid_dataset,
+            batch_size = 3,
+            shuffle = False,
+            aggregate_last = False,
+            drop_last = False,
+        )
+        returned_batches = sampler._create_batches(
+            batch_size = 3,
+            dataset_size = 10,
+            aggregate_last = False,
+            drop_last = False,
+        )
+        expected_batches = [
+            [0,1,2],
+            [3,4,5],
+            [6,7,8],
+            [9]
+        ]
+        self.assertEqual(returned_batches, expected_batches)
+
+        # No shuffle, aggregate_last, no drop_last, batch_size = 3
+        sampler = TimeSeriesSampler(
+            dataset = self.valid_dataset,
+            batch_size = 3,
+            shuffle = False,
+            aggregate_last = True,
+            drop_last = False,
+        )
+        returned_batches = sampler._create_batches(
+            batch_size = 3,
+            dataset_size = 10,
+            aggregate_last = True,
+            drop_last = False,
+        )
+        expected_batches = [
+            [0,1,2],
+            [3,4,5],
+            [6,7,8,9],
+        ]
+        self.assertEqual(returned_batches, expected_batches)
+
+        # No shuffle, no aggregate_last, drop_last, batch_size = 3
+        sampler = TimeSeriesSampler(
+            dataset = self.valid_dataset,
+            batch_size = 3,
+            shuffle = False,
+            aggregate_last = False,
+            drop_last = True,
+        )
+        returned_batches = sampler._create_batches(
+            batch_size = 3,
+            dataset_size = 10,
+            aggregate_last = False,
+            drop_last = True,
+        )
+        expected_batches = [
+            [0,1,2],
+            [3,4,5],
+            [6,7,8],
+        ]
+        self.assertEqual(returned_batches, expected_batches)
