@@ -128,6 +128,8 @@ class TestTimeSeriesSampler(unittest.TestCase):
             if drop_last or aggregate_last:
                 expected_num_batches = len(self.valid_dataset) // 4
             else:
-                expected_num_batches = len(self.valid_dataset) // 4 + 1
+                expected_num_batches = len(self.valid_dataset) // 4 # 64 / 4 is a whole number
+                
+            self.assertEqual(num_batches, expected_num_batches)
 
     

@@ -49,19 +49,25 @@ class TimeSeriesSampler(Sampler):
         self.batches = self._create_batches(
             self.batch_size,
             self.dataset_size,
-            self.aggregate_last
+            self.aggregate_last,
+            self.drop_last,
         )
 
-    def _create_batches(self, batch_size, dataset_size, aggregate_last):
+    def _create_batches(self, batch_size, dataset_size, aggregate_last, drop_last):
         """ Create list of batches """
         batches = [
             list(range(start, min(start + batch_size, dataset_size)))
             for start in range(0, dataset_size, batch_size)
         ]
         if aggregate_last:
-            if len(batches) > 1:
+            if len(batches) > 1 and len(batches[-1]) < batch_size:
                 batches[-2].extend(batches[-1])
                 batches = batches[:-1]
+
+        if drop_last:
+            if len(batches) > 1 and len(batches[-1]) < batch_size:
+                    batches = batches[:-1]
+        
         return batches
 
     def __iter__(self):
