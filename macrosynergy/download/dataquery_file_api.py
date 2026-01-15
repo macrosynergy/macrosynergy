@@ -1105,6 +1105,7 @@ class DataQueryFileAPIClient:
     def _load_metadata_jsons(
         self,
         date: Optional[Union[pd.Timestamp, str]] = None,
+        normalize_headers: bool = True,
         out_dir: Optional[str] = None,
     ) -> pd.DataFrame:
         out_dir = self._get_save_dir(out_dir)
@@ -1117,7 +1118,7 @@ class DataQueryFileAPIClient:
         if date is not None:
             max_date = pd_to_datetime_compat(date).normalize()
         df = df[df["file-timestamp"].dt.normalize() == max_date]
-        json_contentts = {}
+        json_contentts: Dict[str, pd.DataFrame] = {}
         err_str = 'Invalid notification file (missing "sub_title"): '
         title_err_str = "Unexpected notification title in file: "
         expected_titles = [
@@ -1138,14 +1139,28 @@ class DataQueryFileAPIClient:
                 continue
             json_contentts[j_title] = pd.json_normalize(_json, record_path=["data"])
 
+        if normalize_headers:
+            for key in json_contentts:
+                new_cols = [
+                    _col.replace(" ", "_")
+                    .replace("-", "_")
+                    .replace("(%)", "pct")
+                    .lower()
+                    for _col in json_contentts[key].columns
+                ]
+                json_contentts[key].columns = new_cols
+
         return json_contentts
 
     def get_revisions_notifications(
         self,
         date: Optional[Union[pd.Timestamp, str]] = None,
+        normalize_headers: bool = True,
         out_dir: Optional[str] = None,
     ):
-        jsons = self._load_metadata_jsons(date=date, out_dir=out_dir)
+        jsons = self._load_metadata_jsons(
+            date=date, normalize_headers=normalize_headers, out_dir=out_dir
+        )
         if "Changed historical values" not in jsons:
             logger.warning("No `Changed historical values` notifications found.")
             return pd.DataFrame()
@@ -1154,9 +1169,12 @@ class DataQueryFileAPIClient:
     def get_missing_data_notifications(
         self,
         date: Optional[Union[pd.Timestamp, str]] = None,
+        normalize_headers: bool = True,
         out_dir: Optional[str] = None,
     ):
-        jsons = self._load_metadata_jsons(date=date, out_dir=out_dir)
+        jsons = self._load_metadata_jsons(
+            date=date, normalize_headers=normalize_headers, out_dir=out_dir
+        )
         df1 = jsons.get("Missing Updates", pd.DataFrame())
         df2 = jsons.get("Additional information on missing updates", pd.DataFrame())
 
