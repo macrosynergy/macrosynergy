@@ -1102,6 +1102,82 @@ class DataQueryFileAPIClient:
             )
         return files_df
 
+    def _load_metadata_jsons(
+        self,
+        date: Optional[Union[pd.Timestamp, str]] = None,
+        out_dir: Optional[str] = None,
+    ) -> pd.DataFrame:
+        out_dir = self._get_save_dir(out_dir)
+        df = self.list_downloaded_files(out_dir=out_dir)
+        df = df[
+            (df["dataset"] == "JPMAQS_METADATA_NOTIFICATIONS")
+            & df["file-name"].str.lower().str.endswith(".json")
+        ]
+        max_date = pd.Timestamp(df["file-timestamp"].max()).normalize()
+        if date is not None:
+            max_date = pd_to_datetime_compat(date).normalize()
+        df = df[df["file-timestamp"].dt.normalize() == max_date]
+        json_contentts = {}
+        err_str = 'Invalid notification file (missing "sub_title"): '
+        title_err_str = "Unexpected notification title in file: "
+        expected_titles = [
+            "Missing Updates",
+            "Changed historical values",
+            "Additional information on missing updates",
+        ]
+        for jp in df["path"].apply(str).tolist():
+            _json = {}
+            with open(jp, "r", encoding="utf-8") as f:
+                _json: Dict[str, dict] = json.load(f)
+            if _json.get("metadata", {}).get("sub_title", None) is None:
+                logger.warning(err_str + jp)
+                continue
+            j_title: str = _json["metadata"]["sub_title"]
+            if j_title.upper() not in map(str.upper, expected_titles):
+                logger.warning(title_err_str + jp)
+                continue
+            json_contentts[j_title] = pd.json_normalize(_json, record_path=["data"])
+
+        return json_contentts
+
+    def get_revisions_notifications(
+        self,
+        date: Optional[Union[pd.Timestamp, str]] = None,
+        out_dir: Optional[str] = None,
+    ):
+        jsons = self._load_metadata_jsons(date=date, out_dir=out_dir)
+        if "Changed historical values" not in jsons:
+            logger.warning("No `Changed historical values` notifications found.")
+            return pd.DataFrame()
+        return jsons["Changed historical values"]
+
+    def get_missing_data_notifications(
+        self,
+        date: Optional[Union[pd.Timestamp, str]] = None,
+        out_dir: Optional[str] = None,
+    ):
+        jsons = self._load_metadata_jsons(date=date, out_dir=out_dir)
+        df1 = jsons.get("Missing Updates", pd.DataFrame())
+        df2 = jsons.get("Additional information on missing updates", pd.DataFrame())
+
+        if df1.empty and df2.empty:
+            logger.warning("No `Missing Updates` or related notifications found.")
+            return pd.DataFrame()
+        if df2.empty:
+            logger.warning(
+                "No `Additional information on missing updates` notifications found."
+            )
+            return df1
+        if df1.empty:
+            logger.warning("No `Missing Updates` notifications found.")
+            return df2
+        df1 = (
+            df1.merge(df2, how="left", on="Ticker")
+            .sort_values(by="Ticker", ascending=True)
+            .reset_index(drop=True)
+        )
+        return df1
+
     def download_full_snapshot(
         self,
         out_dir: Optional[str] = None,
@@ -2435,6 +2511,8 @@ if __name__ == "__main__":
     with DataQueryFileAPIClient(out_dir="./data/jpmaqs-data/") as dq:
         dq.download_catalog_file()
         dq.download_full_snapshot(since_datetime=since_datetime)
+        print(dq.get_revisions_notifications().head())
+        print(dq.get_missing_data_notifications().head())
     end = time.time()
 
     print(f"Download completed in {end - start:.2f} seconds")
