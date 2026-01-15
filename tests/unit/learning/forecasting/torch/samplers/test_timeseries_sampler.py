@@ -5,6 +5,9 @@ import torch.nn as nn
 
 from macrosynergy.learning.forecasting.torch.samplers.timeseries_sampler import TimeSeriesSampler
 
+import itertools
+from parameterized import parameterized
+
 class TestTimeSeriesSampler(unittest.TestCase):
     @classmethod 
     def setUpClass(self):
@@ -94,5 +97,22 @@ class TestTimeSeriesSampler(unittest.TestCase):
                 aggregate_last = True
             )
 
-    def test_valid_init(self):
-        pass
+    @parameterized.expand(itertools.product([True, False], [True, False], [True, False]))
+    def test_valid_init(self, shuffle, aggregate_last, drop_last):
+        """ Test that valid initialization works """
+        if not (aggregate_last and drop_last):
+            sampler = TimeSeriesSampler(
+                dataset = self.valid_dataset,
+                batch_size = 4,
+                shuffle = shuffle,
+                aggregate_last = aggregate_last,
+                drop_last = drop_last,
+            )
+            self.assertIsInstance(sampler, TimeSeriesSampler)
+            self.assertIsInstance(sampler, torch.utils.data.Sampler)
+            self.assertEqual(sampler.dataset, self.valid_dataset)
+            self.assertEqual(sampler.batch_size, 4)
+            self.assertEqual(sampler.shuffle, shuffle)
+            self.assertEqual(sampler.aggregate_last, aggregate_last)
+            self.assertEqual(sampler.drop_last, drop_last)
+            self.assertEqual(sampler.dataset_size, len(self.valid_dataset))
