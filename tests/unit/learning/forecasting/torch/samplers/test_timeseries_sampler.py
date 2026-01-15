@@ -235,3 +235,53 @@ class TestTimeSeriesSampler(unittest.TestCase):
             [6,7,8],
         ]
         self.assertEqual(returned_batches, expected_batches)
+        # Shuffle, no aggregate_last, no drop_last, batch_size = 3
+        sampler = TimeSeriesSampler(
+            dataset = self.valid_dataset,
+            batch_size = 3,
+            shuffle = True,
+            aggregate_last = False,
+            drop_last = False,
+        )
+        returned_batches = sampler._create_batches(
+            batch_size = 3,
+            dataset_size = 10,
+            aggregate_last = False,
+            drop_last = False,
+        )
+        for batch in returned_batches[:-1]:
+            self.assertEqual(len(batch), 3)
+        self.assertEqual(len(returned_batches[-1]), 1)
+        # Shuffle, aggregate_last, no drop_last, batch_size = 3
+        sampler = TimeSeriesSampler(
+            dataset = self.valid_dataset,
+            batch_size = 3,
+            shuffle = True,
+            aggregate_last = True,
+            drop_last = False,
+        )
+        returned_batches = sampler._create_batches(
+            batch_size = 3,
+            dataset_size = 10,
+            aggregate_last = True,
+            drop_last = False,
+        )
+        for batch in returned_batches[:-1]:
+            self.assertEqual(len(batch), 3)
+        self.assertEqual(len(returned_batches[-1]), 4)
+        # Shuffle, no aggregate_last, drop_last, batch_size = 3
+        sampler = TimeSeriesSampler(
+            dataset = self.valid_dataset,
+            batch_size = 3,
+            shuffle = True,
+            aggregate_last = False,
+            drop_last = True,
+        )
+        returned_batches = sampler._create_batches(
+            batch_size = 3,
+            dataset_size = 10,
+            aggregate_last = False,
+            drop_last = True,
+        )
+        for batch in returned_batches:
+            self.assertEqual(len(batch), 3)
