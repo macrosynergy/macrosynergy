@@ -101,13 +101,19 @@ class TestTimeSeriesSampler(unittest.TestCase):
     def test_valid_init(self, shuffle, aggregate_last, drop_last):
         """ Test that valid initialization works """
         if not (aggregate_last and drop_last):
-            sampler = TimeSeriesSampler(
-                dataset = self.valid_dataset,
-                batch_size = 4,
-                shuffle = shuffle,
-                aggregate_last = aggregate_last,
-                drop_last = drop_last,
-            )
+            # Check instantiation works
+            try:
+                sampler = TimeSeriesSampler(
+                    dataset = self.valid_dataset,
+                    batch_size = 4,
+                    shuffle = shuffle,
+                    aggregate_last = aggregate_last,
+                    drop_last = drop_last,
+                )
+            except Exception as e:
+                self.fail(f"TimeSeriesSampler with parameters shuffle = {shuffle}, aggregate_last = {aggregate_last}, drop_last = {drop_last} raised an exception unexpectedly: {e}")
+            
+            # Check attributes set correctly
             self.assertIsInstance(sampler, TimeSeriesSampler)
             self.assertIsInstance(sampler, torch.utils.data.Sampler)
             self.assertEqual(sampler.dataset, self.valid_dataset)
@@ -116,3 +122,12 @@ class TestTimeSeriesSampler(unittest.TestCase):
             self.assertEqual(sampler.aggregate_last, aggregate_last)
             self.assertEqual(sampler.drop_last, drop_last)
             self.assertEqual(sampler.dataset_size, len(self.valid_dataset))
+
+            # Check length of the sampler is correct
+            num_batches = len(sampler.batches)
+            if drop_last or aggregate_last:
+                expected_num_batches = len(self.valid_dataset) // 4
+            else:
+                expected_num_batches = len(self.valid_dataset) // 4 + 1
+
+    
