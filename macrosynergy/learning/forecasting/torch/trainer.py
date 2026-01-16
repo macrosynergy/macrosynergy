@@ -9,6 +9,46 @@ from macrosynergy.learning.forecasting.torch.samplers import TimeSeriesSampler
 
 
 class MLPTrainer:
+    """
+    Trainer utility for fitting a PyTorch regression model with time-based train/validation
+    splitting, optional scaling, and early stopping.
+
+    Parameters
+    ----------
+    train_pct : float, optional
+        Fraction of unique dates used for the training set (remainder used for validation).
+        Default is 0.8.
+    batch_size : int, optional
+        Batch size used by the training and evaluation dataloaders. Default is 256.
+    use_ts_sampler : bool, optional
+        Whether to use a time-series batch sampler (contiguous batches by time order)
+        instead of random shuffling. Default is False.
+    learning_rate : float, optional
+        Learning rate used by the AdamW optimizer. Default is 1e-3.
+    weight_decay : float, optional
+        Weight decay (L2 penalty) used by the AdamW optimizer. Default is 0.0.
+    epochs : int, optional
+        Maximum number of training epochs. Default is 50.
+    loss_fn : torch.nn.Module, optional
+        Loss function used for optimization. Default is ``nn.MSELoss()``.
+    x_scaler : object or None, optional
+        Feature scaler implementing ``fit`` and ``transform`` (e.g. ``StandardScaler``).
+        If None, no scaling is applied to inputs. Default is ``StandardScaler(with_mean=False)``.
+    y_scaler : object or None, optional
+        Target scaler implementing ``fit`` and ``transform`` (e.g. ``StandardScaler``).
+        If None, no scaling is applied to targets. Default is ``StandardScaler(with_mean=False)``.
+    patience : int, optional
+        Number of epochs without validation improvement tolerated before early stopping.
+        Default is 5.
+    reg_turnover : float, optional
+        Strength of an L1 penalty on successive prediction differences, intended to
+        discourage excessive turnover. If 0, no turnover penalty is applied. Default is 0.0.
+    random_state : int, optional
+        Random seed used for PyTorch initialization and training. Default is 0.
+    verbose : bool, optional
+        Whether to print periodic training diagnostics. Default is False.
+    """
+
     def __init__(
         self,
         train_pct: float = 0.8,
@@ -123,7 +163,7 @@ class MLPTrainer:
                 dataset=train_dataset, batch_size=self.batch_size, shuffle=True
             )
             train_loader_eval = torch.utils.data.DataLoader(
-                dataset=train_dataset, batch_size=32, shuffle=False
+                dataset=train_dataset, batch_size=self.batch_size, shuffle=False
             )
         else:
             train_loader = torch.utils.data.DataLoader(
@@ -140,7 +180,7 @@ class MLPTrainer:
             )
 
         valid_loader = torch.utils.data.DataLoader(
-            dataset=valid_dataset, batch_size=32, shuffle=False
+            dataset=valid_dataset, batch_size=self.batch_size, shuffle=False
         )
 
         return train_loader, train_loader_eval, valid_loader
