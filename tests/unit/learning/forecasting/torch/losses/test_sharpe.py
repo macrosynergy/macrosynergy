@@ -7,6 +7,8 @@ import unittest
 
 from parameterized import parameterized
 
+import itertools
+
 class TestMultiOutputSharpe(unittest.TestCase):
     @classmethod 
     def setUpClass(self):
@@ -16,11 +18,13 @@ class TestMultiOutputSharpe(unittest.TestCase):
         """ Test types of init parameters """
         # skip_validation
         self.assertRaises(TypeError, MultiOutputSharpe, skip_validation = "invalid_string")
+        # unbiased
+        self.assertRaises(TypeError, MultiOutputSharpe, unbiased = "invalid_string")
 
-    @parameterized.expand([True, False])
-    def test_valid_init(self, skip_validation):
+    @parameterized.expand(itertools.product([True, False], [True, False]))
+    def test_valid_init(self, skip_validation, unbiased):
         try: 
-            sharpe = MultiOutputSharpe(skip_validation = skip_validation)
+            sharpe = MultiOutputSharpe(skip_validation = skip_validation, unbiased = unbiased)
         except Exception as e:
             self.fail(f"MultiOutputSharpe raised {type(e)} unexpectedly!")
         self.assertEqual(sharpe.skip_validation, skip_validation)
@@ -64,5 +68,11 @@ class TestMultiOutputSharpe(unittest.TestCase):
             y_pred = torch.randn(10, 3),
         )
 
-    def test_valid_forward(self):
-        pass
+    @parameterized.expand([True, False])
+    def test_valid_forward(self, unbiased):
+        sharpe = MultiOutputSharpe(skip_validation = True, unbiased=unbiased)
+        sharpe_loss = sharpe(y_true = torch.randn(20, 5), y_pred = torch.randn(20, 5))
+        self.assertIsInstance(sharpe_loss, torch.Tensor)
+        self.assertEqual(sharpe_loss.dim(), 0)
+        self.assertFalse(torch.isnan(sharpe_loss).item())
+        self.assertFalse(torch.isinf(sharpe_loss).item())

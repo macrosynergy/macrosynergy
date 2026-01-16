@@ -18,13 +18,18 @@ class MultiOutputSharpe(nn.Module):
     """
     def __init__(self, skip_validation = True, unbiased = True):
         super().__init__()
+        
+        # Checks
+        if not isinstance(skip_validation, bool):
+            raise TypeError("skip_validation must be a boolean")
+        if not isinstance(unbiased, bool):
+            raise TypeError("unbiased must be a boolean")
+        
+        # Attributes
         self.skip_validation = skip_validation
         self.unbiased = unbiased
 
     def forward(self, y_true, y_pred):
-        """
-        Return :math:`- \hat{E_t}[sharpe] = 1/T sum[sharpe_t]`.
-        """
         if not self.skip_validation:
             self._check_forward_params(y_true, y_pred)
 
