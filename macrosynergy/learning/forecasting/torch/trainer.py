@@ -5,6 +5,8 @@ import torch
 import torch.nn as nn
 from sklearn.preprocessing import StandardScaler
 
+from macrosynergy.learning.forecasting.torch.samplers import TimeSeriesSampler
+
 
 class MLPTrainer:
     def __init__(
