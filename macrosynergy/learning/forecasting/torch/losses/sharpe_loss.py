@@ -16,9 +16,10 @@ class MultiOutputSharpe(nn.Module):
     Neural networks are most naturally formulated as minimization problems, so the 
     negative Sharpe ratio is used as a loss function. 
     """
-    def __init__(self, skip_validation = True):
+    def __init__(self, skip_validation = True, unbiased = True):
         super().__init__()
         self.skip_validation = skip_validation
+        self.unbiased = unbiased
 
     def forward(self, y_true, y_pred):
         """
@@ -30,7 +31,7 @@ class MultiOutputSharpe(nn.Module):
         returns = y_true * y_pred
         portfolio_returns = torch.sum(returns, axis = 1)
         
-        return - torch.mean(portfolio_returns)/torch.std(portfolio_returns)
+        return - torch.mean(portfolio_returns)/torch.std(portfolio_returns, unbiased = self.unbiased)
     
     def _check_forward_params(self, y_true, y_pred):
         """ Check parameters for forward method """
