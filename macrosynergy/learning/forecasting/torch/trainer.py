@@ -35,8 +35,8 @@ class MLPTrainer:
         self.random_state = random_state
         self.verbose = verbose
 
-        self.x_scaler = None
-        self.y_scaler = None
+        self.x_scaler = x_scaler
+        self.y_scaler = y_scaler
 
     def fit(self, model, X, y):
         torch.manual_seed(self.random_state)
@@ -65,7 +65,7 @@ class MLPTrainer:
             for X_i, y_i in train_loader:
                 optimizer.zero_grad()
                 preds = model(X_i)
-                loss = self.loss_fn(y_i, preds)
+                loss = self.loss_fn(preds, y_i)
 
                 if self.reg_turnover > 0:
                     pweight_levels = preds[1:] - preds[:-1]
@@ -146,18 +146,14 @@ class MLPTrainer:
     def _fit_transform_X(self, X_train, X_val):
         if self.x_scaler is None:
             return X_train, X_val
-        else:
-            X_train_s = self.x_scaler.transform(X_train)
-            X_val_s = self.x_scaler.transform(X_val)
-        return X_train_s, X_val_s
+        self.x_scaler.fit(X_train)
+        return self.x_scaler.transform(X_train), self.x_scaler.transform(X_val)
 
     def _fit_transform_y(self, y_train, y_val):
         if self.y_scaler is None:
             return y_train, y_val
-        else:
-            y_train_s = self.y_scaler.transform(y_train)
-            y_val_s = self.y_scaler.transform(y_val)
-        return y_train_s, y_val_s
+        self.y_scaler.fit(y_train)
+        return self.y_scaler.transform(y_train), self.y_scaler.transform(y_val)
 
     @staticmethod
     def _eval_loss(model, loader, loss_fn):
@@ -166,5 +162,5 @@ class MLPTrainer:
         with torch.no_grad():
             for X_i, y_i in loader:
                 preds = model(X_i)
-                total += loss_fn(y_i, preds).item()
+                total += loss_fn(preds, y_i).item()
         return total / len(loader)
