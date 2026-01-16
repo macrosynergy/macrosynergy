@@ -29,16 +29,26 @@ class MultiOutputSharpe(nn.Module):
         self.skip_validation = skip_validation
         self.unbiased = unbiased
 
-    def forward(self, y_true, y_pred):
-        if not self.skip_validation:
-            self._check_forward_params(y_true, y_pred)
+    def forward(self, y_pred, y_true):
+        """
+        Evaluate batch negative Sharpe ratio loss.
 
-        returns = y_true * y_pred
+        Parameters
+        ----------
+        y_pred : torch.Tensor
+            Predicted outputs (signals or portfolio weights).
+        y_true : torch.Tensor
+            True outputs (returns).
+        """
+        if not self.skip_validation:
+            self._check_forward_params(y_pred, y_true)
+
+        returns = y_pred * y_true
         portfolio_returns = torch.sum(returns, axis = 1)
         
         return - torch.mean(portfolio_returns)/torch.std(portfolio_returns, unbiased = self.unbiased)
     
-    def _check_forward_params(self, y_true, y_pred):
+    def _check_forward_params(self, y_pred, y_true):
         """ Check parameters for forward method """
         if not isinstance(y_true, torch.Tensor):
             raise TypeError("y_true must be a torch.Tensor")
