@@ -18,6 +18,8 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
     ----------
     n_latent : int
         Number of hidden units in the latent layer of the MLP.
+    loss_func : torch.nn.Module, optional
+        Loss function used during training. Default is ``nn.MSELoss()``.
     weight_decay : float, optional
         L2 regularization strength applied via the optimizer. Default is 1e-4.
     reg_turnover : float, optional
@@ -60,6 +62,7 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         # Neural network structure hyperparameters
         n_latent,
         # Neural network training hyperparameters
+        loss_func=torch.nn.MSELoss(),
         weight_decay=1e-4,
         reg_turnover=0,
         batch_size=16,
@@ -78,6 +81,7 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         inverse_transform_preds=False
     ):
         self.n_latent = n_latent
+        self.loss_func = loss_func
         self.weight_decay = weight_decay
         self.reg_turnover = reg_turnover
         self.batch_size = batch_size
@@ -118,6 +122,7 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
             learning_rate=self.learning_rate,
             weight_decay=self.weight_decay,
             epochs=self.epochs,
+            loss_fn=self.loss_func,
             reg_turnover=self.reg_turnover,
             patience=self.patience,
             random_state=self.random_state,
