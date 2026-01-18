@@ -180,7 +180,10 @@ class MLPTrainer:
             )
 
         valid_loader = torch.utils.data.DataLoader(
-            dataset=valid_dataset, batch_size=self.batch_size, shuffle=False
+            dataset=valid_dataset,
+            batch_sampler=TimeSeriesSampler(
+                dataset=valid_dataset, batch_size=self.batch_size, shuffle=False
+            ),
         )
 
         return train_loader, train_loader_eval, valid_loader
