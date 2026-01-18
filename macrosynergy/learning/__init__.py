@@ -60,6 +60,7 @@ from .forecasting import (
     LinearMultiTargetRegression,
     TimeWeightedWrapper,
     MultiLayerPerceptron,
+    TimeSeriesSampler,
 )
 
 from .random_effects import RandomEffects
@@ -134,4 +135,5 @@ __all__ = [
     "CountryByCountryRegression",
     # torch
     "MultiLayerPerceptron",
+    "TimeSeriesSampler",
 ]
