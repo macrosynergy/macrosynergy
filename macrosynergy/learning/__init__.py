@@ -61,6 +61,8 @@ from .forecasting import (
     TimeWeightedWrapper,
     MultiLayerPerceptron,
     TimeSeriesSampler,
+    MultiOutputSharpe,
+    MultiOutputMCR,
 )
 
 from .random_effects import RandomEffects
@@ -136,4 +138,6 @@ __all__ = [
     # torch
     "MultiLayerPerceptron",
     "TimeSeriesSampler",
+    "MultiOutputSharpe",
+    "MultiOutputMCR",
 ]
