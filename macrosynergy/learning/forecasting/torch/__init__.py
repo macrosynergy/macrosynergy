@@ -4,6 +4,7 @@ from .losses import (
     MultiOutputSharpe,
     MultiOutputMCR,
 )
+from .trainer import MLPTrainer
 
 __all__ = [
     # models
@@ -13,4 +14,6 @@ __all__ = [
     # losses
     "MultiOutputSharpe",
     "MultiOutputMCR",
+    # trainer
+    "MLPTrainer",
 ]
