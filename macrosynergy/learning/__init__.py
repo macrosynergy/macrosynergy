@@ -59,6 +59,7 @@ from .forecasting import (
     PLSTransformer,
     LinearMultiTargetRegression,
     TimeWeightedWrapper,
+    MultiLayerPerceptron,
 )
 
 from .random_effects import RandomEffects
@@ -131,4 +132,6 @@ __all__ = [
     "FIExtractor",
     "DataFrameTransformer",
     "CountryByCountryRegression",
+    # torch
+    "MultiLayerPerceptron",
 ]
