@@ -37,6 +37,9 @@ from .factor_models import (
 
 from .torch import (
     MultiLayerPerceptron,
+    TimeSeriesSampler,
+    MultiOutputSharpe,
+    MultiOutputMCR,
 )
 __all__ = [
     "LADRegressor",
@@ -64,4 +67,7 @@ __all__ = [
     "PLSTransformer",
     "LinearMultiTargetRegression",
     "MultiLayerPerceptron",
+    "TimeSeriesSampler",
+    "MultiOutputSharpe",
+    "MultiOutputMCR",
 ]
