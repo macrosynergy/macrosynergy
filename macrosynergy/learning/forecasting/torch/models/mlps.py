@@ -57,6 +57,11 @@ class MultiLayerPerceptron(nn.Module):
     an arbitrarily complex function. While this is true, I would use the word "flexibility"
     to refer to the ability to customize architectures and loss functions to suit
     a particular problem.
+
+    Future work
+    -----------
+    - Add dropout layers for regularization.
+    - Support for skip connections.
     """
     def __init__(
         self,
