@@ -63,6 +63,7 @@ from .forecasting import (
     TimeSeriesSampler,
     MultiOutputSharpe,
     MultiOutputMCR,
+    MLPRegressor,
 )
 
 from .random_effects import RandomEffects
@@ -121,6 +122,7 @@ __all__ = [
     "GlobalLocalRegression",
     "TimeWeightedWrapper",
     "LinearMultiTargetRegression",
+    "MLPRegressor",
     # market beta estimation
     "BetaEstimator",
     # regression system

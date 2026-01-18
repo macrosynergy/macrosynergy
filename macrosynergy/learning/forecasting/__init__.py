@@ -41,6 +41,10 @@ from .torch import (
     MultiOutputSharpe,
     MultiOutputMCR,
 )
+
+from .nn import (
+    MLPRegressor,
+)
 __all__ = [
     "LADRegressor",
     "KNNClassifier",
@@ -70,4 +74,5 @@ __all__ = [
     "TimeSeriesSampler",
     "MultiOutputSharpe",
     "MultiOutputMCR",
+    "MLPRegressor",
 ]
