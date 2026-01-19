@@ -1107,17 +1107,39 @@ class DataQueryFileAPIClient:
         date: Optional[Union[pd.Timestamp, str]] = None,
         normalize_headers: bool = True,
         out_dir: Optional[str] = None,
+        skip_download: bool = False,
     ) -> pd.DataFrame:
         out_dir = self._get_save_dir(out_dir)
+        date: pd.Timestamp = (
+            pd_to_datetime_compat(date) if date is not None else pd.Timestamp.utcnow()
+        ).normalize()
+        if date > pd.Timestamp.utcnow().normalize():
+            new_dt = pd.Timestamp.utcnow().normalize()
+            logger.warning(
+                f"Provided date {date.date()} is in the future."
+                f" Setting date to today: {new_dt.date()}."
+            )
+            date = new_dt
+        if not skip_download:
+            to_dt = date + pd.offsets.BDay(1) - pd.Timedelta(seconds=1)
+            self.download_full_snapshot(
+                out_dir=out_dir,
+                since_datetime=date,
+                to_datetime=to_dt,
+                include_full_snapshots=False,
+                include_delta=False,
+                include_metadata=True,
+            )
         df = self.list_downloaded_files(out_dir=out_dir)
-        df = df[
+        df: pd.DataFrame = df[
             (df["dataset"] == "JPMAQS_METADATA_NOTIFICATIONS")
             & df["file-name"].str.lower().str.endswith(".json")
         ]
-        max_date = pd.Timestamp(df["file-timestamp"].max()).normalize()
-        if date is not None:
-            max_date = pd_to_datetime_compat(date).normalize()
-        df = df[df["file-timestamp"].dt.normalize() == max_date]
+        date = date.normalize()
+        df = df[df["file-timestamp"].dt.normalize() == date]
+        if df.empty:
+            logger.warning(f"No notification files found for date: {date.date()}")
+            return {}
         json_contentts: Dict[str, pd.DataFrame] = {}
         err_str = 'Invalid notification file (missing "sub_title"): '
         title_err_str = "Unexpected notification title in file: "
