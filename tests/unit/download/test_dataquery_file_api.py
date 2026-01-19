@@ -1,10 +1,12 @@
 import os
+import json
 import unittest
 import pandas as pd
 from unittest.mock import patch, MagicMock
 import functools
 import logging
 import tempfile
+from pathlib import Path
 from macrosynergy.compat import PD_2_0_OR_LATER, PYTHON_3_8_OR_LATER
 from macrosynergy.download.dataquery_file_api import (
     validate_dq_timestamp,
@@ -980,6 +982,237 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
                 tickers=["BAD1", "BAD2"],
                 skip_download=True,
                 show_progress=False,
+            )
+
+
+class TestDataQueryFileAPIClientNotificationLoading(unittest.TestCase):
+    def setUp(self):
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp_dir.cleanup)
+        self.test_dir = self.temp_dir.name
+
+    def _write_notification_json(self, path: Path, sub_title: str, data: list):
+        payload = {
+            "metadata": {
+                "title": "JPMaQS Notifications",
+                "sub_title": sub_title,
+                "schema": "mock",
+                "datetime": "2026-01-19T06:05:01Z",
+                "notification_type": "mock",
+                "message_type": "mock",
+            },
+            "data": data,
+            "disclaimer": "mock",
+            "tags": ["mock"],
+        }
+        path.write_text(json.dumps(payload), encoding="utf-8")
+
+    @patch.object(DataQueryFileAPIClient, "list_downloaded_files")
+    @patch.object(DataQueryFileAPIClient, "download_full_snapshot")
+    def test_load_metadata_jsons_filters_normalizes_and_canonicalizes_titles(
+        self, mock_download_full_snapshot, mock_list_downloaded_files
+    ):
+        client = DataQueryFileAPIClient(
+            client_id="id", client_secret="secret", out_dir=self.test_dir
+        )
+        out_dir = Path(client._get_save_dir(self.test_dir))
+        out_dir.mkdir(parents=True, exist_ok=True)
+
+        p_missing = out_dir / "JPMAQS_METADATA_NOTIFICATIONS_20260119T060501.json"
+        p_changed = out_dir / "JPMAQS_METADATA_NOTIFICATIONS_20260119T060502.json"
+        p_addl = out_dir / "JPMAQS_METADATA_NOTIFICATIONS_20260119T072451.json"
+
+        self._write_notification_json(
+            p_missing,
+            sub_title="missing updates",
+            data=[{"Ticker": "IEP_HPI_SA_P1M1ML12", "Last update": "2020-07-30"}],
+        )
+        self._write_notification_json(
+            p_changed,
+            sub_title="Changed historical values",
+            data=[
+                {
+                    "Ticker": "AED_INFLRISK_NSA",
+                    "Observations affected": 3576,
+                    "Observations affected (%)": "92.38",
+                    "Mean absolute value change": "0.01",
+                    "Dates of changes": "2012-01-31/2026-01-15",
+                }
+            ],
+        )
+        self._write_notification_json(
+            p_addl,
+            sub_title="Additional information on missing updates",
+            data=[
+                {
+                    "Ticker": "IDR_DU10YXR_NSA",
+                    "Additional Information": "Some info",
+                }
+            ],
+        )
+
+        date = pd.Timestamp("2026-01-19T00:00:00Z")
+        mock_list_downloaded_files.return_value = pd.DataFrame(
+            [
+                {
+                    "file-name": p_missing.name,
+                    "dataset": "JPMAQS_METADATA_NOTIFICATIONS",
+                    "file-timestamp": date + pd.Timedelta(hours=6),
+                    "path": str(p_missing),
+                },
+                {
+                    "file-name": p_changed.name,
+                    "dataset": "JPMAQS_METADATA_NOTIFICATIONS",
+                    "file-timestamp": date + pd.Timedelta(hours=6, minutes=1),
+                    "path": str(p_changed),
+                },
+                {
+                    "file-name": p_addl.name,
+                    "dataset": "JPMAQS_METADATA_NOTIFICATIONS",
+                    "file-timestamp": date + pd.Timedelta(hours=7, minutes=24),
+                    "path": str(p_addl),
+                },
+                {
+                    "file-name": "OTHER_20260119T000000.json",
+                    "dataset": "OTHER",
+                    "file-timestamp": date,
+                    "path": str(out_dir / "OTHER_20260119T000000.json"),
+                },
+            ]
+        )
+
+        result = client._load_metadata_jsons(
+            date="2026-01-19",
+            normalize_headers=True,
+            out_dir=self.test_dir,
+            skip_download=True,
+        )
+
+        self.assertIn("Missing Updates", result)
+        self.assertIn("Changed historical values", result)
+        self.assertIn("Additional information on missing updates", result)
+
+        changed = result["Changed historical values"]
+        self.assertEqual(
+            sorted(changed.columns.tolist()),
+            sorted(
+                [
+                    "ticker",
+                    "observations_affected",
+                    "observations_affected_pct",
+                    "mean_absolute_value_change",
+                    "dates_of_changes",
+                ]
+            ),
+        )
+
+        missing = result["Missing Updates"]
+        self.assertEqual(missing.columns.tolist(), ["ticker", "last_update"])
+
+        addl = result["Additional information on missing updates"]
+        self.assertEqual(addl.columns.tolist(), ["ticker", "additional_information"])
+
+        mock_download_full_snapshot.assert_not_called()
+
+    @patch("macrosynergy.download.dataquery_file_api.logger")
+    @patch("pandas.Timestamp.utcnow")
+    @patch.object(DataQueryFileAPIClient, "list_downloaded_files")
+    @patch.object(DataQueryFileAPIClient, "download_full_snapshot")
+    def test_load_metadata_jsons_future_date_warns_and_downloads(
+        self,
+        mock_download_full_snapshot,
+        mock_list_downloaded_files,
+        mock_now,
+        mock_logger,
+    ):
+        client = DataQueryFileAPIClient(
+            client_id="id", client_secret="secret", out_dir=self.test_dir
+        )
+        mock_now.return_value = pd.Timestamp("2026-01-19T12:00:00Z")
+        mock_list_downloaded_files.return_value = pd.DataFrame(
+            {
+                "file-name": pd.Series([], dtype="object"),
+                "dataset": pd.Series([], dtype="object"),
+                "file-timestamp": pd.Series([], dtype="datetime64[ns, UTC]"),
+                "path": pd.Series([], dtype="object"),
+            }
+        )
+
+        client._load_metadata_jsons(date="2026-01-25", out_dir=self.test_dir)
+
+        warning_msgs = [c.args[0] for c in mock_logger.warning.call_args_list]
+        self.assertTrue(any("Provided date" in msg for msg in warning_msgs))
+        mock_download_full_snapshot.assert_called_once()
+
+    @patch("macrosynergy.download.dataquery_file_api.logger")
+    def test_get_revisions_notifications(self, mock_logger):
+        client = DataQueryFileAPIClient(
+            client_id="id", client_secret="secret", out_dir=self.test_dir
+        )
+        df = pd.DataFrame({"ticker": ["X"], "observations_affected": [1]})
+        with patch.object(DataQueryFileAPIClient, "_load_metadata_jsons", return_value={}):
+            out = client.get_revisions_notifications(out_dir=self.test_dir)
+            self.assertTrue(out.empty)
+            mock_logger.warning.assert_called_with(
+                "No `Changed historical values` notifications found."
+            )
+
+        with patch.object(
+            DataQueryFileAPIClient,
+            "_load_metadata_jsons",
+            return_value={"Changed historical values": df},
+        ):
+            out = client.get_revisions_notifications(out_dir=self.test_dir)
+            pd.testing.assert_frame_equal(out, df)
+
+    @patch("macrosynergy.download.dataquery_file_api.logger")
+    def test_get_missing_data_notifications_merge_and_fallbacks(self, mock_logger):
+        client = DataQueryFileAPIClient(
+            client_id="id", client_secret="secret", out_dir=self.test_dir
+        )
+        df1 = pd.DataFrame({"ticker": ["A", "B"], "last_update": ["2020-01-01", None]})
+        df2 = pd.DataFrame({"ticker": ["A"], "additional_information": ["info"]})
+
+        with patch.object(
+            DataQueryFileAPIClient,
+            "_load_metadata_jsons",
+            return_value={
+                "Missing Updates": df1,
+                "Additional information on missing updates": df2,
+            },
+        ):
+            out = client.get_missing_data_notifications(out_dir=self.test_dir)
+            self.assertEqual(out["ticker"].tolist(), ["A", "B"])
+            self.assertIn("additional_information", out.columns)
+
+        mock_logger.reset_mock()
+        with patch.object(
+            DataQueryFileAPIClient, "_load_metadata_jsons", return_value={"Missing Updates": df1}
+        ):
+            out = client.get_missing_data_notifications(out_dir=self.test_dir)
+            pd.testing.assert_frame_equal(out, df1)
+            mock_logger.warning.assert_called_with(
+                "No `Additional information on missing updates` notifications found."
+            )
+
+        mock_logger.reset_mock()
+        with patch.object(
+            DataQueryFileAPIClient,
+            "_load_metadata_jsons",
+            return_value={"Additional information on missing updates": df2},
+        ):
+            out = client.get_missing_data_notifications(out_dir=self.test_dir)
+            pd.testing.assert_frame_equal(out, df2)
+            mock_logger.warning.assert_called_with(
+                "No `Missing Updates` notifications found."
+            )
+
+        mock_logger.reset_mock()
+        with patch.object(DataQueryFileAPIClient, "_load_metadata_jsons", return_value={}):
+            out = client.get_missing_data_notifications(out_dir=self.test_dir)
+            self.assertTrue(out.empty)
+            mock_logger.warning.assert_called_with(
+                "No `Missing Updates` or related notifications found."
             )
 
 
