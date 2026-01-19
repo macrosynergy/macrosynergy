@@ -1108,7 +1108,7 @@ class DataQueryFileAPIClient:
         normalize_headers: bool = True,
         out_dir: Optional[str] = None,
         skip_download: bool = False,
-    ) -> pd.DataFrame:
+    ) -> Dict[str, pd.DataFrame]:
         out_dir = self._get_save_dir(out_dir)
         date: pd.Timestamp = (
             pd_to_datetime_compat(date) if date is not None else pd.Timestamp.utcnow()
@@ -1148,6 +1148,7 @@ class DataQueryFileAPIClient:
             "Changed historical values",
             "Additional information on missing updates",
         ]
+        canonical_title_map = {t.upper(): t for t in expected_titles}
         for jp in df["path"].apply(str).tolist():
             _json = {}
             with open(jp, "r", encoding="utf-8") as f:
@@ -1159,7 +1160,10 @@ class DataQueryFileAPIClient:
             if j_title.upper() not in map(str.upper, expected_titles):
                 logger.warning(title_err_str + jp)
                 continue
-            json_contentts[j_title] = pd.json_normalize(_json, record_path=["data"])
+            canonical_title = canonical_title_map[j_title.upper()]
+            json_contentts[canonical_title] = pd.json_normalize(
+                _json, record_path=["data"]
+            )
 
         if normalize_headers:
             for key in json_contentts:
@@ -1211,9 +1215,25 @@ class DataQueryFileAPIClient:
         if df1.empty:
             logger.warning("No `Missing Updates` notifications found.")
             return df2
+
+        left_join_key = None
+        if "Ticker" in df1.columns and "ticker" in df2.columns:
+            df1 = df1.rename(columns={"Ticker": "ticker"})
+        elif "ticker" in df1.columns and "Ticker" in df2.columns:
+            df2 = df2.rename(columns={"Ticker": "ticker"})
+
+        for candidate in ("Ticker", "ticker"):
+            if candidate in df1.columns and candidate in df2.columns:
+                left_join_key = candidate
+                break
+        if left_join_key is None:
+            raise KeyError(
+                'Expected a common join key ("Ticker" or "ticker") in notification data.'
+            )
+
         df1 = (
-            df1.merge(df2, how="left", on="Ticker")
-            .sort_values(by="Ticker", ascending=True)
+            df1.merge(df2, how="left", on=left_join_key)
+            .sort_values(by=left_join_key, ascending=True)
             .reset_index(drop=True)
         )
         return df1
