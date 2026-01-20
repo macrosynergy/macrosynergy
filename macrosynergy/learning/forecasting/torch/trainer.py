@@ -60,6 +60,8 @@ class MLPTrainer:
         loss_fn: nn.Module = nn.MSELoss(),
         x_scaler=StandardScaler(with_mean=False),
         y_scaler=StandardScaler(with_mean=False),
+        dl_drop_last: bool = False,
+        dl_aggregate_last: bool = True,
         patience: int = 5,
         reg_turnover: float = 0.0,
         random_state: int = 0,
@@ -76,6 +78,8 @@ class MLPTrainer:
         self.reg_turnover = reg_turnover
         self.random_state = random_state
         self.verbose = verbose
+        self.dl_drop_last = dl_drop_last
+        self.dl_aggregate_last = dl_aggregate_last
 
         self.x_scaler = x_scaler
         self.y_scaler = y_scaler
@@ -169,20 +173,20 @@ class MLPTrainer:
             train_loader = torch.utils.data.DataLoader(
                 dataset=train_dataset,
                 batch_sampler=TimeSeriesSampler(
-                    dataset=train_dataset, batch_size=self.batch_size, shuffle=True
+                    dataset=train_dataset, batch_size=self.batch_size, shuffle=True, aggregate_last=self.dl_aggregate_last, drop_last=self.dl_drop_last
                 ),
             )
             train_loader_eval = torch.utils.data.DataLoader(
                 dataset=train_dataset,
                 batch_sampler=TimeSeriesSampler(
-                    dataset=train_dataset, batch_size=self.batch_size, shuffle=False
+                    dataset=train_dataset, batch_size=self.batch_size, shuffle=False, aggregate_last = True, drop_last = False,
                 ),
             )
 
         valid_loader = torch.utils.data.DataLoader(
             dataset=valid_dataset,
             batch_sampler=TimeSeriesSampler(
-                dataset=valid_dataset, batch_size=self.batch_size, shuffle=False
+                dataset=valid_dataset, batch_size=self.batch_size, shuffle=False, aggregate_last = True, drop_last = False,
             ),
         )
 
