@@ -75,8 +75,6 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         epochs=10000,
         patience=1000,
         train_pct=0.7,
-        dl_drop_last=False,
-        dl_aggregate_last = True,
         # Other stuff
         verbose=False,
         random_state=42,
@@ -96,8 +94,6 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         self.epochs = epochs
         self.patience = patience
         self.train_pct = train_pct
-        self.dl_drop_last = dl_drop_last
-        self.dl_aggregate_last = dl_aggregate_last
         # self.long_only = long_only
         self.verbose = verbose
         self.random_state = random_state
@@ -133,8 +129,6 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
             verbose=self.verbose,
             x_scaler=StandardScaler(with_mean=False),
             y_scaler=StandardScaler(with_mean=False),
-            dl_drop_last=self.dl_drop_last,
-            dl_aggregate_last=self.dl_aggregate_last,
         )
 
         self.model, self.x_scaler, self.y_scaler = trainer.fit(self.model, X, y)
