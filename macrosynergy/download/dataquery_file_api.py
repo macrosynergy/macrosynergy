@@ -51,8 +51,8 @@ including full datasets, deltas, and metadata.
 as a dataframe.**
 
 Here, the client checks locally available files, compares them to the latest files.
-It automatically downloads new or updated files, and loads data for the specified `cids`, `xcats`,
-`tickers`, and `start_date`/`end_date` as appropriate.
+It automatically downloads new or updated files, and loads data for the specified `cids`, 
+`xcats`, `tickers`, and `start_date`/`end_date` as appropriate.
 The resulting dataframe is returned to the user in the chosen dataframe format
 (quantamental format/tickers format) and dataframe type (`pandas`/`polars`).
 
