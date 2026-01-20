@@ -25,6 +25,7 @@ dependencies = [
   "pyarrow>=11.0.0",
   "scipy<=1.15.3",
   "polars>=1.0.0",
+  "torch>=1.11.0",
 ]
 classifiers = [
   "Development Status :: 4 - Beta",
