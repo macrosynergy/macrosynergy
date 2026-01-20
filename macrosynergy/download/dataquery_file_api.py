@@ -144,6 +144,28 @@ Please note:
         include_metadata=False,
     )
 
+**Example 8: Load "notification" metadata (missing updates & revisions).**
+
+JPMaQS publishes daily metadata notification JSON files that summarize:
+
+- Missing updates ("Missing Updates")
+- Additional info about missing updates ("Additional information on missing updates")
+- Changed historical values ("Changed historical values")
+
+The helpers below download the relevant metadata for the requested date (UTC, business-day
+window) if needed, and return the notifications as pandas DataFrames.
+
+.. code-block:: python
+
+    from macrosynergy.download import DataQueryFileAPIClient
+
+    with DataQueryFileAPIClient(out_dir="./jpmaqs_data") as client:
+        missing_df = client.get_missing_data_notifications(date="2026-01-19")
+        revisions_df = client.get_revisions_notifications(date="2026-01-19")
+
+        print(missing_df.head())
+        print(revisions_df.head())
+
 """
 
 import os
@@ -1109,6 +1131,7 @@ class DataQueryFileAPIClient:
         out_dir: Optional[str] = None,
         skip_download: bool = False,
     ) -> Dict[str, pd.DataFrame]:
+        """Load JPMaQS metadata notification JSONs for a date."""
         out_dir = self._get_save_dir(out_dir)
         date: pd.Timestamp = (
             pd_to_datetime_compat(date) if date is not None else pd.Timestamp.utcnow()
@@ -1183,7 +1206,31 @@ class DataQueryFileAPIClient:
         date: Optional[Union[pd.Timestamp, str]] = None,
         normalize_headers: bool = True,
         out_dir: Optional[str] = None,
-    ):
+    ) -> pd.DataFrame:
+        """
+        Return "Changed historical values" notifications for a given date.
+
+        This loads daily JPMaQS metadata notification JSON(s) for the requested date
+        and returns the table describing historical revisions. If no matching
+        notification file(s) are found, an empty DataFrame is returned.
+
+        Parameters
+        ----------
+        date : Optional[Union[pd.Timestamp, str]]
+            Target date (UTC). Strings can be "YYYY-MM-DD", "YYYYMMDD", or ISO 8601.
+            Defaults to today (UTC).
+        normalize_headers : bool
+            If True, normalizes column names to lowercase snake_case and converts
+            "(%)" to "pct". Defaults to True.
+        out_dir : Optional[str]
+            Base output directory used for downloads. The client will place files in
+            a `jpmaqs-download/` subdirectory unless `out_dir` already ends with it.
+
+        Returns
+        -------
+        pd.DataFrame
+            A DataFrame of revision notifications. Empty if none are found.
+        """
         jsons = self._load_metadata_jsons(
             date=date, normalize_headers=normalize_headers, out_dir=out_dir
         )
@@ -1197,7 +1244,36 @@ class DataQueryFileAPIClient:
         date: Optional[Union[pd.Timestamp, str]] = None,
         normalize_headers: bool = True,
         out_dir: Optional[str] = None,
-    ):
+    ) -> pd.DataFrame:
+        """
+        Return missing-update notifications (with optional additional information).
+
+        This loads daily JPMaQS metadata notification JSON(s) for the requested date.
+        It returns:
+
+        - "Missing Updates" rows
+        - left-joined with "Additional information on missing updates" when available
+
+        If only one of the two tables is available, that table is returned. If
+        neither is available, an empty DataFrame is returned.
+
+        Parameters
+        ----------
+        date : Optional[Union[pd.Timestamp, str]]
+            Target date (UTC). Strings can be "YYYY-MM-DD", "YYYYMMDD", or ISO 8601.
+            Defaults to today (UTC).
+        normalize_headers : bool
+            If True, normalizes column names to lowercase snake_case and converts
+            "(%)" to "pct". Defaults to True.
+        out_dir : Optional[str]
+            Base output directory used for downloads. The client will place files in
+            a `jpmaqs-download/` subdirectory unless `out_dir` already ends with it.
+
+        Returns
+        -------
+        pd.DataFrame
+            A DataFrame of missing-update notifications (optionally enriched).
+        """
         jsons = self._load_metadata_jsons(
             date=date, normalize_headers=normalize_headers, out_dir=out_dir
         )
