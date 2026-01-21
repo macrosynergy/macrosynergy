@@ -81,7 +81,7 @@ class MLPTrainer:
         self.y_scaler = y_scaler
 
     def fit(self, model, X, y):
-        torch.manual_seed(self.random_state)
+        #torch.manual_seed(self.random_state)
 
         X_train, y_train, X_val, y_val = self._time_split(X, y)
 
