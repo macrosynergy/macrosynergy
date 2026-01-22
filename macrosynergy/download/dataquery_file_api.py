@@ -2681,25 +2681,6 @@ def _lazy_load_filtered_parquets(
 
     tickers_list: List[str] = list(dict.fromkeys(tickers))
 
-    # lazy_parts: List[pl.LazyFrame] = []
-    # for pth in paths:
-    #     lf = pl.scan_parquet(pth, include_file_paths=include_file_column)
-    #     lf = _filter_lazy_frame_by_tickers(
-    #         lf=lf,
-    #         tickers=tickers_list,
-    #         start_date=start_date,
-    #         end_date=end_date,
-    #         min_last_updated=min_last_updated,
-    #         max_last_updated=max_last_updated,
-    #     )
-    #     lf = _to_output_schema(
-    #         lf=lf,
-    #         include_file_column=include_file_column,
-    #         want_qdf=return_qdf,
-    #     )
-    #     lazy_parts.append(lf)
-
-    # out = pl.concat(lazy_parts, how="vertical")
     out = _build_filtered_parquet_lazyframe(
         paths=paths,
         tickers_list=tickers_list,
