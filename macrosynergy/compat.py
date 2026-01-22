@@ -35,6 +35,6 @@ PD_NEW_MAP: bool = version.parse(pd.__version__) >= version.parse("2.1.0")
 
 POLARS_0_17_13_OR_EARLIER = False
 if pl is not None:
-    POLARS_0_17_13_OR_EARLIER = version.parse("0.17.13") <= version.parse(
-        pl.__version__
+    POLARS_0_17_13_OR_EARLIER = version.parse(pl.__version__) <= version.parse(
+        "0.17.13"
     )
