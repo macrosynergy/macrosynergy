@@ -4,6 +4,9 @@ Client for downloading JPMaQS data files from the JPMorgan DataQuery File API.
 This module provides the `DataQueryFileAPIClient`, a high-level wrapper for the
 JPMorgan DataQuery File API.
 
+The client maintains a local on-disk cache of downloaded files. By default, downloads
+are written into a folder called `jpmaqs-download`. If `out_dir` is not already named
+`jpmaqs-download`, the client will create/use `<out_dir>/jpmaqs-download`.
 
 .. note::
     This functionality is currently in BETA and is subject to significant changes
@@ -18,6 +21,8 @@ Before using the client, ensure your API credentials are set as environment vari
 
     export DQ_CLIENT_ID="your_client_id"
     export DQ_CLIENT_SECRET="your_client_secret"
+
+The client will also read `DATAQUERY_CLIENT_ID` and `DATAQUERY_CLIENT_SECRET`.
 
 **Example 1: Initialize the client and list all available JPMaQS files.**
 
@@ -41,22 +46,19 @@ including full datasets, deltas, and metadata.
 .. code-block:: python
 
     from macrosynergy.download import DataQueryFileAPIClient
+
+    # Use a stable local cache directory.
     client = DataQueryFileAPIClient(out_dir="./jpmaqs_data")
 
-    print(f"Downloading today's files to {client.out_dir}...")
+    print(f"Downloading today's files to {client.out_dir} ...")
     client.download_full_snapshot()
     print("Download complete.")
 
-**Example 3: Download all new or updated files for the day, and load data from them
-as a dataframe.**
+**Example 3: `Download and load a filtered dataset (pandas, qdf schema).**
 
-Here, the client checks locally available files, compares them to the latest files.
-It automatically downloads any new or updated files (full snapshots, delta files, and
-metadata as required), applies any locally available deltas to bring your dataset up to
-date, and then loads data for the specified `cids`, `xcats`, `tickers`, and
-`start_date`/`end_date` as appropriate.
-The resulting dataframe is returned to the user in the chosen dataframe format
-(quantamental format/tickers format) and dataframe type (`pandas`/`polars`).
+`download()` is the main "one-stop" method: it downloads the necessary snapshot/delta
+files into the local cache (unless `skip_download=True`), then loads the requested
+timeseries as a DataFrame.
 
 
 .. code-block:: python
@@ -81,6 +83,51 @@ The resulting dataframe is returned to the user in the chosen dataframe format
     3 2000-01-06  AUD  RIR_NSA  3.710      0.0     56.0     1.25 2024-07-25 07:27:22
     4 2000-01-07  AUD  RIR_NSA  3.697      0.0     57.0     1.25 2024-07-25 07:27:22
 
+**Example 3b: `download()` - ticker schema**
+
+Use `dataframe_format="tickers"` to keep a `ticker` column (instead of `cid`/`xcat`).
+This is useful if you want to pivot to a matrix for modeling.
+
+.. code-block:: python
+
+    from macrosynergy.download import DataQueryFileAPIClient
+
+    tickers = ["USD_RIR_NSA", "EUR_RIR_NSA", "JPY_RIR_NSA"]
+
+    with DataQueryFileAPIClient(out_dir="./jpmaqs_data") as client:
+        df = client.download(
+            tickers=tickers,
+            metrics=["value"],
+            start_date="2015-01-01",
+            dataframe_format="tickers",
+        )
+
+**Example 3c: `download()` - large pulls with Polars (lazy) + incremental file window.**
+
+For large requests, `dataframe_type="polars-lazy"` keeps the result lazy so you can
+filter/transform before collecting.
+
+.. code-block:: python
+
+    import pandas as pd
+    import polars as pl
+    from macrosynergy.download import DataQueryFileAPIClient
+
+    since = (pd.Timestamp.utcnow() - pd.offsets.BDay(5)).strftime("%Y%m%d")
+
+    with DataQueryFileAPIClient(out_dir="./jpmaqs_data") as client:
+        lf = client.download(
+            cids=["USD", "EUR"],
+            xcats=["RIR_NSA", "INFL_NSA"],
+            start_date="2010-01-01",
+            metrics=["value", "last_updated"],
+            include_file_column=True,
+            dataframe_type="polars-lazy",
+            since_datetime=since,
+        )
+
+        # Example: filter further before materializing
+        df = lf.filter(pl.col("real_date") >= pl.date(2020, 1, 1)).collect()
 
 **Example 4: Download all new or updated delta-files since a specific date/time.**
 
@@ -89,8 +136,8 @@ The resulting dataframe is returned to the user in the chosen dataframe format
     from macrosynergy.download import DataQueryFileAPIClient
     import pandas as pd
 
-    client = DataQueryFileAPIClient("./jpmaqs_data")
-    since_datetime = pd.Timestamp.today() - pd.DateOffset(days=10)
+    client = DataQueryFileAPIClient(out_dir="./jpmaqs_data")
+    since_datetime = (pd.Timestamp.utcnow() - pd.DateOffset(days=10)).strftime("%Y%m%d")
 
     client.download_full_snapshot(
         since_datetime=since_datetime,
@@ -106,7 +153,7 @@ The resulting dataframe is returned to the user in the chosen dataframe format
 .. code-block:: python
 
     from macrosynergy.download import DataQueryFileAPIClient
-    client = DataQueryFileAPIClient("./jpmaqs_data")
+    client = DataQueryFileAPIClient(out_dir="./jpmaqs_data")
     # This specific filename can be found using the list_available_files... methods
     target_filename = "JPMAQS_MACROECONOMIC_BALANCE_SHEETS_20250414.parquet"
 
@@ -284,7 +331,9 @@ class DataQueryFileAPIClient:
         Client Secret for authentication. If not provided, it will be sourced from
         environment variables (`DQ_CLIENT_SECRET` or `DATAQUERY_CLIENT_SECRET`).
     out_dir : Optional[str]
-        Default output directory for downloads. Can be overridden in download methods.
+        Base output directory for downloads. The effective cache directory is always a
+        folder named `jpmaqs-download` (either `out_dir` itself, or
+        `<out_dir>/jpmaqs-download`). Can be overridden in download methods.
     base_url : str
         The base URL for the DataQuery File API. Defaults to `DQ_FILE_API_BASE_URL`.
     scope : str
@@ -1456,8 +1505,11 @@ class DataQueryFileAPIClient:
         skip_download: bool = False,
     ) -> Union[pd.DataFrame, pl.DataFrame, pl.LazyFrame]:
         """
-        A method to download data and load it as a DataFrame based on specified
-        indicators, and specified date range.
+        Download JPMaQS files into the local cache and load the requested timeseries.
+
+        This is the main "one-stop" method: it resolves tickers to the underlying JPMaQS
+        datasets, downloads the necessary snapshot/delta/metadata files into the local
+        cache (unless `skip_download=True`), and returns the filtered data.
 
         Parameters
         ----------
@@ -1471,7 +1523,7 @@ class DataQueryFileAPIClient:
         metrics : Optional[List[str]]
             A list of JPMaQS metrics to filter the data. Available metrics are "value",
             "grading", "eop_lag", "mop_lag", and "last_updated". The available metrics
-            are also defined in `macrosynergy.constants.JPMAQS_METRICS`. The default
+            are also defined in `macrosynergy.management.constants.JPMAQS_METRICS`. The default
             is None, in which case all metrics are returned.
         start_date : Optional[str]
             The start date for the returned data in "YYYY-MM-DD" (or "YYYYMMDD") format.
@@ -1483,8 +1535,13 @@ class DataQueryFileAPIClient:
             If True, includes a column indicating the source file for each data point.
             Default is False.
         dataframe_format : str
-            The format of the returned DataFrame. Options are "qdf" for QuantamentalDataFrame
-            or "tickers" for a standard DataFrame with tickers as columns. Default is "qdf".
+            The output schema. Options are:
+
+            - "qdf": quantamental schema with `cid` and `xcat` columns.
+            - "tickers": ticker schema with a single `ticker` column (instead of `cid`/`xcat`).
+
+            Note: if you want a wide matrix (date x ticker), pivot the returned data
+            using pandas/Polars. Default is "qdf".
         dataframe_type : str
             The type of DataFrame to return. Options are "pandas" for a pandas DataFrame,
             "polars" for a polars DataFrame, or "polars-lazy" for a polars LazyFrame.
@@ -1493,20 +1550,24 @@ class DataQueryFileAPIClient:
             If True and `dataframe_type` is "pandas", the returned DataFrame will use
             categorical dtypes for object columns. Default is True.
         include_delta_files : bool
-            If True, delta files will be included in the download. Default is True.
+            If True, delta files will be downloaded (and applied when loading, via
+            `delta_treatment`). Default is True.
         include_metadata_files : bool
             If True, metadata files will be included in the download. Default is True.
         delta_treatment : str
             Specifies how to treat new or updated entries across files from different
-            dates. Options are:
-                - 'latest': Use the latest available entry for each (ticker, real_date) pair (default).
-                - 'earliest': Use the earliest available entry for each (ticker, real_date) pair.
-                - 'all': Keep all entries.
+            dates (based on `last_updated`). Options are:
+
+            - "latest": keep the latest value per series/date (default).
+            - "earliest": keep the earliest value per series/date.
+            - "all": keep all entries.
         show_progress : bool
             If True, displays a progress bar during downloads. Default is True.
         out_dir : Optional[str]
             The output directory for downloaded files. The default directory being used
-            by the DataQueryFileAPI instance is used if None.
+            by the client is used if None. The effective cache directory is always a
+            folder named `jpmaqs-download` (either `out_dir` itself, or
+            `<out_dir>/jpmaqs-download`).
         overwrite : bool
             If True, overwrites files if they already exist. Default is False.
         since_datetime : Optional[str]
@@ -1514,6 +1575,11 @@ class DataQueryFileAPIClient:
             Defaults to the start of the current day (UTC).
         to_datetime : Optional[str]
             Download files modified up to this timestamp (inclusive).
+            Note: `since_datetime` and `to_datetime` only affect which files are downloaded.
+            The returned timeseries is controlled by `start_date`/`end_date`.
+        skip_download : bool
+            If True, do not download snapshot/delta/metadata files and only load from the
+            local cache. The catalog is still downloaded/validated. Default is False.
 
         Returns
         -------
