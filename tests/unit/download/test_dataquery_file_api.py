@@ -1140,7 +1140,10 @@ class TestDataQueryFileAPIClientNotificationLoading(unittest.TestCase):
 
         client._load_metadata_jsons(date="2026-01-25", out_dir=self.test_dir)
 
-        warning_msgs = [c.args[0] for c in mock_logger.warning.call_args_list]
+        if PYTHON_3_8_OR_LATER:
+            warning_msgs = [c.args[0] for c in mock_logger.warning.call_args_list]
+        else:
+            warning_msgs = [c[0][0] for c in mock_logger.warning.call_args_list]
         self.assertTrue(any("Provided date" in msg for msg in warning_msgs))
         mock_download_full_snapshot.assert_called_once()
 
@@ -1150,7 +1153,9 @@ class TestDataQueryFileAPIClientNotificationLoading(unittest.TestCase):
             client_id="id", client_secret="secret", out_dir=self.test_dir
         )
         df = pd.DataFrame({"ticker": ["X"], "observations_affected": [1]})
-        with patch.object(DataQueryFileAPIClient, "_load_metadata_jsons", return_value={}):
+        with patch.object(
+            DataQueryFileAPIClient, "_load_metadata_jsons", return_value={}
+        ):
             out = client.get_revisions_notifications(out_dir=self.test_dir)
             self.assertTrue(out.empty)
             mock_logger.warning.assert_called_with(
@@ -1187,7 +1192,9 @@ class TestDataQueryFileAPIClientNotificationLoading(unittest.TestCase):
 
         mock_logger.reset_mock()
         with patch.object(
-            DataQueryFileAPIClient, "_load_metadata_jsons", return_value={"Missing Updates": df1}
+            DataQueryFileAPIClient,
+            "_load_metadata_jsons",
+            return_value={"Missing Updates": df1},
         ):
             out = client.get_missing_data_notifications(out_dir=self.test_dir)
             pd.testing.assert_frame_equal(out, df1)
@@ -1208,7 +1215,9 @@ class TestDataQueryFileAPIClientNotificationLoading(unittest.TestCase):
             )
 
         mock_logger.reset_mock()
-        with patch.object(DataQueryFileAPIClient, "_load_metadata_jsons", return_value={}):
+        with patch.object(
+            DataQueryFileAPIClient, "_load_metadata_jsons", return_value={}
+        ):
             out = client.get_missing_data_notifications(out_dir=self.test_dir)
             self.assertTrue(out.empty)
             mock_logger.warning.assert_called_with(

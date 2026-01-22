@@ -23,7 +23,6 @@ from macrosynergy.download.dataquery_file_api import (
     _expr_split_ticker,
     _lazy_load_filtered_parquets,
 )
-from macrosynergy.compat import PYTHON_3_8_OR_LATER
 
 
 def suppress_logging(func):
@@ -74,7 +73,6 @@ def pd_to_datetime_compat(x, **kwargs):
     return pd.to_datetime(x, errors="coerce", **kwargs)
 
 
-@unittest.skipUnless(PYTHON_3_8_OR_LATER, "Requires Python 3.8+")
 class TestLazyLoad(unittest.TestCase):
     def setUp(self):
         self.tmpdir = Path(tempfile.mkdtemp())
@@ -504,7 +502,6 @@ class TestLargeDeltaFileDatetimes(unittest.TestCase):
         self.assertListEqual(as_strings, sorted(as_strings))
 
 
-@unittest.skipUnless(PYTHON_3_8_OR_LATER, "Requires Python 3.8+")
 class TestLazyLoadFilteredParquets(unittest.TestCase):
     def setUp(self):
         self.tmpdir = Path(tempfile.mkdtemp())
@@ -625,7 +622,6 @@ class TestLazyLoadFilteredParquets(unittest.TestCase):
             _lazy_load_filtered_parquets(**call_kwargs)
 
 
-@unittest.skipUnless(PYTHON_3_8_OR_LATER, "Requires Python 3.8+")
 class TestLazyLoadDatasetsFilterSemantics(unittest.TestCase):
     @patch(
         "macrosynergy.download.dataquery_file_api.pd_to_datetime_compat",
