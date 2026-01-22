@@ -190,7 +190,11 @@ import json
 import calendar
 import datetime
 import requests
-from macrosynergy.compat import PD_2_0_OR_LATER, PYTHON_3_8_OR_LATER
+from macrosynergy.compat import (
+    PD_2_0_OR_LATER,
+    PYTHON_3_8_OR_LATER,
+    POLARS_0_17_13_OR_EARLIER,
+)
 from macrosynergy.management.constants import JPMAQS_METRICS
 from macrosynergy.download.dataquery import JPMAQS_GROUP_ID
 from macrosynergy.download.fusion_interface import (
@@ -202,6 +206,7 @@ from macrosynergy.download.fusion_interface import (
 from macrosynergy.download.dataquery import OAUTH_TOKEN_URL
 from macrosynergy.download.exceptions import DownloadError, InvalidResponseError
 from macrosynergy.download.jpm_oauth import JPMorganOAuth
+
 
 DQ_FILE_API_BASE_URL: str = (
     "https://api-strm-gw01.jpmchase.com/research/dataquery-authe/api/v2"
@@ -1737,9 +1742,15 @@ def _large_delta_file_datetimes(as_str: bool = True) -> List[str]:
     return [d.strftime("%Y%m%dT%H%M%S") for d in dt_list]
 
 
+def pl_string_type():
+    if POLARS_0_17_13_OR_EARLIER:
+        return pl.Utf8
+    return pl.String
+
+
 class JPMaQSParquetExpectedColumns(Enum):
     TICKER = {
-        "ticker": pl.String,
+        "ticker": pl_string_type(),
         "real_date": pl.Date,
         "value": pl.Float64,
         "grading": pl.Float64,
@@ -1748,13 +1759,13 @@ class JPMaQSParquetExpectedColumns(Enum):
         "last_updated": pl.Datetime(time_unit="us", time_zone=None),
     }
     METADATA = {
-        "Theme": pl.String,
-        "Group": pl.String,
-        "Category": pl.String,
-        "Market Group": pl.String,
-        "Market": pl.String,
-        "Ticker": pl.String,
-        "Definition": pl.String,
+        "Theme": pl_string_type(),
+        "Group": pl_string_type(),
+        "Category": pl_string_type(),
+        "Market Group": pl_string_type(),
+        "Market": pl_string_type(),
+        "Ticker": pl_string_type(),
+        "Definition": pl_string_type(),
         "Last Updated": pl.Datetime(time_unit="ns", time_zone=None),
     }
 
@@ -2431,7 +2442,10 @@ def lazy_load_from_parquets(
             raise FileNotFoundError(f"No such file: {catalog_path}")
 
         catalog_lf = pl.scan_parquet(str(catalog_path))
-        schema_cols = catalog_lf.collect_schema().names()
+        if PYTHON_3_8_OR_LATER:
+            schema_cols = catalog_lf.collect_schema().names()
+        else:
+            schema_cols = catalog_lf.schema.keys()
         ticker_col = "Ticker" if "Ticker" in schema_cols else "ticker"
         if ticker_col in schema_cols:
             catalog_tickers = (
@@ -2513,7 +2527,11 @@ def _expr_split_ticker(ticker_expr: pl.Expr) -> Tuple[pl.Expr, pl.Expr]:
     return cid, xcat
 
 
-def _ensure_columns(lf: pl.LazyFrame, cols: Sequence[str]) -> pl.LazyFrame:
+def _ensure_columns(
+    lf: pl.LazyFrame,
+    cols: Sequence[str],
+    dtypes: Optional[Dict[str, "pl.DataType"]] = None,
+) -> pl.LazyFrame:
     """
     Ensure all `cols` exist before .select(...).
     This runs schema-only (lf.collect_schema()), not a materialization.
@@ -2523,7 +2541,17 @@ def _ensure_columns(lf: pl.LazyFrame, cols: Sequence[str]) -> pl.LazyFrame:
     else:
         have = set(lf.schema.keys())
     missing = [c for c in cols if c not in have]
-    return lf.with_columns(**{c: pl.lit(None) for c in missing}) if missing else lf
+    if not missing:
+        return lf
+
+    add_exprs = {}
+    for c in missing:
+        expr = pl.lit(None)
+        if dtypes and c in dtypes:
+            expr = expr.cast(dtypes[c])
+        add_exprs[c] = expr
+
+    return lf.with_columns(**add_exprs)
 
 
 def _filter_lazy_frame_by_tickers(
@@ -2561,23 +2589,80 @@ def _to_output_schema(
     cols = "real_date.ticker.value.eop_lag.mop_lag.grading.last_updated"
     if include_file_column:
         cols += "." + include_file_column
-        lf = lf.with_columns(
-            file_name=pl.col(include_file_column)
-            .str.replace_all(r"\\", "/")
-            .str.split("/")
-            .list.last()
+        path_parts = (
+            pl.col(include_file_column).str.replace_all(r"\\", "/").str.split("/")
         )
+        if POLARS_0_17_13_OR_EARLIER:
+            file_name_expr = path_parts.arr.last()
+        else:
+            file_name_expr = path_parts.list.last()
+        lf = lf.with_columns(file_name=file_name_expr)
     ticker_cols = cols.split(".")
     qdf_cols = cols.replace("ticker", "cid.xcat").split(".")
+
+    dtype_map = dict(JPMaQSParquetExpectedColumns.TICKER.value)
+    dtype_map.update({"cid": pl_string_type(), "xcat": pl_string_type()})
+    if include_file_column:
+        dtype_map[include_file_column] = pl_string_type()
 
     if want_qdf:
         cid_expr, xcat_expr = _expr_split_ticker(pl.col("ticker"))
         lf = lf.with_columns(cid=cid_expr, xcat=xcat_expr)
-        lf = _ensure_columns(lf, qdf_cols)
+        lf = _ensure_columns(lf, qdf_cols, dtypes=dtype_map)
         return lf.select(qdf_cols)
 
-    lf = _ensure_columns(lf, ticker_cols)
+    lf = _ensure_columns(lf, ticker_cols, dtypes=dtype_map)
     return lf.select(ticker_cols)
+
+
+def _build_filtered_parquet_lazyframe(
+    paths: Sequence[Union[str, os.PathLike]],
+    tickers_list: Sequence[str],
+    *,
+    start_date: Optional[Union[pd.Timestamp, str]] = None,
+    end_date: Optional[Union[pd.Timestamp, str]] = None,
+    min_last_updated: Optional[Union[pd.Timestamp, str]] = None,
+    max_last_updated: Optional[Union[pd.Timestamp, str]] = None,
+    include_file_column: Optional[str] = None,
+    return_qdf: bool = False,
+) -> pl.LazyFrame:
+    """
+    Scan multiple parquet paths into a single LazyFrame, optionally adding a file-path
+    column in a way compatible with Polars 0.17.13 (Python 3.7).
+    """
+    lazy_parts: List[pl.LazyFrame] = []
+
+    for pth in paths:
+        pth_str = os.fspath(pth)
+        if include_file_column:
+            if POLARS_0_17_13_OR_EARLIER:
+                lf = pl.scan_parquet(pth_str)
+                lf = lf.with_columns(pl.lit(pth_str).alias(include_file_column))
+            else:
+                lf = pl.scan_parquet(pth_str, include_file_paths=include_file_column)
+        else:
+            lf = pl.scan_parquet(pth_str)
+
+        lf = _filter_lazy_frame_by_tickers(
+            lf=lf,
+            tickers=tickers_list,
+            start_date=start_date,
+            end_date=end_date,
+            min_last_updated=min_last_updated,
+            max_last_updated=max_last_updated,
+        )
+        lf = _to_output_schema(
+            lf=lf,
+            include_file_column=include_file_column,
+            want_qdf=return_qdf,
+        )
+
+        lazy_parts.append(lf)
+
+    if not lazy_parts:
+        return pl.DataFrame().lazy()
+
+    return pl.concat(lazy_parts, how="vertical")
 
 
 def _lazy_load_filtered_parquets(
@@ -2596,25 +2681,35 @@ def _lazy_load_filtered_parquets(
 
     tickers_list: List[str] = list(dict.fromkeys(tickers))
 
-    lazy_parts: List[pl.LazyFrame] = []
-    for pth in paths:
-        lf = pl.scan_parquet(pth, include_file_paths=include_file_column)
-        lf = _filter_lazy_frame_by_tickers(
-            lf=lf,
-            tickers=tickers_list,
-            start_date=start_date,
-            end_date=end_date,
-            min_last_updated=min_last_updated,
-            max_last_updated=max_last_updated,
-        )
-        lf = _to_output_schema(
-            lf=lf,
-            include_file_column=include_file_column,
-            want_qdf=return_qdf,
-        )
-        lazy_parts.append(lf)
+    # lazy_parts: List[pl.LazyFrame] = []
+    # for pth in paths:
+    #     lf = pl.scan_parquet(pth, include_file_paths=include_file_column)
+    #     lf = _filter_lazy_frame_by_tickers(
+    #         lf=lf,
+    #         tickers=tickers_list,
+    #         start_date=start_date,
+    #         end_date=end_date,
+    #         min_last_updated=min_last_updated,
+    #         max_last_updated=max_last_updated,
+    #     )
+    #     lf = _to_output_schema(
+    #         lf=lf,
+    #         include_file_column=include_file_column,
+    #         want_qdf=return_qdf,
+    #     )
+    #     lazy_parts.append(lf)
 
-    out = pl.concat(lazy_parts, how="vertical")
+    # out = pl.concat(lazy_parts, how="vertical")
+    out = _build_filtered_parquet_lazyframe(
+        paths=paths,
+        tickers_list=tickers_list,
+        start_date=start_date,
+        end_date=end_date,
+        min_last_updated=min_last_updated,
+        max_last_updated=max_last_updated,
+        include_file_column=include_file_column,
+        return_qdf=return_qdf,
+    )
 
     key_cols = ["cid", "xcat"] if return_qdf else ["ticker"]
     full_key = key_cols + ["real_date"]
@@ -2640,20 +2735,19 @@ def _lazy_load_filtered_parquets(
 if __name__ == "__main__":
     print("Current time UTC:", pd.Timestamp.utcnow().isoformat())
 
-    start = time.time()
-    since_datetime = pd.Timestamp.now() - pd.offsets.BDay(7)
-    print(
-        f"Downloading full-snapshots, delta-files, and metadata files published since {since_datetime}"
-    )
-    since_datetime = since_datetime.strftime("%Y%m%d")
-    with DataQueryFileAPIClient(out_dir="./data/jpmaqs-data/") as dq:
-        dq.download_catalog_file()
-        dq.download_full_snapshot(since_datetime=since_datetime)
-        print(dq.get_revisions_notifications().head())
-        print(dq.get_missing_data_notifications().head())
-    end = time.time()
-
-    print(f"Download completed in {end - start:.2f} seconds")
+    # start = time.time()
+    # since_datetime = pd.Timestamp.now() - pd.offsets.BDay(7)
+    # print(
+    #     f"Downloading full-snapshots, delta-files, and metadata files published since {since_datetime}"
+    # )
+    # since_datetime = since_datetime.strftime("%Y%m%d")
+    # with DataQueryFileAPIClient(out_dir="./data/jpmaqs-data/") as dq:
+    #     dq.download_catalog_file()
+    #     dq.download_full_snapshot(since_datetime=since_datetime)
+    #     print(dq.get_revisions_notifications().head())
+    #     print(dq.get_missing_data_notifications().head())
+    # end = time.time()
+    # print(f"Download completed in {end - start:.2f} seconds")
 
     test_cids = ["AUD", "BRL", "CAD", "CHF", "CNY", "CZK", "EUR", "GBP", "USD"]
     test_xcats = ["RIR_NSA", "FXXR_NSA", "FXXR_VT10", "DU05YXR_NSA", "DU05YXR_VT10"]
@@ -2663,11 +2757,11 @@ if __name__ == "__main__":
         df = dq.download(tickers=tickers)
         print(df.head())
 
-    with DataQueryFileAPIClient(out_dir="./data/jpmaqs-data/") as dq:
-        pl_df: pl.DataFrame = dq.download(
-            cids=test_cids,
-            xcats=test_xcats,
-            dataframe_format="tickers",
-            dataframe_type="polars",
-        )
-        print(pl_df.head())
+    # with DataQueryFileAPIClient(out_dir="./data/jpmaqs-data/") as dq:
+    #     pl_df: pl.DataFrame = dq.download(
+    #         cids=test_cids,
+    #         xcats=test_xcats,
+    #         dataframe_format="tickers",
+    #         dataframe_type="polars",
+    #     )
+    #     print(pl_df.head())
