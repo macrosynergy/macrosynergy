@@ -59,6 +59,11 @@ from .forecasting import (
     PLSTransformer,
     LinearMultiTargetRegression,
     TimeWeightedWrapper,
+    MultiLayerPerceptron,
+    TimeSeriesSampler,
+    MultiOutputSharpe,
+    MultiOutputMCR,
+    MLPRegressor,
 )
 
 from .random_effects import RandomEffects
@@ -117,6 +122,7 @@ __all__ = [
     "GlobalLocalRegression",
     "TimeWeightedWrapper",
     "LinearMultiTargetRegression",
+    "MLPRegressor",
     # market beta estimation
     "BetaEstimator",
     # regression system
@@ -131,4 +137,9 @@ __all__ = [
     "FIExtractor",
     "DataFrameTransformer",
     "CountryByCountryRegression",
+    # torch
+    "MultiLayerPerceptron",
+    "TimeSeriesSampler",
+    "MultiOutputSharpe",
+    "MultiOutputMCR",
 ]
