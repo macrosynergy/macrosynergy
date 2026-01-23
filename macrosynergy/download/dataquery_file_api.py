@@ -1,4 +1,9 @@
 """
+
+.. note::
+    This functionality is currently in BETA and is subject to significant changes
+    without deprecation cycles.
+
 Client for downloading JPMaQS data files from the JPMorgan DataQuery File API.
 
 This module provides the `DataQueryFileAPIClient`, a high-level wrapper for the
@@ -8,13 +13,11 @@ The client maintains a local on-disk cache of downloaded files. By default, down
 are written into a folder called `jpmaqs-download`. If `out_dir` is not already named
 `jpmaqs-download`, the client will create/use `<out_dir>/jpmaqs-download`.
 
-.. note::
-    This functionality is currently in BETA and is subject to significant changes
-    without deprecation cycles.
+Setting up API Credentials
+--------------------------
 
-Consumption & Examples
-----------------------
-
+Please obtain your DataQuery API credentials (Client ID and Client Secret) from the
+JPMorgan Developer Portal, as directed by DataQuery/JPMaQS support channels.
 Before using the client, ensure your API credentials are set as environment variables:
 
 .. code-block:: bash
@@ -22,7 +25,13 @@ Before using the client, ensure your API credentials are set as environment vari
     export DQ_CLIENT_ID="your_client_id"
     export DQ_CLIENT_SECRET="your_client_secret"
 
-The client will also read `DATAQUERY_CLIENT_ID` and `DATAQUERY_CLIENT_SECRET`.
+In line with the DataQuery SDK, the client will also check for the environment
+variables `DATAQUERY_CLIENT_ID` and `DATAQUERY_CLIENT_SECRET`.
+Please refer to the official documentation and IT/Tech support channels for
+guidance on setting environment variables securely.
+
+Common usage examples
+---------------------
 
 **Example 1: Initialize the client and list all available JPMaQS files.**
 
@@ -37,6 +46,17 @@ The client will also read `DATAQUERY_CLIENT_ID` and `DATAQUERY_CLIENT_SECRET`.
     available_files_df = client.list_available_files_for_all_file_groups()
     print("Available JPMaQS files:")
     print(available_files_df.head())
+
+.. code-block:: python
+
+    Available JPMaQS files:
+    group-id                    file-group-id             file-datetime  is-available                                         file-name             last-modified
+    0   JPMAQS  JPMAQS_STYLIZED_TRADING_FACTORS 2026-01-23 00:00:00+00:00          True  JPMAQS_STYLIZED_TRADING_FACTORS_20260123.parquet 2026-01-23 06:13:48+00:00
+    1   JPMAQS  JPMAQS_STYLIZED_TRADING_FACTORS 2026-01-22 00:00:00+00:00          True  JPMAQS_STYLIZED_TRADING_FACTORS_20260122.parquet 2026-01-22 06:14:18+00:00
+    2   JPMAQS  JPMAQS_STYLIZED_TRADING_FACTORS 2026-01-21 00:00:00+00:00          True  JPMAQS_STYLIZED_TRADING_FACTORS_20260121.parquet 2026-01-21 06:13:11+00:00
+    3   JPMAQS  JPMAQS_STYLIZED_TRADING_FACTORS 2026-01-20 00:00:00+00:00          True  JPMAQS_STYLIZED_TRADING_FACTORS_20260120.parquet 2026-01-20 06:08:55+00:00
+    4   JPMAQS  JPMAQS_STYLIZED_TRADING_FACTORS 2026-01-19 00:00:00+00:00          True  JPMAQS_STYLIZED_TRADING_FACTORS_20260119.parquet 2026-01-19 06:11:40+00:00
+
 
 **Example 2: Download all new or updated files for the current day.**
 
