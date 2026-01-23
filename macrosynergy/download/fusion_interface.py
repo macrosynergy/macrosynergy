@@ -902,7 +902,10 @@ def coerce_real_date(table: pa.Table) -> pa.Table:
         col = pc.utf8_slice_codeunits(col, 0, 10)
         ts = pc.strptime(col, format="%Y-%m-%d", unit="s")
         dates = pc.cast(ts, pa.date32())
-
+    elif pa.types.is_large_string(t):
+        col = pc.utf8_slice_codeunits(col, 0, 10)
+        ts = pc.strptime(col, format="%Y-%m-%d", unit="s")
+        dates = pc.cast(ts, pa.date32())
     else:
         raise TypeError(f"Unsupported type for real_date: {t}")
 
