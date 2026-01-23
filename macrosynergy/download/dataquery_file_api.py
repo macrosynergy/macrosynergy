@@ -235,6 +235,11 @@ window) if needed, and return the notifications as pandas DataFrames.
         print(missing_df.head())
         print(revisions_df.head())
 
+
+---
+
+Please find below the documentation for the `DataQueryFileAPIClient` and related 
+classes/methods.
 """
 
 import os
