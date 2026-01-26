@@ -245,6 +245,7 @@ classes/methods.
 """
 
 import os
+import threading
 import pandas as pd
 import polars as pl
 
@@ -274,7 +275,6 @@ from macrosynergy.download.dataquery import JPMAQS_GROUP_ID
 from macrosynergy.download.fusion_interface import (
     request_wrapper,
     request_wrapper_stream_bytes_to_disk,
-    _wait_for_api_call,
     cache_decorator,
 )
 from macrosynergy.download.dataquery import OAUTH_TOKEN_URL
@@ -289,7 +289,7 @@ DQ_FILE_API_SCOPE: str = "JPMC:URI:RS-06785-DataQueryExternalApi-PROD"
 DQ_FILE_API_TIMEOUT: float = 300.0
 DQ_FILE_API_HEADERS_TIMEOUT: float = 60.0
 DQ_FILE_API_DELAY_PARAM: float = 0.04  # =1/25 ; 25 transactions per second
-DQ_FILE_API_DELAY_MARGIN: float = 1.1  # 10% safety margin
+DQ_FILE_API_DELAY_MARGIN: float = 1.05  # 5% safety margin
 DQ_FILE_API_SEGMENT_SIZE_MB: float = 8.0  # 8 MB
 DQ_FILE_API_STREAM_CHUNK_SIZE: int = 8192  # 8 KB
 
@@ -339,7 +339,45 @@ class DataQueryFileAPIOauth(JPMorganOAuth):
         )
 
 
-class DataQueryFileAPIClient:
+class RateLimitedRequester:
+    """
+    Provides a thread-safe rate-limiting mechanism for API requests.
+    """
+
+    def __init__(self, api_delay: float):
+        if api_delay < 0:
+            raise ValueError("`api_delay` must be non-negative.")
+        self._api_delay = api_delay
+        self._rate_limit_lock = threading.Lock()
+        self._last_api_call: Optional[datetime.datetime] = None
+
+    def _wait_for_api_call(self, api_delay: Optional[float] = None) -> bool:
+        """
+        Blocks until the required delay since the last API call has passed.
+        """
+        delay = self._api_delay if api_delay is None else api_delay
+        if delay <= 0:
+            return True
+        with self._rate_limit_lock:
+            now = datetime.datetime.now()
+            if self._last_api_call is None:
+                self._last_api_call = now
+                return True
+
+            diff = (now - self._last_api_call).total_seconds()
+            sleep_for = delay - diff
+            if sleep_for > 0:
+                if sleep_for > 1:
+                    logger.info(
+                        f"Sleeping for {sleep_for:.2f} seconds for API rate limit."
+                    )
+                time.sleep(sleep_for)
+
+            self._last_api_call = datetime.datetime.now()
+        return True
+
+
+class DataQueryFileAPIClient(RateLimitedRequester):
     """
     A client for accessing JPMaQS product files via the JPMorgan DataQuery File API.
 
@@ -380,7 +418,10 @@ class DataQueryFileAPIClient:
         scope: str = DQ_FILE_API_SCOPE,
         proxies: Optional[Dict[str, str]] = None,
         verify_ssl: bool = True,
+        api_delay: float = DQ_FILE_API_DELAY_PARAM,
+        api_delay_margin: float = DQ_FILE_API_DELAY_MARGIN,
     ):
+        super().__init__(api_delay=api_delay * api_delay_margin)
         if not (bool(client_id) and bool(client_secret)):
             client_id, client_secret = get_client_id_secret()
 
@@ -455,6 +496,7 @@ class DataQueryFileAPIClient:
         headers = self.oauth.get_headers()
         for _ in range(retries):
             try:
+                self._wait_for_api_call()
                 return request_wrapper(
                     method="GET",
                     url=url,
@@ -462,7 +504,8 @@ class DataQueryFileAPIClient:
                     params=params or {},
                     proxies=self.proxies,
                     as_json=True,
-                    api_delay=DQ_FILE_API_DELAY_PARAM,
+                    api_delay=0,  # handled by self._wait_for_api_call
+                    skip_wait=True,
                     verify_ssl=self.verify_ssl,
                 )
             except Exception as e:
@@ -686,7 +729,6 @@ class DataQueryFileAPIClient:
                         include_unavailable=include_unavailable,
                     )
                 ] = file_group_id
-                time.sleep(DQ_FILE_API_DELAY_PARAM)
 
             for future in cf.as_completed(futures):
                 available_files = future.result()
@@ -890,7 +932,6 @@ class DataQueryFileAPIClient:
             proxies=self.proxies,
             chunk_size=chunk_size,
             timeout=timeout,
-            api_delay=DQ_FILE_API_DELAY_PARAM,
             verify_ssl=self.verify_ssl,
         )
 
@@ -899,10 +940,18 @@ class DataQueryFileAPIClient:
             is_small_file = file_datetime not in _large_delta_file_datetimes()
 
         if is_small_file:
-            request_wrapper_stream_bytes_to_disk(**download_args)
+            self._wait_for_api_call()
+            request_wrapper_stream_bytes_to_disk(
+                **download_args,
+                api_delay=0,
+                skip_wait=True,
+            )
         else:
             SegmentedFileDownloader(
                 **download_args,
+                api_delay=DQ_FILE_API_DELAY_PARAM,
+                api_delay_margin=DQ_FILE_API_DELAY_MARGIN,
+                parent_requester=self,
                 max_file_retries=max_retries,
                 start_download=True,
             )
@@ -997,7 +1046,6 @@ class DataQueryFileAPIClient:
                         timeout=timeout,
                     )
                 ] = filename
-                time.sleep(DQ_FILE_API_DELAY_PARAM)
 
             for future in tqdm(
                 cf.as_completed(futures),
@@ -1915,9 +1963,15 @@ class SegmentedFileDownloader:
         max_file_retries: int = 3,
         verify_ssl: bool = True,
         start_download: bool = False,
+        *,
+        parent_requester: RateLimitedRequester,
         debug: bool = False,
     ):
         """Initializes the downloader with URL, headers, and download parameters."""
+        if parent_requester is None:
+            raise ValueError("`parent_requester` must be provided for rate limiting.")
+        self.parent_requester: RateLimitedRequester = parent_requester
+        self.api_delay_seconds = api_delay * api_delay_margin
         self.filename = Path(filename)
         self.url = url
         self.headers = headers
@@ -1934,7 +1988,6 @@ class SegmentedFileDownloader:
         self.chunk_size = chunk_size
         self.segment_size_mb = segment_size_mb
         self.timeout = timeout
-        self.api_delay = api_delay * api_delay_margin
         self.headers_timeout = headers_timeout
         self.max_concurrent_downloads = max_concurrent_downloads
         self.max_file_retries = max_file_retries
@@ -1959,6 +2012,9 @@ class SegmentedFileDownloader:
             logger.error(tb.format_exc())
         self.cleanup()
         return False
+
+    def _wait_for_api_call(self) -> bool:
+        return self.parent_requester._wait_for_api_call()
 
     def log(self, msg: str, part_num: int = None, level: int = logging.INFO):
         """Logs a message with downloader-specific context."""
@@ -2007,7 +2063,7 @@ class SegmentedFileDownloader:
                 self.log(
                     f"Retrying download (attempt {self.max_file_retries - retries + 1}/{self.max_file_retries})..."
                 )
-                time.sleep(self.api_delay)
+                time.sleep(self.api_delay_seconds)
                 self.cleanup()
                 return self.download(retries=retries - 1)
 
@@ -2018,7 +2074,7 @@ class SegmentedFileDownloader:
     def _get_file_size(self) -> int:
         """Fetches the total size of the file using a HEAD request."""
         self.log("Fetching file size...")
-        _wait_for_api_call(self.api_delay)
+        self._wait_for_api_call()
         start_time = time.time()
         response = requests.head(
             self.url,
@@ -2079,7 +2135,7 @@ class SegmentedFileDownloader:
         part_path = self.temp_dir / f"part_{part_num}"
 
         try:
-            _wait_for_api_call(self.api_delay)
+            self._wait_for_api_call()
             with requests.get(
                 headers=segment_headers,
                 url=self.url,
