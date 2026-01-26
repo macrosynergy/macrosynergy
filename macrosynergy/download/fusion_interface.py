@@ -246,6 +246,7 @@ def request_wrapper_stream_bytes_to_disk(
     api_delay: float = FUSION_API_DELAY,
     timeout: Optional[float] = None,
     verify_ssl: bool = True,
+    skip_wait: bool = False,
 ) -> None:
     """
     Stream a request's response bytes directly to disk, chunk by chunk.
@@ -276,6 +277,9 @@ def request_wrapper_stream_bytes_to_disk(
         Timeout for the request (defaults to None).
     verify_ssl : bool
         Whether to verify SSL certificates (defaults to True).
+    skip_wait : bool
+        If True, bypasses the internal `_wait_for_api_call` delay enforcement (intended
+        for tests or when external/global rate limiting is handled elsewhere).
     """
     if not isinstance(method, str):
         raise TypeError("Method must be a string.")
@@ -283,7 +287,8 @@ def request_wrapper_stream_bytes_to_disk(
         raise ValueError(
             f"Invalid method: {method}. Must be 'GET' for streaming to disk."
         )
-    _wait_for_api_call(api_delay=api_delay)
+    if not skip_wait:
+        _wait_for_api_call(api_delay=api_delay)
     with requests.request(
         method=method.upper(),
         url=url,
