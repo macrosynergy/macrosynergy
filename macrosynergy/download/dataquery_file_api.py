@@ -74,7 +74,7 @@ including full datasets, deltas, and metadata.
     client.download_full_snapshot()
     print("Download complete.")
 
-**Example 3: `Download and load a filtered dataset (pandas, qdf schema).**
+**Example 3: Download and load a filtered dataset**
 
 `download()` is the main "one-stop" method: it downloads the necessary snapshot/delta
 files into the local cache (unless `skip_download=True`), then loads the requested
@@ -103,7 +103,7 @@ timeseries as a DataFrame.
     3 2000-01-06  AUD  RIR_NSA  3.710      0.0     56.0     1.25 2024-07-25 07:27:22
     4 2000-01-07  AUD  RIR_NSA  3.697      0.0     57.0     1.25 2024-07-25 07:27:22
 
-**Example 3b: `download()` - ticker schema**
+**Example 3b: `download()` - ticker schema.**
 
 Use `dataframe_format="tickers"` to keep a `ticker` column (instead of `cid`/`xcat`).
 This is useful if you want to pivot to a matrix for modeling.
@@ -121,8 +121,9 @@ This is useful if you want to pivot to a matrix for modeling.
             start_date="2015-01-01",
             dataframe_format="tickers",
         )
+        df_pivot = df.pivot(index="real_date", columns="ticker", values="value")
 
-**Example 3c: `download()` - large pulls with Polars (lazy) + incremental file window.**
+**Example 3c: `download()` - large pulls with Polars (lazy)**
 
 For large requests, `dataframe_type="polars-lazy"` keeps the result lazy so you can
 filter/transform before collecting.
@@ -133,17 +134,18 @@ filter/transform before collecting.
     import polars as pl
     from macrosynergy.download import DataQueryFileAPIClient
 
-    since = (pd.Timestamp.utcnow() - pd.offsets.BDay(5)).strftime("%Y%m%d")
 
     with DataQueryFileAPIClient(out_dir="./jpmaqs_data") as client:
+        cat_df = pd.read_parquet(client.download_catalog_file())
+        cat_df = cat_df[cat_df["Ticker"].str.startswith(("USD_", "EUR_"))]
+        usd_eur_tickers = cat_df["Ticker"].tolist()
+
         lf = client.download(
-            cids=["USD", "EUR"],
-            xcats=["RIR_NSA", "INFL_NSA"],
+            tickers=usd_eur_tickers,
             start_date="2010-01-01",
             metrics=["value", "last_updated"],
             include_file_column=True,
             dataframe_type="polars-lazy",
-            since_datetime=since,
         )
 
         # Example: filter further before materializing
@@ -238,7 +240,7 @@ window) if needed, and return the notifications as pandas DataFrames.
 
 ---
 
-Please find below the documentation for the `DataQueryFileAPIClient` and related 
+Please find below the documentation for the `DataQueryFileAPIClient` and related
 classes/methods.
 """
 
@@ -358,7 +360,7 @@ class DataQueryFileAPIClient:
     out_dir : Optional[str]
         Base output directory for downloads. The effective cache directory is always a
         folder named `jpmaqs-download` (either `out_dir` itself, or
-        `<out_dir>/jpmaqs-download`). Can be overridden in download methods.
+        `<out_dir>/jpmaqs-download`). A client instance is bound to this directory.
     base_url : str
         The base URL for the DataQuery File API. Defaults to `DQ_FILE_API_BASE_URL`.
     scope : str
@@ -391,7 +393,7 @@ class DataQueryFileAPIClient:
 
         self.client_id = client_id
         self.client_secret = client_secret
-        self.out_dir = out_dir or "./jpmaqs-download"
+        self.out_dir = self._normalize_out_dir(out_dir or "./jpmaqs-download")
 
         self.base_url = base_url.rstrip("/")
         self.scope = scope
@@ -414,11 +416,20 @@ class DataQueryFileAPIClient:
             logger.error(tb.format_exc())
         return False
 
-    def _get_save_dir(self, out_dir: Optional[str] = None) -> str:
-        base_dir = Path(out_dir or self.out_dir)
-        if base_dir.name != "jpmaqs-download":
-            return str(base_dir / "jpmaqs-download")
-        return str(base_dir)
+    @staticmethod
+    def _normalize_out_dir(out_dir: Union[str, Path]) -> str:
+        """
+        Normalize an output directory to the effective JPMaQS cache directory.
+
+        The DataQuery File API client stores all downloads under a folder called
+        `jpmaqs-download`. If `out_dir` is not already named `jpmaqs-download`, this
+        method appends a `jpmaqs-download` subdirectory.
+        """
+        out_dir_str = os.fspath(out_dir)
+        stripped = out_dir_str.rstrip("/\\")
+        if os.path.basename(stripped) == "jpmaqs-download":
+            return stripped
+        return str(Path(stripped) / "jpmaqs-download")
 
     def _get(
         self, endpoint: str, params: Optional[Dict[str, Any]] = None, retries: int = 3
@@ -807,14 +818,13 @@ class DataQueryFileAPIClient:
         file_group_id: str = None,
         file_datetime: str = None,
         filename: Optional[str] = None,
-        out_dir: Optional[str] = None,
         overwrite: bool = False,
         chunk_size: Optional[int] = None,
         timeout: Optional[float] = DQ_FILE_API_TIMEOUT,
         max_retries: int = 3,
     ) -> str:
         """
-        Downloads a single Parquet file to a specified directory.
+        Downloads a single Parquet file to the client's output directory.
 
         This method can be called with either (`file_group_id` and `file_datetime`)
         or a `filename`. For large files, it automatically uses the
@@ -828,8 +838,6 @@ class DataQueryFileAPIClient:
             The timestamp of the file to download.
         filename : Optional[str]
             The full filename to download. Overrides `file_group_id` and `file_datetime`.
-        out_dir : str
-            The directory where the file will be saved.
         overwrite : bool
             If True, overwrites the file if it already exists. Default is False.
         chunk_size : Optional[int]
@@ -844,7 +852,6 @@ class DataQueryFileAPIClient:
         str
             The full path to the downloaded file.
         """
-        out_dir = self._get_save_dir(out_dir)
         if not ((bool(file_group_id) and bool(file_datetime)) ^ bool(filename)):
             raise ValueError(
                 "One of `file_group_id` & `file_datetime`, or `filename` must be provided."
@@ -862,7 +869,7 @@ class DataQueryFileAPIClient:
 
         file_name = filename or f"{file_group_id}_{file_datetime}.parquet"
         file_date = pd_to_datetime_compat(file_datetime).strftime("%Y-%m-%d")
-        file_path = Path(out_dir) / Path(file_date) / Path(file_name)
+        file_path = Path(self.out_dir) / Path(file_date) / Path(file_name)
 
         file_path.parent.mkdir(parents=True, exist_ok=True)
         if file_path.exists():
@@ -908,7 +915,6 @@ class DataQueryFileAPIClient:
 
     def delete_corrupt_files(
         self,
-        out_dir: Optional[str] = None,
         files: Optional[List[str]] = None,
     ) -> List[str]:
         """
@@ -916,26 +922,23 @@ class DataQueryFileAPIClient:
 
         Parameters
         ----------
-        out_dir : Optional[str]
-            The directory to scan for corrupt files. If None, uses the client's default
-            output directory.
         files : Optional[List[str]]
-            A list of file paths to check for corruption. If None, scans all downloaded
-            files in the specified output directory.
+            A list of file names (as in `list_downloaded_files()["file-name"]`) to check
+            for corruption. If None, scans all downloaded files in the client's output
+            directory.
 
         Returns
         -------
         List[str]
             A list of file paths that were identified as corrupt and deleted.
         """
-        out_dir = self._get_save_dir(out_dir)
-        avail_files = self.list_downloaded_files(out_dir=out_dir)
+        avail_files = self.list_downloaded_files()
         if avail_files.empty:
             return []
         if files is not None:
             if not all(isinstance(f, str) for f in files):
                 raise ValueError(
-                    "All items in `files` must be strings representing file paths."
+                    "All items in `files` must be strings representing file names."
                 )
             avail_files = avail_files[avail_files["file-name"].isin(files)]
         files = sorted(set(map(str, avail_files["path"])))
@@ -945,7 +948,6 @@ class DataQueryFileAPIClient:
     def download_multiple_files(
         self,
         filenames: List[str],
-        out_dir: Optional[str] = None,
         overwrite: bool = False,
         max_retries: int = 3,
         n_jobs: int = None,
@@ -960,8 +962,6 @@ class DataQueryFileAPIClient:
         ----------
         filenames : List[str]
             A list of full filenames to be downloaded.
-        out_dir : str
-            The directory to save the downloaded files.
         overwrite : bool
             If True, overwrites files if they already exist. Default is False.
         max_retries : int
@@ -975,8 +975,7 @@ class DataQueryFileAPIClient:
         show_progress : bool
             If True, displays a progress bar for the downloads.
         """
-        out_dir = self._get_save_dir(out_dir)
-        Path(out_dir).mkdir(parents=True, exist_ok=True)
+        Path(self.out_dir).mkdir(parents=True, exist_ok=True)
         start_time = time.time()
         logger.info(f"Starting download of {len(filenames)} files.")
         failed_files = []
@@ -993,7 +992,6 @@ class DataQueryFileAPIClient:
                     executor.submit(
                         self.download_file,
                         filename=filename,
-                        out_dir=out_dir,
                         overwrite=overwrite,
                         chunk_size=chunk_size,
                         timeout=timeout,
@@ -1016,9 +1014,7 @@ class DataQueryFileAPIClient:
                 except Exception as e:
                     logger.error(f"Failed to download {fname}: {e}")
                     failed_files.append(fname)
-        found_corrupt_files = self.delete_corrupt_files(
-            out_dir=out_dir, files=filenames
-        )
+        found_corrupt_files = self.delete_corrupt_files(files=filenames)
         corrupt_filenames = [Path(p).name for p in found_corrupt_files]
         failed_files = sorted(set(failed_files + corrupt_filenames))
         if not failed_files:
@@ -1040,7 +1036,6 @@ class DataQueryFileAPIClient:
 
         return self.download_multiple_files(
             filenames=failed_files,
-            out_dir=out_dir,
             max_retries=max_retries - 1,
             n_jobs=n_jobs,
             chunk_size=chunk_size,
@@ -1050,15 +1045,12 @@ class DataQueryFileAPIClient:
 
     def download_catalog_file(
         self,
-        out_dir: Optional[str] = None,
         overwrite: bool = False,
         timeout: Optional[float] = DQ_FILE_API_TIMEOUT,
     ) -> str:
-        out_dir = self._get_save_dir(out_dir)
-
         # check if file already exists
         file_path = None
-        existing_files = self.list_downloaded_files(out_dir=out_dir)
+        existing_files = self.list_downloaded_files()
         if not overwrite and not existing_files.empty:
             todayts = pd.Timestamp.utcnow().strftime("%Y%m%d")
             today_file = f"JPMAQS_METADATA_CATALOG_{todayts}.parquet"
@@ -1081,7 +1073,6 @@ class DataQueryFileAPIClient:
         if file_path is None:
             file_path = self.download_file(
                 filename=latest_filename,
-                out_dir=out_dir,
                 overwrite=overwrite,
                 timeout=timeout,
             )
@@ -1095,13 +1086,12 @@ class DataQueryFileAPIClient:
         xcats: Optional[List[str]] = None,
         case_sensitive: bool = False,
         catalog_file: Optional[str] = None,
-        out_dir: Optional[str] = None,
     ) -> List[str]:
         tickers = _construct_all_tickers_list(tickers=tickers, cids=cids, xcats=xcats)
         if not tickers or not any(t.strip() for t in tickers):
             raise ValueError("No valid tickers to search for.")
 
-        catalog_file = catalog_file or self.download_catalog_file(out_dir=out_dir)
+        catalog_file = catalog_file or self.download_catalog_file()
         catalog_df = pd.read_parquet(catalog_file)
         catalog_df.loc[:, "Dataset"] = catalog_df["Theme"].map(
             JPMAQS_DATASET_THEME_MAPPING
@@ -1169,10 +1159,8 @@ class DataQueryFileAPIClient:
 
     def list_downloaded_files(
         self,
-        out_dir: Optional[str] = None,
         include_last_modified_columns: bool = True,
     ) -> pd.DataFrame:
-        out_dir = self._get_save_dir(out_dir)
         col_order = [
             "filename",
             "file-datetime",
@@ -1182,7 +1170,9 @@ class DataQueryFileAPIClient:
             "path",
         ]
         dfs = [
-            _downloaded_files_df(out_dir, file_format=fmt, include_metadata_files=True)
+            _downloaded_files_df(
+                self.out_dir, file_format=fmt, include_metadata_files=True
+            )
             for fmt in ["parquet", "json"]
         ]
         dfs = [df for df in dfs if not df.empty]
@@ -1209,11 +1199,9 @@ class DataQueryFileAPIClient:
         self,
         date: Optional[Union[pd.Timestamp, str]] = None,
         normalize_headers: bool = True,
-        out_dir: Optional[str] = None,
         skip_download: bool = False,
     ) -> Dict[str, pd.DataFrame]:
         """Load JPMaQS metadata notification JSONs for a date."""
-        out_dir = self._get_save_dir(out_dir)
         date: pd.Timestamp = (
             pd_to_datetime_compat(date) if date is not None else pd.Timestamp.utcnow()
         ).normalize()
@@ -1227,14 +1215,13 @@ class DataQueryFileAPIClient:
         if not skip_download:
             to_dt = date + pd.offsets.BDay(1) - pd.Timedelta(seconds=1)
             self.download_full_snapshot(
-                out_dir=out_dir,
                 since_datetime=date,
                 to_datetime=to_dt,
                 include_full_snapshots=False,
                 include_delta=False,
                 include_metadata=True,
             )
-        df = self.list_downloaded_files(out_dir=out_dir)
+        df = self.list_downloaded_files()
         df: pd.DataFrame = df[
             (df["dataset"] == "JPMAQS_METADATA_NOTIFICATIONS")
             & df["file-name"].str.lower().str.endswith(".json")
@@ -1286,7 +1273,6 @@ class DataQueryFileAPIClient:
         self,
         date: Optional[Union[pd.Timestamp, str]] = None,
         normalize_headers: bool = True,
-        out_dir: Optional[str] = None,
     ) -> pd.DataFrame:
         """
         Return "Changed historical values" notifications for a given date.
@@ -1303,9 +1289,6 @@ class DataQueryFileAPIClient:
         normalize_headers : bool
             If True, normalizes column names to lowercase snake_case and converts
             "(%)" to "pct". Defaults to True.
-        out_dir : Optional[str]
-            Base output directory used for downloads. The client will place files in
-            a `jpmaqs-download/` subdirectory unless `out_dir` already ends with it.
 
         Returns
         -------
@@ -1313,7 +1296,7 @@ class DataQueryFileAPIClient:
             A DataFrame of revision notifications. Empty if none are found.
         """
         jsons = self._load_metadata_jsons(
-            date=date, normalize_headers=normalize_headers, out_dir=out_dir
+            date=date, normalize_headers=normalize_headers
         )
         if "Changed historical values" not in jsons:
             logger.warning("No `Changed historical values` notifications found.")
@@ -1324,7 +1307,6 @@ class DataQueryFileAPIClient:
         self,
         date: Optional[Union[pd.Timestamp, str]] = None,
         normalize_headers: bool = True,
-        out_dir: Optional[str] = None,
     ) -> pd.DataFrame:
         """
         Return missing-update notifications (with optional additional information).
@@ -1346,9 +1328,6 @@ class DataQueryFileAPIClient:
         normalize_headers : bool
             If True, normalizes column names to lowercase snake_case and converts
             "(%)" to "pct". Defaults to True.
-        out_dir : Optional[str]
-            Base output directory used for downloads. The client will place files in
-            a `jpmaqs-download/` subdirectory unless `out_dir` already ends with it.
 
         Returns
         -------
@@ -1356,7 +1335,7 @@ class DataQueryFileAPIClient:
             A DataFrame of missing-update notifications (optionally enriched).
         """
         jsons = self._load_metadata_jsons(
-            date=date, normalize_headers=normalize_headers, out_dir=out_dir
+            date=date, normalize_headers=normalize_headers
         )
         df1 = jsons.get("Missing Updates", pd.DataFrame())
         df2 = jsons.get("Additional information on missing updates", pd.DataFrame())
@@ -1397,7 +1376,6 @@ class DataQueryFileAPIClient:
 
     def download_full_snapshot(
         self,
-        out_dir: Optional[str] = None,
         since_datetime: Optional[str] = None,
         to_datetime: Optional[str] = None,
         overwrite: bool = False,
@@ -1418,8 +1396,6 @@ class DataQueryFileAPIClient:
 
         Parameters
         ----------
-        out_dir : str
-            The directory where files will be saved.
         since_datetime : Optional[str]
             Download files modified since this timestamp (inclusive).
             Defaults to the start of the current day (UTC).
@@ -1445,15 +1421,14 @@ class DataQueryFileAPIClient:
         show_progress : bool
             If True, displays a progress bar for downloads.
         """
-        out_dir = self._get_save_dir(out_dir)
-        Path(out_dir).mkdir(parents=True, exist_ok=True)
+        Path(self.out_dir).mkdir(parents=True, exist_ok=True)
         start_time = time.time()
 
         if since_datetime is None:
             since_datetime = pd.Timestamp.utcnow().strftime("%Y%m%d")
 
         logger.info(
-            f"Starting snapshot download to '{out_dir}' for files since {since_datetime}."
+            f"Starting snapshot download to '{self.out_dir}' for files since {since_datetime}."
         )
 
         validate_dq_timestamp(since_datetime, var_name="since_datetime")
@@ -1473,7 +1448,7 @@ class DataQueryFileAPIClient:
                 raise ValueError("`file_group_ids` must be a list of strings.")
             files_df = files_df[files_df["file-group-id"].isin(file_group_ids)].copy()
 
-        downloaded_files_df = self.list_downloaded_files(out_dir=out_dir)
+        downloaded_files_df = self.list_downloaded_files()
         if not overwrite and not downloaded_files_df.empty:
             files_df = files_df[
                 ~(files_df["file-name"].isin(downloaded_files_df["file-name"]))
@@ -1497,7 +1472,6 @@ class DataQueryFileAPIClient:
 
         self.download_multiple_files(
             filenames=download_order,
-            out_dir=out_dir,
             overwrite=overwrite,
             chunk_size=chunk_size,
             timeout=timeout,
@@ -1523,7 +1497,6 @@ class DataQueryFileAPIClient:
         include_metadata_files: bool = True,
         delta_treatment: str = "latest",
         show_progress: bool = True,
-        out_dir: Optional[str] = None,
         overwrite: bool = False,
         since_datetime: Optional[str] = None,
         to_datetime: Optional[str] = None,
@@ -1588,11 +1561,6 @@ class DataQueryFileAPIClient:
             - "all": keep all entries.
         show_progress : bool
             If True, displays a progress bar during downloads. Default is True.
-        out_dir : Optional[str]
-            The output directory for downloaded files. The default directory being used
-            by the client is used if None. The effective cache directory is always a
-            folder named `jpmaqs-download` (either `out_dir` itself, or
-            `<out_dir>/jpmaqs-download`).
         overwrite : bool
             If True, overwrites files if they already exist. Default is False.
         since_datetime : Optional[str]
@@ -1611,10 +1579,7 @@ class DataQueryFileAPIClient:
         Union[pd.DataFrame, pl.DataFrame, pl.LazyFrame]
             A DataFrame containing the requested data.
         """
-
-        out_dir = self._get_save_dir(out_dir)
-
-        catalog_file = self.download_catalog_file(out_dir=out_dir)
+        catalog_file = self.download_catalog_file()
 
         rqstd_tickers = _construct_all_tickers_list(
             tickers=tickers, cids=cids, xcats=xcats
@@ -1652,7 +1617,6 @@ class DataQueryFileAPIClient:
                 "%Y%m%d"
             )
             self.download_full_snapshot(
-                out_dir=out_dir,
                 since_datetime=download_since_datetime,
                 to_datetime=to_datetime,
                 file_group_ids=datasets_to_download,
@@ -1665,7 +1629,7 @@ class DataQueryFileAPIClient:
 
         warn_if_no_full_snapshots = since_datetime is not None
         return lazy_load_from_parquets(
-            files_dir=out_dir,
+            files_dir=self.out_dir,
             tickers=rqstd_tickers,
             metrics=metrics,
             start_date=start_date,
