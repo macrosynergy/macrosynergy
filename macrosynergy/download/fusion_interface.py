@@ -144,9 +144,17 @@ def request_wrapper(
     api_delay: float = FUSION_API_DELAY,
     timeout: Optional[float] = None,
     verify_ssl: bool = True,
+    skip_wait: bool = False,
 ) -> Union[Dict[str, Any], str, bytes]:
     """
     A wrapper function for making API requests to the JPMorgan Fusion API.
+
+    Notes
+    -----
+    By default, this function enforces a minimum delay between calls via
+    `_wait_for_api_call`. Set `skip_wait=True` to bypass the wait (primarily intended
+    for tests or controlled batch workflows where external rate limiting is handled
+    elsewhere).
     """
     if not isinstance(method, str):
         raise TypeError("Method must be a string.")
@@ -163,7 +171,8 @@ def request_wrapper(
         as_json = True
     raw_response: Optional[requests.Response] = None
     try:
-        _wait_for_api_call(api_delay=api_delay)
+        if not skip_wait:
+            _wait_for_api_call(api_delay=api_delay)
         response = requests.request(
             method=method.upper(),
             url=url,
