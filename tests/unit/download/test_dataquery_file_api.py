@@ -84,7 +84,7 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
             client_id="arg_id", client_secret="arg_secret", out_dir=test_dir
         )
         self.assertEqual(client.client_id, "arg_id")
-        self.assertEqual(client.out_dir, test_dir)
+        self.assertEqual(Path(client.out_dir), Path(test_dir) / "jpmaqs-download")
         mock_oauth_constructor.assert_called_once_with(
             client_id="arg_id",
             client_secret="arg_secret",
@@ -101,7 +101,7 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
         client = DataQueryFileAPIClient()
         self.assertEqual(client.client_id, "env_id")
         self.assertEqual(client.client_secret, "env_secret")
-        self.assertEqual(client.out_dir, "./jpmaqs-download")
+        self.assertEqual(Path(client.out_dir), Path("jpmaqs-download"))
         mock_get_client.assert_called_once()
         mock_oauth_constructor.assert_called_once_with(
             client_id="env_id",
@@ -652,16 +652,12 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
             )
         mock_executor.shutdown.assert_called_once_with(wait=False, cancel_futures=True)
 
-    @patch("macrosynergy.download.dataquery_file_api.Path")
     @patch("macrosynergy.download.dataquery_file_api.pd.read_parquet")
     @patch.object(DataQueryFileAPIClient, "download_file")
     @patch.object(DataQueryFileAPIClient, "list_available_files")
     def test_download_catalog_file(
-        self, mock_list_files, mock_download, mock_read_parquet, mock_path_cls
+        self, mock_list_files, mock_download, mock_read_parquet
     ):
-        client = DataQueryFileAPIClient(
-            client_id="id", client_secret="secret", out_dir=self.test_dir
-        )
         mock_list_files.return_value = pd.DataFrame(
             {
                 "file-name": ["CATALOG_20230102.parquet"],
@@ -670,22 +666,18 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
             }
         )
         cat_dir = os.path.join(self.test_dir, "cat")
+        client = DataQueryFileAPIClient(
+            client_id="id", client_secret="secret", out_dir=cat_dir
+        )
         fake_path_str = os.path.join(
             cat_dir, "jpmaqs-download", "CATALOG_20230102.parquet"
         )
         mock_download.return_value = fake_path_str
 
-        # Configure mock for the first call's _get_save_dir
-        mock_path_cls.return_value.name = "cat"
-        mock_path_cls.return_value.__truediv__.return_value.__str__.return_value = (
-            os.path.join(cat_dir, "jpmaqs-download")
-        )
-
         # simple base case
-        client.download_catalog_file(out_dir=cat_dir, overwrite=True)
+        client.download_catalog_file(overwrite=True)
         mock_download.assert_called_once_with(
             filename="CATALOG_20230102.parquet",
-            out_dir=os.path.join(cat_dir, "jpmaqs-download"),
             overwrite=True,
             timeout=300.0,
         )
@@ -759,6 +751,7 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
         client = DataQueryFileAPIClient(
             client_id="id", client_secret="secret", out_dir=class_dir
         )
+        self.assertEqual(Path(client.out_dir), Path(class_dir) / "jpmaqs-download")
         mock_filter_files.return_value = pd.DataFrame(
             {
                 "file-name": [
@@ -789,7 +782,6 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
 
         mock_download_multi.assert_called_once_with(
             filenames=expected_order,
-            out_dir=os.path.join(class_dir, "jpmaqs-download"),
             overwrite=False,
             chunk_size=None,
             timeout=300.0,
@@ -798,14 +790,13 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
 
         mock_download_multi.reset_mock()
         method_dir = os.path.join(self.test_dir, "method", "dir")
-        client.download_full_snapshot(
-            since_datetime="20250201",
-            show_progress=False,
-            out_dir=method_dir,
+        client2 = DataQueryFileAPIClient(
+            client_id="id", client_secret="secret", out_dir=method_dir
         )
+        self.assertEqual(Path(client2.out_dir), Path(method_dir) / "jpmaqs-download")
+        client2.download_full_snapshot(since_datetime="20250201", show_progress=False)
         mock_download_multi.assert_called_once_with(
             filenames=expected_order,
-            out_dir=os.path.join(method_dir, "jpmaqs-download"),
             overwrite=False,
             chunk_size=None,
             timeout=300.0,
@@ -1015,7 +1006,7 @@ class TestDataQueryFileAPIClientNotificationLoading(unittest.TestCase):
         client = DataQueryFileAPIClient(
             client_id="id", client_secret="secret", out_dir=self.test_dir
         )
-        out_dir = Path(client._get_save_dir(self.test_dir))
+        out_dir = Path(client.out_dir)
         out_dir.mkdir(parents=True, exist_ok=True)
 
         p_missing = out_dir / "JPMAQS_METADATA_NOTIFICATIONS_20260119T060501.json"
@@ -1084,7 +1075,6 @@ class TestDataQueryFileAPIClientNotificationLoading(unittest.TestCase):
         result = client._load_metadata_jsons(
             date="2026-01-19",
             normalize_headers=True,
-            out_dir=self.test_dir,
             skip_download=True,
         )
 
@@ -1138,7 +1128,7 @@ class TestDataQueryFileAPIClientNotificationLoading(unittest.TestCase):
             }
         )
 
-        client._load_metadata_jsons(date="2026-01-25", out_dir=self.test_dir)
+        client._load_metadata_jsons(date="2026-01-25")
 
         if PYTHON_3_8_OR_LATER:
             warning_msgs = [c.args[0] for c in mock_logger.warning.call_args_list]
@@ -1156,7 +1146,7 @@ class TestDataQueryFileAPIClientNotificationLoading(unittest.TestCase):
         with patch.object(
             DataQueryFileAPIClient, "_load_metadata_jsons", return_value={}
         ):
-            out = client.get_revisions_notifications(out_dir=self.test_dir)
+            out = client.get_revisions_notifications()
             self.assertTrue(out.empty)
             mock_logger.warning.assert_called_with(
                 "No `Changed historical values` notifications found."
@@ -1167,7 +1157,7 @@ class TestDataQueryFileAPIClientNotificationLoading(unittest.TestCase):
             "_load_metadata_jsons",
             return_value={"Changed historical values": df},
         ):
-            out = client.get_revisions_notifications(out_dir=self.test_dir)
+            out = client.get_revisions_notifications()
             pd.testing.assert_frame_equal(out, df)
 
     @patch("macrosynergy.download.dataquery_file_api.logger")
@@ -1186,7 +1176,7 @@ class TestDataQueryFileAPIClientNotificationLoading(unittest.TestCase):
                 "Additional information on missing updates": df2,
             },
         ):
-            out = client.get_missing_data_notifications(out_dir=self.test_dir)
+            out = client.get_missing_data_notifications()
             self.assertEqual(out["ticker"].tolist(), ["A", "B"])
             self.assertIn("additional_information", out.columns)
 
@@ -1196,7 +1186,7 @@ class TestDataQueryFileAPIClientNotificationLoading(unittest.TestCase):
             "_load_metadata_jsons",
             return_value={"Missing Updates": df1},
         ):
-            out = client.get_missing_data_notifications(out_dir=self.test_dir)
+            out = client.get_missing_data_notifications()
             pd.testing.assert_frame_equal(out, df1)
             mock_logger.warning.assert_called_with(
                 "No `Additional information on missing updates` notifications found."
@@ -1208,7 +1198,7 @@ class TestDataQueryFileAPIClientNotificationLoading(unittest.TestCase):
             "_load_metadata_jsons",
             return_value={"Additional information on missing updates": df2},
         ):
-            out = client.get_missing_data_notifications(out_dir=self.test_dir)
+            out = client.get_missing_data_notifications()
             pd.testing.assert_frame_equal(out, df2)
             mock_logger.warning.assert_called_with(
                 "No `Missing Updates` notifications found."
@@ -1218,7 +1208,7 @@ class TestDataQueryFileAPIClientNotificationLoading(unittest.TestCase):
         with patch.object(
             DataQueryFileAPIClient, "_load_metadata_jsons", return_value={}
         ):
-            out = client.get_missing_data_notifications(out_dir=self.test_dir)
+            out = client.get_missing_data_notifications()
             self.assertTrue(out.empty)
             mock_logger.warning.assert_called_with(
                 "No `Missing Updates` or related notifications found."
