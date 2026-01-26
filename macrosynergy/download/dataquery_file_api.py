@@ -2207,8 +2207,8 @@ def _check_lazy_load_inputs(
                     "recognized timestamp format with timezone."
                 )
 
-    if dataframe_format not in ["qdf", "wide", "tickers"]:
-        raise ValueError("`dataframe_format` must be one of 'qdf', 'wide', 'tickers'.")
+    if dataframe_format not in ["qdf", "tickers"]:
+        raise ValueError("`dataframe_format` must be one of 'qdf' or 'tickers'.")
 
     if dataframe_type not in ["pandas", "polars", "polars-lazy"]:
         raise ValueError(
