@@ -1,5 +1,6 @@
 import os
 import json
+import datetime
 import unittest
 import pandas as pd
 from unittest.mock import patch, MagicMock
@@ -13,6 +14,7 @@ from macrosynergy.download.dataquery_file_api import (
     get_client_id_secret,
     DataQueryFileAPIClient,
     SegmentedFileDownloader,
+    RateLimitedRequester,
     DownloadError,
     InvalidResponseError,
     DQ_FILE_API_SCOPE,
@@ -59,6 +61,35 @@ class TestStandaloneFunctions(unittest.TestCase):
         mock_getenv.side_effect = lambda key: None
         self.assertEqual(get_client_id_secret(), (None, None))
 
+
+class TestRateLimiting(unittest.TestCase):
+    @patch("macrosynergy.download.dataquery_file_api.time.sleep")
+    def test_rate_limiter_sleeps_on_quick_successive_calls(self, mock_sleep):
+        requester = RateLimitedRequester(api_delay=1.0)
+
+        t0 = datetime.datetime(2024, 1, 1, 0, 0, 0)
+        now_times = iter(
+            [
+                t0,
+                t0 + datetime.timedelta(seconds=0.25),
+                t0 + datetime.timedelta(seconds=1.0),
+            ]
+        )
+
+        class FakeDateTime(datetime.datetime):
+            @classmethod
+            def now(cls):
+                return next(now_times)
+
+        with patch(
+            "macrosynergy.download.dataquery_file_api.datetime.datetime",
+            FakeDateTime,
+        ):
+            requester._wait_for_api_call()
+            requester._wait_for_api_call()
+
+        mock_sleep.assert_called_once()
+        self.assertAlmostEqual(mock_sleep.call_args[0][0], 0.75, places=2)
 
 class TestDataQueryFileAPIClient(unittest.TestCase):
     def setUp(self):
@@ -366,19 +397,25 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
         mock_logger.warning.assert_called_once()
         self.assertIn("Swapping values", mock_logger.warning.call_args[0][0])
 
-    @patch("macrosynergy.download.dataquery_file_api._wait_for_api_call", MagicMock())
+    @patch(
+        "macrosynergy.download.dataquery_file_api.SegmentedFileDownloader._wait_for_api_call",
+        MagicMock(),
+    )
     @patch("macrosynergy.download.dataquery_file_api.requests.head")
     def test_segmented_downloader_head_uses_headers_timeout(self, mock_head):
         response = MagicMock()
         response.headers = {"Content-Length": "123"}
         mock_head.return_value = response
 
+        parent = MagicMock()
+        parent._wait_for_api_call = MagicMock(return_value=True)
         downloader = SegmentedFileDownloader(
             filename=os.path.join(self.test_dir, "out.parquet"),
             url="https://example.invalid/file",
             headers={"Authorization": "Bearer t"},
             params={"file-group-id": "FG", "file-datetime": "20240101"},
             headers_timeout=7,
+            parent_requester=parent,
         )
 
         size = downloader._get_file_size()
@@ -389,6 +426,52 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
             self.assertEqual(mock_head.call_args.kwargs.get("timeout"), 7)
         else:
             self.assertEqual(mock_head.call_args[1].get("timeout"), 7)
+
+    @patch("macrosynergy.download.dataquery_file_api.requests.head")
+    def test_segmented_downloader_uses_parent_rate_limiter(self, mock_head):
+        parent = MagicMock()
+        parent._wait_for_api_call = MagicMock(return_value=True)
+
+        response = MagicMock()
+        response.headers = {"Content-Length": "123"}
+        mock_head.return_value = response
+
+        downloader = SegmentedFileDownloader(
+            filename=os.path.join(self.test_dir, "out.parquet"),
+            url="https://example.invalid/file",
+            headers={"Authorization": "Bearer t"},
+            params={"file-group-id": "FG", "file-datetime": "20240101"},
+            headers_timeout=7,
+            parent_requester=parent,
+        )
+
+        downloader._get_file_size()
+        parent._wait_for_api_call.assert_called()
+
+    @patch("macrosynergy.download.dataquery_file_api.requests.get")
+    def test_segmented_downloader_chunk_calls_wait_for_api_call(self, mock_get):
+        mock_resp = MagicMock()
+        mock_resp.__enter__.return_value = mock_resp
+        mock_resp.__exit__.return_value = False
+        mock_resp.raise_for_status.return_value = None
+        mock_resp.iter_content.return_value = [b"abc"]
+        mock_get.return_value = mock_resp
+
+        parent = MagicMock()
+        parent._wait_for_api_call = MagicMock(return_value=True)
+        downloader = SegmentedFileDownloader(
+            filename=os.path.join(self.test_dir, "out.parquet"),
+            url="https://example.invalid/file",
+            headers={"Authorization": "Bearer t"},
+            params={"file-group-id": "FG", "file-datetime": "20240101"},
+            max_concurrent_downloads=1,
+            parent_requester=parent,
+        )
+        downloader.temp_dir.mkdir(parents=True, exist_ok=True)
+        with patch.object(downloader, "_wait_for_api_call", return_value=True) as mock_wait:
+            downloader._download_chunk_retry(part_num=0, start_byte=0, end_byte=2, retries=1)
+        mock_wait.assert_called_once()
+        downloader.cleanup()
 
     @patch.object(DataQueryFileAPIClient, "_get")
     def test_check_file_availability(self, mock_get):
@@ -513,6 +596,30 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
         client.download_file(filename="TEST_METADATA_20230101.parquet")
         mock_request_wrapper.assert_called_once()
         mock_segmented_downloader.assert_not_called()
+
+    @suppress_logging
+    @patch("macrosynergy.download.dataquery_file_api.SegmentedFileDownloader")
+    @patch("macrosynergy.download.dataquery_file_api.Path")
+    @patch("macrosynergy.download.dataquery_file_api.DataQueryFileAPIOauth")
+    def test_download_file_large_file_passes_parent_requester(
+        self, mock_oauth, mock_path, mock_segmented_downloader
+    ):
+        client = DataQueryFileAPIClient(
+            client_id="id", client_secret="secret", out_dir=self.test_dir
+        )
+        mock_file_path = MagicMock()
+        mock_file_path.exists.return_value = False
+        (
+            mock_path.return_value.__truediv__.return_value.__truediv__.return_value
+        ) = mock_file_path
+
+        client.download_file(filename="TEST_FULL_20230101.parquet")
+        self.assertTrue(mock_segmented_downloader.called)
+        if PYTHON_3_8_OR_LATER:
+            kwargs = mock_segmented_downloader.call_args.kwargs
+        else:
+            kwargs = mock_segmented_downloader.call_args[1]
+        self.assertIs(kwargs.get("parent_requester"), client)
 
     @patch("macrosynergy.download.dataquery_file_api.DataQueryFileAPIOauth")
     def test_download_file_invalid_filename_format(self, mock_oauth):

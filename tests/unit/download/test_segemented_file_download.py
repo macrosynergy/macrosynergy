@@ -25,11 +25,14 @@ class TestSegmentedFileDownloaderInitAndLifecycle(unittest.TestCase):
         self.url = "some.sort.of/url"
         self.headers = {"Authorization": "Bearer sometoken"}
         self.params = {"file-group-id": "group1", "file-datetime": "20230101"}
+        self.parent_requester = MagicMock()
+        self.parent_requester._wait_for_api_call = MagicMock(return_value=True)
         self.base_args = {
             "filename": self.filename,
             "url": self.url,
             "headers": self.headers,
             "params": self.params,
+            "parent_requester": self.parent_requester,
         }
 
     @patch("pathlib.Path.mkdir")
@@ -50,7 +53,11 @@ class TestSegmentedFileDownloaderInitAndLifecycle(unittest.TestCase):
     def test_init_missing_params_raises_error(self):
         with self.assertRaises(ValueError):
             SegmentedFileDownloader(
-                filename=self.filename, url=self.url, headers={}, params={}
+                filename=self.filename,
+                url=self.url,
+                headers={},
+                params={},
+                parent_requester=self.parent_requester,
             )
 
     @patch("macrosynergy.download.dataquery_file_api.SegmentedFileDownloader.download")
@@ -100,7 +107,10 @@ class TestSegmentedFileDownloaderInitAndLifecycle(unittest.TestCase):
         mock_rmtree.assert_not_called()
 
 
-@patch("macrosynergy.download.dataquery_file_api._wait_for_api_call", MagicMock())
+@patch(
+    "macrosynergy.download.dataquery_file_api.SegmentedFileDownloader._wait_for_api_call",
+    MagicMock(),
+)
 class TestSegmentedFileDownloaderNetworking(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -112,11 +122,14 @@ class TestSegmentedFileDownloaderNetworking(unittest.TestCase):
 
     def setUp(self):
         with patch("pathlib.Path.mkdir", MagicMock()):
+            parent_requester = MagicMock()
+            parent_requester._wait_for_api_call = MagicMock(return_value=True)
             self.downloader = SegmentedFileDownloader(
                 filename="./output/g1_dt1.parquet",
                 url="https://fake.url/data",
                 headers={"Auth": "token"},
                 params={"file-group-id": "g1", "file-datetime": "dt1"},
+                parent_requester=parent_requester,
             )
         self.downloader.temp_dir = Path("/fake/temp/dir")
 
@@ -219,6 +232,8 @@ class TestSegmentedFileDownloaderOrchestration(unittest.TestCase):
         logging.disable(logging.NOTSET)
 
     def setUp(self):
+        parent_requester = MagicMock()
+        parent_requester._wait_for_api_call = MagicMock(return_value=True)
         self.downloader = SegmentedFileDownloader(
             # using a random filename - as the user is allowed to do
             filename="./test_output/file.dat",
@@ -226,6 +241,7 @@ class TestSegmentedFileDownloaderOrchestration(unittest.TestCase):
             headers={"Auth": "token"},
             params={"file-group-id": "g1", "file-datetime": "dt1"},
             max_file_retries=2,
+            parent_requester=parent_requester,
         )
 
     @patch("pathlib.Path.exists", return_value=True)
