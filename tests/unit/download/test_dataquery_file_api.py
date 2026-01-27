@@ -646,23 +646,23 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
         found_files = pd.DataFrame(
             [
                 {
-                    "file-group-id": "FG_A",
-                    "file-datetime": pd.Timestamp("2024-01-01"),
+                    "dataset": "FG_A",
+                    "file-timestamp": pd.Timestamp("2024-01-01"),
                     "path": str(f_old_a),
                 },
                 {
-                    "file-group-id": "FG_A",
-                    "file-datetime": pd.Timestamp("2024-01-03"),
+                    "dataset": "FG_A",
+                    "file-timestamp": pd.Timestamp("2024-01-03"),
                     "path": str(f_new_a),
                 },
                 {
-                    "file-group-id": "FG_B",
-                    "file-datetime": pd.Timestamp("2024-01-29"),
+                    "dataset": "FG_B",
+                    "file-timestamp": pd.Timestamp("2024-01-29"),
                     "path": str(f_old_b),
                 },
                 {
-                    "file-group-id": "FG_B",
-                    "file-datetime": pd.Timestamp("2024-01-31"),
+                    "dataset": "FG_B",
+                    "file-timestamp": pd.Timestamp("2024-01-31"),
                     "path": str(f_edge_b),
                 },
             ]
@@ -1061,7 +1061,7 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
             "JPMAQS_METADATA_CATALOG_20230101.parquet"
         )
         mock_filter_to_valid_tickers.return_value = ["USD_GROWTH"]
-        mock_utcnow.return_value = pd.Timestamp("2023-01-05 01:02:03")
+        mock_utcnow.return_value = pd.Timestamp("2023-01-05T01:02:03Z")
 
         client.download(
             tickers=["USD_GROWTH"], since_datetime=None, show_progress=False
@@ -1217,7 +1217,7 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
 
         mock_logger.warning.assert_any_call(
             "`cleanup_old_files_n_days` is less than the number of business "
-            "days since `since_datetime`, and is being adjusted accordingly."
+            "days since `since_datetime`, and is being adjusted from 2 to 10."
         )
         mock_cleanup.assert_called_once_with(days_to_keep=10)
 

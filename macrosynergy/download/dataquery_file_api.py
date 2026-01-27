@@ -1025,8 +1025,15 @@ class DataQueryFileAPIClient(RateLimitedRequester):
         found_files = self.list_downloaded_files()
         if found_files.empty:
             return []
+        dataset_col = "file-group-id"
+        if dataset_col not in found_files.columns:
+            dataset_col = "dataset"
+        if dataset_col not in found_files.columns:
+            raise InvalidResponseError(
+                'Missing expected column "dataset" or "file-group-id" in downloaded files listing.'
+            )
         fg_dt_mapping: Dict[str, pd.Timestamp] = (
-            found_files.groupby("file-group-id")["file-datetime"].max().to_dict()
+            found_files.groupby(dataset_col)["file-timestamp"].max().to_dict()
         )
         cutoff_dates = {
             fg: (dt - pd.Timedelta(days=days_to_keep)).normalize()
@@ -1035,8 +1042,8 @@ class DataQueryFileAPIClient(RateLimitedRequester):
         files_to_delete = []
         deleted_files: List[str] = []
         for _, row in found_files.iterrows():
-            fg = row["file-group-id"]
-            fdt = row["file-datetime"]
+            fg = row[dataset_col]
+            fdt = row["file-timestamp"]
             if fdt < cutoff_dates[fg]:
                 files_to_delete.append(str(row["path"]))
 
@@ -2934,7 +2941,7 @@ if __name__ == "__main__":
     tickers = [f"{c}_{x}" for c in test_cids for x in test_xcats]
 
     with DataQueryFileAPIClient(out_dir="./data/jpmaqs-data/") as dq:
-        df = dq.download(tickers=tickers)
+        df = dq.download(tickers=tickers, include_file_column=True)
         print(df.head())
 
     # with DataQueryFileAPIClient(out_dir="./data/jpmaqs-data/") as dq:
