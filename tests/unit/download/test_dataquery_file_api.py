@@ -629,6 +629,64 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Invalid filename format"):
             client.download_file(filename="invalidformat.parquet")
 
+    @suppress_logging
+    @patch("macrosynergy.download.dataquery_file_api.DataQueryFileAPIOauth")
+    def test_cleanup_old_files_deletes_expected_files_and_returns_list(self, mock_oauth):
+        client = DataQueryFileAPIClient(
+            client_id="id", client_secret="secret", out_dir=self.test_dir
+        )
+        base = Path(self.test_dir)
+        f_old_a = base / "old_a.parquet"
+        f_new_a = base / "new_a.parquet"
+        f_old_b = base / "old_b.parquet"
+        f_edge_b = base / "edge_b.parquet"
+        for p in [f_old_a, f_new_a, f_old_b, f_edge_b]:
+            p.write_bytes(b"x")
+
+        found_files = pd.DataFrame(
+            [
+                {
+                    "file-group-id": "FG_A",
+                    "file-datetime": pd.Timestamp("2024-01-01"),
+                    "path": str(f_old_a),
+                },
+                {
+                    "file-group-id": "FG_A",
+                    "file-datetime": pd.Timestamp("2024-01-03"),
+                    "path": str(f_new_a),
+                },
+                {
+                    "file-group-id": "FG_B",
+                    "file-datetime": pd.Timestamp("2024-01-29"),
+                    "path": str(f_old_b),
+                },
+                {
+                    "file-group-id": "FG_B",
+                    "file-datetime": pd.Timestamp("2024-01-31"),
+                    "path": str(f_edge_b),
+                },
+            ]
+        )
+
+        with patch.object(client, "list_downloaded_files", return_value=found_files):
+            deleted = client.cleanup_old_files(days_to_keep=1)
+
+        self.assertEqual(set(deleted), {str(f_old_a), str(f_old_b)})
+        self.assertFalse(f_old_a.exists())
+        self.assertFalse(f_old_b.exists())
+        self.assertTrue(f_new_a.exists())
+        self.assertTrue(f_edge_b.exists())
+
+    @patch("macrosynergy.download.dataquery_file_api.DataQueryFileAPIOauth")
+    def test_cleanup_old_files_days_to_keep_zero_is_noop(self, mock_oauth):
+        client = DataQueryFileAPIClient(
+            client_id="id", client_secret="secret", out_dir=self.test_dir
+        )
+        with patch.object(client, "list_downloaded_files") as mock_list:
+            deleted = client.cleanup_old_files(days_to_keep=0)
+        self.assertEqual(deleted, [])
+        mock_list.assert_not_called()
+
     @patch("macrosynergy.download.dataquery_file_api.cf.as_completed")
     @patch("macrosynergy.download.dataquery_file_api.cf.ThreadPoolExecutor")
     @patch("macrosynergy.download.dataquery_file_api.DataQueryFileAPIOauth")
@@ -1003,7 +1061,7 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
             "JPMAQS_METADATA_CATALOG_20230101.parquet"
         )
         mock_filter_to_valid_tickers.return_value = ["USD_GROWTH"]
-        mock_utcnow.return_value = pd.Timestamp("2023-01-05T01:02:03Z")
+        mock_utcnow.return_value = pd.Timestamp("2023-01-05 01:02:03")
 
         client.download(
             tickers=["USD_GROWTH"], since_datetime=None, show_progress=False
@@ -1079,6 +1137,189 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
             client.download(
                 tickers=["BAD1", "BAD2"],
                 skip_download=True,
+                show_progress=False,
+            )
+
+    @patch.object(DataQueryFileAPIClient, "download_catalog_file")
+    @patch.object(DataQueryFileAPIClient, "filter_to_valid_tickers")
+    @patch.object(DataQueryFileAPIClient, "get_datasets_for_indicators")
+    @patch("macrosynergy.download.dataquery_file_api.lazy_load_from_parquets")
+    @patch.object(DataQueryFileAPIClient, "download_full_snapshot")
+    @patch("macrosynergy.download.dataquery_file_api.pd.bdate_range", return_value=[0])
+    def test_download_calls_cleanup_old_files_when_configured(
+        self,
+        _mock_bdate_range,
+        _mock_download_full_snapshot,
+        mock_lazy_load,
+        mock_get_datasets_for_indicators,
+        mock_filter_to_valid_tickers,
+        mock_download_catalog_file,
+    ):
+        client = DataQueryFileAPIClient(
+            client_id="id", client_secret="secret", out_dir=self.test_dir
+        )
+        mock_download_catalog_file.return_value = (
+            "JPMAQS_METADATA_CATALOG_20230101.parquet"
+        )
+        mock_filter_to_valid_tickers.return_value = ["USD_GROWTH"]
+        mock_get_datasets_for_indicators.return_value = []
+        mock_lazy_load.return_value = pd.DataFrame()
+
+        with patch.object(client, "cleanup_old_files", return_value=[]) as mock_cleanup:
+            client.download(
+                tickers=["USD_GROWTH"],
+                skip_download=False,
+                cleanup_old_files_n_days=7,
+                since_datetime="20240101",
+                show_progress=False,
+            )
+
+        mock_cleanup.assert_called_once_with(days_to_keep=7)
+
+    @patch("macrosynergy.download.dataquery_file_api.logger")
+    @patch.object(DataQueryFileAPIClient, "download_catalog_file")
+    @patch.object(DataQueryFileAPIClient, "filter_to_valid_tickers")
+    @patch.object(DataQueryFileAPIClient, "get_datasets_for_indicators")
+    @patch("macrosynergy.download.dataquery_file_api.lazy_load_from_parquets")
+    @patch.object(DataQueryFileAPIClient, "download_full_snapshot")
+    @patch(
+        "macrosynergy.download.dataquery_file_api.pd.bdate_range",
+        return_value=list(range(10)),
+    )
+    def test_download_cleanup_old_files_n_days_adjusts_to_since_datetime_business_days(
+        self,
+        _mock_bdate_range,
+        _mock_download_full_snapshot,
+        mock_lazy_load,
+        mock_get_datasets_for_indicators,
+        mock_filter_to_valid_tickers,
+        mock_download_catalog_file,
+        mock_logger,
+    ):
+        client = DataQueryFileAPIClient(
+            client_id="id", client_secret="secret", out_dir=self.test_dir
+        )
+        mock_download_catalog_file.return_value = (
+            "JPMAQS_METADATA_CATALOG_20230101.parquet"
+        )
+        mock_filter_to_valid_tickers.return_value = ["USD_GROWTH"]
+        mock_get_datasets_for_indicators.return_value = []
+        mock_lazy_load.return_value = pd.DataFrame()
+
+        with patch.object(client, "cleanup_old_files", return_value=[]) as mock_cleanup:
+            client.download(
+                tickers=["USD_GROWTH"],
+                skip_download=False,
+                cleanup_old_files_n_days=-2,
+                since_datetime="20240101",
+                show_progress=False,
+            )
+
+        mock_logger.warning.assert_any_call(
+            "`cleanup_old_files_n_days` is less than the number of business "
+            "days since `since_datetime`, and is being adjusted accordingly."
+        )
+        mock_cleanup.assert_called_once_with(days_to_keep=10)
+
+    @patch("macrosynergy.download.dataquery_file_api.logger")
+    @patch.object(DataQueryFileAPIClient, "download_catalog_file")
+    @patch.object(DataQueryFileAPIClient, "filter_to_valid_tickers")
+    @patch.object(DataQueryFileAPIClient, "get_datasets_for_indicators")
+    @patch("macrosynergy.download.dataquery_file_api.lazy_load_from_parquets")
+    def test_download_does_not_call_cleanup_old_files_when_none(
+        self,
+        mock_lazy_load,
+        mock_get_datasets_for_indicators,
+        mock_filter_to_valid_tickers,
+        mock_download_catalog_file,
+        mock_logger,
+    ):
+        client = DataQueryFileAPIClient(
+            client_id="id", client_secret="secret", out_dir=self.test_dir
+        )
+        mock_download_catalog_file.return_value = (
+            "JPMAQS_METADATA_CATALOG_20230101.parquet"
+        )
+        mock_filter_to_valid_tickers.return_value = ["USD_GROWTH"]
+        mock_get_datasets_for_indicators.return_value = []
+        mock_lazy_load.return_value = pd.DataFrame()
+
+        with patch.object(client, "cleanup_old_files", return_value=[]) as mock_cleanup:
+            client.download(
+                tickers=["USD_GROWTH"],
+                skip_download=True,
+                cleanup_old_files_n_days=None,
+                show_progress=False,
+            )
+
+        mock_cleanup.assert_not_called()
+        mock_logger.warning.assert_not_called()
+
+    @patch("macrosynergy.download.dataquery_file_api.logger")
+    @patch.object(DataQueryFileAPIClient, "download_catalog_file")
+    @patch.object(DataQueryFileAPIClient, "filter_to_valid_tickers")
+    @patch.object(DataQueryFileAPIClient, "get_datasets_for_indicators")
+    @patch("macrosynergy.download.dataquery_file_api.lazy_load_from_parquets")
+    def test_download_skip_download_ignores_cleanup_old_files_n_days(
+        self,
+        mock_lazy_load,
+        mock_get_datasets_for_indicators,
+        mock_filter_to_valid_tickers,
+        mock_download_catalog_file,
+        mock_logger,
+    ):
+        client = DataQueryFileAPIClient(
+            client_id="id", client_secret="secret", out_dir=self.test_dir
+        )
+        mock_download_catalog_file.return_value = (
+            "JPMAQS_METADATA_CATALOG_20230101.parquet"
+        )
+        mock_filter_to_valid_tickers.return_value = ["USD_GROWTH"]
+        mock_get_datasets_for_indicators.return_value = []
+        mock_lazy_load.return_value = pd.DataFrame()
+
+        with patch.object(client, "cleanup_old_files", return_value=[]) as mock_cleanup:
+            client.download(
+                tickers=["USD_GROWTH"],
+                skip_download=True,
+                cleanup_old_files_n_days=7,
+                show_progress=False,
+            )
+
+        mock_cleanup.assert_not_called()
+        mock_logger.warning.assert_any_call(
+            "`cleanup_old_files_n_days` is ignored when `skip_download=True`."
+        )
+
+    @patch.object(DataQueryFileAPIClient, "download_catalog_file")
+    @patch.object(DataQueryFileAPIClient, "filter_to_valid_tickers")
+    @patch.object(DataQueryFileAPIClient, "get_datasets_for_indicators")
+    @patch("macrosynergy.download.dataquery_file_api.lazy_load_from_parquets")
+    @patch.object(DataQueryFileAPIClient, "download_full_snapshot")
+    def test_download_cleanup_old_files_n_days_invalid_type_raises_when_downloading(
+        self,
+        _mock_download_full_snapshot,
+        mock_lazy_load,
+        mock_get_datasets_for_indicators,
+        mock_filter_to_valid_tickers,
+        mock_download_catalog_file,
+    ):
+        client = DataQueryFileAPIClient(
+            client_id="id", client_secret="secret", out_dir=self.test_dir
+        )
+        mock_download_catalog_file.return_value = (
+            "JPMAQS_METADATA_CATALOG_20230101.parquet"
+        )
+        mock_filter_to_valid_tickers.return_value = ["USD_GROWTH"]
+        mock_get_datasets_for_indicators.return_value = []
+        mock_lazy_load.return_value = pd.DataFrame()
+
+        with self.assertRaisesRegex(ValueError, "`cleanup_old_files_n_days` must be"):
+            client.download(
+                tickers=["USD_GROWTH"],
+                skip_download=False,
+                cleanup_old_files_n_days="bad",  # type: ignore[arg-type]
+                since_datetime="20240101",
                 show_progress=False,
             )
 
