@@ -2887,7 +2887,7 @@ def _lazy_load_filtered_parquets(
 
     tickers_list: List[str] = list(dict.fromkeys(tickers))
 
-    out = _build_filtered_parquet_lazyframe(
+    out: pl.LazyFrame = _build_filtered_parquet_lazyframe(
         paths=paths,
         tickers_list=tickers_list,
         start_date=start_date,
