@@ -1745,11 +1745,13 @@ class DataQueryFileAPIClient(RateLimitedRequester):
                 )
                 cleanup_old_files_n_days = abs(cleanup_old_files_n_days)
                 if cleanup_old_files_n_days < n_days_implied:
+                    old_value = cleanup_old_files_n_days
+                    cleanup_old_files_n_days = n_days_implied
                     logger.warning(
                         "`cleanup_old_files_n_days` is less than the number of business "
-                        "days since `since_datetime`, and is being adjusted accordingly."
+                        "days since `since_datetime`, and is being adjusted "
+                        f"from {old_value} to {cleanup_old_files_n_days}."
                     )
-                    cleanup_old_files_n_days = n_days_implied
                 self.cleanup_old_files(days_to_keep=cleanup_old_files_n_days)
 
         if skip_download and isinstance(cleanup_old_files_n_days, int):
