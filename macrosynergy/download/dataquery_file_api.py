@@ -2682,6 +2682,8 @@ def lazy_load_from_parquets(
         return_qdf=(dataframe_format == "qdf"),
         include_file_column=include_file_column,
     )
+    if include_file_column and categorical_dataframe:
+        lf = lf.with_columns(pl.col(include_file_column).cast(pl.Categorical))
     if (metrics and set(metrics) != set(JPMAQS_METRICS)) or include_file_column:
         cols_to_keep = ["real_date", "cid", "xcat", "ticker"] + metrics
         if include_file_column:
@@ -2800,20 +2802,14 @@ def _to_output_schema(
 
     dtype_map = dict(JPMaQSParquetExpectedColumns.TICKER.value)
     dtype_map.update({"cid": pl_string_type(), "xcat": pl_string_type()})
-    if include_file_column:
-        dtype_map[include_file_column] = pl.Categorical
 
     if want_qdf:
         cid_expr, xcat_expr = _expr_split_ticker(pl.col("ticker"))
         lf = lf.with_columns(cid=cid_expr, xcat=xcat_expr)
         lf = _ensure_columns(lf, qdf_cols, dtypes=dtype_map)
-        if include_file_column:
-            lf = lf.with_columns(pl.col(include_file_column).cast(pl.Categorical))
         return lf.select(qdf_cols)
 
     lf = _ensure_columns(lf, ticker_cols, dtypes=dtype_map)
-    if include_file_column:
-        lf = lf.with_columns(pl.col(include_file_column).cast(pl.Categorical))
     return lf.select(ticker_cols)
 
 
@@ -2837,11 +2833,7 @@ def _build_filtered_parquet_lazyframe(
     for pth in paths:
         file_base_name = Path(pth).name
         pth_str = os.fspath(pth)
-        if include_file_column:
-            lf = pl.scan_parquet(pth_str)
-            lf = lf.with_columns(pl.lit(file_base_name).alias(include_file_column))
-        else:
-            lf = pl.scan_parquet(pth_str)
+        lf = pl.scan_parquet(pth_str)
 
         lf = _filter_lazy_frame_by_tickers(
             lf=lf,
@@ -2851,6 +2843,9 @@ def _build_filtered_parquet_lazyframe(
             min_last_updated=min_last_updated,
             max_last_updated=max_last_updated,
         )
+
+        if include_file_column:
+            lf = lf.with_columns(pl.lit(file_base_name).alias(include_file_column))
         lf = _to_output_schema(
             lf=lf,
             include_file_column=include_file_column,
