@@ -994,6 +994,61 @@ class DataQueryFileAPIClient(RateLimitedRequester):
         extensions = sorted(set(Path(f).suffix.rsplit(".", 1)[-1] for f in files))
         return _delete_corrupt_files(files=files, extensions=extensions)
 
+    def cleanup_old_files(
+        self,
+        days_to_keep: int = 5,
+    ) -> List[str]:
+        """
+        Deletes files older than the specified number of days from the output directory.
+
+        Parameters
+        ----------
+        days_to_keep : int
+            The number of days to retain files. This is measured from the latest file date
+            within each file group. Files older than this threshold will be deleted.
+
+        Returns
+        -------
+        List[str]
+            A list of file paths that were deleted.
+        """
+        if not isinstance(days_to_keep, int):
+            raise ValueError("`days_to_keep` must be a non-negative integer.")
+        if days_to_keep < 0:
+            logger.warning(
+                "`days_to_keep` is negative; it will be treated as the absolute value."
+                f" ({days_to_keep} -> {abs(days_to_keep)})"
+            )
+            days_to_keep = abs(days_to_keep)
+        if days_to_keep == 0:
+            return []
+        found_files = self.list_downloaded_files()
+        if found_files.empty:
+            return []
+        fg_dt_mapping: Dict[str, pd.Timestamp] = (
+            found_files.groupby("file-group-id")["file-datetime"].max().to_dict()
+        )
+        cutoff_dates = {
+            fg: (dt - pd.Timedelta(days=days_to_keep)).normalize()
+            for fg, dt in fg_dt_mapping.items()
+        }
+        files_to_delete = []
+        deleted_files: List[str] = []
+        for _, row in found_files.iterrows():
+            fg = row["file-group-id"]
+            fdt = row["file-datetime"]
+            if fdt < cutoff_dates[fg]:
+                files_to_delete.append(str(row["path"]))
+
+        for file_path in files_to_delete:
+            try:
+                Path(file_path).unlink()
+                deleted_files.append(file_path)
+                logger.info(f"Deleted old file: {file_path}")
+            except Exception as e:
+                logger.error(f"Failed to delete file {file_path}: {e}")
+        return sorted(deleted_files)
+
     def download_multiple_files(
         self,
         filenames: List[str],
@@ -1549,6 +1604,7 @@ class DataQueryFileAPIClient(RateLimitedRequester):
         since_datetime: Optional[str] = None,
         to_datetime: Optional[str] = None,
         skip_download: bool = False,
+        cleanup_old_files_n_days: Optional[int] = 5,
     ) -> Union[pd.DataFrame, pl.DataFrame, pl.LazyFrame]:
         """
         Download JPMaQS files into the local cache and load the requested timeseries.
@@ -1621,6 +1677,11 @@ class DataQueryFileAPIClient(RateLimitedRequester):
         skip_download : bool
             If True, do not download snapshot/delta/metadata files and only load from the
             local cache. The catalog is still downloaded/validated. Default is False.
+        cleanup_old_files_n_days : Optional[int]
+            If set to an integer value, deletes files older than this number of days
+            from the local cache after the download is complete. This integer value is
+            passed to `cleanup_old_files()`. If None, no cleanup is performed.
+            Default is 5 (days).
 
         Returns
         -------
@@ -1674,6 +1735,28 @@ class DataQueryFileAPIClient(RateLimitedRequester):
                 include_delta=include_delta_files,
                 include_metadata=include_metadata_files,
             )
+            if not isinstance(cleanup_old_files_n_days, (type(None), int)):
+                raise ValueError(
+                    "`cleanup_old_files_n_days` must be an integer or None."
+                )
+            if isinstance(cleanup_old_files_n_days, int):
+                n_days_implied = len(
+                    pd.bdate_range(download_since_datetime, pd.Timestamp.utcnow())
+                )
+                cleanup_old_files_n_days = abs(cleanup_old_files_n_days)
+                if cleanup_old_files_n_days < n_days_implied:
+                    logger.warning(
+                        "`cleanup_old_files_n_days` is less than the number of business "
+                        "days since `since_datetime`, and is being adjusted accordingly."
+                    )
+                    cleanup_old_files_n_days = n_days_implied
+                self.cleanup_old_files(days_to_keep=cleanup_old_files_n_days)
+
+        if skip_download and isinstance(cleanup_old_files_n_days, int):
+            if cleanup_old_files_n_days > 0:
+                logger.warning(
+                    "`cleanup_old_files_n_days` is ignored when `skip_download=True`."
+                )
 
         warn_if_no_full_snapshots = since_datetime is not None
         return lazy_load_from_parquets(
