@@ -2795,29 +2795,25 @@ def _to_output_schema(
     cols = "real_date.ticker.value.eop_lag.mop_lag.grading.last_updated"
     if include_file_column:
         cols += "." + include_file_column
-        path_parts = (
-            pl.col(include_file_column).str.replace_all(r"\\", "/").str.split("/")
-        )
-        if POLARS_0_17_13_OR_EARLIER:
-            file_name_expr = path_parts.arr.last()
-        else:
-            file_name_expr = path_parts.list.last()
-        lf = lf.with_columns(file_name=file_name_expr)
     ticker_cols = cols.split(".")
     qdf_cols = cols.replace("ticker", "cid.xcat").split(".")
 
     dtype_map = dict(JPMaQSParquetExpectedColumns.TICKER.value)
     dtype_map.update({"cid": pl_string_type(), "xcat": pl_string_type()})
     if include_file_column:
-        dtype_map[include_file_column] = pl_string_type()
+        dtype_map[include_file_column] = pl.Categorical
 
     if want_qdf:
         cid_expr, xcat_expr = _expr_split_ticker(pl.col("ticker"))
         lf = lf.with_columns(cid=cid_expr, xcat=xcat_expr)
         lf = _ensure_columns(lf, qdf_cols, dtypes=dtype_map)
+        if include_file_column:
+            lf = lf.with_columns(pl.col(include_file_column).cast(pl.Categorical))
         return lf.select(qdf_cols)
 
     lf = _ensure_columns(lf, ticker_cols, dtypes=dtype_map)
+    if include_file_column:
+        lf = lf.with_columns(pl.col(include_file_column).cast(pl.Categorical))
     return lf.select(ticker_cols)
 
 
@@ -2839,13 +2835,11 @@ def _build_filtered_parquet_lazyframe(
     lazy_parts: List[pl.LazyFrame] = []
 
     for pth in paths:
+        file_base_name = Path(pth).name
         pth_str = os.fspath(pth)
         if include_file_column:
-            if POLARS_0_17_13_OR_EARLIER:
-                lf = pl.scan_parquet(pth_str)
-                lf = lf.with_columns(pl.lit(pth_str).alias(include_file_column))
-            else:
-                lf = pl.scan_parquet(pth_str, include_file_paths=include_file_column)
+            lf = pl.scan_parquet(pth_str)
+            lf = lf.with_columns(pl.lit(file_base_name).alias(include_file_column))
         else:
             lf = pl.scan_parquet(pth_str)
 
