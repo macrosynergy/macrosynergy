@@ -1741,7 +1741,10 @@ class DataQueryFileAPIClient(RateLimitedRequester):
                 )
             if isinstance(cleanup_old_files_n_days, int):
                 n_days_implied = len(
-                    pd.bdate_range(download_since_datetime, pd.Timestamp.utcnow())
+                    pd.bdate_range(
+                        start=pd.Timestamp(download_since_datetime).normalize(),
+                        end=pd.Timestamp.utcnow().normalize(),
+                    )
                 )
                 cleanup_old_files_n_days = abs(cleanup_old_files_n_days)
                 if cleanup_old_files_n_days < n_days_implied:
