@@ -560,6 +560,7 @@ class TestLazyLoadFilteredParquets(unittest.TestCase):
         df = lf.collect()
 
         self.assertIn("source_file", df.columns)
+        self.assertEqual(df.schema["source_file"], pl.Categorical)
         self.assertEqual(df.height, 3)
 
         usd_jan = df.filter(
@@ -569,14 +570,18 @@ class TestLazyLoadFilteredParquets(unittest.TestCase):
         )
         self.assertEqual(usd_jan.height, 1)
         self.assertEqual(usd_jan["value"][0], 10.0)
-        self.assertEqual(Path(str(usd_jan["source_file"][0])).name, self.qdf_file.name)
+        usd_source = str(usd_jan["source_file"][0])
+        self.assertEqual(usd_source, self.qdf_file.name)
+        self.assertNotIn("\\", usd_source)
+        self.assertNotIn("/", usd_source)
 
         eur_row = df.filter((pl.col("cid") == "EUR") & (pl.col("xcat") == "INFL"))
         self.assertEqual(eur_row.height, 1)
         self.assertEqual(eur_row["value"][0], 2.0)
-        self.assertEqual(
-            Path(str(eur_row["source_file"][0])).name, self.ticker_file.name
-        )
+        eur_source = str(eur_row["source_file"][0])
+        self.assertEqual(eur_source, self.ticker_file.name)
+        self.assertNotIn("\\", eur_source)
+        self.assertNotIn("/", eur_source)
 
     def test_lazy_load_filtered_parquets_earliest_ticker_schema(self):
         lf = _lazy_load_filtered_parquets(
@@ -595,6 +600,7 @@ class TestLazyLoadFilteredParquets(unittest.TestCase):
         self.assertIn("ticker", df.columns)
         self.assertNotIn("cid", df.columns)
         self.assertEqual(df.filter(pl.col("ticker") == "USD_INFL").height, 2)
+        self.assertEqual(df.schema["source_file"], pl.Categorical)
 
         usd_jan = df.filter(
             (pl.col("ticker") == "USD_INFL")
@@ -602,9 +608,10 @@ class TestLazyLoadFilteredParquets(unittest.TestCase):
         )
         self.assertEqual(usd_jan.height, 1)
         self.assertEqual(usd_jan["value"][0], 1.0)
-        self.assertEqual(
-            Path(str(usd_jan["source_file"][0])).name, self.ticker_file.name
-        )
+        usd_source = str(usd_jan["source_file"][0])
+        self.assertEqual(usd_source, self.ticker_file.name)
+        self.assertNotIn("\\", usd_source)
+        self.assertNotIn("/", usd_source)
 
     def test_lazy_load_filtered_parquets_requires_paths(self):
         call_kwargs = dict(
