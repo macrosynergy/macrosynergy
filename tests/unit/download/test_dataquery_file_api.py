@@ -123,6 +123,28 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
             verify=True,
         )
 
+    @suppress_logging
+    @patch("macrosynergy.download.dataquery_file_api._delete_corrupt_files")
+    @patch.object(DataQueryFileAPIClient, "list_downloaded_files")
+    @patch("macrosynergy.download.dataquery_file_api.DataQueryFileAPIOauth")
+    def test_delete_corrupt_files_passes_root_dir(
+        self, mock_oauth, mock_list_downloaded_files, mock_delete_corrupt_files
+    ):
+        client = DataQueryFileAPIClient(
+            client_id="id", client_secret="secret", out_dir=self.test_dir
+        )
+        fake_file_path = Path(client.out_dir) / "2023-01-01" / "f1.json"
+        mock_list_downloaded_files.return_value = pd.DataFrame(
+            {"file-name": ["f1.json"], "path": [str(fake_file_path)]}
+        )
+        mock_delete_corrupt_files.return_value = []
+
+        client.delete_corrupt_files()
+
+        self.assertEqual(
+            mock_delete_corrupt_files.call_args[1]["root_dir"], Path(client.out_dir)
+        )
+
     @patch("macrosynergy.download.dataquery_file_api.DataQueryFileAPIOauth")
     @patch(
         "macrosynergy.download.dataquery_file_api.get_client_id_secret",

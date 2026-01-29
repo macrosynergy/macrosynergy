@@ -480,6 +480,53 @@ class TestCorruptedFilesHandling(unittest.TestCase):
         self.assertFalse(corrupt_file_path in current_files)
 
 
+class TestCorruptedFilesDirectoryCleanup(unittest.TestCase):
+    def setUp(self):
+        self.tmpdir = Path(tempfile.mkdtemp())
+        keep_dir = self.tmpdir / "keep"
+        keep_dir.mkdir(parents=True, exist_ok=True)
+        (keep_dir / "keep.txt").write_text("keep", encoding="utf-8")
+
+    def tearDown(self):
+        if self.tmpdir.exists():
+            shutil.rmtree(self.tmpdir)
+
+    @suppress_logging
+    def test_delete_corrupt_files_removes_empty_directories_when_root_dir_provided(self):
+        nested_dir = self.tmpdir / "jpmaqs-download" / "2023-01-01"
+        nested_dir.mkdir(parents=True, exist_ok=True)
+        corrupt_file = nested_dir / "f1.json"
+        corrupt_file.write_text("{}", encoding="utf-8")
+
+        removed = _delete_corrupt_files(
+            files=[corrupt_file], extensions=["json"], root_dir=self.tmpdir
+        )
+
+        self.assertEqual(removed, [str(corrupt_file)])
+        self.assertFalse(corrupt_file.exists())
+        self.assertFalse(nested_dir.exists())
+        self.assertFalse((self.tmpdir / "jpmaqs-download").exists())
+        self.assertTrue((self.tmpdir / "keep" / "keep.txt").exists())
+
+    @suppress_logging
+    def test_delete_corrupt_files_does_not_remove_non_empty_directories(self):
+        nested_dir = self.tmpdir / "jpmaqs-download" / "2023-01-01"
+        nested_dir.mkdir(parents=True, exist_ok=True)
+        corrupt_file = nested_dir / "bad.json"
+        corrupt_file.write_text("{}", encoding="utf-8")
+        keep_file = nested_dir / "good.json"
+        keep_file.write_text('{"a": 1}', encoding="utf-8")
+
+        removed = _delete_corrupt_files(
+            files=[corrupt_file, keep_file], extensions=["json"], root_dir=self.tmpdir
+        )
+
+        self.assertEqual(removed, [str(corrupt_file)])
+        self.assertFalse(corrupt_file.exists())
+        self.assertTrue(keep_file.exists())
+        self.assertTrue(nested_dir.exists())
+
+
 class TestLargeDeltaFileDatetimes(unittest.TestCase):
     def test_large_delta_datetimes_formatting(self):
         as_strings = _large_delta_file_datetimes()
