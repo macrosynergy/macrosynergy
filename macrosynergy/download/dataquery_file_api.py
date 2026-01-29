@@ -992,7 +992,10 @@ class DataQueryFileAPIClient(RateLimitedRequester):
             avail_files = avail_files[avail_files["file-name"].isin(files)]
         files = sorted(set(map(str, avail_files["path"])))
         extensions = sorted(set(Path(f).suffix.rsplit(".", 1)[-1] for f in files))
-        return _delete_corrupt_files(files=files, extensions=extensions)
+
+        return _delete_corrupt_files(
+            files=files, extensions=extensions, root_dir=Path(self.out_dir)
+        )
 
     def cleanup_old_files(
         self,
@@ -2002,6 +2005,7 @@ def _check_individual_file_parquet_columns(
 def _delete_corrupt_files(
     files: List[Path],
     extensions: List[str] = ["parquet", "json"],
+    root_dir: Path = None,
     allow_empty: bool = False,
 ) -> List[Path]:
     """Deletes corrupt files based on their extensions."""
@@ -2032,6 +2036,16 @@ def _delete_corrupt_files(
             logger.warning(f"Deleting corrupt file: {file_path}")
             file_path.unlink()
             removed_files.append(file_path)
+
+    if root_dir is not None and root_dir.exists() and root_dir.is_dir():
+        for dirpath, _, _ in os.walk(root_dir, topdown=False):
+            dir_path = Path(dirpath)
+            if not any(dir_path.iterdir()):
+                try:
+                    dir_path.rmdir()
+                    logger.info(f"Removed empty directory: {dir_path}")
+                except Exception:
+                    logger.warning(f"Failed to remove directory: {dir_path}")
 
     return sorted(map(str, removed_files))
 
