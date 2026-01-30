@@ -2696,8 +2696,6 @@ def lazy_load_from_parquets(
         return_qdf=(dataframe_format == "qdf"),
         include_file_column=include_file_column,
     )
-    if include_file_column and categorical_dataframe:
-        lf = lf.with_columns(pl.col(include_file_column).cast(pl.Categorical))
     if (metrics and set(metrics) != set(JPMAQS_METRICS)) or include_file_column:
         cols_to_keep = ["real_date", "cid", "xcat", "ticker"] + metrics
         if include_file_column:
@@ -2708,20 +2706,27 @@ def lazy_load_from_parquets(
             )
         else:
             lf = lf.select([pl.col(c) for c in cols_to_keep if c in lf.schema.keys()])
-    if dataframe_type == "polars-lazy":
-        return lf
-
-    cat_cols = ["cid", "xcat", "ticker", "source_file"]
-    if dataframe_type == "polars":
+    cat_cols = ["cid", "xcat", "ticker"]
+    if include_file_column:
+        cat_cols.append(include_file_column)
+    if dataframe_type in {"polars", "polars-lazy"}:
         if categorical_dataframe:
-            cols = None
-            if PYTHON_3_8_OR_LATER:
-                cols = [c for c in cat_cols if c in lf.collect_schema().names()]
-            else:
-                cols = [c for c in cat_cols if c in lf.schema.keys()]
-            if cols:
-                lf = lf.with_columns([pl.col(c).cast(pl.Categorical) for c in cols])
-        return lf.collect()
+            categorical_dtype = getattr(pl, "Categorical", None)
+            if categorical_dtype is not None:
+                _names = (
+                    lf.collect_schema().names()
+                    if PYTHON_3_8_OR_LATER
+                    else lf.schema.keys()
+                )
+                cols = [c for c in cat_cols if c in _names]
+                for c in cols:
+                    try:
+                        lf = lf.with_columns(pl.col(c).cast(categorical_dtype))
+                    except Exception:
+                        logger.warning(
+                            f"Failed to cast '{c}' to Categorical; keeping as string."
+                        )
+        return lf if dataframe_type == "polars-lazy" else lf.collect()
     if dataframe_type == "pandas":
         df = lf.collect().to_pandas()
         if categorical_dataframe:
@@ -2841,6 +2846,10 @@ def _build_filtered_parquet_lazyframe(
     """
     Scan multiple parquet paths into a single LazyFrame, optionally adding a file-path
     column in a way compatible with Polars 0.17.13 (Python 3.7).
+
+    NOTE: categorical casting is intentionally not done here. Casting per-file columns
+    to `pl.Categorical` before concatenation can break on older Polars/Python (e.g.
+    Polars 0.17.x on Python 3.7). Callers should cast categoricals after concat.
     """
     lazy_parts: List[pl.LazyFrame] = []
 
