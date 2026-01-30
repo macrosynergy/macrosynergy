@@ -791,8 +791,6 @@ class DataQueryFileAPIClient(RateLimitedRequester):
                 to_ts.normalize() + pd.DateOffset(days=1) - pd.Timedelta(nanoseconds=1)
             )
 
-        filter_date = since_ts.normalize()
-
         if since_ts > to_ts:
             logger.warning(
                 f"`since_datetime` ({since_ts}) is after `to_datetime` ({to_ts}). Swapping values."
@@ -807,8 +805,7 @@ class DataQueryFileAPIClient(RateLimitedRequester):
             include_metadata=include_metadata,
             include_unavailable=include_unavailable,
         )
-        files_df = files_df[files_df["file-datetime"] >= filter_date]
-        files_df = files_df[files_df["last-modified"].between(since_ts, to_ts)]
+        files_df = files_df[files_df["file-datetime"].between(since_ts, to_ts)]
         files_df = files_df.sort_values(
             by=["file-datetime", "last-modified"],
             ascending=[False, False],
@@ -1602,6 +1599,8 @@ class DataQueryFileAPIClient(RateLimitedRequester):
         metrics: Optional[List[str]] = None,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
+        min_last_updated: Optional[Union[str, pd.Timestamp]] = None,
+        max_last_updated: Optional[Union[str, pd.Timestamp]] = None,
         include_file_column: bool = False,
         dataframe_format: str = "qdf",
         dataframe_type: str = "pandas",
@@ -1643,6 +1642,14 @@ class DataQueryFileAPIClient(RateLimitedRequester):
         end_date : Optional[str]
             The end date for the returned data in "YYYY-MM-DD" (or "YYYYMMDD") format.
             If None, data is returned up to the latest available date.
+        min_last_updated : Optional[Union[str, pd.Timestamp]]
+            If provided, only data points with `last_updated` on or after this timestamp
+            are returned. Strings can be "YYYY-MM-DDThh:mm:ss", "YYYYMMDDhhmmss", or
+            ISO 8601 format.
+        max_last_updated : Optional[Union[str, pd.Timestamp]]
+            If provided, only data points with `last_updated` on or before this timestamp
+            are returned. Strings can be "YYYY-MM-DDThh:mm:ss", "YYYYMMDDhhmmss", or
+            ISO 8601 format.
         include_file_column : bool
             If True, includes a column indicating the source file for each data point.
             Default is False.
@@ -1735,6 +1742,19 @@ class DataQueryFileAPIClient(RateLimitedRequester):
             download_since_datetime = since_datetime or pd.Timestamp.utcnow().strftime(
                 "%Y%m%d"
             )
+            if to_datetime is not None:
+                validate_dq_timestamp(to_datetime, var_name="to_datetime")
+                since_dt = pd_to_datetime_compat(download_since_datetime)
+                to_dt = pd_to_datetime_compat(to_datetime)
+                if to_dt < since_dt:
+                    new_since = (to_dt - pd.offsets.BDay(1)).strftime("%Y%m%d")
+                    logger.warning(
+                        "`to_datetime` is before `since_datetime`; adjusting "
+                        "`since_datetime` to be one business day before `to_datetime`. "
+                        f"New `since_datetime`: {new_since}"
+                    )
+                    download_since_datetime = new_since
+
             self.download_full_snapshot(
                 since_datetime=download_since_datetime,
                 to_datetime=to_datetime,
@@ -1780,6 +1800,8 @@ class DataQueryFileAPIClient(RateLimitedRequester):
             metrics=metrics,
             start_date=start_date,
             end_date=end_date,
+            min_last_updated=min_last_updated,
+            max_last_updated=max_last_updated,
             include_delta_files=include_delta_files,
             delta_treatment=delta_treatment,
             dataframe_format=dataframe_format,
