@@ -355,21 +355,26 @@ class TestLazyLoad(unittest.TestCase):
             self.tmpdir,
             tickers=["USD_INFL"],
             dataframe_type="polars",
+            include_file_column=True,
             since_datetime="20240101",
             include_delta_files=False,
         )
         self.assertIsInstance(pl_df, pl.DataFrame)
         self.assertEqual(pl_df.shape[0], 1)
+        self.assertEqual(pl_df.schema["source_file"], pl.Categorical)
 
         lazy_df = lazy_load_from_parquets(
             self.tmpdir,
             tickers=["USD_INFL"],
             dataframe_type="polars-lazy",
+            include_file_column=True,
             since_datetime="20240101",
             include_delta_files=False,
         )
         self.assertIsInstance(lazy_df, pl.LazyFrame)
-        self.assertEqual(lazy_df.collect().shape[0], 1)
+        collected = lazy_df.collect()
+        self.assertEqual(collected.shape[0], 1)
+        self.assertEqual(collected.schema["source_file"], pl.Categorical)
 
         df_wide = lazy_load_from_parquets(
             self.tmpdir,
@@ -492,7 +497,9 @@ class TestCorruptedFilesDirectoryCleanup(unittest.TestCase):
             shutil.rmtree(self.tmpdir)
 
     @suppress_logging
-    def test_delete_corrupt_files_removes_empty_directories_when_root_dir_provided(self):
+    def test_delete_corrupt_files_removes_empty_directories_when_root_dir_provided(
+        self,
+    ):
         nested_dir = self.tmpdir / "jpmaqs-download" / "2023-01-01"
         nested_dir.mkdir(parents=True, exist_ok=True)
         corrupt_file = nested_dir / "f1.json"
@@ -607,7 +614,7 @@ class TestLazyLoadFilteredParquets(unittest.TestCase):
         df = lf.collect()
 
         self.assertIn("source_file", df.columns)
-        self.assertEqual(df.schema["source_file"], pl.Categorical)
+        self.assertEqual(df.schema["source_file"], pl.Utf8)
         self.assertEqual(df.height, 3)
 
         usd_jan = df.filter(
@@ -647,7 +654,7 @@ class TestLazyLoadFilteredParquets(unittest.TestCase):
         self.assertIn("ticker", df.columns)
         self.assertNotIn("cid", df.columns)
         self.assertEqual(df.filter(pl.col("ticker") == "USD_INFL").height, 2)
-        self.assertEqual(df.schema["source_file"], pl.Categorical)
+        self.assertEqual(df.schema["source_file"], pl.Utf8)
 
         usd_jan = df.filter(
             (pl.col("ticker") == "USD_INFL")
