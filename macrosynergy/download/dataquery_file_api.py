@@ -2814,16 +2814,9 @@ def lazy_load_from_parquets(
         else:
             schema_cols = catalog_lf.schema.keys()
         ticker_col = "Ticker" if "Ticker" in schema_cols else "ticker"
+        tickers_lf_col = catalog_lf.select(pl.col(ticker_col)).drop_nulls().unique()
         if ticker_col in schema_cols:
-            catalog_tickers = (
-                catalog_lf.select(pl.col(ticker_col))
-                .collect()
-                .get_column(ticker_col)
-                .drop_nulls()
-                .cast(pl.Utf8)
-                .unique()
-                .to_list()
-            )
+            catalog_tickers = tickers_lf_col.collect()[ticker_col].to_list()
             if catalog_tickers:
                 catalog_set = {str(t).lower() for t in catalog_tickers}
                 missing = sorted({t for t in tickers if t.lower() not in catalog_set})
