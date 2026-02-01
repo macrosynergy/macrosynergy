@@ -1535,7 +1535,12 @@ class DataQueryFileAPIClient(RateLimitedRequester):
         start_time = time.time()
 
         if since_datetime is None:
-            since_datetime = pd.Timestamp.utcnow().strftime("%Y%m%d")
+            # JPMaQS data files are not published on weekends, so "today" can yield
+            # no snapshot/delta files even though the catalog is daily.
+            if include_full_snapshots or include_delta:
+                since_datetime = get_current_or_last_business_day().strftime("%Y%m%d")
+            else:
+                since_datetime = pd.Timestamp.utcnow().strftime("%Y%m%d")
 
         logger.info(
             f"Starting snapshot download to '{self.out_dir}' for files since {since_datetime}."
@@ -1739,8 +1744,8 @@ class DataQueryFileAPIClient(RateLimitedRequester):
         if datasets_to_download and include_delta_files:
             datasets_to_download += [f"{ds}_DELTA" for ds in datasets_to_download]
         if not skip_download:
-            download_since_datetime = since_datetime or pd.Timestamp.utcnow().strftime(
-                "%Y%m%d"
+            download_since_datetime = (
+                since_datetime or get_current_or_last_business_day().strftime("%Y%m%d")
             )
             if to_datetime is not None:
                 validate_dq_timestamp(to_datetime, var_name="to_datetime")
@@ -1868,16 +1873,104 @@ def _pd_to_datetime_compat(ts: str, utc: bool):
     )
 
 
+def _pd_to_utc_timestamp(ts: pd.Timestamp, utc: bool) -> pd.Timestamp:
+    if not utc:
+        return ts
+    if ts.tzinfo is None:
+        return ts.tz_localize("UTC")
+    return ts.tz_convert("UTC")
+
+
+def _pd_scalar_to_datetime_compat(
+    ts: Union[str, datetime.date, datetime.datetime, pd.Timestamp],
+    *,
+    format: str,
+    utc: bool,
+) -> pd.Timestamp:
+    if isinstance(ts, pd.Timestamp):
+        return _pd_to_utc_timestamp(ts, utc=utc)
+    if isinstance(ts, datetime.datetime):
+        return _pd_to_utc_timestamp(pd.Timestamp(ts), utc=utc)
+    if isinstance(ts, datetime.date):
+        return _pd_to_utc_timestamp(pd.Timestamp(ts), utc=utc)
+    if isinstance(ts, str):
+        if PD_2_0_OR_LATER:
+            return pd.to_datetime(ts, format=format, utc=utc)
+        return _pd_to_datetime_compat(ts, utc=utc)
+    raise TypeError(
+        "`ts` must be a string, date, datetime, pandas Timestamp, or a Series."
+    )
+
+
 def pd_to_datetime_compat(
-    ts: Union[str, pd.Series],
+    ts: Union[str, datetime.date, datetime.datetime, pd.Timestamp, pd.Series],
     format: str = "mixed",
     utc: bool = True,
 ):
-    if PD_2_0_OR_LATER:
-        return pd.to_datetime(ts, format=format, utc=utc)
+    """
+    Parse common timestamp-like inputs into pandas datetime objects.
+
+    - Scalars return a `pd.Timestamp`
+    - `pd.Series` returns a Series of Timestamps
+
+    Notes
+    -----
+    - Strings accept the same formats as `_pd_to_datetime_compat` (and in pandas>=2.0
+      also support `format="mixed"`).
+    - Non-string scalars (date/datetime/Timestamp) are converted via `pd.Timestamp`
+      and optionally localized/converted to UTC.
+    """
+
     if isinstance(ts, pd.Series):
-        return ts.apply(lambda x: _pd_to_datetime_compat(x, utc=utc))
-    return _pd_to_datetime_compat(ts, utc=utc)
+        if PD_2_0_OR_LATER:
+            return pd.to_datetime(ts, format=format, utc=utc)
+        return ts.apply(
+            lambda x: _pd_scalar_to_datetime_compat(x, format=format, utc=utc)
+        )
+
+    return _pd_scalar_to_datetime_compat(ts, format=format, utc=utc)
+
+
+def pd_timestamp_compat(
+    ts: Optional[Union[str, datetime.date, datetime.datetime, pd.Timestamp]] = None,
+    *,
+    utc: bool = True,
+) -> pd.Timestamp:
+    """
+    Convert common timestamp-like inputs into a pandas Timestamp.
+
+    This is a thin wrapper around `pd_to_datetime_compat` for scalar inputs. It keeps
+    the legacy convenience of `ts=None` defaulting to "now".
+    """
+    if ts is None:
+        return pd.Timestamp.utcnow() if utc else pd.Timestamp.now()
+
+    out = pd_to_datetime_compat(ts, utc=utc)
+    if isinstance(out, pd.Series):
+        raise TypeError("`pd_timestamp_compat` expects a scalar input, not a Series.")
+    return out
+
+
+def get_current_or_last_business_day(
+    now_utc: Optional[
+        Union[str, datetime.date, datetime.datetime, pd.Timestamp]
+    ] = None,
+) -> pd.Timestamp:
+    """
+    Return "today" (UTC) if it's a weekday, otherwise the previous business day.
+
+    Notes
+    -----
+    - "Business day" is Monday-Friday (no holiday calendar).
+    - Returned Timestamp is UTC and normalized to midnight.
+    """
+    now_ts = pd_to_datetime_compat(
+        now_utc if now_utc is not None else pd.Timestamp.utcnow(), utc=True
+    ).normalize()
+    # Monday=0 ... Sunday=6; weekend => >=5
+    if now_ts.weekday() >= 5:
+        return (now_ts - pd.offsets.BDay(1)).normalize()
+    return now_ts
 
 
 def validate_dq_timestamp(
@@ -2640,7 +2733,7 @@ def lazy_load_from_parquets(
         datasets=datasets,
     )
 
-    available_files_df: pd.DataFrame = _downloaded_files_df(
+    all_data_files_df: pd.DataFrame = _downloaded_files_df(
         files_dir=files_dir,
         file_format=file_format,
         include_metadata_files=False,  # no metadata files - cannot scan with QDF like schema
@@ -2653,7 +2746,7 @@ def lazy_load_from_parquets(
     ):
         effective_to_datetime = pd.Timestamp.utcnow().strftime("%Y%m%dT%H%M%S")
     available_files_df: pd.DataFrame = _filter_to_latest_files(
-        files_df=available_files_df,
+        files_df=all_data_files_df,
         since_datetime=since_datetime,
         to_datetime=effective_to_datetime,
         include_delta_files=include_delta_files,
@@ -2662,13 +2755,15 @@ def lazy_load_from_parquets(
     )
     if datasets:
         datasets = sorted(set([d.replace("_DELTA", "") for d in datasets]))
-        available_files_df = available_files_df.loc[
-            available_files_df["e-dataset"].isin(datasets)
-        ]
+        if "e-dataset" in available_files_df.columns:
+            available_files_df = available_files_df.loc[
+                available_files_df["e-dataset"].isin(datasets)
+            ]
+        else:
+            available_files_df = available_files_df.iloc[0:0].copy()
 
     include_file_column = "source_file" if include_file_column else None
 
-    paths = sorted(available_files_df["path"])
     tickers = [t.strip() for t in tickers if isinstance(t, str) and t.strip()]
 
     if not tickers:
@@ -2676,6 +2771,36 @@ def lazy_load_from_parquets(
             "No tickers specified. Provide `tickers=[...]` (or `cids` and `xcats`). "
             "If you want to load all tickers, pass `tickers` as a list of all tickers "
             "you want to load."
+        )
+
+    paths = (
+        sorted(available_files_df["path"])
+        if (not available_files_df.empty and ("path" in available_files_df.columns))
+        else []
+    )
+    if not paths:
+        total_parquets = len(_list_downloaded_files(files_dir, file_format="parquet"))
+        total_data_parquets = len(all_data_files_df)
+        today_utc = pd.Timestamp.utcnow().normalize()
+        last_bd = get_current_or_last_business_day(today_utc)
+        datasets_str = (
+            ", ".join(list(datasets)[:5]) + ("..." if len(datasets) > 5 else "")
+            if datasets
+            else "N/A"
+        )
+        extra_hint = ""
+        if total_parquets > 0 and total_data_parquets == 0:
+            extra_hint = (
+                " Found parquet file(s), but they appear to be metadata/catalog only "
+                "(no data snapshot/delta files)."
+            )
+        raise FileNotFoundError(
+            "No JPMaQS data snapshot/delta parquet files were found to load for the "
+            f"requested selection (datasets={datasets_str}).{extra_hint} "
+            "JPMaQS data files are published on business days only (the catalog is daily). "
+            f"Today (UTC) is {today_utc.date()}; latest business day is {last_bd.date()}. "
+            "Try running `download()` again (with `skip_download=False`) or set "
+            f"`since_datetime='{last_bd.strftime('%Y%m%d')}'` (or earlier)."
         )
 
     if catalog_file:
