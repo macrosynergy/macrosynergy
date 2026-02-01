@@ -129,6 +129,24 @@ class TestLazyLoad(unittest.TestCase):
         self.assertIn("DATASET1_DELTA_20240102T010101.parquet", filenames)
         self.assertIn("DATASET2_20240103.parquet", filenames)
 
+    def test_lazy_load_from_parquets_raises_clean_error_when_only_metadata_exists(self):
+        # Simulate a cache that only has metadata/catalog parquet files.
+        empty_dir = self.tmpdir / "only_metadata"
+        empty_dir.mkdir(parents=True, exist_ok=True)
+        (empty_dir / "JPMAQS_METADATA_CATALOG_20240101.parquet").touch()
+
+        with self.assertRaises(FileNotFoundError) as ctx:
+            lazy_load_from_parquets(
+                files_dir=empty_dir,
+                tickers=["USD_INFL"],
+                datasets=["JPMAQS_GENERIC_RETURNS"],
+                dataframe_type="polars-lazy",
+            )
+
+        msg = str(ctx.exception)
+        self.assertIn("metadata/catalog only", msg.lower())
+        self.assertIn("business days", msg.lower())
+
     @patch(
         "macrosynergy.download.dataquery_file_api.pd_to_datetime_compat",
         pd_to_datetime_compat,

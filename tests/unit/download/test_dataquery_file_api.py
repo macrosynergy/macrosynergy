@@ -12,6 +12,9 @@ from macrosynergy.compat import PD_2_0_OR_LATER, PYTHON_3_8_OR_LATER
 from macrosynergy.download.dataquery_file_api import (
     validate_dq_timestamp,
     get_client_id_secret,
+    get_current_or_last_business_day,
+    pd_to_datetime_compat,
+    pd_timestamp_compat,
     DataQueryFileAPIClient,
     SegmentedFileDownloader,
     RateLimitedRequester,
@@ -43,6 +46,57 @@ class TestStandaloneFunctions(unittest.TestCase):
         self.assertFalse(validate_dq_timestamp("invalid-date", raise_error=False))
         with self.assertRaisesRegex(ValueError, "Invalid `my_ts` format"):
             validate_dq_timestamp("invalid-date", var_name="my_ts")
+
+    def test_pd_timestamp_compat(self):
+        self.assertEqual(
+            pd_timestamp_compat("2023-01-05T01:02:03Z"),
+            pd.Timestamp("2023-01-05T01:02:03Z"),
+        )
+        self.assertEqual(
+            pd_timestamp_compat(pd.Timestamp("2023-01-05T01:02:03Z")),
+            pd.Timestamp("2023-01-05T01:02:03Z"),
+        )
+        with self.assertRaises(TypeError):
+            pd_timestamp_compat(pd.Series(["2023-01-01"]))
+
+    def test_pd_to_datetime_compat_accepts_non_string_scalars(self):
+        self.assertEqual(
+            pd_to_datetime_compat(datetime.date(2023, 1, 5)),
+            pd.Timestamp("2023-01-05T00:00:00Z"),
+        )
+
+        # naive datetime -> localized to UTC when utc=True
+        self.assertEqual(
+            pd_to_datetime_compat(datetime.datetime(2023, 1, 5, 1, 2, 3)),
+            pd.Timestamp("2023-01-05T01:02:03Z"),
+        )
+
+        # tz-aware datetime -> converted to UTC
+        self.assertEqual(
+            pd_to_datetime_compat(
+                datetime.datetime(
+                    2023,
+                    1,
+                    5,
+                    1,
+                    2,
+                    3,
+                    tzinfo=datetime.timezone(datetime.timedelta(hours=2)),
+                )
+            ),
+            pd.Timestamp("2023-01-04T23:02:03Z"),
+        )
+
+    def test_get_current_or_last_business_day(self):
+        self.assertEqual(
+            get_current_or_last_business_day("2026-01-28T12:00:00Z"),
+            pd.Timestamp("2026-01-28T00:00:00Z"),
+        )
+        # Sunday -> Friday
+        self.assertEqual(
+            get_current_or_last_business_day("2026-02-01T17:20:22Z"),
+            pd.Timestamp("2026-01-30T00:00:00Z"),
+        )
 
     @patch("macrosynergy.download.dataquery_file_api.os.getenv")
     def test_get_client_id_secret(self, mock_getenv):
@@ -90,6 +144,7 @@ class TestRateLimiting(unittest.TestCase):
 
         mock_sleep.assert_called_once()
         self.assertAlmostEqual(mock_sleep.call_args[0][0], 0.75, places=2)
+
 
 class TestDataQueryFileAPIClient(unittest.TestCase):
     def setUp(self):
@@ -490,8 +545,12 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
             parent_requester=parent,
         )
         downloader.temp_dir.mkdir(parents=True, exist_ok=True)
-        with patch.object(downloader, "_wait_for_api_call", return_value=True) as mock_wait:
-            downloader._download_chunk_retry(part_num=0, start_byte=0, end_byte=2, retries=1)
+        with patch.object(
+            downloader, "_wait_for_api_call", return_value=True
+        ) as mock_wait:
+            downloader._download_chunk_retry(
+                part_num=0, start_byte=0, end_byte=2, retries=1
+            )
         mock_wait.assert_called_once()
         downloader.cleanup()
 
@@ -653,7 +712,9 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
 
     @suppress_logging
     @patch("macrosynergy.download.dataquery_file_api.DataQueryFileAPIOauth")
-    def test_cleanup_old_files_deletes_expected_files_and_returns_list(self, mock_oauth):
+    def test_cleanup_old_files_deletes_expected_files_and_returns_list(
+        self, mock_oauth
+    ):
         client = DataQueryFileAPIClient(
             client_id="id", client_secret="secret", out_dir=self.test_dir
         )
@@ -1015,6 +1076,24 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
         )
         self.assertEqual(mock_download_multi.call_args[1]["filenames"], ["f1.parquet"])
 
+    @patch("pandas.Timestamp.utcnow")
+    @patch.object(DataQueryFileAPIClient, "filter_available_files_by_datetime")
+    def test_download_full_snapshot_defaults_to_last_business_day_on_weekend(
+        self, mock_filter_files, mock_utcnow
+    ):
+        client = DataQueryFileAPIClient(
+            client_id="id", client_secret="secret", out_dir=self.test_dir
+        )
+        # Sunday (UTC)
+        mock_utcnow.return_value = pd.Timestamp("2023-01-08T01:02:03Z")
+        mock_filter_files.return_value = pd.DataFrame(columns=["file-name"])
+
+        client.download_full_snapshot(since_datetime=None, show_progress=False)
+
+        mock_filter_files.assert_called_once()
+        called_since = mock_filter_files.call_args.kwargs["since_datetime"]
+        self.assertEqual(called_since, "20230106")
+
     @patch("macrosynergy.download.dataquery_file_api.logger")
     @patch.object(DataQueryFileAPIClient, "download_multiple_files")
     @patch.object(DataQueryFileAPIClient, "filter_available_files_by_datetime")
@@ -1103,6 +1182,45 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
             self.assertIsNone(mock_lazy_load.call_args[1]["to_datetime"])
 
         self.assertEqual(called_since, "20230105")
+
+    @patch("pandas.Timestamp.utcnow")
+    @patch.object(DataQueryFileAPIClient, "download_full_snapshot")
+    @patch.object(DataQueryFileAPIClient, "filter_to_valid_tickers")
+    @patch.object(DataQueryFileAPIClient, "download_catalog_file")
+    @patch("macrosynergy.download.dataquery_file_api.lazy_load_from_parquets")
+    @patch.object(DataQueryFileAPIClient, "get_datasets_for_indicators")
+    def test_download_defaults_since_datetime_uses_last_business_day_on_weekend(
+        self,
+        mock_get_datasets_for_indicators,
+        mock_lazy_load,
+        mock_download_catalog_file,
+        mock_filter_to_valid_tickers,
+        mock_download_full_snapshot,
+        mock_utcnow,
+    ):
+        client = DataQueryFileAPIClient(
+            client_id="id", client_secret="secret", out_dir=self.test_dir
+        )
+        mock_get_datasets_for_indicators.return_value = []
+        mock_lazy_load.return_value = pd.DataFrame()
+        mock_download_catalog_file.return_value = (
+            "JPMAQS_METADATA_CATALOG_20230101.parquet"
+        )
+        mock_filter_to_valid_tickers.return_value = ["USD_GROWTH"]
+        # Sunday (UTC)
+        mock_utcnow.return_value = pd.Timestamp("2023-01-08T01:02:03Z")
+
+        client.download(
+            tickers=["USD_GROWTH"], since_datetime=None, show_progress=False
+        )
+
+        if PYTHON_3_8_OR_LATER:
+            called_since = mock_download_full_snapshot.call_args.kwargs[
+                "since_datetime"
+            ]
+        else:
+            called_since = mock_download_full_snapshot.call_args[1]["since_datetime"]
+        self.assertEqual(called_since, "20230106")
 
     @patch("macrosynergy.download.dataquery_file_api.logger")
     @patch.object(DataQueryFileAPIClient, "download_catalog_file")
