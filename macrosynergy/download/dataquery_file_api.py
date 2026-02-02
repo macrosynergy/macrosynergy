@@ -1627,6 +1627,9 @@ class DataQueryFileAPIClient(RateLimitedRequester):
         datasets, downloads the necessary snapshot/delta/metadata files into the local
         cache (unless `skip_download=True`), and returns the filtered data.
 
+        For a "load-only" workflow (no snapshot/delta downloads), call `load_data()`
+        directly (or call this method with `skip_download=True`).
+
         Parameters
         ----------
         tickers : Optional[List[str]]
@@ -1797,6 +1800,172 @@ class DataQueryFileAPIClient(RateLimitedRequester):
                 logger.warning(
                     "`cleanup_old_files_n_days` is ignored when `skip_download=True`."
                 )
+
+        return self.load_data(
+            tickers=rqstd_tickers,
+            metrics=metrics,
+            start_date=start_date,
+            end_date=end_date,
+            min_last_updated=min_last_updated,
+            max_last_updated=max_last_updated,
+            include_file_column=include_file_column,
+            dataframe_format=dataframe_format,
+            dataframe_type=dataframe_type,
+            categorical_dataframe=categorical_dataframe,
+            include_delta_files=include_delta_files,
+            delta_treatment=delta_treatment,
+            since_datetime=since_datetime,
+            to_datetime=to_datetime,
+            catalog_file=catalog_file,
+            datasets=datasets_to_download,
+        )
+
+    def load_data(
+        self,
+        tickers: Optional[List[str]] = None,
+        cids: Optional[List[str]] = None,
+        xcats: Optional[List[str]] = None,
+        metrics: Optional[List[str]] = None,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        min_last_updated: Optional[Union[str, pd.Timestamp]] = None,
+        max_last_updated: Optional[Union[str, pd.Timestamp]] = None,
+        include_file_column: bool = False,
+        dataframe_format: str = "qdf",
+        dataframe_type: str = "pandas",
+        categorical_dataframe: bool = True,
+        include_delta_files: bool = True,
+        delta_treatment: str = "latest",
+        since_datetime: Optional[str] = None,
+        to_datetime: Optional[str] = None,
+        catalog_file: Optional[str] = None,
+        datasets: Optional[List[str]] = None,
+    ) -> Union[pd.DataFrame, pl.DataFrame, pl.LazyFrame]:
+        """
+        Load JPMaQS timeseries from the local cache for the requested selection.
+
+        This method performs the "load" part of `download()`: it resolves tickers to the
+        underlying JPMaQS datasets (using the catalog file) and returns the filtered data
+        from locally cached snapshot/delta parquet files.
+
+        Unlike `download()`, this method does **not** download snapshot/delta/metadata
+        files. It assumes the relevant files are already present in `out_dir`.
+        The catalog file is still downloaded/validated unless `catalog_file` is provided.
+
+        Parameters
+        ----------
+        tickers : Optional[List[str]]
+            A list of tickers to filter datasets. Each ticker must be in the standard
+            format "CID_XCAT" used in JPMaQS.
+        cids : Optional[List[str]]
+            A list of cross-sectional identifiers (CIDs) to filter datasets.
+        xcats : Optional[List[str]]
+            A list of extended categories (XCATS) to filter datasets.
+        metrics : Optional[List[str]]
+            A list of JPMaQS metrics to filter the data. Available metrics are "value",
+            "grading", "eop_lag", "mop_lag", and "last_updated". The available metrics
+            are also defined in `macrosynergy.management.constants.JPMAQS_METRICS`. The default
+            is None, in which case all metrics are returned.
+        start_date : Optional[str]
+            The start date for the returned data in "YYYY-MM-DD" (or "YYYYMMDD") format.
+            If None, data is returned from the earliest available date.
+        end_date : Optional[str]
+            The end date for the returned data in "YYYY-MM-DD" (or "YYYYMMDD") format.
+            If None, data is returned up to the latest available date.
+        min_last_updated : Optional[Union[str, pd.Timestamp]]
+            If provided, only data points with `last_updated` on or after this timestamp
+            are returned. Strings can be "YYYY-MM-DDThh:mm:ss", "YYYYMMDDhhmmss", or
+            ISO 8601 format.
+        max_last_updated : Optional[Union[str, pd.Timestamp]]
+            If provided, only data points with `last_updated` on or before this timestamp
+            are returned. Strings can be "YYYY-MM-DDThh:mm:ss", "YYYYMMDDhhmmss", or
+            ISO 8601 format.
+        include_file_column : bool
+            If True, includes a column indicating the source file for each data point.
+            Default is False.
+        dataframe_format : str
+            The output schema. Options are:
+
+            - "qdf": quantamental schema with `cid` and `xcat` columns.
+            - "tickers": ticker schema with a single `ticker` column (instead of `cid`/`xcat`).
+
+            Note: if you want a wide matrix (date x ticker), pivot the returned data
+            using pandas/Polars. Default is "qdf".
+        dataframe_type : str
+            The type of DataFrame to return. Options are "pandas" for a pandas DataFrame,
+            "polars" for a polars DataFrame, or "polars-lazy" for a polars LazyFrame.
+            Default is "pandas".
+        categorical_dataframe : bool
+            If True and `dataframe_type` is "pandas" (or "polars"/"polars-lazy" with
+            compatible Polars versions), converts selected string columns to categorical
+            dtype. Default is True.
+        include_delta_files : bool
+            If True, includes delta files in the load process (recommended).
+            Default is True.
+        delta_treatment : str
+            Determines how to treat duplicate values between snapshots and deltas. Options are:
+
+            - "latest": keep the latest value per series/date.
+            - "earliest": keep the earliest value per series/date.
+            - "all": keep all entries.
+
+            Default is "latest".
+        since_datetime : Optional[str]
+            Restrict which locally available snapshot/delta files are considered to those
+            modified since this timestamp (inclusive). If None, all locally available files
+            are considered.
+        to_datetime : Optional[str]
+            Restrict which locally available snapshot/delta files are considered to those
+            modified up to this timestamp (inclusive). If None, all locally available files
+            are considered.
+        catalog_file : Optional[str]
+            Optional path to a local JPMaQS catalog parquet file. If not provided, the
+            client will download/validate the latest catalog file for ticker resolution.
+        datasets : Optional[List[str]]
+            Optional list of JPMaQS datasets (file-group IDs) to restrict which locally cached
+            snapshot/delta parquet files are scanned/loaded. If not provided, datasets are
+            inferred from the requested tickers using the catalog.
+
+        Returns
+        -------
+        Union[pd.DataFrame, pl.DataFrame, pl.LazyFrame]
+            A DataFrame containing the requested data.
+        """
+        catalog_file = catalog_file or self.download_catalog_file()
+
+        rqstd_tickers = _construct_all_tickers_list(
+            tickers=tickers, cids=cids, xcats=xcats
+        )
+        if not bool(rqstd_tickers):
+            raise ValueError(
+                "At least one ticker must be specified via `tickers`, or `cids` & `xcats`."
+            )
+
+        valid_tickers = self.filter_to_valid_tickers(
+            tickers=rqstd_tickers, catalog_file=catalog_file
+        )
+        valid_norm = {t.lower() for t in valid_tickers}
+        missing = sorted({t for t in rqstd_tickers if t.lower() not in valid_norm})
+        if not valid_tickers:
+            raise ValueError(
+                "No valid tickers found with the provided `tickers`, `cids`, and `xcats`."
+            )
+        if missing:
+            lmiss = min(5, len(missing))
+            nmore = f"{len(missing) - lmiss} more" if len(missing) > lmiss else ""
+            miss_str = "[" + ", ".join(missing[:lmiss]) + "..." + nmore + "]"
+            miss_str = f"{len(missing)} tickers requested do not exist in the catalog, these are: {miss_str}"
+            logger.warning(miss_str)
+
+        rqstd_tickers = valid_tickers
+
+        datasets_to_download = datasets
+        if datasets_to_download is None:
+            datasets_to_download = self.get_datasets_for_indicators(
+                tickers=rqstd_tickers, catalog_file=catalog_file
+            )
+            if datasets_to_download and include_delta_files:
+                datasets_to_download += [f"{ds}_DELTA" for ds in datasets_to_download]
 
         warn_if_no_full_snapshots = since_datetime is not None
         return lazy_load_from_parquets(
