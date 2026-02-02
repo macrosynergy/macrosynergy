@@ -1463,6 +1463,115 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
                 show_progress=False,
             )
 
+    @patch.object(DataQueryFileAPIClient, "download_full_snapshot")
+    @patch.object(DataQueryFileAPIClient, "download_catalog_file")
+    @patch.object(DataQueryFileAPIClient, "filter_to_valid_tickers")
+    @patch.object(DataQueryFileAPIClient, "get_datasets_for_indicators")
+    @patch("macrosynergy.download.dataquery_file_api.lazy_load_from_parquets")
+    def test_load_data_skips_snapshot_download(
+        self,
+        mock_lazy_load,
+        mock_get_datasets_for_indicators,
+        mock_filter_to_valid_tickers,
+        mock_download_catalog_file,
+        mock_download_full_snapshot,
+    ):
+        client = DataQueryFileAPIClient(
+            client_id="id", client_secret="secret", out_dir=self.test_dir
+        )
+        mock_download_catalog_file.return_value = (
+            "JPMAQS_METADATA_CATALOG_20230101.parquet"
+        )
+        mock_filter_to_valid_tickers.return_value = ["USD_GROWTH"]
+        mock_get_datasets_for_indicators.return_value = []
+        mock_lazy_load.return_value = pd.DataFrame()
+
+        client.load_data(tickers=["USD_GROWTH"])
+
+        mock_download_catalog_file.assert_called_once()
+        mock_filter_to_valid_tickers.assert_called_once()
+        mock_get_datasets_for_indicators.assert_called_once()
+        mock_download_full_snapshot.assert_not_called()
+        mock_lazy_load.assert_called_once()
+
+    @patch.object(DataQueryFileAPIClient, "download_catalog_file")
+    @patch.object(DataQueryFileAPIClient, "filter_to_valid_tickers")
+    @patch.object(DataQueryFileAPIClient, "get_datasets_for_indicators")
+    @patch("macrosynergy.download.dataquery_file_api.lazy_load_from_parquets")
+    def test_load_data_uses_catalog_file_argument_without_downloading_catalog(
+        self,
+        mock_lazy_load,
+        mock_get_datasets_for_indicators,
+        mock_filter_to_valid_tickers,
+        mock_download_catalog_file,
+    ):
+        client = DataQueryFileAPIClient(
+            client_id="id", client_secret="secret", out_dir=self.test_dir
+        )
+        mock_filter_to_valid_tickers.return_value = ["USD_GROWTH"]
+        mock_get_datasets_for_indicators.return_value = []
+        mock_lazy_load.return_value = pd.DataFrame()
+
+        client.load_data(
+            tickers=["USD_GROWTH"],
+            catalog_file="JPMAQS_METADATA_CATALOG_20230101.parquet",
+        )
+
+        mock_download_catalog_file.assert_not_called()
+        mock_filter_to_valid_tickers.assert_called_once()
+        mock_get_datasets_for_indicators.assert_called_once()
+        mock_lazy_load.assert_called_once()
+
+    @patch.object(DataQueryFileAPIClient, "load_data")
+    @patch.object(DataQueryFileAPIClient, "download_full_snapshot")
+    @patch.object(DataQueryFileAPIClient, "download_catalog_file")
+    @patch.object(DataQueryFileAPIClient, "filter_to_valid_tickers")
+    @patch.object(DataQueryFileAPIClient, "get_datasets_for_indicators")
+    def test_download_delegates_to_load_data(
+        self,
+        mock_get_datasets_for_indicators,
+        mock_filter_to_valid_tickers,
+        mock_download_catalog_file,
+        mock_download_full_snapshot,
+        mock_load_data,
+    ):
+        client = DataQueryFileAPIClient(
+            client_id="id", client_secret="secret", out_dir=self.test_dir
+        )
+        mock_download_catalog_file.return_value = (
+            "JPMAQS_METADATA_CATALOG_20230101.parquet"
+        )
+        mock_filter_to_valid_tickers.return_value = ["USD_GROWTH"]
+        mock_get_datasets_for_indicators.return_value = ["JPMAQS_GENERIC_RETURNS"]
+        sentinel = pd.DataFrame({"a": [1]})
+        mock_load_data.return_value = sentinel
+
+        out = client.download(
+            tickers=["USD_GROWTH"], skip_download=True, show_progress=False
+        )
+
+        self.assertIs(out, sentinel)
+        mock_download_full_snapshot.assert_not_called()
+        mock_load_data.assert_called_once()
+        if PYTHON_3_8_OR_LATER:
+            kwargs = mock_load_data.call_args.kwargs
+            self.assertIn("datasets", kwargs)
+            self.assertIn("catalog_file", kwargs)
+            self.assertEqual(kwargs["tickers"], ["USD_GROWTH"])
+            self.assertEqual(
+                kwargs["datasets"],
+                ["JPMAQS_GENERIC_RETURNS", "JPMAQS_GENERIC_RETURNS_DELTA"],
+            )
+        else:
+            kwargs = mock_load_data.call_args[1]
+            self.assertIn("datasets", kwargs)
+            self.assertIn("catalog_file", kwargs)
+            self.assertEqual(kwargs["tickers"], ["USD_GROWTH"])
+            self.assertEqual(
+                kwargs["datasets"],
+                ["JPMAQS_GENERIC_RETURNS", "JPMAQS_GENERIC_RETURNS_DELTA"],
+            )
+
 
 class TestDataQueryFileAPIClientNotificationLoading(unittest.TestCase):
     def setUp(self):
