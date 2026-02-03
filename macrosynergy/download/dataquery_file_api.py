@@ -151,6 +151,28 @@ filter/transform before collecting.
         # Example: filter further before materializing
         df = lf.filter(pl.col("real_date") >= pl.date(2020, 1, 1)).collect()
 
+**Example 4: Download a slice of the dataset "as of" a specific date-time.**
+
+This method downloads the necessary snapshot and delta files to reconstruct the
+dataset as of the specified date-time.
+
+.. code-block:: python
+
+    from macrosynergy.download import DataQueryFileAPIClient
+    import pandas as pd
+
+    tickers = ['AUD_EQXR_NSA', 'CAD_EQXR_NSA', 'USD_EQXR_NSA', 'JPY_EQXR_NSA']
+
+    with DataQueryFileAPIClient(out_dir="./data/jpmaqs-data/") as dq:
+        # Cut off at noon on 2025-11-12 (UTC)
+        df = dq.download_as_of(tickers=tickers, as_of_datetime="2025-11-12T12:00:00")
+
+        # inline with T-1 release schedule
+        assert df['real_date'].max() <= pd.Timestamp("2025-11-12")
+        assert df['last_updated'].max() <= pd.Timestamp("2025-11-12T12:00:00")
+        print(df.head())
+
+
 **Example 4: Download all new or updated delta-files since a specific date/time.**
 
 .. code-block:: python
@@ -3656,6 +3678,15 @@ if __name__ == "__main__":
             tickers=tickers,
             include_file_column=True,
         )
+        print(df.head())
+
+    with DataQueryFileAPIClient(out_dir="./data/jpmaqs-data/") as dq:
+        df = dq.download_as_of(tickers=tickers, as_of_datetime="2025-11-12")
+
+    with DataQueryFileAPIClient(out_dir="./data/jpmaqs-data/") as dq:
+        df = dq.download_as_of(tickers=tickers, as_of_datetime="2025-11-12T12:00:00")
+        assert df["real_date"].max() <= pd.Timestamp("2025-11-12")
+        assert df["last_updated"].max() <= pd.Timestamp("2025-11-12T12:00:00")
         print(df.head())
 
     # with DataQueryFileAPIClient(out_dir="./data/jpmaqs-data/") as dq:
