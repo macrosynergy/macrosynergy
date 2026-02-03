@@ -173,7 +173,7 @@ dataset as of the specified date-time.
         print(df.head())
 
 
-**Example 4: Download all new or updated delta-files since a specific date/time.**
+**Example 5: Download all new or updated delta-files since a specific date/time.**
 
 .. code-block:: python
 
@@ -192,7 +192,7 @@ dataset as of the specified date-time.
     print("Download complete.")
 
 
-**Example 5: Download a single, specific historical file.**
+**Example 6: Download a single, specific historical file.**
 
 .. code-block:: python
 
@@ -205,7 +205,7 @@ dataset as of the specified date-time.
     file_path = client.download_file(filename=target_filename)
     print(f"File downloaded to: {file_path}")
 
-**Example 6: Check availability for a specific file-group.**
+**Example 7: Check availability for a specific file-group.**
 
 .. code-block:: python
 
@@ -217,25 +217,6 @@ dataset as of the specified date-time.
 
     # print the earliest file's details
     print(available_files.iloc[-1])
-
-**Example 7: Download all historical full snapshot files (vintages) for JPMaQS.**
-
-Please note:
-    - This is a **VERY LARGE** download, taking 1hr+ and around 1GB/snapshot.
-    - This method is **NOT** recommended for regular use.
-    - This method should **ONLY** be used for audit and archival purposes.
-
-.. code-block:: python
-
-    from macrosynergy.download import DataQueryFileAPIClient
-    client = DataQueryFileAPIClient(out_dir="./jpmaqs_full_snapshots")
-    earliest_date = "20220101" # a date before the earliest available file
-
-    client.download_full_snapshot(
-        since_datetime=earliest_date,
-        include_delta=False,
-        include_metadata=False,
-    )
 
 **Example 8: Load "notification" metadata (missing updates & revisions).**
 
@@ -258,6 +239,26 @@ window) if needed, and return the notifications as pandas DataFrames.
 
         print(missing_df.head())
         print(revisions_df.head())
+
+
+**Example 9: Download all historical full snapshot files (vintages) for JPMaQS.**
+
+Please note:
+    - This is a **VERY LARGE** download, taking 1hr+ and around 1GB/snapshot.
+    - This method is **NOT** recommended for regular use.
+    - This method should **ONLY** be used for audit and archival purposes.
+
+.. code-block:: python
+
+    from macrosynergy.download import DataQueryFileAPIClient
+    client = DataQueryFileAPIClient(out_dir="./jpmaqs_full_snapshots")
+    earliest_date = "20220101" # a date before the earliest available file
+
+    client.download_full_snapshot(
+        since_datetime=earliest_date,
+        include_delta=False,
+        include_metadata=False,
+    )
 
 
 ---
