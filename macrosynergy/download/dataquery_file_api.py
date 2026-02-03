@@ -3550,8 +3550,6 @@ if __name__ == "__main__":
     with DataQueryFileAPIClient(out_dir="./data/jpmaqs-data/") as dq:
         df = dq.download(
             tickers=tickers,
-            to_datetime="2025-03-28",
-            max_last_updated="2025-03-28T23:59:59Z",
             include_file_column=True,
         )
         print(df.head())
