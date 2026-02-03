@@ -1092,7 +1092,10 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
         client.download_full_snapshot(since_datetime=None, show_progress=False)
 
         mock_filter_files.assert_called_once()
-        called_since = mock_filter_files.call_args.kwargs["since_datetime"]
+        if PYTHON_3_8_OR_LATER:
+            called_since = mock_filter_files.call_args.kwargs["since_datetime"]
+        else:
+            called_since = mock_filter_files.call_args[1]["since_datetime"]
         self.assertEqual(called_since, "20230106")
 
     @patch("macrosynergy.download.dataquery_file_api.logger")
