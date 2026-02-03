@@ -1596,7 +1596,6 @@ class DataQueryFileAPIClient(RateLimitedRequester):
         total_time = time.time() - start_time
         logger.info(f"Snapshot download completed in {total_time:.2f} seconds.")
 
-
     def load_data(
         self,
         tickers: Optional[List[str]] = None,
@@ -1695,6 +1694,14 @@ class DataQueryFileAPIClient(RateLimitedRequester):
             Restrict which locally available snapshot/delta files are considered to those
             modified up to this timestamp (inclusive). If None, all locally available files
             are considered.
+
+            Notes:
+            - If `to_datetime` is provided and `max_last_updated` is not, the loader
+              defaults `max_last_updated` to `to_datetime` (interpreting date-only strings
+              as end-of-day). This is important for monthly delta regimes where the
+              covering delta file can be timestamped at month-end (after `to_datetime`),
+              and row-level filtering by `last_updated` is needed to honor the requested
+              data.
         catalog_file : Optional[str]
             Optional path to a local JPMaQS catalog parquet file. If not provided, the
             client will download/validate the latest catalog file for ticker resolution.
@@ -1744,6 +1751,10 @@ class DataQueryFileAPIClient(RateLimitedRequester):
             if datasets_to_download and include_delta_files:
                 datasets_to_download += [f"{ds}_DELTA" for ds in datasets_to_download]
 
+        effective_max_last_updated = max_last_updated
+        if to_datetime is not None and max_last_updated is None:
+            effective_max_last_updated = _normalize_last_updated_cutoff(to_datetime)
+
         warn_if_no_full_snapshots = since_datetime is not None
         return lazy_load_from_parquets(
             files_dir=self.out_dir,
@@ -1752,7 +1763,7 @@ class DataQueryFileAPIClient(RateLimitedRequester):
             start_date=start_date,
             end_date=end_date,
             min_last_updated=min_last_updated,
-            max_last_updated=max_last_updated,
+            max_last_updated=effective_max_last_updated,
             include_delta_files=include_delta_files,
             delta_treatment=delta_treatment,
             dataframe_format=dataframe_format,
@@ -1766,7 +1777,47 @@ class DataQueryFileAPIClient(RateLimitedRequester):
             to_datetime=to_datetime,
         )
 
+    def _get_effective_snapshot_switchover_ts(
+        self, datasets: List[str]
+    ) -> Optional[pd.Timestamp]:
+        """
+        Return the effective (per-request) earliest full-snapshot timestamp.
 
+        Notes
+        -----
+        JPMaQS can remove older full snapshots over time. For a given set of datasets
+        we define the "switchover" as the *latest* of the datasets' earliest currently
+        available full snapshots. If any dataset has no full snapshots at all, returns
+        None.
+        """
+        if not datasets:
+            return None
+
+        # Datasets are passed around as file-group-ids; treat *_DELTA as updates to the
+        # base dataset. Exclude metadata-only datasets.
+        base_datasets = sorted(
+            {
+                str(d).replace("_DELTA", "")
+                for d in datasets
+                if isinstance(d, str) and d and ("_METADATA" not in d.upper())
+            }
+        )
+        base_datasets = [d for d in base_datasets if d != self.catalog_file_group_id]
+        if not base_datasets:
+            return None
+
+        earliest_by_dataset: List[pd.Timestamp] = []
+        for ds in base_datasets:
+            df = self.list_available_files(file_group_id=ds)
+            if df.empty:
+                return None
+            if "file-datetime" not in df.columns:
+                raise InvalidResponseError(
+                    f'Missing "file-datetime" in available-files response for {ds}'
+                )
+            earliest_by_dataset.append(df["file-datetime"].min())
+
+        return max(earliest_by_dataset) if earliest_by_dataset else None
 
     def download(
         self,
@@ -1871,6 +1922,12 @@ class DataQueryFileAPIClient(RateLimitedRequester):
             Download files modified up to this timestamp (inclusive).
             Note: `since_datetime` and `to_datetime` only affect which files are downloaded.
             The returned timeseries is controlled by `start_date`/`end_date`.
+
+            Note for historical ("delta-only") vintages:
+            - If `to_datetime` falls within a month where only monthly delta files exist,
+              the client may expand the download window to the month-end timestamp so the
+              covering delta file is available locally. Row-level filtering is then
+              enforced via `max_last_updated` during the load step.
         skip_download : bool
             If True, do not download snapshot/delta/metadata files and only load from the
             local cache. The catalog is still downloaded/validated. Default is False.
@@ -1919,11 +1976,61 @@ class DataQueryFileAPIClient(RateLimitedRequester):
         if datasets_to_download and include_delta_files:
             datasets_to_download += [f"{ds}_DELTA" for ds in datasets_to_download]
         if not skip_download:
+            # If the user requests a historical vintage (`to_datetime`) that predates the
+            # earliest available full snapshots, JPMaQS data can only be reconstructed by
+            # applying the entire delta history since `JPMAQS_EARLIEST_FILE_DATE`.
+            requires_full_delta_history = False
+            switchover_ts: Optional[pd.Timestamp] = None
+            if to_datetime is not None:
+                validate_dq_timestamp(to_datetime, var_name="to_datetime")
+                to_ts = pd_to_datetime_compat(to_datetime)
+
+                if (
+                    isinstance(to_datetime, str)
+                    and ("T" not in to_datetime)
+                    and (":" not in to_datetime)
+                ):
+                    to_ts = (
+                        to_ts.normalize()
+                        + pd.DateOffset(days=1)
+                        - pd.Timedelta(nanoseconds=1)
+                    )
+
+                earliest_file_ts = pd_to_datetime_compat(JPMAQS_EARLIEST_FILE_DATE)
+                if to_ts < earliest_file_ts:
+                    raise ValueError(
+                        "`to_datetime` is earlier than the earliest supported JPMaQS "
+                        f"file date ({JPMAQS_EARLIEST_FILE_DATE})."
+                    )
+
+                switchover_ts = self._get_effective_snapshot_switchover_ts(
+                    datasets=datasets_to_download
+                )
+                if switchover_ts is None or to_ts < switchover_ts:
+                    requires_full_delta_history = True
+                    if not include_delta_files:
+                        raise ValueError(
+                            "The requested vintage predates the earliest available full "
+                            "snapshots, so `include_delta_files` must be True."
+                        )
+                    logger.info(
+                        "No full snapshots are available for the requested vintage "
+                        f"(to_datetime={to_datetime}, switchover={switchover_ts}); "
+                        f"downloading all delta files since {JPMAQS_EARLIEST_FILE_DATE}."
+                    )
+
             download_since_datetime = (
                 since_datetime or get_current_or_last_business_day().strftime("%Y%m%d")
             )
+            download_to_datetime = to_datetime
+            if requires_full_delta_history and to_datetime is not None:
+                # Monthly delta files can be timestamped at month-end, which can be after
+                # an in-month `to_datetime`. Expand the download window so the covering
+                # month-end delta file is available locally (row-level filtering is done
+                # via `max_last_updated` in the load step).
+                download_to_datetime = _month_end_dq_timestamp(to_datetime)
+                validate_dq_timestamp(download_to_datetime, var_name="to_datetime")
             if to_datetime is not None:
-                validate_dq_timestamp(to_datetime, var_name="to_datetime")
                 since_dt = pd_to_datetime_compat(download_since_datetime)
                 to_dt = pd_to_datetime_compat(to_datetime)
                 if to_dt < since_dt:
@@ -1935,13 +2042,20 @@ class DataQueryFileAPIClient(RateLimitedRequester):
                     )
                     download_since_datetime = new_since
 
+            include_full_snapshots = True
+            effective_since_datetime_for_load = since_datetime
+            if requires_full_delta_history:
+                download_since_datetime = JPMAQS_EARLIEST_FILE_DATE
+                include_full_snapshots = False
+                effective_since_datetime_for_load = None
+
             self.download_full_snapshot(
                 since_datetime=download_since_datetime,
-                to_datetime=to_datetime,
+                to_datetime=download_to_datetime,
                 file_group_ids=datasets_to_download,
                 overwrite=overwrite,
                 show_progress=show_progress,
-                include_full_snapshots=True,
+                include_full_snapshots=include_full_snapshots,
                 include_delta=include_delta_files,
                 include_metadata=include_metadata_files,
             )
@@ -1986,7 +2100,9 @@ class DataQueryFileAPIClient(RateLimitedRequester):
             categorical_dataframe=categorical_dataframe,
             include_delta_files=include_delta_files,
             delta_treatment=delta_treatment,
-            since_datetime=since_datetime,
+            since_datetime=effective_since_datetime_for_load
+            if (not skip_download)
+            else since_datetime,
             to_datetime=to_datetime,
             catalog_file=catalog_file,
             datasets=datasets_to_download,
@@ -2721,18 +2837,113 @@ def _downloaded_files_df(
     return df
 
 
-def _filter_to_latest_files(
+def _is_date_only_string(x: Any) -> bool:
+    """
+    True for date-only strings like "YYYYMMDD" or "YYYY-MM-DD".
+
+    This is used to interpret "date-only" `since_datetime`/`to_datetime` inputs as
+    whole-day windows when selecting files or filtering by `last_updated`.
+    """
+    if not isinstance(x, str):
+        return False
+    return ("T" not in x) and (":" not in x)
+
+
+def _normalize_file_timestamp_cutoff(
+    x: Union[str, pd.Timestamp, datetime.date, datetime.datetime],
+) -> pd.Timestamp:
+    """
+    Normalize a file-vintage cutoff.
+
+    - For date-only strings, interpret as *end of that day* (inclusive).
+    - For datetime-like inputs, keep the exact timestamp.
+    """
+    ts = pd_to_datetime_compat(x)
+    if _is_date_only_string(x):
+        ts = ts.normalize() + pd.DateOffset(days=1) - pd.Timedelta(nanoseconds=1)
+    return ts
+
+
+def _normalize_last_updated_cutoff(
+    x: Union[str, pd.Timestamp, datetime.date, datetime.datetime],
+) -> pd.Timestamp:
+    """
+    Normalize a `last_updated` cutoff.
+
+    - For date-only strings, interpret as *end of that day* (inclusive) so that
+      updates on that date are retained.
+    - For datetime-like inputs, keep the exact timestamp.
+    """
+    return _normalize_file_timestamp_cutoff(x)
+
+
+def _covering_large_delta_timestamp(
+    to_ts: pd.Timestamp, delta_file_timestamps: Sequence[pd.Timestamp]
+) -> Optional[pd.Timestamp]:
+    """
+    For monthly "large delta" regimes, return the first month-end-ish delta timestamp
+    that covers `to_ts`, even if it is after `to_ts`.
+
+    This is needed because the monthly delta file for a given month can be timestamped
+    at month-end (or the previous business day), which may fall *after* a user's
+    requested `to_datetime` within the month. In that case, we still need to load the
+    covering delta file and then filter rows using `max_last_updated <= to_datetime`.
+    """
+    if not delta_file_timestamps:
+        return None
+
+    delta_ts_set = set(delta_file_timestamps)
+    large_delta_ts_all = _large_delta_file_datetimes(as_str=False)
+    if not large_delta_ts_all:
+        return None
+
+    # Candidates are "large delta" timestamps in the same (year, month) at or after to_ts.
+    candidates = [
+        ts
+        for ts in large_delta_ts_all
+        if (ts.year == to_ts.year and ts.month == to_ts.month and ts >= to_ts)
+    ]
+    for ts in sorted(candidates):
+        if ts in delta_ts_set:
+            return ts
+    return None
+
+
+def _month_end_dq_timestamp(
+    x: Union[str, pd.Timestamp, datetime.date, datetime.datetime],
+) -> str:
+    """
+    Return a DataQuery-style timestamp string for month-end 23:59:59 of `x`'s month.
+
+    Used to expand a `to_datetime` download window when monthly delta files are used,
+    so that the covering month-end delta file is included in the download.
+    """
+    ts = pd_to_datetime_compat(x)
+    y, m = int(ts.year), int(ts.month)
+    last_day = calendar.monthrange(y, m)[1]
+    dt = datetime.datetime(y, m, last_day, 23, 59, 59)
+    return dt.strftime("%Y%m%dT%H%M%S")
+
+
+def _select_local_files_for_load(
     files_df: pd.DataFrame,
+    *,
     since_datetime: Optional[Union[str, pd.Timestamp]] = None,
     to_datetime: Optional[Union[str, pd.Timestamp]] = None,
     include_delta_files: bool = True,
-    delta_treatment: str = "all",
     warn_if_no_full_snapshots: bool = False,
 ) -> pd.DataFrame:
     """
-    Reduce a set of local files to:
-      - the latest available full snapshot per dataset (within the optional window), and
-      - delta files that are newer than that snapshot (within the optional window).
+    Single-responsibility helper: choose which local snapshot/delta files to load.
+
+    The selection is per effective dataset ("e-dataset"):
+    - If full snapshots exist for the dataset and at least one snapshot is present in the
+      requested file-vintage window, load the latest snapshot in the window and any delta
+      files newer than that snapshot (also within the window).
+    - If no full snapshots exist at all for the dataset (delta-only history), load *all*
+      available deltas up to the requested vintage. For monthly "large delta" regimes,
+      also include the covering month-end delta file even if it timestamps after
+      `to_datetime` (row-level filtering is handled via `max_last_updated`).
     """
     if files_df.empty:
         return files_df
@@ -2752,102 +2963,162 @@ def _filter_to_latest_files(
     if "file-timestamp" not in df.columns:
         raise ValueError("Expected column 'file-timestamp' in files_df")
 
-    def _is_date_only_string(x: Any) -> bool:
-        if not isinstance(x, str):
-            return False
-        return ("T" not in x) and (":" not in x)
-
     since_ts = (
         pd_to_datetime_compat(since_datetime) if since_datetime is not None else None
     )
     if since_ts is not None and _is_date_only_string(since_datetime):
         since_ts = since_ts.normalize()
-    if to_datetime is not None:
-        to_ts = pd_to_datetime_compat(to_datetime)
-        if _is_date_only_string(to_datetime):
-            to_ts = (
-                to_ts.normalize() + pd.DateOffset(days=1) - pd.Timedelta(nanoseconds=1)
-            )
-    else:
-        to_ts = df["file-timestamp"].max()
 
-    if since_ts is not None and since_ts > to_ts:
-        since_ts, to_ts = to_ts, since_ts
+    vintage_to_ts = (
+        _normalize_file_timestamp_cutoff(to_datetime)
+        if to_datetime is not None
+        else df["file-timestamp"].max()
+    )
 
-    if warn_if_no_full_snapshots and since_ts is not None:
+    # For snapshot-led selection we keep the historical behaviour of treating
+    # (`since_datetime`, `to_datetime`) as an unordered window and swapping if needed.
+    window_since_ts = since_ts
+    window_to_ts = vintage_to_ts
+    if window_since_ts is not None and window_since_ts > window_to_ts:
+        window_since_ts, window_to_ts = window_to_ts, window_since_ts
+
+    earliest_snapshot_ts: Optional[pd.Timestamp] = None
+    if warn_if_no_full_snapshots and window_since_ts is not None:
         is_delta_all = df["filename"].astype(str).str.contains("_DELTA")
         is_metadata_all = df["filename"].astype(str).str.contains("_METADATA")
         snapshots_all = df.loc[~is_delta_all & ~is_metadata_all].copy()
-        earliest_snapshot_ts = (
-            snapshots_all["file-timestamp"].min() if not snapshots_all.empty else None
-        )
+        earliest_snapshot_ts = snapshots_all["file-timestamp"].min()
+        if pd.isna(earliest_snapshot_ts):
+            earliest_snapshot_ts = None
 
-    if since_ts is not None:
-        df = df[df["file-timestamp"].between(since_ts, to_ts)].copy()
-    else:
-        df = df[df["file-timestamp"].le(to_ts)].copy()
+    selected = []
+    for _, g in df.groupby(group_col):
+        if g.empty:
+            continue
 
-    if df.empty:
-        return df
+        is_delta_g = g["filename"].astype(str).str.contains("_DELTA")
+        is_metadata_g = g["filename"].astype(str).str.contains("_METADATA")
+        snapshots_all_g = g.loc[~is_delta_g & ~is_metadata_g].copy()
 
-    is_delta = df["filename"].astype(str).str.contains("_DELTA")
-    is_metadata = df["filename"].astype(str).str.contains("_METADATA")
+        # Delta-only history: no snapshots exist at all for this dataset.
+        if snapshots_all_g.empty:
+            if not include_delta_files:
+                continue
 
-    snapshots = df.loc[~is_delta & ~is_metadata].copy()
-    if snapshots.empty:
-        if warn_if_no_full_snapshots and since_ts is not None and bool(is_delta.any()):
+            deltas_all = g.loc[is_delta_g].copy()
+            if deltas_all.empty:
+                continue
+
+            effective_to_ts = vintage_to_ts
+            if to_datetime is not None:
+                cover_ts = _covering_large_delta_timestamp(
+                    to_ts=vintage_to_ts,
+                    delta_file_timestamps=deltas_all["file-timestamp"].tolist(),
+                )
+                if cover_ts is not None:
+                    effective_to_ts = cover_ts
+
+            deltas_sel = deltas_all[
+                deltas_all["file-timestamp"].le(effective_to_ts)
+            ].copy()
+            selected.append(deltas_sel)
+            continue
+
+        # Windowed candidate set (matches historical behaviour for snapshot-led selection).
+        if window_since_ts is not None:
+            g_window = g[
+                g["file-timestamp"].between(window_since_ts, window_to_ts)
+            ].copy()
+        else:
+            g_window = g[g["file-timestamp"].le(window_to_ts)].copy()
+        if g_window.empty:
+            continue
+
+        is_delta_w = g_window["filename"].astype(str).str.contains("_DELTA")
+        is_metadata_w = g_window["filename"].astype(str).str.contains("_METADATA")
+        snapshots_w = g_window.loc[~is_delta_w & ~is_metadata_w].copy()
+
+        # Snapshot-led selection (preserves the window semantics):
+        if snapshots_w.empty:
+            # No snapshots within the requested window: fall back to deltas in-window (if any).
+            if include_delta_files:
+                selected.append(g_window.loc[is_delta_w].copy())
+            continue
+
+        latest_snapshot_ts = snapshots_w["file-timestamp"].max()
+        snapshots_sel = snapshots_w[
+            snapshots_w["file-timestamp"] == latest_snapshot_ts
+        ].copy()
+        if not include_delta_files:
+            selected.append(snapshots_sel)
+            continue
+
+        deltas_w = g_window.loc[is_delta_w].copy()
+        deltas_sel = deltas_w[deltas_w["file-timestamp"] >= latest_snapshot_ts].copy()
+        selected.append(pd.concat([snapshots_sel, deltas_sel], ignore_index=True))
+
+    out = (
+        pd.concat(selected, ignore_index=True).reset_index(drop=True)
+        if selected
+        else df.iloc[0:0].copy()
+    )
+
+    if out.empty:
+        return out
+
+    if warn_if_no_full_snapshots and window_since_ts is not None:
+        is_delta_out = out["filename"].astype(str).str.contains("_DELTA")
+        is_metadata_out = out["filename"].astype(str).str.contains("_METADATA")
+        snapshots_out = out.loc[~is_delta_out & ~is_metadata_out].copy()
+        if snapshots_out.empty and bool(is_delta_out.any()):
             earliest_snapshot_str = None
-            if earliest_snapshot_ts is not None and not pd.isna(earliest_snapshot_ts):
+            if earliest_snapshot_ts is not None:
                 earliest_snapshot_str = earliest_snapshot_ts.strftime(
                     "%Y-%m-%dT%H:%M:%SZ"
                 )
             else:
                 earliest_snapshot_str = "N/A"
-
             logger.warning(
                 "No full snapshots available in the requested window "
-                f"since={since_ts.strftime('%Y-%m-%dT%H:%M:%SZ')} "
-                f"to={to_ts.strftime('%Y-%m-%dT%H:%M:%SZ')} "
+                f"since={window_since_ts.strftime('%Y-%m-%dT%H:%M:%SZ')} "
+                f"to={window_to_ts.strftime('%Y-%m-%dT%H:%M:%SZ')} "
                 f"earliest_snapshot={earliest_snapshot_str}"
             )
 
-        # only possible to return delta files if no snapshots exist
-        return (
-            df.loc[is_delta].copy().reset_index(drop=True)
-            if include_delta_files
-            else df.iloc[0:0].copy()
-        )
-
-    latest_snapshot_ts = (
-        snapshots.groupby(group_col)["file-timestamp"]
-        .max()
-        .rename("_latest_snapshot_ts")
-    )
-    snapshots = snapshots.merge(
-        latest_snapshot_ts.reset_index(), on=group_col, how="inner"
-    )
-    snapshots = snapshots[
-        snapshots["file-timestamp"] == snapshots["_latest_snapshot_ts"]
-    ].drop(columns="_latest_snapshot_ts")
-
     if not include_delta_files:
-        return snapshots.sort_values(
-            [group_col, "file-timestamp", "filename"]
-        ).reset_index(drop=True)
+        # keep only snapshots
+        is_delta = out["filename"].astype(str).str.contains("_DELTA")
+        is_metadata = out["filename"].astype(str).str.contains("_METADATA")
+        out = out.loc[~is_delta & ~is_metadata].copy()
 
-    deltas = df.loc[is_delta].copy()
-    deltas = deltas.merge(latest_snapshot_ts.reset_index(), on=group_col, how="left")
-
-    deltas = deltas[
-        deltas["_latest_snapshot_ts"].isna()
-        | (deltas["file-timestamp"] >= deltas["_latest_snapshot_ts"])
-    ].drop(columns="_latest_snapshot_ts")
-
-    out = pd.concat([snapshots, deltas], ignore_index=True)
     out = out.sort_values([group_col, "file-timestamp", "filename"]).reset_index(
         drop=True
     )
     return out
+
+
+def _filter_to_latest_files(
+    files_df: pd.DataFrame,
+    since_datetime: Optional[Union[str, pd.Timestamp]] = None,
+    to_datetime: Optional[Union[str, pd.Timestamp]] = None,
+    include_delta_files: bool = True,
+    delta_treatment: str = "all",
+    warn_if_no_full_snapshots: bool = False,
+) -> pd.DataFrame:
+    """
+    Backwards-compatible wrapper around `_select_local_files_for_load()`.
+
+    Historically this function selected the latest full snapshot per dataset (within an
+    optional window) plus any newer deltas. It now also supports "delta-only history"
+    regimes (no full snapshots available), including monthly "large delta" coverage.
+    """
+    return _select_local_files_for_load(
+        files_df,
+        since_datetime=since_datetime,
+        to_datetime=to_datetime,
+        include_delta_files=include_delta_files,
+        warn_if_no_full_snapshots=warn_if_no_full_snapshots,
+    )
 
 
 def lazy_load_from_parquets(
@@ -2880,6 +3151,18 @@ def lazy_load_from_parquets(
     The `datasets` argument applies to
     the "effective dataset" (e-dataset), meaning that delta datasets (those ending with
     `_DELTA`) are treated as updates to their base dataset, not as separate datasets.
+
+    Vintage selection (`to_datetime`)
+    -------------------------------
+    When JPMaQS removes older full snapshots, historical data may only be reconstructible
+    from delta files. In monthly "large delta" regimes, the delta file for a given month
+    is timestamped at month-end (or the previous business day), which can fall *after*
+    an in-month `to_datetime` (e.g., `to_datetime="2025-03-15"`).
+
+    In that case the loader will still select the covering month-end delta file and you
+    should use `max_last_updated <= to_datetime` to exclude updates beyond the requested
+    vintage. `DataQueryFileAPIClient.load_data()` applies this default automatically
+    when `to_datetime` is provided without `max_last_updated`.
     """
     files_dir = Path(files_dir)
     if (not metrics) or (metrics == "all") or ("all" in metrics):
@@ -3265,7 +3548,12 @@ if __name__ == "__main__":
     tickers = [f"{c}_{x}" for c in test_cids for x in test_xcats]
 
     with DataQueryFileAPIClient(out_dir="./data/jpmaqs-data/") as dq:
-        df = dq.download(tickers=tickers, include_file_column=True)
+        df = dq.download(
+            tickers=tickers,
+            to_datetime="2025-03-28",
+            max_last_updated="2025-03-28T23:59:59Z",
+            include_file_column=True,
+        )
         print(df.head())
 
     # with DataQueryFileAPIClient(out_dir="./data/jpmaqs-data/") as dq:
