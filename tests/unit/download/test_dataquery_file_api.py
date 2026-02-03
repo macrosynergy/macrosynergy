@@ -1318,6 +1318,59 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
         expected = pd.Timestamp("2025-03-28T23:59:59.999999999Z")
         self.assertEqual(passed_max, expected)
 
+    @patch.object(DataQueryFileAPIClient, "download")
+    @patch("macrosynergy.download.dataquery_file_api.DataQueryFileAPIOauth")
+    def test_download_as_of_date_only_defaults_to_eod_utc(
+        self, _mock_oauth, mock_download
+    ):
+        client = DataQueryFileAPIClient(
+            client_id="id", client_secret="secret", out_dir=self.test_dir
+        )
+        sentinel = pd.DataFrame({"a": [1]})
+        mock_download.return_value = sentinel
+
+        out = client.download_as_of(
+            tickers=["USD_GROWTH"],
+            as_of_datetime="20250328",
+            show_progress=False,
+            cleanup_old_files_n_days=None,
+        )
+
+        self.assertIs(out, sentinel)
+        if PYTHON_3_8_OR_LATER:
+            kwargs = mock_download.call_args.kwargs
+        else:
+            kwargs = mock_download.call_args[1]
+
+        self.assertEqual(kwargs["to_datetime"], "20250328")
+        self.assertEqual(kwargs["max_last_updated"], "2025-03-28T23:59:59Z")
+        self.assertEqual(kwargs["since_datetime"], "20250328")
+
+    @patch.object(DataQueryFileAPIClient, "download")
+    @patch("macrosynergy.download.dataquery_file_api.DataQueryFileAPIOauth")
+    def test_download_as_of_datetime_preserves_time_component(
+        self, _mock_oauth, mock_download
+    ):
+        client = DataQueryFileAPIClient(
+            client_id="id", client_secret="secret", out_dir=self.test_dir
+        )
+        mock_download.return_value = pd.DataFrame()
+
+        client.download_as_of(
+            tickers=["USD_GROWTH"],
+            as_of_datetime="2025-03-28T12:34:56Z",
+            show_progress=False,
+            cleanup_old_files_n_days=None,
+        )
+
+        if PYTHON_3_8_OR_LATER:
+            kwargs = mock_download.call_args.kwargs
+        else:
+            kwargs = mock_download.call_args[1]
+        self.assertEqual(kwargs["to_datetime"], "2025-03-28T12:34:56Z")
+        self.assertEqual(kwargs["max_last_updated"], "2025-03-28T12:34:56Z")
+        self.assertEqual(kwargs["since_datetime"], "20250328")
+
     @patch("macrosynergy.download.dataquery_file_api.logger")
     @patch.object(DataQueryFileAPIClient, "download_catalog_file")
     @patch.object(DataQueryFileAPIClient, "filter_to_valid_tickers")
@@ -1381,10 +1434,10 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
     @patch.object(DataQueryFileAPIClient, "get_datasets_for_indicators")
     @patch("macrosynergy.download.dataquery_file_api.lazy_load_from_parquets")
     @patch.object(DataQueryFileAPIClient, "download_full_snapshot")
-    @patch("macrosynergy.download.dataquery_file_api.pd.bdate_range", return_value=[0])
+    @patch("pandas.Timestamp.utcnow", return_value=pd.Timestamp("2024-01-02T00:00:00Z"))
     def test_download_calls_cleanup_old_files_when_configured(
         self,
-        _mock_bdate_range,
+        _mock_utcnow,
         _mock_download_full_snapshot,
         mock_lazy_load,
         mock_get_datasets_for_indicators,
@@ -1418,13 +1471,10 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
     @patch.object(DataQueryFileAPIClient, "get_datasets_for_indicators")
     @patch("macrosynergy.download.dataquery_file_api.lazy_load_from_parquets")
     @patch.object(DataQueryFileAPIClient, "download_full_snapshot")
-    @patch(
-        "macrosynergy.download.dataquery_file_api.pd.bdate_range",
-        return_value=list(range(10)),
-    )
-    def test_download_cleanup_old_files_n_days_adjusts_to_since_datetime_business_days(
+    @patch("pandas.Timestamp.utcnow", return_value=pd.Timestamp("2024-01-11T00:00:00Z"))
+    def test_download_cleanup_old_files_n_days_adjusts_to_since_datetime_calendar_days(
         self,
-        _mock_bdate_range,
+        _mock_utcnow,
         _mock_download_full_snapshot,
         mock_lazy_load,
         mock_get_datasets_for_indicators,
@@ -1452,7 +1502,7 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
             )
 
         mock_logger.warning.assert_any_call(
-            "`cleanup_old_files_n_days` is less than the number of business "
+            "`cleanup_old_files_n_days` is less than the number of calendar "
             "days since `since_datetime`, and is being adjusted from 2 to 10."
         )
         mock_cleanup.assert_called_once_with(days_to_keep=10)
