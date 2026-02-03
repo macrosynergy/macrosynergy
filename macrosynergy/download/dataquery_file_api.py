@@ -2064,18 +2064,19 @@ class DataQueryFileAPIClient(RateLimitedRequester):
                     "`cleanup_old_files_n_days` must be an integer or None."
                 )
             if isinstance(cleanup_old_files_n_days, int):
-                n_days_implied = len(
-                    pd.bdate_range(
-                        start=pd.Timestamp(download_since_datetime).date(),
-                        end=pd.Timestamp.utcnow().date(),
-                    )
-                )
+                # `cleanup_old_files()` uses calendar days (Timedelta(days=...)),
+                # so `cleanup_old_files_n_days` must be interpreted as calendar days too.
+                # Using business-day counts here can lead to under-cleaning and, worse,
+                # deleting files that were just downloaded for historical/vintage pulls.
+                since_day = pd_to_datetime_compat(download_since_datetime).normalize()
+                today_day = pd.Timestamp.utcnow().normalize()
+                n_days_implied = max(0, int((today_day - since_day).days))
                 cleanup_old_files_n_days = abs(cleanup_old_files_n_days)
                 if cleanup_old_files_n_days < n_days_implied:
                     old_value = cleanup_old_files_n_days
                     cleanup_old_files_n_days = n_days_implied
                     logger.warning(
-                        "`cleanup_old_files_n_days` is less than the number of business "
+                        "`cleanup_old_files_n_days` is less than the number of calendar "
                         "days since `since_datetime`, and is being adjusted "
                         f"from {old_value} to {cleanup_old_files_n_days}."
                     )
@@ -2106,6 +2107,99 @@ class DataQueryFileAPIClient(RateLimitedRequester):
             to_datetime=to_datetime,
             catalog_file=catalog_file,
             datasets=datasets_to_download,
+        )
+
+    def download_as_of(
+        self,
+        tickers: Optional[List[str]] = None,
+        cids: Optional[List[str]] = None,
+        xcats: Optional[List[str]] = None,
+        metrics: Optional[List[str]] = None,
+        as_of_datetime: str = None,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        include_file_column: bool = False,
+        dataframe_format: str = "qdf",
+        dataframe_type: str = "pandas",
+        categorical_dataframe: bool = True,
+        include_delta_files: bool = True,
+        delta_treatment: str = "latest",
+        show_progress: bool = True,
+        overwrite: bool = False,
+        skip_download: bool = False,
+        cleanup_old_files_n_days: Optional[int] = 5,
+        *args,
+        **kwargs,
+    ) -> Union[pd.DataFrame, pl.DataFrame, pl.LazyFrame]:
+        """
+        Return data "as of" a specific point in time.
+
+        This is a very lightweight wrapper around `download()`: it only translates the
+        intent ("as of") into the correct `download()` arguments:
+          - `to_datetime`: the file-vintage cutoff (which files can be used)
+          - `max_last_updated`: the row-level vintage cutoff (which updates are allowed)
+
+        Notes
+        -----
+        - If `as_of_datetime` is date-only (e.g., "2025-11-12"), it is interpreted as
+          end-of-day UTC (23:59:59Z) for the *row-level* cutoff (`max_last_updated`), and
+          uses the date itself as the *file-vintage* cutoff (`to_datetime="YYYYMMDD"`).
+          If you want an intraday vintage, pass an explicit datetime string with timezone
+          (e.g., "2025-11-12T06:30:00Z").
+        - This wrapper sets `since_datetime` to the as-of date (UTC), to ensure the relevant
+          snapshot/delta files for that day are downloaded into an empty cache without relying
+          on the "today" default.
+        """
+        if args:
+            raise TypeError(
+                "download_as_of() only accepts keyword arguments (unexpected positional arguments)."
+            )
+        if as_of_datetime is None:
+            raise ValueError("`as_of_datetime` must be provided.")
+
+        validate_dq_timestamp(as_of_datetime, var_name="as_of_datetime")
+
+        as_of_ts = pd_to_datetime_compat(as_of_datetime)
+        as_of_day = as_of_ts.normalize()
+
+        if _is_date_only_string(as_of_datetime):
+            # Date-only: interpret as the full day (end-of-day) for the row-level cutoff,
+            # but use the date itself as the file-vintage cutoff.
+            to_datetime_str = as_of_day.strftime("%Y%m%d")
+            max_last_updated_str = (
+                as_of_day + pd.DateOffset(days=1) - pd.Timedelta(seconds=1)
+            ).strftime("%Y-%m-%dT%H:%M:%SZ")
+        else:
+            # Datetime: treat as a precise vintage.
+            to_datetime_str = as_of_ts.strftime("%Y-%m-%dT%H:%M:%SZ")
+            max_last_updated_str = to_datetime_str
+
+        # Download window start: use the as-of date (not "today") so an empty cache can
+        # still download the relevant file-vintage for that day.
+        since_str = as_of_day.strftime("%Y%m%d")
+
+        # Main driver remains `self.download()`; keep logic out of this wrapper.
+        return self.download(
+            tickers=tickers,
+            cids=cids,
+            xcats=xcats,
+            metrics=metrics,
+            start_date=start_date,
+            end_date=end_date,
+            max_last_updated=max_last_updated_str,
+            include_file_column=include_file_column,
+            dataframe_format=dataframe_format,
+            dataframe_type=dataframe_type,
+            categorical_dataframe=categorical_dataframe,
+            include_delta_files=include_delta_files,
+            delta_treatment=delta_treatment,
+            show_progress=show_progress,
+            overwrite=overwrite,
+            since_datetime=since_str,
+            to_datetime=to_datetime_str,
+            skip_download=skip_download,
+            cleanup_old_files_n_days=cleanup_old_files_n_days,
+            **kwargs,
         )
 
 
@@ -3244,14 +3338,24 @@ def lazy_load_from_parquets(
             else "N/A"
         )
         extra_hint = ""
+        cache_hint = (
+            f"Local cache scanned: '{files_dir.resolve()}'. "
+            f"Found {total_parquets} parquet file(s) total."
+        )
         if total_parquets > 0 and total_data_parquets == 0:
             extra_hint = (
                 " Found parquet file(s), but they appear to be metadata/catalog only "
                 "(no data snapshot/delta files)."
             )
         raise FileNotFoundError(
-            "No JPMaQS data snapshot/delta parquet files were found to load for the "
-            f"requested selection (datasets={datasets_str}).{extra_hint} "
+            "No JPMaQS data snapshot/delta parquet files were found in the local cache "
+            f"to load for the requested selection (datasets={datasets_str}).{extra_hint} "
+            f"{cache_hint} "
+            "This is a local-cache issue (not necessarily a DataQuery availability issue). "
+            "Common causes: only metadata files were downloaded for the selected vintage, "
+            "or cache cleanup removed older files. "
+            "If you are making a historical/vintage request, try setting "
+            "`cleanup_old_files_n_days=None`. "
             "JPMaQS data files are published on business days only (the catalog is daily). "
             f"Today (UTC) is {today_utc.date()}; latest business day is {last_bd.date()}. "
             "Try running `download()` again (with `skip_download=False`) or set "
