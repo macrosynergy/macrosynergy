@@ -21,6 +21,7 @@ from macrosynergy.download.dataquery_file_api import (
     DownloadError,
     InvalidResponseError,
     DQ_FILE_API_SCOPE,
+    JPMAQS_EARLIEST_FILE_DATE,
     JPMAQS_DATASET_THEME_MAPPING,
 )
 
@@ -1221,6 +1222,101 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
         else:
             called_since = mock_download_full_snapshot.call_args[1]["since_datetime"]
         self.assertEqual(called_since, "20230106")
+
+    @patch.object(DataQueryFileAPIClient, "load_data")
+    @patch.object(DataQueryFileAPIClient, "download_full_snapshot")
+    @patch.object(DataQueryFileAPIClient, "filter_to_valid_tickers")
+    @patch.object(DataQueryFileAPIClient, "download_catalog_file")
+    @patch.object(DataQueryFileAPIClient, "get_datasets_for_indicators")
+    @patch.object(DataQueryFileAPIClient, "list_available_files")
+    def test_download_historical_to_datetime_bootstraps_full_delta_history(
+        self,
+        mock_list_available_files,
+        mock_get_datasets_for_indicators,
+        mock_download_catalog_file,
+        mock_filter_to_valid_tickers,
+        mock_download_full_snapshot,
+        mock_load_data,
+    ):
+        client = DataQueryFileAPIClient(
+            client_id="id", client_secret="secret", out_dir=self.test_dir
+        )
+        mock_download_catalog_file.return_value = (
+            "JPMAQS_METADATA_CATALOG_20230101.parquet"
+        )
+        mock_filter_to_valid_tickers.return_value = ["USD_GROWTH"]
+        mock_get_datasets_for_indicators.return_value = ["JPMAQS_GENERIC_RETURNS"]
+
+        # Full snapshots exist, but only from a later date onward.
+        mock_list_available_files.return_value = pd.DataFrame(
+            {
+                "file-datetime": [
+                    pd.Timestamp("2025-06-02T00:00:00Z"),
+                    pd.Timestamp("2025-06-03T00:00:00Z"),
+                ]
+            }
+        )
+
+        sentinel = pd.DataFrame({"a": [1]})
+        mock_load_data.return_value = sentinel
+
+        out = client.download(
+            tickers=["USD_GROWTH"],
+            to_datetime="20250328",
+            show_progress=False,
+            cleanup_old_files_n_days=None,
+        )
+
+        self.assertIs(out, sentinel)
+        if PYTHON_3_8_OR_LATER:
+            kwargs = mock_download_full_snapshot.call_args.kwargs
+            self.assertEqual(kwargs["since_datetime"], JPMAQS_EARLIEST_FILE_DATE)
+            self.assertEqual(kwargs["to_datetime"], "20250331T235959")
+            self.assertFalse(kwargs["include_full_snapshots"])
+
+            load_kwargs = mock_load_data.call_args.kwargs
+            self.assertIsNone(load_kwargs["since_datetime"])
+        else:
+            kwargs = mock_download_full_snapshot.call_args[1]
+            self.assertEqual(kwargs["since_datetime"], JPMAQS_EARLIEST_FILE_DATE)
+            self.assertEqual(kwargs["to_datetime"], "20250331T235959")
+            self.assertFalse(kwargs["include_full_snapshots"])
+
+            load_kwargs = mock_load_data.call_args[1]
+            self.assertIsNone(load_kwargs["since_datetime"])
+
+    @patch("macrosynergy.download.dataquery_file_api.lazy_load_from_parquets")
+    @patch.object(DataQueryFileAPIClient, "download_catalog_file")
+    @patch.object(DataQueryFileAPIClient, "filter_to_valid_tickers")
+    @patch.object(DataQueryFileAPIClient, "get_datasets_for_indicators")
+    def test_load_data_defaults_max_last_updated_from_to_datetime_date_only(
+        self,
+        mock_get_datasets_for_indicators,
+        mock_filter_to_valid_tickers,
+        mock_download_catalog_file,
+        mock_lazy_load,
+    ):
+        client = DataQueryFileAPIClient(
+            client_id="id", client_secret="secret", out_dir=self.test_dir
+        )
+        mock_download_catalog_file.return_value = (
+            "JPMAQS_METADATA_CATALOG_20230101.parquet"
+        )
+        mock_filter_to_valid_tickers.return_value = ["USD_GROWTH"]
+        mock_get_datasets_for_indicators.return_value = ["JPMAQS_GENERIC_RETURNS"]
+        mock_lazy_load.return_value = pd.DataFrame()
+
+        client.load_data(tickers=["USD_GROWTH"], to_datetime="20250328")
+
+        if PYTHON_3_8_OR_LATER:
+            kwargs = mock_lazy_load.call_args.kwargs
+            passed_max = kwargs["max_last_updated"]
+        else:
+            kwargs = mock_lazy_load.call_args[1]
+            passed_max = kwargs["max_last_updated"]
+
+        expected = pd.Timestamp("2025-03-28T23:59:59.999999999Z")
+        self.assertEqual(passed_max, expected)
 
     @patch("macrosynergy.download.dataquery_file_api.logger")
     @patch.object(DataQueryFileAPIClient, "download_catalog_file")

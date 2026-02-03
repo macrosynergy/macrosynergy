@@ -14,6 +14,7 @@ from macrosynergy.download.dataquery_file_api import (
     _list_downloaded_files,
     _downloaded_files_df,
     _filter_to_latest_files,
+    _select_local_files_for_load,
     lazy_load_from_parquets,
     _ensure_columns,
     _to_output_schema,
@@ -197,6 +198,132 @@ class TestLazyLoad(unittest.TestCase):
         self.assertIn("DATASET2_20240103.parquet", filenames)
         # Delta is older than the latest snapshot for DATASET1 and should not be selected.
         self.assertIn("DATASET1_DELTA_20240102T010101.parquet", filenames)
+
+    def test_select_local_files_for_load_includes_covering_month_end_large_delta(self):
+        # Delta-only history (no snapshots). JPMaQS monthly "large delta" files are
+        # timestamped at month-end (or the previous business day) 23:59:59, which can be
+        # after an in-month `to_datetime` request.
+        df = pd.DataFrame(
+            {
+                "path": [
+                    self.tmpdir
+                    / "JPMAQS_GENERIC_RETURNS_DELTA_20240229T235959.parquet",
+                    # 2024-03-31 is a Sunday, so "previous business day" is 2024-03-29.
+                    self.tmpdir
+                    / "JPMAQS_GENERIC_RETURNS_DELTA_20240329T235959.parquet",
+                ],
+                "filename": [
+                    "JPMAQS_GENERIC_RETURNS_DELTA_20240229T235959.parquet",
+                    "JPMAQS_GENERIC_RETURNS_DELTA_20240329T235959.parquet",
+                ],
+                "dataset": [
+                    "JPMAQS_GENERIC_RETURNS_DELTA",
+                    "JPMAQS_GENERIC_RETURNS_DELTA",
+                ],
+                "e-dataset": ["JPMAQS_GENERIC_RETURNS", "JPMAQS_GENERIC_RETURNS"],
+                "file-timestamp": [
+                    pd.Timestamp("2024-02-29T23:59:59Z"),
+                    pd.Timestamp("2024-03-29T23:59:59Z"),
+                ],
+            }
+        )
+
+        out = _select_local_files_for_load(
+            df,
+            since_datetime="20240320",  # should be ignored for delta-only history
+            to_datetime="20240315",
+            include_delta_files=True,
+        )
+
+        self.assertIn(
+            "JPMAQS_GENERIC_RETURNS_DELTA_20240329T235959.parquet",
+            out["filename"].tolist(),
+        )
+        self.assertIn(
+            "JPMAQS_GENERIC_RETURNS_DELTA_20240229T235959.parquet",
+            out["filename"].tolist(),
+        )
+
+    def test_select_local_files_for_load_prefers_earliest_covering_large_delta_when_multiple(
+        self,
+    ):
+        # If both (prev business day) and (month-end) delta files exist for the same month,
+        # selection should include the earliest timestamp that still covers `to_datetime`.
+        df = pd.DataFrame(
+            {
+                "path": [
+                    self.tmpdir
+                    / "JPMAQS_GENERIC_RETURNS_DELTA_20240329T235959.parquet",
+                    self.tmpdir
+                    / "JPMAQS_GENERIC_RETURNS_DELTA_20240331T235959.parquet",
+                ],
+                "filename": [
+                    "JPMAQS_GENERIC_RETURNS_DELTA_20240329T235959.parquet",
+                    "JPMAQS_GENERIC_RETURNS_DELTA_20240331T235959.parquet",
+                ],
+                "dataset": [
+                    "JPMAQS_GENERIC_RETURNS_DELTA",
+                    "JPMAQS_GENERIC_RETURNS_DELTA",
+                ],
+                "e-dataset": ["JPMAQS_GENERIC_RETURNS", "JPMAQS_GENERIC_RETURNS"],
+                "file-timestamp": [
+                    pd.Timestamp("2024-03-29T23:59:59Z"),
+                    pd.Timestamp("2024-03-31T23:59:59Z"),
+                ],
+            }
+        )
+
+        out = _select_local_files_for_load(
+            df,
+            to_datetime="20240315",
+            include_delta_files=True,
+        )
+
+        filenames = out["filename"].tolist()
+        self.assertIn("JPMAQS_GENERIC_RETURNS_DELTA_20240329T235959.parquet", filenames)
+        self.assertNotIn(
+            "JPMAQS_GENERIC_RETURNS_DELTA_20240331T235959.parquet", filenames
+        )
+
+    def test_select_local_files_for_load_does_not_include_future_month_large_delta(
+        self,
+    ):
+        # A future month's large delta should not be pulled in for a `to_datetime` in an earlier month.
+        df = pd.DataFrame(
+            {
+                "path": [
+                    self.tmpdir
+                    / "JPMAQS_GENERIC_RETURNS_DELTA_20240329T235959.parquet",
+                    self.tmpdir
+                    / "JPMAQS_GENERIC_RETURNS_DELTA_20240430T235959.parquet",
+                ],
+                "filename": [
+                    "JPMAQS_GENERIC_RETURNS_DELTA_20240329T235959.parquet",
+                    "JPMAQS_GENERIC_RETURNS_DELTA_20240430T235959.parquet",
+                ],
+                "dataset": [
+                    "JPMAQS_GENERIC_RETURNS_DELTA",
+                    "JPMAQS_GENERIC_RETURNS_DELTA",
+                ],
+                "e-dataset": ["JPMAQS_GENERIC_RETURNS", "JPMAQS_GENERIC_RETURNS"],
+                "file-timestamp": [
+                    pd.Timestamp("2024-03-29T23:59:59Z"),
+                    pd.Timestamp("2024-04-30T23:59:59Z"),
+                ],
+            }
+        )
+
+        out = _select_local_files_for_load(
+            df,
+            to_datetime="20240315",
+            include_delta_files=True,
+        )
+
+        filenames = out["filename"].tolist()
+        self.assertIn("JPMAQS_GENERIC_RETURNS_DELTA_20240329T235959.parquet", filenames)
+        self.assertNotIn(
+            "JPMAQS_GENERIC_RETURNS_DELTA_20240430T235959.parquet", filenames
+        )
 
     @patch("macrosynergy.download.dataquery_file_api.logger")
     def test_filter_to_latest_files_warns_when_window_has_only_deltas(
