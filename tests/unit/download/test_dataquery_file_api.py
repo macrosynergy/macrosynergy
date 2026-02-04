@@ -1504,11 +1504,8 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
                 show_progress=False,
             )
 
-        mock_logger.warning.assert_any_call(
-            "`cleanup_old_files_n_days` is less than the number of calendar "
-            "days since `since_datetime`, and is being adjusted from 2 to 10."
-        )
-        mock_cleanup.assert_called_once_with(days_to_keep=10)
+        mock_logger.warning.assert_not_called()
+        mock_cleanup.assert_called_once_with(days_to_keep=2)
 
     @patch("macrosynergy.download.dataquery_file_api.logger")
     @patch.object(DataQueryFileAPIClient, "download_catalog_file")

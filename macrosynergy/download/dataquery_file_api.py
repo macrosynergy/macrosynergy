@@ -1864,7 +1864,7 @@ class DataQueryFileAPIClient(RateLimitedRequester):
         since_datetime: Optional[str] = None,
         to_datetime: Optional[str] = None,
         skip_download: bool = False,
-        cleanup_old_files_n_days: Optional[int] = 5,
+        cleanup_old_files_n_days: Optional[int] = None,
     ) -> Union[pd.DataFrame, pl.DataFrame, pl.LazyFrame]:
         """
         Download JPMaQS files into the local cache and load the requested timeseries.
@@ -1958,7 +1958,7 @@ class DataQueryFileAPIClient(RateLimitedRequester):
             If set to an integer value, deletes files older than this number of days
             from the local cache after the download is complete. This integer value is
             passed to `cleanup_old_files()`. If None, no cleanup is performed.
-            Default is 5 (days).
+            Default is None.
 
         Returns
         -------
@@ -2087,22 +2087,7 @@ class DataQueryFileAPIClient(RateLimitedRequester):
                     "`cleanup_old_files_n_days` must be an integer or None."
                 )
             if isinstance(cleanup_old_files_n_days, int):
-                # `cleanup_old_files()` uses calendar days (Timedelta(days=...)),
-                # so `cleanup_old_files_n_days` must be interpreted as calendar days too.
-                # Using business-day counts here can lead to under-cleaning and, worse,
-                # deleting files that were just downloaded for historical/vintage pulls.
-                since_day = pd_to_datetime_compat(download_since_datetime).normalize()
-                today_day = pd.Timestamp.utcnow().normalize()
-                n_days_implied = max(0, int((today_day - since_day).days))
                 cleanup_old_files_n_days = abs(cleanup_old_files_n_days)
-                if cleanup_old_files_n_days < n_days_implied:
-                    old_value = cleanup_old_files_n_days
-                    cleanup_old_files_n_days = n_days_implied
-                    logger.warning(
-                        "`cleanup_old_files_n_days` is less than the number of calendar "
-                        "days since `since_datetime`, and is being adjusted "
-                        f"from {old_value} to {cleanup_old_files_n_days}."
-                    )
                 self.cleanup_old_files(days_to_keep=cleanup_old_files_n_days)
 
         if skip_download and isinstance(cleanup_old_files_n_days, int):
@@ -2150,7 +2135,7 @@ class DataQueryFileAPIClient(RateLimitedRequester):
         show_progress: bool = True,
         overwrite: bool = False,
         skip_download: bool = False,
-        cleanup_old_files_n_days: Optional[int] = 5,
+        cleanup_old_files_n_days: Optional[int] = None,
         *args,
         **kwargs,
     ) -> Union[pd.DataFrame, pl.DataFrame, pl.LazyFrame]:
