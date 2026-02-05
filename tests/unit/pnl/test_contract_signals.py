@@ -123,7 +123,7 @@ class TestContractSignals(unittest.TestCase):
         bad_args["df_wide"].loc[:, :] = 1
         bad_args["hscales"] = [1, 1]
         wide_df = _apply_hedge_ratios(**bad_args)
-        self.assertTrue(np.all(wide_df.values == len(self.cids)))
+        self.assertTrue(np.all(wide_df.values == -len(self.cids)))
 
         bad_args = good_args.copy()
         bad_args["df_wide"].loc[:, :] = 1
@@ -136,7 +136,7 @@ class TestContractSignals(unittest.TestCase):
         )
         self.assertTrue(len(nz_tickers) == 1)
         self.assertTrue(nz_tickers[0] == "USD_EQ_CSIG")
-        self.assertTrue(np.all(wide_df["USD_EQ_CSIG"].values == -5))
+        self.assertTrue(np.all(wide_df["USD_EQ_CSIG"].values == 5))
 
     def test_apply_hedge_ratios_with_timeseries_scales(self):
         test_df = self._testDF()
@@ -176,7 +176,7 @@ class TestContractSignals(unittest.TestCase):
                 ).fillna(0.0)
                 expected += contrib
 
-            self.assertTrue(np.allclose(wide_df[basket_pos].values, expected.values))
+            self.assertTrue(np.allclose(wide_df[basket_pos].values, -expected.values))
 
     def test_add_hedged_signals(self):
         dfcs = qdf_to_ticker_df(
