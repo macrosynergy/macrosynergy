@@ -29,7 +29,6 @@ def _check_scaling_args(
     hscales: Optional[List[Union[Number, str]]] = None,
     hratios: Optional[str] = None,
 ) -> Tuple[Any, Any, Any, Any, Any]:
-
     ## Check cscales and csigns
     if cscales is not None:
         # check that the number of scales is the same as the number of ctypes
@@ -202,7 +201,6 @@ def _apply_hedge_ratios(
     hscales: List[Union[Number, str]],
     hratios: str,
 ) -> pd.DataFrame:
-
     # check if the CID_SIG is in the dataframe
     expc_cid_sigs: List[str] = [f"{cx}_{sig}" for cx in cids]
     expc_cid_hr: List[str] = [f"{cx}_{hratios}" for cx in cids]
@@ -237,6 +235,9 @@ def _apply_hedge_ratios(
                 hb_hratio: pd.Series = df_wide[_cid + "_" + hscales[hb_ix]]
             else:
                 hb_hratio: Number = hscales[hb_ix]
+
+            # Flip the sign of the hedge ratio (to preserve hedge direction)
+            hb_hratio: Union[Number, pd.Series] = -1 * hb_hratio
 
             # Add the basket position to the exisitng basket_pos column in the df
             _posx: pd.Series = df_wide[cid_sig] * df_wide[cid_hr] * hb_hratio
@@ -327,7 +328,7 @@ def contract_signals(
         `csigns` must be of the same length as `ctypes` and `cscales`.
     hbasket : List[str]
         list of contract identifiers in the format "<cid>_<ctype>" that serve as
-        constituents of a hedging basket, if one is used.    
+        constituents of a hedging basket, if one is used.
     hscales : List[str|float]
         list of scaling factors (weights) for the basket. These can be either a list of
         floats or a list of category tickers that serve as basis of translation. The former
