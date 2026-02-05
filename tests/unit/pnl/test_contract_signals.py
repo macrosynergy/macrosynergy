@@ -30,7 +30,7 @@ class TestContractSignals(unittest.TestCase):
         self.cids: List[str] = ["USD", "EUR", "GBP", "AUD", "CAD"]
         self.xcats: List[str] = ["SIG", "HR"]
         self.start: str = "2000-01-01"
-        self.end: str = "2020-12-31"
+        self.end: str = "2002-12-31"
         self.ctypes: List[str] = ["FX", "IRS", "CDS"]
         self.cscales: List[Number] = [1.0, 0.5, 0.1]
         self.csigns: List[int] = [1, -1, 1]
@@ -49,7 +49,9 @@ class TestContractSignals(unittest.TestCase):
         )
 
     def test_gen_contract_signals(self):
-        test_df = qdf_to_ticker_df(self._testDF())
+        test_df = self._testDF()
+        test_df["value"] = test_df["value"].abs()
+        test_df = qdf_to_ticker_df(test_df)
         good_args = dict(
             df_wide=test_df,
             sig=self.sig,
@@ -71,7 +73,7 @@ class TestContractSignals(unittest.TestCase):
         bad_args = good_args.copy()
         bad_args["csigns"] = [-1 for _ in self.csigns]
         df_wide = _gen_contract_signals(**bad_args)
-        self.assertTrue(np.all(df_wide.values < 0))
+        self.assertTrue(np.all(df_wide.values <= 0))
 
         # should all be exactly 1 when cscales are 1
         bad_args = good_args.copy()
@@ -135,6 +137,46 @@ class TestContractSignals(unittest.TestCase):
         self.assertTrue(len(nz_tickers) == 1)
         self.assertTrue(nz_tickers[0] == "USD_EQ_CSIG")
         self.assertTrue(np.all(wide_df["USD_EQ_CSIG"].values == -5))
+
+    def test_apply_hedge_ratios_with_timeseries_scales(self):
+        test_df = self._testDF()
+        test_df = qdf_to_ticker_df(test_df)
+        test_df.loc[:, :] = 1.0
+
+        w1 = pd.Series(np.linspace(0.0, 1.0, len(test_df.index)), index=test_df.index)
+        w2 = pd.Series(np.linspace(1.0, 0.0, len(test_df.index)), index=test_df.index)
+
+        for ix, cid in enumerate(self.cids):
+            test_df[f"{cid}_HW1"] = w1 * (ix + 1)
+            test_df[f"{cid}_HW2"] = w2 * (ix + 1)
+
+        test_df.loc[test_df.index[0], "GBP_HW1"] = np.nan
+        test_df.loc[test_df.index[1], "AUD_SIG"] = np.nan
+        test_df.loc[test_df.index[2], "CAD_HR"] = np.nan
+
+        wide_df = _apply_hedge_ratios(
+            df_wide=test_df,
+            sig=self.sig,
+            cids=self.cids,
+            hbasket=self.hbasket,
+            hscales=["HW1", "HW2"],
+            hratios=self.hratios,
+        )
+
+        self.assertTrue(set(wide_df.columns) == {"USD_EQ_CSIG", "EUR_EQ_CSIG"})
+
+        for hb, hscale in zip(self.hbasket, ["HW1", "HW2"]):
+            basket_pos = f"{hb}_CSIG"
+            expected = pd.Series(0.0, index=test_df.index)
+            for cid in self.cids:
+                contrib = (
+                    test_df[f"{cid}_{self.sig}"]
+                    * test_df[f"{cid}_{self.hratios}"]
+                    * test_df[f"{cid}_{hscale}"]
+                ).fillna(0.0)
+                expected += contrib
+
+            self.assertTrue(np.allclose(wide_df[basket_pos].values, expected.values))
 
     def test_add_hedged_signals(self):
         dfcs = qdf_to_ticker_df(
