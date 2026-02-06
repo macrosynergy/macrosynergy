@@ -3034,7 +3034,6 @@ class FileSelector:
         self,
         api_files_df: Optional[pd.DataFrame],
         local_files_df: Optional[pd.DataFrame],
-        *,
         file_name_col: str = "file-name",
         tickers: Optional[List[str]] = None,
         catalog_file: Optional[Union[str, Path]] = None,
@@ -3080,12 +3079,14 @@ class FileSelector:
         self.datasets_for_tickers: List[str] = self._resolve_datasets_for_tickers()
 
         self._dedupe_inventories()
-        self.merged_df = self.api_files_df.merge(
+        self.files_df = self.api_files_df.merge(
             self.local_files_df,
             on=self.file_name_col,
             how="outer",
             suffixes=("_api", "_local"),
         )
+        # Backwards compatible alias (internal / not user-facing).
+        self.merged_df = self.files_df
 
     def _dedupe_inventories(self) -> None:
         for attr in ("api_files_df", "local_files_df"):
@@ -3153,19 +3154,6 @@ class FileSelector:
         )
         return sorted(set(ds))
 
-    def _filter_to_datasets(self, df: pd.DataFrame) -> pd.DataFrame:
-        if df.empty or not self.datasets_for_tickers:
-            return df
-        if "e-dataset" in df.columns:
-            eds = df["e-dataset"].astype(str)
-        elif "dataset" in df.columns:
-            eds = df["dataset"].astype(str).str.replace(r"_DELTA$", "", regex=True)
-        else:
-            base = df[self.file_name_col].astype(str).str.split(".", n=1).str[0]
-            ds = base.str.rsplit("_", n=1).str[0]
-            eds = ds.str.replace(r"_DELTA$", "", regex=True)
-        return df[eds.isin(self.datasets_for_tickers)].copy()
-
     def _as_local_like_df(self, df: pd.DataFrame, *, source: str) -> pd.DataFrame:
         if df.empty:
             return df.copy()
@@ -3193,12 +3181,14 @@ class FileSelector:
                 ts_str = base.str.rsplit("_", n=1).str[-1]
                 out["file-timestamp"] = pd_to_datetime_compat(ts_str, utc=True)
 
+        out = out[out["file-timestamp"].notna()].copy()
+        if self.datasets_for_tickers:
+            out = out[out["e-dataset"].isin(self.datasets_for_tickers)].copy()
+
         return out
 
     def select_files_for_download(
         self,
-        *,
-        purpose: str = "load",
         overwrite: bool = False,
         since_datetime: Optional[Union[str, pd.Timestamp]] = None,
         to_datetime: Optional[Union[str, pd.Timestamp]] = None,
@@ -3206,85 +3196,73 @@ class FileSelector:
         warn_if_no_full_snapshots: bool = False,
         last_modified_col: str = "last-modified",
     ) -> List[str]:
-        purpose = str(purpose).strip().lower()
-        api_df = self._filter_to_datasets(self.api_files_df)
-        local_df = self._filter_to_datasets(self.local_files_df)
-        if api_df.empty:
+        """Select API file-name(s) required for a load vintage that are missing/outdated locally."""
+        api_like = self._as_local_like_df(self.api_files_df, source="api")
+        if api_like.empty:
             return []
 
-        if purpose == "load":
-            api_like = self._as_local_like_df(api_df, source="api")
-            selected_api = _select_local_files_for_load(
-                api_like,
-                since_datetime=since_datetime,
-                to_datetime=to_datetime,
-                include_delta_files=include_delta_files,
-                warn_if_no_full_snapshots=warn_if_no_full_snapshots,
-            )
-            required = set(selected_api["filename"].astype(str).tolist())
-            if overwrite:
-                return sorted(required)
+        selected_api = _select_local_files_for_load(
+            api_like,
+            since_datetime=since_datetime,
+            to_datetime=to_datetime,
+            include_delta_files=include_delta_files,
+            warn_if_no_full_snapshots=warn_if_no_full_snapshots,
+        )
+        required = set(selected_api["filename"].astype(str).tolist())
+        if not required:
+            return []
+        if overwrite:
+            return sorted(required)
 
-            if local_df.empty:
-                return sorted(required)
-
-            local_has = local_df.copy()
-            if "path" in local_has.columns:
-                local_has = local_has[
-                    local_has["path"].notna()
-                    & local_has["path"].astype(str).str.len().gt(0)
-                ]
-            present = set(local_has[self.file_name_col].astype(str).tolist())
-            return sorted(required - present)
-
-        api_names = set(api_df[self.file_name_col].astype(str).tolist())
-        local_names = (
-            set(local_df[self.file_name_col].astype(str).tolist())
-            if not local_df.empty
+        local = self.local_files_df.copy()
+        if (not local.empty) and ("path" in local.columns):
+            local = local[
+                local["path"].notna() & local["path"].astype(str).str.len().gt(0)
+            ]
+            local = local[local["path"].apply(lambda p: Path(str(p)).is_file())]
+        present = (
+            set(local[self.file_name_col].astype(str).tolist())
+            if not local.empty
             else set()
         )
-        names = set(api_names - local_names)
+        to_download = set(required - present)
 
         if (
-            (last_modified_col in api_df.columns)
-            and (not local_df.empty)
-            and (last_modified_col in local_df.columns)
+            (last_modified_col in self.api_files_df.columns)
+            and (not self.local_files_df.empty)
+            and (last_modified_col in self.local_files_df.columns)
         ):
-            a = api_df.set_index(self.file_name_col)[last_modified_col]
-            l = local_df.set_index(self.file_name_col)[last_modified_col]
-            common = a.index.intersection(l.index)
+            adf = self.api_files_df.set_index(self.file_name_col)[last_modified_col]
+            ldf = self.local_files_df.set_index(self.file_name_col)[last_modified_col]
+            common = adf.index.intersection(ldf.index).intersection(list(required))
             if len(common) > 0:
-                newer = common[a.loc[common] > l.loc[common]]
-                names |= set(map(str, newer.tolist()))
+                updated = common[adf.loc[common] > ldf.loc[common]]
+                to_download |= set(map(str, updated.tolist()))
 
-        return sorted(names)
+        return sorted(to_download)
 
     def select_files_for_load(
         self,
-        *,
         since_datetime: Optional[Union[str, pd.Timestamp]] = None,
         to_datetime: Optional[Union[str, pd.Timestamp]] = None,
         include_delta_files: bool = True,
         warn_if_no_full_snapshots: bool = False,
     ) -> pd.DataFrame:
-        """Return the subset of local snapshot/delta files to load."""
+        """Select local snapshot/delta files to load from disk (drops rows without a valid file `path`)."""
         if self.local_files_df.empty:
             return self.local_files_df.copy()
 
-        local_df = self._filter_to_datasets(self.local_files_df)
-        if local_df.empty:
-            return local_df
+        if "path" not in self.local_files_df.columns:
+            return pd.DataFrame()
 
-        if "path" not in local_df.columns:
-            return local_df.iloc[0:0].copy()
-
+        local_df = self.local_files_df.copy()
         local_df = local_df[
             local_df["path"].notna() & local_df["path"].astype(str).str.len().gt(0)
-        ].copy()
+        ]
+        local_df = local_df[local_df["path"].apply(lambda p: Path(str(p)).is_file())]
+        local_df = self._as_local_like_df(local_df, source="local")
         if local_df.empty:
             return local_df
-
-        local_df = self._as_local_like_df(local_df, source="local")
 
         return _select_local_files_for_load(
             local_df,
