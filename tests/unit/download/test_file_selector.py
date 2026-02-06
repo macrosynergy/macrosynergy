@@ -4,52 +4,135 @@ from pathlib import Path
 
 import pandas as pd
 
-from macrosynergy.download.dataquery_file_api import FileSelector, JPMAQS_DATASET_THEME_MAPPING
-
+from macrosynergy.download.dataquery_file_api import (
+    FileSelector,
+    JPMAQS_DATASET_THEME_MAPPING,
+)
 
 """
-Every day JPMaQS publish all data as multiple parquet datasets and related metadata files.
+JPMaQS publishes data as multiple parquet datasets plus related metadata files.
 
-All data files share the common schema of:
+All data files share a common schema:
+
+```
 - real_date: date
 - ticker: string
 - value: float
 - grading: float
 - eop_lag: float
 - mop_lag: float
-- last_updated: datetime
+- last_updated: datetime (the time the row was produced/published)
+```
 
-The "full view" of the dataset is meant to be unique on (real_date, ticker, last_updated).
-To arrive at a 'canonical' representation (what should be used for analysis), 
-the last_updated value is used to pick the most recent value for each (real_date, ticker) pair.
+The "full view" of a dataset is expected to be unique on
+(real_date, ticker, last_updated).
 
+To arrive at a canonical representation (what should be used for analysis),
+select the row with the greatest last_updated for each (real_date, ticker) pair.
 
-The files are divided into datasets such as "JPMAQS_GENERIC_RETURNS", "JPMAQS_MACROECONOMIC_TRENDS", etc. - these are "snapshot" files.
-These datasets also have complementary "delta" datasets, named "JPMAQS_GENERIC_RETURNS_DELTA", "JPMAQS_MACROECONOMIC_TRENDS_DELTA", etc. - these are delta files.
+Minimal row example (note: last_updated is a column value, not the file timestamp):
 
+```
+# earlier published row
+real_date=2026-02-04, ticker=AAA, value=1.0, last_updated=2026-02-05T06:10:00Z
+# later correction published
+real_date=2026-02-04, ticker=AAA, value=1.1, last_updated=2026-02-06T06:10:00Z
+# canonical keeps the later row (value=1.1)
+```
 
-Snapshot files, are published every day, with all 'real_date' values for the given dataset for all tickers.
-Delta files are published intra-daily, and contain only rows that have "updated" since the last delta file was published.
-The snapshot for real_date T, will have entries up to T-1, and will contain ONLY the latest rows for each (real_date, ticker) pair.
-Delta files however, contain multiple rows for the same (real_date, ticker) which are unique on (real_date, ticker, last_updated).
-If all delta files were collected and stitched together, they would contain all the rows that have ever been published for the dataset.
+File naming and types
 
-There are also historical delta files, published at the last second of every month (23:59:59 on the last day of the month).
-These are a stitched/glued version of all the delta files published in that month, and contain all the rows published in that month.
-The source then deletes the smaller delta files, as well as the snapshots, and the users are expected to use the historical delta files.
+Datasets appear in two main file types:
 
-To get a canonical representation of the dataset of any given day delta files, the user would need to:
+1. Snapshot files (daily "full snapshots")
 
-1) Download a snapshot file. Download ALL deltas since the snapshot file's last_updated value, up to the day of interest.
-2) Download absolutely all delta files since the beginning of time, and stitch them together, and select as required. 
+   * One file per dataset per day
+   * Filename ends with YYYYMMDD (no intra-day time component)
 
-Given that the source removes snapshot files, for days in far past, only option 2 is available.
+   Example:
+   JPMAQS_MACROECONOMIC_TRENDS_20260206.parquet
 
-The FileSelector class is responsible for evaluting which files should be downloaded, as well as returning a list of files
-that need to be loaded to arrive at the canonical representation of the dataset for a given day.]
+2. Delta files (intra-day increments)
 
-The JPMAQS_METADATA_CATALOG, when paired with mapping in the `JPMAQS_DATASET_THEME_MAPPING` dictionary, allows us to identify
-which datasets contain which tickers.
+   * Multiple files per dataset per day
+   * Filename ends with YYYYMMDDTHHMMSS
+
+   Example:
+   JPMAQS_GENERIC_RETURNS_DELTA_20260206T140336.parquet
+
+Monthly historical delta files
+
+At the end of each month, the source publishes a historical delta file that is
+a stitched/appended version of all the delta files published during that month.
+
+The only differentiating factor of a historical delta file is its timestamp:
+
+- It is ALWAYS on the last day of the month at 23:59:59 (i.e. ...T235959)
+- Regular intra-day delta files are guaranteed NOT to have ...T235959
+
+Example (historical delta):
+JPMAQS_GENERIC_RETURNS_DELTA_20260131T235959.parquet
+
+Example (regular delta, never T235959):
+JPMAQS_GENERIC_RETURNS_DELTA_20260206T140336.parquet
+
+Availability and deletion behavior
+
+Files do not "update" in place: once published, a file's contents remain fixed.
+However, the source may remove files over time.
+
+End-of-month deletion and consolidation behavior:
+
+- Full snapshot files for older dates may be removed.
+- All smaller intra-day delta files for that month may be removed.
+- A single historical delta file for that month remains (the ...T235959 file).
+
+How canonical reconstruction works (high-level)
+
+To reconstruct a canonical dataset "as of" some target time:
+
+Inputs:
+
+- A set of snapshot files (if available)
+- A set of delta files up to the target time (regular deltas and/or monthly historical deltas)
+- Rows are canonicalized by max(last_updated) per (real_date, ticker)
+
+Minimal pseudocode:
+
+```
+rows = []
+
+if snapshot exists for dataset on or before target time:
+    rows += read(snapshot_YYYYMMDD.parquet)
+
+    rows += read(all delta files for dataset with file_timestamp > snapshot_timestamp
+                 and file_timestamp <= target_time)
+
+else:
+    rows += read(all delta files for dataset with file_timestamp <= target_time)
+    # this may include monthly historical delta files (...T235959) and/or remaining regular deltas
+
+canonical_rows = for each (real_date, ticker): keep row with max(last_updated)
+```
+
+FileSelector responsibilities (what tests should focus on)
+
+The FileSelector class decides which files should be downloaded and/or loaded to
+support the reconstruction logic above, given:
+
+* a view of what the source currently makes available (api listing)
+* a view of what exists locally (local listing)
+
+Tests for FileSelector typically assert:
+
+* Correct inclusion/exclusion of snapshot vs delta files based on time range and flags
+* Correct preference for monthly historical delta files (...T235959) when they cover the range
+* Correct handling of overwrite flags (force download even if local exists)
+* Correct handling of missing/invalid local paths (treat as not present)
+* Correct handling of source-side deletions (file absent from api listing => cannot rely on it)
+
+The JPMAQS_METADATA_CATALOG, when paired with the JPMAQS_DATASET_THEME_MAPPING
+dictionary, allows identification of which datasets contain which tickers.
 """
 
 
@@ -217,7 +300,3 @@ class TestFileSelector(unittest.TestCase):
                 out["filename"].astype(str).tolist(),
                 ["DATASET1_20240102.parquet", "DATASET1_DELTA_20240102T010101.parquet"],
             )
-
-
-
-
