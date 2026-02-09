@@ -1,23 +1,3 @@
-import unittest
-import tempfile
-from contextlib import ExitStack
-from pathlib import Path
-from unittest.mock import patch
-
-import pandas as pd
-
-from macrosynergy.download.dataquery_file_api import (
-    DataQueryFileAPIClient,
-    FileSelector,
-    JPMAQS_EARLIEST_FILE_DATE,
-    JPMAQS_DATASET_THEME_MAPPING,
-)
-
-EMPTY_API_FILES_DF = pd.DataFrame(
-    columns=["file-name", "file-datetime", "last-modified"]
-)
-EMPTY_LOCAL_FILES_DF = pd.DataFrame(columns=["file-name", "path", "last-modified"])
-
 """
 JPMaQS publishes data as multiple parquet datasets plus related metadata files.
 
@@ -43,9 +23,9 @@ Minimal row example (note: last_updated is a column value, not the file timestam
 
 ```
 # earlier published row
-real_date=2026-02-04, ticker=AAA, value=1.0, last_updated=2026-02-05T06:10:00Z
+real_date=2026-02-04, ticker=USD_EQXR_NSA_TRF1, value=1.0, last_updated=2026-02-05T06:10:00Z
 # later correction published
-real_date=2026-02-04, ticker=AAA, value=1.1, last_updated=2026-02-06T06:10:00Z
+real_date=2026-02-04, ticker=USD_EQXR_NSA_TRF1, value=1.1, last_updated=2026-02-06T06:10:00Z
 # canonical keeps the later row (value=1.1)
 ```
 
@@ -78,6 +58,8 @@ The only differentiating factor of a historical delta file is its timestamp:
 
 - It is at month-end "23:59:59" (i.e. ...T235959). If month-end falls on a
   weekend/holiday, the timestamp can also be the previous business day at 23:59:59.
+  This means both, the last day of the month and the last business day of the month, should
+  be checked for historical deltas.
 - Regular intra-day delta files are guaranteed NOT to have ...T235959
 
 Example (historical delta):
@@ -143,7 +125,31 @@ Tests for FileSelector typically assert:
 
 The JPMAQS_METADATA_CATALOG, when paired with the JPMAQS_DATASET_THEME_MAPPING
 dictionary, allows identification of which datasets contain which tickers.
+
+This module also contains a small number of integration-style tests for
+`DataQueryFileAPIClient.download()` that assert the *historical delta bootstrap*
+parameters and file selection passed into lower-level download helpers.
 """
+
+import tempfile
+import unittest
+from contextlib import ExitStack
+from pathlib import Path
+from unittest.mock import patch
+
+import pandas as pd
+
+from macrosynergy.download.dataquery_file_api import (
+    DataQueryFileAPIClient,
+    FileSelector,
+    JPMAQS_DATASET_THEME_MAPPING,
+    JPMAQS_EARLIEST_FILE_DATE,
+)
+
+EMPTY_API_FILES_DF = pd.DataFrame(
+    columns=["file-name", "file-datetime", "last-modified"]
+)
+EMPTY_LOCAL_FILES_DF = pd.DataFrame(columns=["file-name", "path", "last-modified"])
 
 
 class TestFileSelectorInit(unittest.TestCase):
@@ -269,15 +275,10 @@ class TestFileSelectorSelectFilesForDownload(unittest.TestCase):
     def test_select_files_for_download_skips_rows_with_invalid_timestamp(self):
         api_df = pd.DataFrame({"file-name": ["DATASET1_NOT_A_TS.parquet"]})
         fs = FileSelector(api_df, EMPTY_LOCAL_FILES_DF.copy())
-        # For API listings without "file-datetime", FileSelector infers the timestamp from
-        # the filename and should fail fast if it cannot parse the trailing timestamp.
         with self.assertRaises(ValueError):
             fs.select_files_for_download(to_datetime="20240102")
 
     def test_select_files_for_download_skips_api_rows_with_missing_file_datetime(self):
-        # If the API provides a "file-datetime" column but a specific row is missing the
-        # value, selection should skip that row (cannot infer the timestamp reliably from
-        # the API listing in this case).
         api_df = pd.DataFrame(
             [
                 {"file-name": "DATASET1_20240102.parquet", "file-datetime": pd.NaT},
@@ -379,12 +380,10 @@ class TestFileSelectorSelectFilesForDownload(unittest.TestCase):
                     "file-name": "DATASET1_20240102.parquet",
                     "file-datetime": pd.Timestamp("2024-01-02T00:00:00Z"),
                 },
-                # delta older than selected snapshot (should not be selected)
                 {
                     "file-name": "DATASET1_DELTA_20240101T010101.parquet",
                     "file-datetime": pd.Timestamp("2024-01-01T01:01:01Z"),
                 },
-                # deltas newer than selected snapshot (should be selected)
                 {
                     "file-name": "DATASET1_DELTA_20240102T010101.parquet",
                     "file-datetime": pd.Timestamp("2024-01-02T01:01:01Z"),
@@ -483,8 +482,6 @@ class TestFileSelectorSelectFilesForDownload(unittest.TestCase):
         self.assertEqual(out, ["DATASET1_20240102.parquet"])
 
     def test_select_files_for_download_load_delta_only_large_delta_cover(self):
-        # Delta-only history (no snapshots). For monthly "large delta" regimes, include
-        # the covering month-end delta file even if it timestamps after `to_datetime`.
         api_df = pd.DataFrame(
             [
                 {
@@ -492,7 +489,6 @@ class TestFileSelectorSelectFilesForDownload(unittest.TestCase):
                     "file-datetime": pd.Timestamp("2024-02-29T23:59:59Z"),
                 },
                 {
-                    # 2024-03-31 is Sunday -> previous business day large delta is 2024-03-29.
                     "file-name": "JPMAQS_GENERIC_RETURNS_DELTA_20240329T235959.parquet",
                     "file-datetime": pd.Timestamp("2024-03-29T23:59:59Z"),
                 },
@@ -504,7 +500,7 @@ class TestFileSelectorSelectFilesForDownload(unittest.TestCase):
         )
         fs = FileSelector(api_df, EMPTY_LOCAL_FILES_DF.copy())
         out = fs.select_files_for_download(
-            since_datetime="20240320",  # should be ignored for delta-only history
+            since_datetime="20240320",
             to_datetime="20240315",
             include_delta_files=True,
         )
@@ -617,13 +613,11 @@ class TestFileSelectorSelectFilesForDownload(unittest.TestCase):
                     {
                         "file-name": "DATASET1_20240101.parquet",
                         "path": str(p_not),
-                        # local is stale but file isn't required for `to_datetime=20240102`
                         "last-modified": pd.Timestamp("2024-01-01T00:00:00Z"),
                     },
                     {
                         "file-name": "DATASET1_20240102.parquet",
                         "path": str(p_req),
-                        # local is up-to-date for the required file
                         "last-modified": pd.Timestamp("2024-01-02T11:00:00Z"),
                     },
                 ]
@@ -661,8 +655,6 @@ class TestFileSelectorSelectFilesForDownload(unittest.TestCase):
     def test_select_files_for_download_warns_when_window_has_only_deltas(
         self, mock_logger
     ):
-        # Snapshot exists overall, but not in the requested window: selection falls back to
-        # in-window deltas and should emit a warning when requested.
         api_df = pd.DataFrame(
             [
                 {
@@ -811,7 +803,7 @@ class TestFileSelectorSelectFilesForLoad(unittest.TestCase):
             )
             fs = FileSelector(EMPTY_API_FILES_DF.copy(), local_df)
             out = fs.select_files_for_load(
-                since_datetime="20240320",  # should be ignored for delta-only history
+                since_datetime="20240320",
                 to_datetime="20240315",
                 include_delta_files=True,
             )
@@ -834,7 +826,6 @@ class TestFileSelectorSelectFilesForLoad(unittest.TestCase):
 
 class TestFileSelectorTickerFiltering(unittest.TestCase):
     def test_filters_api_files_to_datasets_for_tickers_using_catalog(self):
-        # Catalog maps tickers -> Theme, then Theme -> dataset name via JPMAQS_DATASET_THEME_MAPPING.
         with tempfile.TemporaryDirectory() as td:
             cat_path = Path(td) / "JPMAQS_METADATA_CATALOG_20240102.parquet"
             cat_path.write_bytes(b"not a real parquet - patched read")
@@ -854,7 +845,7 @@ class TestFileSelectorTickerFiltering(unittest.TestCase):
 
             mocked_catalog_df = pd.DataFrame(
                 {
-                    "Ticker": ["AAA", "BBB"],
+                    "Ticker": ["USD_EQXR_NSA_TRF1", "EUR_RIR_NSA_TRFX"],
                     "Theme": ["Generic returns", "Macroeconomic trends"],
                 }
             )
@@ -866,13 +857,11 @@ class TestFileSelectorTickerFiltering(unittest.TestCase):
                 fs = FileSelector(
                     api_df,
                     EMPTY_LOCAL_FILES_DF.copy(),
-                    tickers=["aaa"],
+                    tickers=["usd_eqxr_nsa_trf1"],
                     catalog_file=cat_path,
                 )
                 mock_read.assert_called_once()
                 self.assertEqual(mock_read.call_args[0][0], cat_path)
-
-                # sanity: our test theme must exist in the mapping used by FileSelector
                 self.assertIn("Generic returns", JPMAQS_DATASET_THEME_MAPPING)
 
                 out = fs.select_files_for_download(
@@ -881,8 +870,6 @@ class TestFileSelectorTickerFiltering(unittest.TestCase):
                 self.assertEqual(out, ["JPMAQS_GENERIC_RETURNS_20240102.parquet"])
 
     def test_resolves_catalog_from_local_inventory_when_catalog_file_not_provided(self):
-        # FileSelector can resolve the latest downloaded catalog from `local_files_df` when
-        # `catalog_file` is not provided explicitly.
         with tempfile.TemporaryDirectory() as td:
             catalog_old = Path(td) / "JPMAQS_METADATA_CATALOG_20240101.parquet"
             catalog_new = Path(td) / "JPMAQS_METADATA_CATALOG_20240102.parquet"
@@ -920,15 +907,14 @@ class TestFileSelectorTickerFiltering(unittest.TestCase):
             )
 
             mocked_catalog_df = pd.DataFrame(
-                {"Ticker": ["AAA"], "Theme": ["Generic returns"]}
+                {"Ticker": ["USD_EQXR_NSA_TRF1"], "Theme": ["Generic returns"]}
             )
             with patch(
                 "macrosynergy.download.dataquery_file_api.pd.read_parquet",
                 autospec=True,
                 return_value=mocked_catalog_df,
             ) as mock_read:
-                fs = FileSelector(api_df, local_df, tickers=["AAA"])
-                # should use the newest catalog file (by file-timestamp)
+                fs = FileSelector(api_df, local_df, tickers=["USD_EQXR_NSA_TRF1"])
                 self.assertEqual(mock_read.call_args[0][0], catalog_new)
 
                 out = fs.select_files_for_download(
@@ -946,31 +932,55 @@ class TestFileSelectorTickerFiltering(unittest.TestCase):
                     {
                         "file-name": "JPMAQS_GENERIC_RETURNS_20240102.parquet",
                         "file-datetime": pd.Timestamp("2024-01-02T00:00:00Z"),
-                    }
+                    },
+                    {
+                        "file-name": "JPMAQS_MACROECONOMIC_TRENDS_20240102.parquet",
+                        "file-datetime": pd.Timestamp("2024-01-02T00:00:00Z"),
+                    },
                 ]
             )
 
             mocked_catalog_df = pd.DataFrame(
-                {"Ticker": ["AAA"], "Theme": ["Generic returns"]}
+                {"Ticker": ["USD_EQXR_NSA_TRF1"], "Theme": ["Generic returns"]}
             )
             with patch(
                 "macrosynergy.download.dataquery_file_api.pd.read_parquet",
                 autospec=True,
                 return_value=mocked_catalog_df,
             ):
-                fs = FileSelector(
+                fs_case_insensitive = FileSelector(
                     api_df,
                     EMPTY_LOCAL_FILES_DF.copy(),
-                    tickers=["aaa"],
+                    tickers=["usd_eqxr_nsa_trf1"],
+                    catalog_file=cat_path,
+                    case_sensitive=False,
+                )
+                out_case_insensitive = fs_case_insensitive.select_files_for_download(
+                    overwrite=True, to_datetime="20240102"
+                )
+                self.assertEqual(
+                    out_case_insensitive, ["JPMAQS_GENERIC_RETURNS_20240102.parquet"]
+                )
+
+                fs_case_sensitive = FileSelector(
+                    api_df,
+                    EMPTY_LOCAL_FILES_DF.copy(),
+                    tickers=["usd_eqxr_nsa_trf1"],
                     catalog_file=cat_path,
                     case_sensitive=True,
                 )
-                out = fs.select_files_for_download(
+                out_case_sensitive = fs_case_sensitive.select_files_for_download(
                     overwrite=True, to_datetime="20240102"
                 )
-                self.assertEqual(out, ["JPMAQS_GENERIC_RETURNS_20240102.parquet"])
+                self.assertCountEqual(
+                    out_case_sensitive,
+                    [
+                        "JPMAQS_GENERIC_RETURNS_20240102.parquet",
+                        "JPMAQS_MACROECONOMIC_TRENDS_20240102.parquet",
+                    ],
+                )
 
-    def test_ticker_filtering_returns_empty_when_catalog_unreadable(self):
+    def test_ticker_filtering_falls_back_to_unfiltered_when_catalog_unreadable(self):
         with tempfile.TemporaryDirectory() as td:
             cat_path = Path(td) / "JPMAQS_METADATA_CATALOG_20240102.parquet"
             cat_path.write_bytes(b"x")
@@ -979,7 +989,11 @@ class TestFileSelectorTickerFiltering(unittest.TestCase):
                     {
                         "file-name": "JPMAQS_GENERIC_RETURNS_20240102.parquet",
                         "file-datetime": pd.Timestamp("2024-01-02T00:00:00Z"),
-                    }
+                    },
+                    {
+                        "file-name": "JPMAQS_MACROECONOMIC_TRENDS_20240102.parquet",
+                        "file-datetime": pd.Timestamp("2024-01-02T00:00:00Z"),
+                    },
                 ]
             )
             with patch(
@@ -990,15 +1004,21 @@ class TestFileSelectorTickerFiltering(unittest.TestCase):
                 fs = FileSelector(
                     api_df,
                     EMPTY_LOCAL_FILES_DF.copy(),
-                    tickers=["AAA"],
+                    tickers=["USD_EQXR_NSA_TRF1"],
                     catalog_file=cat_path,
                 )
                 out = fs.select_files_for_download(
                     overwrite=True, to_datetime="20240102"
                 )
-                self.assertEqual(out, ["JPMAQS_GENERIC_RETURNS_20240102.parquet"])
+                self.assertCountEqual(
+                    out,
+                    [
+                        "JPMAQS_GENERIC_RETURNS_20240102.parquet",
+                        "JPMAQS_MACROECONOMIC_TRENDS_20240102.parquet",
+                    ],
+                )
 
-    def test_ticker_filtering_skips_themes_not_in_mapping(self):
+    def test_ticker_filtering_falls_back_to_unfiltered_when_theme_not_mapped(self):
         with tempfile.TemporaryDirectory() as td:
             cat_path = Path(td) / "JPMAQS_METADATA_CATALOG_20240102.parquet"
             cat_path.write_bytes(b"x")
@@ -1007,11 +1027,15 @@ class TestFileSelectorTickerFiltering(unittest.TestCase):
                     {
                         "file-name": "JPMAQS_GENERIC_RETURNS_20240102.parquet",
                         "file-datetime": pd.Timestamp("2024-01-02T00:00:00Z"),
-                    }
+                    },
+                    {
+                        "file-name": "JPMAQS_MACROECONOMIC_TRENDS_20240102.parquet",
+                        "file-datetime": pd.Timestamp("2024-01-02T00:00:00Z"),
+                    },
                 ]
             )
             mocked_catalog_df = pd.DataFrame(
-                {"Ticker": ["AAA"], "Theme": ["Not a theme"]}
+                {"Ticker": ["USD_EQXR_NSA_TRF1"], "Theme": ["Not a theme"]}
             )
             with patch(
                 "macrosynergy.download.dataquery_file_api.pd.read_parquet",
@@ -1021,13 +1045,19 @@ class TestFileSelectorTickerFiltering(unittest.TestCase):
                 fs = FileSelector(
                     api_df,
                     EMPTY_LOCAL_FILES_DF.copy(),
-                    tickers=["AAA"],
+                    tickers=["USD_EQXR_NSA_TRF1"],
                     catalog_file=cat_path,
                 )
                 out = fs.select_files_for_download(
                     overwrite=True, to_datetime="20240102"
                 )
-                self.assertEqual(out, ["JPMAQS_GENERIC_RETURNS_20240102.parquet"])
+                self.assertCountEqual(
+                    out,
+                    [
+                        "JPMAQS_GENERIC_RETURNS_20240102.parquet",
+                        "JPMAQS_MACROECONOMIC_TRENDS_20240102.parquet",
+                    ],
+                )
 
     def test_ticker_filtering_supports_lowercase_catalog_columns(self):
         with tempfile.TemporaryDirectory() as td:
@@ -1038,11 +1068,18 @@ class TestFileSelectorTickerFiltering(unittest.TestCase):
                     {
                         "file-name": "JPMAQS_GENERIC_RETURNS_20240102.parquet",
                         "file-datetime": pd.Timestamp("2024-01-02T00:00:00Z"),
-                    }
+                    },
+                    {
+                        "file-name": "JPMAQS_MACROECONOMIC_TRENDS_20240102.parquet",
+                        "file-datetime": pd.Timestamp("2024-01-02T00:00:00Z"),
+                    },
                 ]
             )
             mocked_catalog_df = pd.DataFrame(
-                {"ticker": ["AAA"], "theme": ["Generic returns"]}
+                {
+                    "ticker": ["USD_EQXR_NSA_TRF1", "EUR_RIR_NSA_TRFX"],
+                    "theme": ["Generic returns", "Macroeconomic trends"],
+                }
             )
             with patch(
                 "macrosynergy.download.dataquery_file_api.pd.read_parquet",
@@ -1052,7 +1089,7 @@ class TestFileSelectorTickerFiltering(unittest.TestCase):
                 fs = FileSelector(
                     api_df,
                     EMPTY_LOCAL_FILES_DF.copy(),
-                    tickers=["aaa"],
+                    tickers=["usd_eqxr_nsa_trf1"],
                     catalog_file=cat_path,
                 )
                 out = fs.select_files_for_download(
@@ -1063,47 +1100,10 @@ class TestFileSelectorTickerFiltering(unittest.TestCase):
 
 class TestFileSelectorHistoricalDeltaFullSelection(unittest.TestCase):
     def test_select_files_for_download_full_history_for_delta_only_dataset(self):
-        # This test builds an API listing with many rows to emulate a realistic "delta-only
-        # history" regime, where the selection must include:
-        # - all historical deltas up to the effective cutoff
-        # - the covering month-end delta file even if its timestamp is after `to_datetime`
-        #
-        # `to_datetime` is mid-month (2024-03-15). The covering monthly delta file is the
-        # "previous business day" month-end timestamp (2024-03-29T23:59:59Z).
-        large_delta_ts = [
-            "20220131T235959",
-            "20220228T235959",
-            "20220331T235959",
-            "20220430T235959",
-            "20220531T235959",
-            "20220630T235959",
-            "20220731T235959",
-            "20220831T235959",
-            "20220930T235959",
-            "20221031T235959",
-            "20221130T235959",
-            "20221231T235959",
-            "20230131T235959",
-            "20230228T235959",
-            "20230331T235959",
-            "20230430T235959",
-            "20230531T235959",
-            "20230630T235959",
-            "20230731T235959",
-            "20230831T235959",
-            "20230930T235959",
-            "20231031T235959",
-            "20231130T235959",
-            "20231231T235959",
-            "20240131T235959",
-            "20240229T235959",
-            "20240329T235959",
-            # also present (later in the same month) but should NOT be selected because the
-            # earliest covering large-delta for March is 20240329T235959.
-            "20240331T235959",
-            # future month large delta must not be pulled in.
-            "20240430T235959",
-        ]
+        month_ends = pd.date_range("2022-01-31", "2024-02-29", freq="ME")
+        large_delta_ts = [d.strftime("%Y%m%dT235959") for d in month_ends]
+        large_delta_ts += ["20240329T235959", "20240331T235959"]
+        large_delta_ts += ["20240430T235959"]
 
         api_rows = [
             {
@@ -1121,15 +1121,12 @@ class TestFileSelectorHistoricalDeltaFullSelection(unittest.TestCase):
                 "file-name": "JPMAQS_GENERIC_RETURNS_DELTA_20240315T010101.parquet",
                 "file-datetime": pd.Timestamp("2024-03-15T01:01:01Z"),
             },
-            # after the covering 2024-03-29 large delta -> must not be selected
             {
                 "file-name": "JPMAQS_GENERIC_RETURNS_DELTA_20240330T010101.parquet",
                 "file-datetime": pd.Timestamp("2024-03-30T01:01:01Z"),
             },
         ]
 
-        # Add another dataset with snapshots so the test demonstrates *both* selection modes
-        # (delta-only history + snapshot-led).
         api_rows += [
             {
                 "file-name": "JPMAQS_MACROECONOMIC_TRENDS_20240313.parquet",
@@ -1139,7 +1136,6 @@ class TestFileSelectorHistoricalDeltaFullSelection(unittest.TestCase):
                 "file-name": "JPMAQS_MACROECONOMIC_TRENDS_20240314.parquet",
                 "file-datetime": pd.Timestamp("2024-03-14T00:00:00Z"),
             },
-            # older than latest snapshot -> should not be selected
             {
                 "file-name": "JPMAQS_MACROECONOMIC_TRENDS_DELTA_20240313T230000.parquet",
                 "file-datetime": pd.Timestamp("2024-03-13T23:00:00Z"),
@@ -1152,7 +1148,6 @@ class TestFileSelectorHistoricalDeltaFullSelection(unittest.TestCase):
                 "file-name": "JPMAQS_MACROECONOMIC_TRENDS_DELTA_20240315T120000.parquet",
                 "file-datetime": pd.Timestamp("2024-03-15T12:00:00Z"),
             },
-            # metadata/cat entries should not affect selection
             {
                 "file-name": "JPMAQS_METADATA_CATALOG_20240315.parquet",
                 "file-datetime": pd.Timestamp("2024-03-15T00:00:00Z"),
@@ -1171,7 +1166,6 @@ class TestFileSelectorHistoricalDeltaFullSelection(unittest.TestCase):
             for fn in already_downloaded:
                 (td_path / fn).write_bytes(b"x")
 
-            # one "present" file but with an invalid path -> treat as not downloaded
             local_df = pd.DataFrame(
                 [
                     {
@@ -1208,22 +1202,17 @@ class TestFileSelectorHistoricalDeltaFullSelection(unittest.TestCase):
                 include_delta_files=True,
             )
 
-            # Expect:
-            # - macro trends: latest snapshot in window + deltas >= that snapshot timestamp
             expected_macro = [
                 "JPMAQS_MACROECONOMIC_TRENDS_20240314.parquet",
                 "JPMAQS_MACROECONOMIC_TRENDS_DELTA_20240314T010101.parquet",
                 "JPMAQS_MACROECONOMIC_TRENDS_DELTA_20240315T120000.parquet",
             ]
-            # but snapshot is already present locally -> download should exclude it unless overwrite=True
             expected_macro = [
                 x
                 for x in expected_macro
                 if x != "JPMAQS_MACROECONOMIC_TRENDS_20240314.parquet"
             ]
 
-            # - generic returns: full delta history up to the covering 20240329 large delta
-            #   (including the mid-month deltas). Also include 20220331 because local path was invalid.
             expected_generic = [
                 f"JPMAQS_GENERIC_RETURNS_DELTA_{ts}.parquet"
                 for ts in large_delta_ts
@@ -1233,7 +1222,6 @@ class TestFileSelectorHistoricalDeltaFullSelection(unittest.TestCase):
                 "JPMAQS_GENERIC_RETURNS_DELTA_20240310T120000.parquet",
                 "JPMAQS_GENERIC_RETURNS_DELTA_20240315T010101.parquet",
             ]
-            # remove those already downloaded with valid local paths
             expected_generic = sorted(
                 set(expected_generic)
                 - {
@@ -1247,17 +1235,16 @@ class TestFileSelectorHistoricalDeltaFullSelection(unittest.TestCase):
 
 
 class TestDataQueryFileAPIClientHistoricalDeltaBootstrap(unittest.TestCase):
+    @patch(
+        "macrosynergy.download.dataquery_file_api.get_client_id_secret",
+        side_effect=AssertionError(
+            "Unexpected credential lookup via get_client_id_secret."
+        ),
+    )
     @patch("macrosynergy.download.dataquery_file_api.DataQueryFileAPIOauth")
     def test_download_mid_month_historical_vintage_bootstraps_full_delta_history(
-        self, _mock_oauth
+        self, _mock_oauth, _mock_get_client
     ):
-        # This test asserts that an *historical* `to_datetime` that predates the earliest
-        # available full snapshots triggers the "full delta history" download behaviour:
-        #
-        # - since_datetime is forced to `JPMAQS_EARLIEST_FILE_DATE`
-        # - include_full_snapshots is forced to False
-        # - the download `to_datetime` is expanded to month-end so the covering large-delta
-        #   file can be downloaded (row-level vintage filtering is then done via last_updated)
         with tempfile.TemporaryDirectory() as td:
             client = DataQueryFileAPIClient(
                 client_id="id",
@@ -1273,7 +1260,9 @@ class TestDataQueryFileAPIClientHistoricalDeltaBootstrap(unittest.TestCase):
                 )
                 stack.enter_context(
                     patch.object(
-                        client, "filter_to_valid_tickers", return_value=["USD_EQXR_NSA"]
+                        client,
+                        "filter_to_valid_tickers",
+                        return_value=["USD_EQXR_NSA_TRF1"],
                     )
                 )
                 mock_get_ds = stack.enter_context(
@@ -1298,7 +1287,7 @@ class TestDataQueryFileAPIClientHistoricalDeltaBootstrap(unittest.TestCase):
                 )
 
                 client.download(
-                    tickers=["USD_EQXR_NSA"],
+                    tickers=["USD_EQXR_NSA_TRF1"],
                     since_datetime="20240301",
                     to_datetime="20240315",
                     include_delta_files=True,
@@ -1323,17 +1312,18 @@ class TestDataQueryFileAPIClientHistoricalDeltaBootstrap(unittest.TestCase):
                 self.assertIsNone(load_kwargs["since_datetime"])
                 self.assertEqual(load_kwargs["to_datetime"], "20240315")
 
+                _mock_get_client.assert_not_called()
+
+    @patch(
+        "macrosynergy.download.dataquery_file_api.get_client_id_secret",
+        side_effect=AssertionError(
+            "Unexpected credential lookup via get_client_id_secret."
+        ),
+    )
     @patch("macrosynergy.download.dataquery_file_api.DataQueryFileAPIOauth")
     def test_download_full_history_download_selects_complete_delta_set(
-        self, _mock_oauth
+        self, _mock_oauth, _mock_get_client
     ):
-        # This is a higher-integration test than the previous one: it exercises
-        # `download()` -> `download_full_snapshot()` and asserts the full delta history
-        # file selection that will be passed to `download_multiple_files`.
-        #
-        # The request is for a mid-month historical vintage (`to_datetime="20240315"`),
-        # which triggers the "full delta history" regime and expands the download window
-        # to month-end (`20240331T235959`) so the covering monthly delta is available.
         with tempfile.TemporaryDirectory() as td:
             client = DataQueryFileAPIClient(
                 client_id="id",
@@ -1343,7 +1333,6 @@ class TestDataQueryFileAPIClientHistoricalDeltaBootstrap(unittest.TestCase):
 
             available_df = pd.DataFrame(
                 [
-                    # target dataset deltas across history
                     {
                         "file-group-id": "JPMAQS_GENERIC_RETURNS_DELTA",
                         "file-name": "JPMAQS_GENERIC_RETURNS_DELTA_20240229T235959.parquet",
@@ -1354,7 +1343,6 @@ class TestDataQueryFileAPIClientHistoricalDeltaBootstrap(unittest.TestCase):
                         "file-name": "JPMAQS_GENERIC_RETURNS_DELTA_20240310T120000.parquet",
                         "file-datetime": pd.Timestamp("2024-03-10T12:00:00Z"),
                     },
-                    # month-end candidates (both exist)
                     {
                         "file-group-id": "JPMAQS_GENERIC_RETURNS_DELTA",
                         "file-name": "JPMAQS_GENERIC_RETURNS_DELTA_20240329T235959.parquet",
@@ -1365,13 +1353,11 @@ class TestDataQueryFileAPIClientHistoricalDeltaBootstrap(unittest.TestCase):
                         "file-name": "JPMAQS_GENERIC_RETURNS_DELTA_20240331T235959.parquet",
                         "file-datetime": pd.Timestamp("2024-03-31T23:59:59Z"),
                     },
-                    # unrelated dataset should be filtered out by file_group_ids
                     {
                         "file-group-id": "JPMAQS_MACROECONOMIC_TRENDS_DELTA",
                         "file-name": "JPMAQS_MACROECONOMIC_TRENDS_DELTA_20240331T235959.parquet",
                         "file-datetime": pd.Timestamp("2024-03-31T23:59:59Z"),
                     },
-                    # metadata should not be downloaded (include_metadata_files=False)
                     {
                         "file-group-id": "JPMAQS_GENERIC_RETURNS",
                         "file-name": "JPMAQS_GENERIC_RETURNS_METADATA_20240315.json",
@@ -1414,7 +1400,9 @@ class TestDataQueryFileAPIClientHistoricalDeltaBootstrap(unittest.TestCase):
                 )
                 stack.enter_context(
                     patch.object(
-                        client, "filter_to_valid_tickers", return_value=["USD_EQXR_NSA"]
+                        client,
+                        "filter_to_valid_tickers",
+                        return_value=["USD_EQXR_NSA_TRF1"],
                     )
                 )
                 stack.enter_context(
@@ -1451,7 +1439,7 @@ class TestDataQueryFileAPIClientHistoricalDeltaBootstrap(unittest.TestCase):
                 )
 
                 client.download(
-                    tickers=["USD_EQXR_NSA"],
+                    tickers=["USD_EQXR_NSA_TRF1"],
                     since_datetime="20240301",
                     to_datetime="20240315",
                     include_delta_files=True,
@@ -1466,6 +1454,8 @@ class TestDataQueryFileAPIClientHistoricalDeltaBootstrap(unittest.TestCase):
                 ]
                 called = mock_dlm.call_args.kwargs["filenames"]
                 self.assertListEqual(called, expected)
+
+                _mock_get_client.assert_not_called()
 
 
 if __name__ == "__main__":
