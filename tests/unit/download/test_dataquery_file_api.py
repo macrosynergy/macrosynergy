@@ -9,12 +9,12 @@ import logging
 import tempfile
 from pathlib import Path
 from macrosynergy.compat import PD_2_0_OR_LATER, PYTHON_3_8_OR_LATER
+from macrosynergy.download.dataquery_file_api.common import pd_timestamp_compat
 from macrosynergy.download.dataquery_file_api.dataquery_file_api import (
     validate_dq_timestamp,
     get_client_id_secret,
     get_current_or_last_business_day,
     pd_to_datetime_compat,
-    pd_timestamp_compat,
     DataQueryFileAPIClient,
     SegmentedFileDownloader,
     RateLimitedRequester,
@@ -99,7 +99,7 @@ class TestStandaloneFunctions(unittest.TestCase):
             pd.Timestamp("2026-01-30T00:00:00Z"),
         )
 
-    @patch("macrosynergy.download.dataquery_file_api.os.getenv")
+    @patch("macrosynergy.download.dataquery_file_api.dataquery_file_api.os.getenv")
     def test_get_client_id_secret(self, mock_getenv):
         mock_getenv.side_effect = lambda key: {
             "DQ_CLIENT_ID": "id1",
@@ -118,7 +118,7 @@ class TestStandaloneFunctions(unittest.TestCase):
 
 
 class TestRateLimiting(unittest.TestCase):
-    @patch("macrosynergy.download.dataquery_file_api.time.sleep")
+    @patch("macrosynergy.download.dataquery_file_api.dataquery_file_api.time.sleep")
     def test_rate_limiter_sleeps_on_quick_successive_calls(self, mock_sleep):
         requester = RateLimitedRequester(api_delay=1.0)
 
@@ -137,7 +137,7 @@ class TestRateLimiting(unittest.TestCase):
                 return next(now_times)
 
         with patch(
-            "macrosynergy.download.dataquery_file_api.datetime.datetime",
+            "macrosynergy.download.dataquery_file_api.dataquery_file_api.datetime.datetime",
             FakeDateTime,
         ):
             requester._wait_for_api_call()
@@ -153,9 +153,11 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
         self.addCleanup(self.temp_dir.cleanup)
         self.test_dir = self.temp_dir.name
 
-    @patch("macrosynergy.download.dataquery_file_api.DataQueryFileAPIOauth")
     @patch(
-        "macrosynergy.download.dataquery_file_api.get_client_id_secret",
+        "macrosynergy.download.dataquery_file_api.dataquery_file_api.DataQueryFileAPIOauth"
+    )
+    @patch(
+        "macrosynergy.download.dataquery_file_api.dataquery_file_api.get_client_id_secret",
         return_value=(None, None),
     )
     def test_init_no_credentials_raises_error(self, mock_get_client, mock_oauth):
@@ -164,7 +166,9 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
         ):
             DataQueryFileAPIClient(out_dir=self.test_dir)
 
-    @patch("macrosynergy.download.dataquery_file_api.DataQueryFileAPIOauth")
+    @patch(
+        "macrosynergy.download.dataquery_file_api.dataquery_file_api.DataQueryFileAPIOauth"
+    )
     def test_init_with_args(self, mock_oauth_constructor):
         test_dir = os.path.join(self.test_dir, "test", "dir")
         client = DataQueryFileAPIClient(
@@ -180,9 +184,13 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
         )
 
     @suppress_logging
-    @patch("macrosynergy.download.dataquery_file_api._delete_corrupt_files")
+    @patch(
+        "macrosynergy.download.dataquery_file_api.dataquery_file_api._delete_corrupt_files"
+    )
     @patch.object(DataQueryFileAPIClient, "list_downloaded_files")
-    @patch("macrosynergy.download.dataquery_file_api.DataQueryFileAPIOauth")
+    @patch(
+        "macrosynergy.download.dataquery_file_api.dataquery_file_api.DataQueryFileAPIOauth"
+    )
     def test_delete_corrupt_files_passes_root_dir(
         self, mock_oauth, mock_list_downloaded_files, mock_delete_corrupt_files
     ):
@@ -201,9 +209,11 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
             mock_delete_corrupt_files.call_args[1]["root_dir"], Path(client.out_dir)
         )
 
-    @patch("macrosynergy.download.dataquery_file_api.DataQueryFileAPIOauth")
     @patch(
-        "macrosynergy.download.dataquery_file_api.get_client_id_secret",
+        "macrosynergy.download.dataquery_file_api.dataquery_file_api.DataQueryFileAPIOauth"
+    )
+    @patch(
+        "macrosynergy.download.dataquery_file_api.dataquery_file_api.get_client_id_secret",
         return_value=("env_id", "env_secret"),
     )
     def test_init_with_env_vars(self, mock_get_client, mock_oauth_constructor):
@@ -219,8 +229,10 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
             verify=True,
         )
 
-    @patch("macrosynergy.download.dataquery_file_api.logger")
-    @patch("macrosynergy.download.dataquery_file_api.DataQueryFileAPIOauth")
+    @patch("macrosynergy.download.dataquery_file_api.dataquery_file_api.logger")
+    @patch(
+        "macrosynergy.download.dataquery_file_api.dataquery_file_api.DataQueryFileAPIOauth"
+    )
     def test_context_manager_exception_logging(self, mock_oauth, mock_logger):
         with self.assertRaises(ValueError):
             with DataQueryFileAPIClient(
@@ -230,9 +242,16 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
         mock_logger.error.assert_called_once()
 
     @suppress_logging
-    @patch("macrosynergy.download.dataquery_file_api.DataQueryFileAPIOauth")
-    @patch("macrosynergy.download.dataquery_file_api.request_wrapper")
-    @patch("macrosynergy.download.dataquery_file_api.time.sleep", MagicMock())
+    @patch(
+        "macrosynergy.download.dataquery_file_api.dataquery_file_api.DataQueryFileAPIOauth"
+    )
+    @patch(
+        "macrosynergy.download.dataquery_file_api.dataquery_file_api.request_wrapper"
+    )
+    @patch(
+        "macrosynergy.download.dataquery_file_api.dataquery_file_api.time.sleep",
+        MagicMock(),
+    )
     def test_get_retry(self, mock_request_wrapper, mock_oauth_class):
         mock_oauth_instance = MagicMock()
         mock_oauth_instance.get_headers.return_value = {
@@ -454,7 +473,7 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
         self.assertEqual(filtered_df["file-name"].tolist(), ["f3", "f2"])
         mock_list_all_files.assert_called_once()
 
-    @patch("macrosynergy.download.dataquery_file_api.logger")
+    @patch("macrosynergy.download.dataquery_file_api.dataquery_file_api.logger")
     @patch("pandas.Timestamp.utcnow")
     @patch.object(DataQueryFileAPIClient, "list_available_files_for_all_file_groups")
     def test_filter_available_files_by_datetime_defaults_and_swap(
@@ -476,10 +495,12 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
         self.assertIn("Swapping values", mock_logger.warning.call_args[0][0])
 
     @patch(
-        "macrosynergy.download.dataquery_file_api.SegmentedFileDownloader._wait_for_api_call",
+        "macrosynergy.download.dataquery_file_api.segmented_file_downloader.SegmentedFileDownloader._wait_for_api_call",
         MagicMock(),
     )
-    @patch("macrosynergy.download.dataquery_file_api.requests.head")
+    @patch(
+        "macrosynergy.download.dataquery_file_api.segmented_file_downloader.requests.head"
+    )
     def test_segmented_downloader_head_uses_headers_timeout(self, mock_head):
         response = MagicMock()
         response.headers = {"Content-Length": "123"}
@@ -505,7 +526,9 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
         else:
             self.assertEqual(mock_head.call_args[1].get("timeout"), 7)
 
-    @patch("macrosynergy.download.dataquery_file_api.requests.head")
+    @patch(
+        "macrosynergy.download.dataquery_file_api.segmented_file_downloader.requests.head"
+    )
     def test_segmented_downloader_uses_parent_rate_limiter(self, mock_head):
         parent = MagicMock()
         parent._wait_for_api_call = MagicMock(return_value=True)
@@ -526,7 +549,9 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
         downloader._get_file_size()
         parent._wait_for_api_call.assert_called()
 
-    @patch("macrosynergy.download.dataquery_file_api.requests.get")
+    @patch(
+        "macrosynergy.download.dataquery_file_api.segmented_file_downloader.requests.get"
+    )
     def test_segmented_downloader_chunk_calls_wait_for_api_call(self, mock_get):
         mock_resp = MagicMock()
         mock_resp.__enter__.return_value = mock_resp
@@ -613,8 +638,10 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
             client.check_file_availability(filename="badformat.parquet")
 
     @suppress_logging
-    @patch("macrosynergy.download.dataquery_file_api.Path")
-    @patch("macrosynergy.download.dataquery_file_api.DataQueryFileAPIOauth")
+    @patch("macrosynergy.download.dataquery_file_api.dataquery_file_api.Path")
+    @patch(
+        "macrosynergy.download.dataquery_file_api.dataquery_file_api.DataQueryFileAPIOauth"
+    )
     def test_download_file_no_overwrite(self, mock_oauth, mock_path):
         client = DataQueryFileAPIClient(
             client_id="id", client_secret="secret", out_dir=self.test_dir
@@ -631,9 +658,13 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
         self.assertEqual(result, str(mock_final_path))
 
     @suppress_logging
-    @patch("macrosynergy.download.dataquery_file_api.SegmentedFileDownloader")
-    @patch("macrosynergy.download.dataquery_file_api.Path")
-    @patch("macrosynergy.download.dataquery_file_api.DataQueryFileAPIOauth")
+    @patch(
+        "macrosynergy.download.dataquery_file_api.dataquery_file_api.SegmentedFileDownloader"
+    )
+    @patch("macrosynergy.download.dataquery_file_api.dataquery_file_api.Path")
+    @patch(
+        "macrosynergy.download.dataquery_file_api.dataquery_file_api.DataQueryFileAPIOauth"
+    )
     def test_download_file_overwrite(
         self, mock_oauth, mock_path, mock_segmented_downloader
     ):
@@ -651,11 +682,15 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
 
     @suppress_logging
     @patch(
-        "macrosynergy.download.dataquery_file_api.request_wrapper_stream_bytes_to_disk"
+        "macrosynergy.download.dataquery_file_api.dataquery_file_api.request_wrapper_stream_bytes_to_disk"
     )
-    @patch("macrosynergy.download.dataquery_file_api.SegmentedFileDownloader")
-    @patch("macrosynergy.download.dataquery_file_api.Path")
-    @patch("macrosynergy.download.dataquery_file_api.DataQueryFileAPIOauth")
+    @patch(
+        "macrosynergy.download.dataquery_file_api.dataquery_file_api.SegmentedFileDownloader"
+    )
+    @patch("macrosynergy.download.dataquery_file_api.dataquery_file_api.Path")
+    @patch(
+        "macrosynergy.download.dataquery_file_api.dataquery_file_api.DataQueryFileAPIOauth"
+    )
     def test_download_file_small_file_logic(
         self, mock_oauth, mock_path, mock_segmented_downloader, mock_request_wrapper
     ):
@@ -680,9 +715,13 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
         mock_segmented_downloader.assert_not_called()
 
     @suppress_logging
-    @patch("macrosynergy.download.dataquery_file_api.SegmentedFileDownloader")
-    @patch("macrosynergy.download.dataquery_file_api.Path")
-    @patch("macrosynergy.download.dataquery_file_api.DataQueryFileAPIOauth")
+    @patch(
+        "macrosynergy.download.dataquery_file_api.dataquery_file_api.SegmentedFileDownloader"
+    )
+    @patch("macrosynergy.download.dataquery_file_api.dataquery_file_api.Path")
+    @patch(
+        "macrosynergy.download.dataquery_file_api.dataquery_file_api.DataQueryFileAPIOauth"
+    )
     def test_download_file_large_file_passes_parent_requester(
         self, mock_oauth, mock_path, mock_segmented_downloader
     ):
@@ -703,7 +742,9 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
             kwargs = mock_segmented_downloader.call_args[1]
         self.assertIs(kwargs.get("parent_requester"), client)
 
-    @patch("macrosynergy.download.dataquery_file_api.DataQueryFileAPIOauth")
+    @patch(
+        "macrosynergy.download.dataquery_file_api.dataquery_file_api.DataQueryFileAPIOauth"
+    )
     def test_download_file_invalid_filename_format(self, mock_oauth):
         client = DataQueryFileAPIClient(
             client_id="id", client_secret="secret", out_dir=self.test_dir
@@ -712,7 +753,9 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
             client.download_file(filename="invalidformat.parquet")
 
     @suppress_logging
-    @patch("macrosynergy.download.dataquery_file_api.DataQueryFileAPIOauth")
+    @patch(
+        "macrosynergy.download.dataquery_file_api.dataquery_file_api.DataQueryFileAPIOauth"
+    )
     def test_cleanup_old_files_deletes_expected_files_and_returns_list(
         self, mock_oauth
     ):
@@ -761,7 +804,9 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
         self.assertTrue(f_new_a.exists())
         self.assertTrue(f_edge_b.exists())
 
-    @patch("macrosynergy.download.dataquery_file_api.DataQueryFileAPIOauth")
+    @patch(
+        "macrosynergy.download.dataquery_file_api.dataquery_file_api.DataQueryFileAPIOauth"
+    )
     def test_cleanup_old_files_days_to_keep_zero_is_noop(self, mock_oauth):
         client = DataQueryFileAPIClient(
             client_id="id", client_secret="secret", out_dir=self.test_dir
@@ -771,9 +816,15 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
         self.assertEqual(deleted, [])
         mock_list.assert_not_called()
 
-    @patch("macrosynergy.download.dataquery_file_api.cf.as_completed")
-    @patch("macrosynergy.download.dataquery_file_api.cf.ThreadPoolExecutor")
-    @patch("macrosynergy.download.dataquery_file_api.DataQueryFileAPIOauth")
+    @patch(
+        "macrosynergy.download.dataquery_file_api.dataquery_file_api.cf.as_completed"
+    )
+    @patch(
+        "macrosynergy.download.dataquery_file_api.dataquery_file_api.cf.ThreadPoolExecutor"
+    )
+    @patch(
+        "macrosynergy.download.dataquery_file_api.dataquery_file_api.DataQueryFileAPIOauth"
+    )
     def test_download_multiple_files_success(
         self, mock_oauth, mock_executor_cls, mock_as_completed
     ):
@@ -799,9 +850,15 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
         future2.result.assert_called_once()
 
     @suppress_logging
-    @patch("macrosynergy.download.dataquery_file_api.cf.as_completed")
-    @patch("macrosynergy.download.dataquery_file_api.cf.ThreadPoolExecutor")
-    @patch("macrosynergy.download.dataquery_file_api.DataQueryFileAPIOauth")
+    @patch(
+        "macrosynergy.download.dataquery_file_api.dataquery_file_api.cf.as_completed"
+    )
+    @patch(
+        "macrosynergy.download.dataquery_file_api.dataquery_file_api.cf.ThreadPoolExecutor"
+    )
+    @patch(
+        "macrosynergy.download.dataquery_file_api.dataquery_file_api.DataQueryFileAPIOauth"
+    )
     def test_download_multiple_files_retry(
         self, mock_oauth, mock_executor_cls, mock_as_completed
     ):
@@ -840,9 +897,15 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
 
     @suppress_logging
     @patch.object(DataQueryFileAPIClient, "delete_corrupt_files")
-    @patch("macrosynergy.download.dataquery_file_api.cf.as_completed")
-    @patch("macrosynergy.download.dataquery_file_api.cf.ThreadPoolExecutor")
-    @patch("macrosynergy.download.dataquery_file_api.DataQueryFileAPIOauth")
+    @patch(
+        "macrosynergy.download.dataquery_file_api.dataquery_file_api.cf.as_completed"
+    )
+    @patch(
+        "macrosynergy.download.dataquery_file_api.dataquery_file_api.cf.ThreadPoolExecutor"
+    )
+    @patch(
+        "macrosynergy.download.dataquery_file_api.dataquery_file_api.DataQueryFileAPIOauth"
+    )
     def test_download_multiple_files_retries_corrupt_files_as_filenames(
         self,
         mock_oauth,
@@ -881,8 +944,12 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
                 res = spy.call_args_list[1][1]["filenames"]
             self.assertEqual(res, ["f2.parquet"])
 
-    @patch("macrosynergy.download.dataquery_file_api.cf.as_completed")
-    @patch("macrosynergy.download.dataquery_file_api.cf.ThreadPoolExecutor")
+    @patch(
+        "macrosynergy.download.dataquery_file_api.dataquery_file_api.cf.as_completed"
+    )
+    @patch(
+        "macrosynergy.download.dataquery_file_api.dataquery_file_api.cf.ThreadPoolExecutor"
+    )
     @suppress_logging
     def test_download_multiple_files_keyboard_interrupt(
         self, mock_executor_cls, mock_as_completed
@@ -901,7 +968,9 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
             )
         mock_executor.shutdown.assert_called_once_with(wait=False, cancel_futures=True)
 
-    @patch("macrosynergy.download.dataquery_file_api.pd.read_parquet")
+    @patch(
+        "macrosynergy.download.dataquery_file_api.dataquery_file_api.pd.read_parquet"
+    )
     @patch.object(DataQueryFileAPIClient, "download_file")
     @patch.object(DataQueryFileAPIClient, "list_available_files")
     def test_download_catalog_file(
@@ -937,9 +1006,13 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
         with self.assertRaises(DownloadError):
             client.download_catalog_file()
 
-    @patch("macrosynergy.download.dataquery_file_api.logger")
-    @patch("macrosynergy.download.dataquery_file_api.pd.read_parquet")
-    @patch("macrosynergy.download.dataquery_file_api.DataQueryFileAPIOauth")
+    @patch("macrosynergy.download.dataquery_file_api.dataquery_file_api.logger")
+    @patch(
+        "macrosynergy.download.dataquery_file_api.dataquery_file_api.pd.read_parquet"
+    )
+    @patch(
+        "macrosynergy.download.dataquery_file_api.dataquery_file_api.DataQueryFileAPIOauth"
+    )
     def test_get_datasets_for_indicators_maps_themes_to_datasets(
         self, mock_oauth, mock_read_parquet, mock_logger
     ):
@@ -961,9 +1034,13 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
         self.assertEqual(result, [JPMAQS_DATASET_THEME_MAPPING[themes[0]]])
         mock_logger.warning.assert_not_called()
 
-    @patch("macrosynergy.download.dataquery_file_api.logger")
-    @patch("macrosynergy.download.dataquery_file_api.pd.read_parquet")
-    @patch("macrosynergy.download.dataquery_file_api.DataQueryFileAPIOauth")
+    @patch("macrosynergy.download.dataquery_file_api.dataquery_file_api.logger")
+    @patch(
+        "macrosynergy.download.dataquery_file_api.dataquery_file_api.pd.read_parquet"
+    )
+    @patch(
+        "macrosynergy.download.dataquery_file_api.dataquery_file_api.DataQueryFileAPIOauth"
+    )
     def test_get_datasets_for_indicators_warns_on_unknown_themes(
         self, mock_oauth, mock_read_parquet, mock_logger
     ):
@@ -990,7 +1067,7 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
         self.assertIn("unknown themes", warning_msg.lower())
         self.assertIn(unknown_theme, warning_msg)
 
-    @patch("macrosynergy.download.dataquery_file_api.logger")
+    @patch("macrosynergy.download.dataquery_file_api.dataquery_file_api.logger")
     @patch.object(DataQueryFileAPIClient, "download_multiple_files")
     @patch.object(DataQueryFileAPIClient, "filter_available_files_by_datetime")
     def test_download_full_snapshot(
@@ -1097,7 +1174,7 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
             called_since = mock_filter_files.call_args[1]["since_datetime"]
         self.assertEqual(called_since, "20230106")
 
-    @patch("macrosynergy.download.dataquery_file_api.logger")
+    @patch("macrosynergy.download.dataquery_file_api.dataquery_file_api.logger")
     @patch.object(DataQueryFileAPIClient, "download_multiple_files")
     @patch.object(DataQueryFileAPIClient, "filter_available_files_by_datetime")
     def test_download_full_snapshot_no_new_files(
@@ -1145,7 +1222,9 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
     @patch.object(DataQueryFileAPIClient, "download_full_snapshot")
     @patch.object(DataQueryFileAPIClient, "filter_to_valid_tickers")
     @patch.object(DataQueryFileAPIClient, "download_catalog_file")
-    @patch("macrosynergy.download.dataquery_file_api.lazy_load_from_parquets")
+    @patch(
+        "macrosynergy.download.dataquery_file_api.dataquery_file_api.lazy_load_from_parquets"
+    )
     @patch.object(DataQueryFileAPIClient, "get_datasets_for_indicators")
     def test_download_defaults_since_datetime_uses_utc(
         self,
@@ -1190,7 +1269,9 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
     @patch.object(DataQueryFileAPIClient, "download_full_snapshot")
     @patch.object(DataQueryFileAPIClient, "filter_to_valid_tickers")
     @patch.object(DataQueryFileAPIClient, "download_catalog_file")
-    @patch("macrosynergy.download.dataquery_file_api.lazy_load_from_parquets")
+    @patch(
+        "macrosynergy.download.dataquery_file_api.dataquery_file_api.lazy_load_from_parquets"
+    )
     @patch.object(DataQueryFileAPIClient, "get_datasets_for_indicators")
     def test_download_defaults_since_datetime_uses_last_business_day_on_weekend(
         self,
@@ -1287,7 +1368,9 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
             load_kwargs = mock_load_data.call_args[1]
             self.assertIsNone(load_kwargs["since_datetime"])
 
-    @patch("macrosynergy.download.dataquery_file_api.lazy_load_from_parquets")
+    @patch(
+        "macrosynergy.download.dataquery_file_api.dataquery_file_api.lazy_load_from_parquets"
+    )
     @patch.object(DataQueryFileAPIClient, "download_catalog_file")
     @patch.object(DataQueryFileAPIClient, "filter_to_valid_tickers")
     @patch.object(DataQueryFileAPIClient, "get_datasets_for_indicators")
@@ -1321,7 +1404,9 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
         self.assertEqual(passed_max, expected)
 
     @patch.object(DataQueryFileAPIClient, "download")
-    @patch("macrosynergy.download.dataquery_file_api.DataQueryFileAPIOauth")
+    @patch(
+        "macrosynergy.download.dataquery_file_api.dataquery_file_api.DataQueryFileAPIOauth"
+    )
     def test_download_as_of_date_only_defaults_to_eod_utc(
         self, _mock_oauth, mock_download
     ):
@@ -1349,7 +1434,9 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
         self.assertEqual(kwargs["since_datetime"], "20250328")
 
     @patch.object(DataQueryFileAPIClient, "download")
-    @patch("macrosynergy.download.dataquery_file_api.DataQueryFileAPIOauth")
+    @patch(
+        "macrosynergy.download.dataquery_file_api.dataquery_file_api.DataQueryFileAPIOauth"
+    )
     def test_download_as_of_datetime_preserves_time_component(
         self, _mock_oauth, mock_download
     ):
@@ -1373,11 +1460,13 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
         self.assertEqual(kwargs["max_last_updated"], "2025-03-28T12:34:56Z")
         self.assertEqual(kwargs["since_datetime"], "20250328")
 
-    @patch("macrosynergy.download.dataquery_file_api.logger")
+    @patch("macrosynergy.download.dataquery_file_api.dataquery_file_api.logger")
     @patch.object(DataQueryFileAPIClient, "download_catalog_file")
     @patch.object(DataQueryFileAPIClient, "filter_to_valid_tickers")
     @patch.object(DataQueryFileAPIClient, "get_datasets_for_indicators")
-    @patch("macrosynergy.download.dataquery_file_api.lazy_load_from_parquets")
+    @patch(
+        "macrosynergy.download.dataquery_file_api.dataquery_file_api.lazy_load_from_parquets"
+    )
     def test_download_warns_for_missing_tickers_but_loads_valid(
         self,
         mock_lazy_load,
@@ -1434,7 +1523,9 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
     @patch.object(DataQueryFileAPIClient, "download_catalog_file")
     @patch.object(DataQueryFileAPIClient, "filter_to_valid_tickers")
     @patch.object(DataQueryFileAPIClient, "get_datasets_for_indicators")
-    @patch("macrosynergy.download.dataquery_file_api.lazy_load_from_parquets")
+    @patch(
+        "macrosynergy.download.dataquery_file_api.dataquery_file_api.lazy_load_from_parquets"
+    )
     @patch.object(DataQueryFileAPIClient, "download_full_snapshot")
     @patch("pandas.Timestamp.utcnow", return_value=pd.Timestamp("2024-01-02T00:00:00Z"))
     def test_download_calls_cleanup_old_files_when_configured(
@@ -1467,11 +1558,13 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
 
         mock_cleanup.assert_called_once_with(days_to_keep=7)
 
-    @patch("macrosynergy.download.dataquery_file_api.logger")
+    @patch("macrosynergy.download.dataquery_file_api.dataquery_file_api.logger")
     @patch.object(DataQueryFileAPIClient, "download_catalog_file")
     @patch.object(DataQueryFileAPIClient, "filter_to_valid_tickers")
     @patch.object(DataQueryFileAPIClient, "get_datasets_for_indicators")
-    @patch("macrosynergy.download.dataquery_file_api.lazy_load_from_parquets")
+    @patch(
+        "macrosynergy.download.dataquery_file_api.dataquery_file_api.lazy_load_from_parquets"
+    )
     @patch.object(DataQueryFileAPIClient, "download_full_snapshot")
     @patch("pandas.Timestamp.utcnow", return_value=pd.Timestamp("2024-01-11T00:00:00Z"))
     def test_download_cleanup_old_files_n_days_adjusts_to_since_datetime_calendar_days(
@@ -1506,11 +1599,13 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
         mock_logger.warning.assert_not_called()
         mock_cleanup.assert_called_once_with(days_to_keep=2)
 
-    @patch("macrosynergy.download.dataquery_file_api.logger")
+    @patch("macrosynergy.download.dataquery_file_api.dataquery_file_api.logger")
     @patch.object(DataQueryFileAPIClient, "download_catalog_file")
     @patch.object(DataQueryFileAPIClient, "filter_to_valid_tickers")
     @patch.object(DataQueryFileAPIClient, "get_datasets_for_indicators")
-    @patch("macrosynergy.download.dataquery_file_api.lazy_load_from_parquets")
+    @patch(
+        "macrosynergy.download.dataquery_file_api.dataquery_file_api.lazy_load_from_parquets"
+    )
     def test_download_does_not_call_cleanup_old_files_when_none(
         self,
         mock_lazy_load,
@@ -1540,11 +1635,13 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
         mock_cleanup.assert_not_called()
         mock_logger.warning.assert_not_called()
 
-    @patch("macrosynergy.download.dataquery_file_api.logger")
+    @patch("macrosynergy.download.dataquery_file_api.dataquery_file_api.logger")
     @patch.object(DataQueryFileAPIClient, "download_catalog_file")
     @patch.object(DataQueryFileAPIClient, "filter_to_valid_tickers")
     @patch.object(DataQueryFileAPIClient, "get_datasets_for_indicators")
-    @patch("macrosynergy.download.dataquery_file_api.lazy_load_from_parquets")
+    @patch(
+        "macrosynergy.download.dataquery_file_api.dataquery_file_api.lazy_load_from_parquets"
+    )
     def test_download_skip_download_ignores_cleanup_old_files_n_days(
         self,
         mock_lazy_load,
@@ -1579,7 +1676,9 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
     @patch.object(DataQueryFileAPIClient, "download_catalog_file")
     @patch.object(DataQueryFileAPIClient, "filter_to_valid_tickers")
     @patch.object(DataQueryFileAPIClient, "get_datasets_for_indicators")
-    @patch("macrosynergy.download.dataquery_file_api.lazy_load_from_parquets")
+    @patch(
+        "macrosynergy.download.dataquery_file_api.dataquery_file_api.lazy_load_from_parquets"
+    )
     @patch.object(DataQueryFileAPIClient, "download_full_snapshot")
     def test_download_cleanup_old_files_n_days_invalid_type_raises_when_downloading(
         self,
@@ -1612,7 +1711,9 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
     @patch.object(DataQueryFileAPIClient, "download_catalog_file")
     @patch.object(DataQueryFileAPIClient, "filter_to_valid_tickers")
     @patch.object(DataQueryFileAPIClient, "get_datasets_for_indicators")
-    @patch("macrosynergy.download.dataquery_file_api.lazy_load_from_parquets")
+    @patch(
+        "macrosynergy.download.dataquery_file_api.dataquery_file_api.lazy_load_from_parquets"
+    )
     def test_load_data_skips_snapshot_download(
         self,
         mock_lazy_load,
@@ -1642,7 +1743,9 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
     @patch.object(DataQueryFileAPIClient, "download_catalog_file")
     @patch.object(DataQueryFileAPIClient, "filter_to_valid_tickers")
     @patch.object(DataQueryFileAPIClient, "get_datasets_for_indicators")
-    @patch("macrosynergy.download.dataquery_file_api.lazy_load_from_parquets")
+    @patch(
+        "macrosynergy.download.dataquery_file_api.dataquery_file_api.lazy_load_from_parquets"
+    )
     def test_load_data_uses_catalog_file_argument_without_downloading_catalog(
         self,
         mock_lazy_load,
@@ -1846,7 +1949,7 @@ class TestDataQueryFileAPIClientNotificationLoading(unittest.TestCase):
 
         mock_download_full_snapshot.assert_not_called()
 
-    @patch("macrosynergy.download.dataquery_file_api.logger")
+    @patch("macrosynergy.download.dataquery_file_api.dataquery_file_api.logger")
     @patch("pandas.Timestamp.utcnow")
     @patch.object(DataQueryFileAPIClient, "list_downloaded_files")
     @patch.object(DataQueryFileAPIClient, "download_full_snapshot")
@@ -1879,7 +1982,7 @@ class TestDataQueryFileAPIClientNotificationLoading(unittest.TestCase):
         self.assertTrue(any("Provided date" in msg for msg in warning_msgs))
         mock_download_full_snapshot.assert_called_once()
 
-    @patch("macrosynergy.download.dataquery_file_api.logger")
+    @patch("macrosynergy.download.dataquery_file_api.dataquery_file_api.logger")
     def test_get_revisions_notifications(self, mock_logger):
         client = DataQueryFileAPIClient(
             client_id="id", client_secret="secret", out_dir=self.test_dir
@@ -1902,7 +2005,7 @@ class TestDataQueryFileAPIClientNotificationLoading(unittest.TestCase):
             out = client.get_revisions_notifications()
             pd.testing.assert_frame_equal(out, df)
 
-    @patch("macrosynergy.download.dataquery_file_api.logger")
+    @patch("macrosynergy.download.dataquery_file_api.dataquery_file_api.logger")
     def test_get_missing_data_notifications_merge_and_fallbacks(self, mock_logger):
         client = DataQueryFileAPIClient(
             client_id="id", client_secret="secret", out_dir=self.test_dir

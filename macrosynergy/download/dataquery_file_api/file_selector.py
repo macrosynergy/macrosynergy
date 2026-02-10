@@ -386,27 +386,12 @@ def _select_local_files_for_load(
                 effective_to_ts = max(effective_to_ts, content_to_ts)
 
             if (to_datetime is not None) or (max_last_updated is not None):
-                # Prefer regular in-month deltas when they exist up to the requested
-                # vintage; only fall back to the covering month-end ("large delta")
-                # file when needed (regular deltas may be deleted/absent).
                 ts_ser = deltas_all["file-timestamp"]
-                in_month = (ts_ser.dt.year == to_base_ts.year) & (
-                    ts_ser.dt.month == to_base_ts.month
-                )
-                is_large_delta_ts = (
-                    (ts_ser.dt.hour == 23)
-                    & (ts_ser.dt.minute == 59)
-                    & (ts_ser.dt.second == 59)
-                )
-                has_regular_in_month = bool(
-                    (in_month & (ts_ser.le(to_base_ts)) & (~is_large_delta_ts)).any()
-                )
-
                 cover_ts = _covering_large_delta_timestamp(
                     to_ts=to_base_ts,
                     delta_file_timestamps=deltas_all["file-timestamp"].tolist(),
                 )
-                if cover_ts is not None and not has_regular_in_month:
+                if cover_ts is not None:
                     effective_to_ts = max(effective_to_ts, cover_ts)
 
             deltas_sel = deltas_all[

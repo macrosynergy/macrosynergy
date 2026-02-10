@@ -680,7 +680,7 @@ class TestFileSelectorSelectFilesForDownload(unittest.TestCase):
             )
             self.assertEqual(out, ["DATASET1_20240102.parquet"])
 
-    @patch("macrosynergy.download.dataquery_file_api.logger")
+    @patch("macrosynergy.download.dataquery_file_api.file_selector.logger")
     def test_select_files_for_download_warns_when_window_has_only_deltas(
         self, mock_logger
     ):
@@ -847,12 +847,10 @@ class TestFileSelectorSelectFilesForLoad(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             td_path = Path(td)
             p_prev = (
-                td_path
-                / "JPMAQS_SHOCKS_RISK_MEASURES_DELTA_20250930T235959.parquet"
+                td_path / "JPMAQS_SHOCKS_RISK_MEASURES_DELTA_20250930T235959.parquet"
             )
             p_cover = (
-                td_path
-                / "JPMAQS_SHOCKS_RISK_MEASURES_DELTA_20251031T235959.parquet"
+                td_path / "JPMAQS_SHOCKS_RISK_MEASURES_DELTA_20251031T235959.parquet"
             )
             p_future_snap = td_path / "JPMAQS_SHOCKS_RISK_MEASURES_20260204.parquet"
             for p in (p_prev, p_cover, p_future_snap):
@@ -943,7 +941,7 @@ class TestFileSelectorTickerFiltering(unittest.TestCase):
                 }
             )
             with patch(
-                "macrosynergy.download.dataquery_file_api.pd.read_parquet",
+                "macrosynergy.download.dataquery_file_api.file_selector.pd.read_parquet",
                 autospec=True,
                 return_value=mocked_catalog_df,
             ) as mock_read:
@@ -1003,7 +1001,7 @@ class TestFileSelectorTickerFiltering(unittest.TestCase):
                 {"Ticker": ["USD_EQXR_NSA_TRF1"], "Theme": ["Generic returns"]}
             )
             with patch(
-                "macrosynergy.download.dataquery_file_api.pd.read_parquet",
+                "macrosynergy.download.dataquery_file_api.file_selector.pd.read_parquet",
                 autospec=True,
                 return_value=mocked_catalog_df,
             ) as mock_read:
@@ -1037,7 +1035,7 @@ class TestFileSelectorTickerFiltering(unittest.TestCase):
                 {"Ticker": ["USD_EQXR_NSA_TRF1"], "Theme": ["Generic returns"]}
             )
             with patch(
-                "macrosynergy.download.dataquery_file_api.pd.read_parquet",
+                "macrosynergy.download.dataquery_file_api.file_selector.pd.read_parquet",
                 autospec=True,
                 return_value=mocked_catalog_df,
             ):
@@ -1090,7 +1088,7 @@ class TestFileSelectorTickerFiltering(unittest.TestCase):
                 ]
             )
             with patch(
-                "macrosynergy.download.dataquery_file_api.pd.read_parquet",
+                "macrosynergy.download.dataquery_file_api.file_selector.pd.read_parquet",
                 autospec=True,
                 side_effect=ValueError("boom"),
             ):
@@ -1131,7 +1129,7 @@ class TestFileSelectorTickerFiltering(unittest.TestCase):
                 {"Ticker": ["USD_EQXR_NSA_TRF1"], "Theme": ["Not a theme"]}
             )
             with patch(
-                "macrosynergy.download.dataquery_file_api.pd.read_parquet",
+                "macrosynergy.download.dataquery_file_api.file_selector.pd.read_parquet",
                 autospec=True,
                 return_value=mocked_catalog_df,
             ):
@@ -1175,7 +1173,7 @@ class TestFileSelectorTickerFiltering(unittest.TestCase):
                 }
             )
             with patch(
-                "macrosynergy.download.dataquery_file_api.pd.read_parquet",
+                "macrosynergy.download.dataquery_file_api.file_selector.pd.read_parquet",
                 autospec=True,
                 return_value=mocked_catalog_df,
             ):
@@ -1329,12 +1327,14 @@ class TestFileSelectorHistoricalDeltaFullSelection(unittest.TestCase):
 
 class TestDataQueryFileAPIClientHistoricalDeltaBootstrap(unittest.TestCase):
     @patch(
-        "macrosynergy.download.dataquery_file_api.get_client_id_secret",
+        "macrosynergy.download.dataquery_file_api.dataquery_file_api.get_client_id_secret",
         side_effect=AssertionError(
             "Unexpected credential lookup via get_client_id_secret."
         ),
     )
-    @patch("macrosynergy.download.dataquery_file_api.DataQueryFileAPIOauth")
+    @patch(
+        "macrosynergy.download.dataquery_file_api.dataquery_file_api.DataQueryFileAPIOauth"
+    )
     def test_download_mid_month_historical_vintage_bootstraps_full_delta_history(
         self, _mock_oauth, _mock_get_client
     ):
@@ -1408,12 +1408,14 @@ class TestDataQueryFileAPIClientHistoricalDeltaBootstrap(unittest.TestCase):
                 _mock_get_client.assert_not_called()
 
     @patch(
-        "macrosynergy.download.dataquery_file_api.get_client_id_secret",
+        "macrosynergy.download.dataquery_file_api.dataquery_file_api.get_client_id_secret",
         side_effect=AssertionError(
             "Unexpected credential lookup via get_client_id_secret."
         ),
     )
-    @patch("macrosynergy.download.dataquery_file_api.DataQueryFileAPIOauth")
+    @patch(
+        "macrosynergy.download.dataquery_file_api.dataquery_file_api.DataQueryFileAPIOauth"
+    )
     def test_download_full_history_download_selects_complete_delta_set(
         self, _mock_oauth, _mock_get_client
     ):

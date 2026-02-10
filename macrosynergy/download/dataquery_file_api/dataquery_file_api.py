@@ -2539,7 +2539,9 @@ def _downloaded_files_df(
     df["file-datetime"] = df["filename"].apply(
         lambda x: str(x).split(".")[0].rsplit("_", 1)[-1]
     )
-    df["file-timestamp"] = df["file-datetime"].apply(lambda x: pd_to_datetime_compat(x))
+    df["file-timestamp"] = df["file-datetime"].apply(
+        lambda x: pd_to_datetime_compat(x, utc=True)
+    )
     if include_effective_dataset_column:
         df["e-dataset"] = df["dataset"].str.replace(r"_DELTA$", "", regex=True)
     df = df.reset_index(drop=True)

@@ -13,8 +13,6 @@ from macrosynergy.download.dataquery_file_api.dataquery_file_api import (
     _check_lazy_load_inputs,
     _list_downloaded_files,
     _downloaded_files_df,
-    _filter_to_latest_files,
-    _select_local_files_for_load,
     lazy_load_from_parquets,
     _ensure_columns,
     _to_output_schema,
@@ -23,6 +21,9 @@ from macrosynergy.download.dataquery_file_api.dataquery_file_api import (
     _large_delta_file_datetimes,
     _expr_split_ticker,
     _lazy_load_filtered_parquets,
+)
+from macrosynergy.download.dataquery_file_api.file_selector import (
+    _select_local_files_for_load,
 )
 
 
@@ -149,7 +150,7 @@ class TestLazyLoad(unittest.TestCase):
         self.assertIn("business days", msg.lower())
 
     @patch(
-        "macrosynergy.download.dataquery_file_api.pd_to_datetime_compat",
+        "macrosynergy.download.dataquery_file_api.dataquery_file_api.pd_to_datetime_compat",
         pd_to_datetime_compat,
     )
     def test_downloaded_files_df(self):
@@ -158,10 +159,12 @@ class TestLazyLoad(unittest.TestCase):
         self.assertNotIn("DATASET2_20240103_METADATA.json", df["filename"].to_list())
         ds1_latest = df[df["filename"] == "DATASET1_20240102.parquet"].iloc[0]
         self.assertEqual(ds1_latest["dataset"], "DATASET1")
-        self.assertEqual(ds1_latest["file-timestamp"], pd.Timestamp("2024-01-02"))
+        self.assertEqual(
+            ds1_latest["file-timestamp"], pd.Timestamp("2024-01-02T00:00:00Z")
+        )
 
     @patch(
-        "macrosynergy.download.dataquery_file_api.pd_to_datetime_compat",
+        "macrosynergy.download.dataquery_file_api.dataquery_file_api.pd_to_datetime_compat",
         pd_to_datetime_compat,
     )
     def test_downloaded_files_df_effective_dataset_delta_and_non_delta(self):
@@ -186,17 +189,16 @@ class TestLazyLoad(unittest.TestCase):
         self.assertEqual(delta["e-dataset"], "BETA")
 
     @patch(
-        "macrosynergy.download.dataquery_file_api.pd_to_datetime_compat",
+        "macrosynergy.download.dataquery_file_api.dataquery_file_api.pd_to_datetime_compat",
         pd_to_datetime_compat,
     )
     def test_filter_to_latest_files(self):
         df = _downloaded_files_df(self.tmpdir, file_format="parquet")
-        latest = _filter_to_latest_files(df)
+        latest = _select_local_files_for_load(df)
         self.assertEqual(len(latest), 3)
         filenames = latest["filename"].to_list()
         self.assertIn("DATASET1_20240102.parquet", filenames)
         self.assertIn("DATASET2_20240103.parquet", filenames)
-        # Delta is older than the latest snapshot for DATASET1 and should not be selected.
         self.assertIn("DATASET1_DELTA_20240102T010101.parquet", filenames)
 
     def test_select_local_files_for_load_includes_covering_month_end_large_delta(self):
@@ -325,7 +327,7 @@ class TestLazyLoad(unittest.TestCase):
             "JPMAQS_GENERIC_RETURNS_DELTA_20240430T235959.parquet", filenames
         )
 
-    @patch("macrosynergy.download.dataquery_file_api.logger")
+    @patch("macrosynergy.download.dataquery_file_api.file_selector.logger")
     def test_filter_to_latest_files_warns_when_window_has_only_deltas(
         self, mock_logger
     ):
@@ -347,7 +349,7 @@ class TestLazyLoad(unittest.TestCase):
                 ],
             }
         )
-        _filter_to_latest_files(
+        _select_local_files_for_load(
             files_df=df,
             include_delta_files=True,
             warn_if_no_full_snapshots=True,
@@ -420,7 +422,7 @@ class TestLazyLoad(unittest.TestCase):
         self.assertEqual(filt_date.collect().shape[0], 1)
 
     @patch(
-        "macrosynergy.download.dataquery_file_api.pd_to_datetime_compat",
+        "macrosynergy.download.dataquery_file_api.dataquery_file_api.pd_to_datetime_compat",
         pd_to_datetime_compat,
     )
     def test_lazy_load_basic_filtering(self):
@@ -446,7 +448,7 @@ class TestLazyLoad(unittest.TestCase):
         self.assertEqual(df_qdf.iloc[0]["value"], 5.0)
 
     @patch(
-        "macrosynergy.download.dataquery_file_api.pd_to_datetime_compat",
+        "macrosynergy.download.dataquery_file_api.dataquery_file_api.pd_to_datetime_compat",
         pd_to_datetime_compat,
     )
     def test_lazy_load_date_and_dataset_filters(self):
@@ -492,7 +494,7 @@ class TestLazyLoad(unittest.TestCase):
             )
 
     @patch(
-        "macrosynergy.download.dataquery_file_api.pd_to_datetime_compat",
+        "macrosynergy.download.dataquery_file_api.dataquery_file_api.pd_to_datetime_compat",
         pd_to_datetime_compat,
     )
     def test_lazy_load_output_formats(self):
@@ -830,7 +832,7 @@ class TestLazyLoadFilteredParquets(unittest.TestCase):
 
 class TestLazyLoadDatasetsFilterSemantics(unittest.TestCase):
     @patch(
-        "macrosynergy.download.dataquery_file_api.pd_to_datetime_compat",
+        "macrosynergy.download.dataquery_file_api.dataquery_file_api.pd_to_datetime_compat",
         pd_to_datetime_compat,
     )
     def test_datasets_filter_matches_effective_dataset_and_respects_include_delta(self):

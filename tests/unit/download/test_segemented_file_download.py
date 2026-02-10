@@ -7,7 +7,9 @@ import shutil  # noqa
 import uuid  # noqa
 import concurrent.futures  # noqa
 
-from macrosynergy.download.dataquery_file_api.dataquery_file_api import SegmentedFileDownloader
+from macrosynergy.download.dataquery_file_api.dataquery_file_api import (
+    SegmentedFileDownloader,
+)
 from macrosynergy.compat import PYTHON_3_8_OR_LATER
 
 
@@ -60,14 +62,20 @@ class TestSegmentedFileDownloaderInitAndLifecycle(unittest.TestCase):
                 parent_requester=self.parent_requester,
             )
 
-    @patch("macrosynergy.download.dataquery_file_api.SegmentedFileDownloader.download")
+    @patch(
+        "macrosynergy.download.dataquery_file_api.segmented_file_downloader.SegmentedFileDownloader.download"
+    )
     @patch("pathlib.Path.mkdir", MagicMock())
     def test_init_with_start_download(self, mock_download):
         SegmentedFileDownloader(**self.base_args, start_download=True)
         mock_download.assert_called_once()
 
-    @patch("macrosynergy.download.dataquery_file_api.SegmentedFileDownloader.cleanup")
-    @patch("macrosynergy.download.dataquery_file_api.SegmentedFileDownloader.download")
+    @patch(
+        "macrosynergy.download.dataquery_file_api.segmented_file_downloader.SegmentedFileDownloader.cleanup"
+    )
+    @patch(
+        "macrosynergy.download.dataquery_file_api.segmented_file_downloader.SegmentedFileDownloader.download"
+    )
     @patch("pathlib.Path.mkdir", MagicMock())
     def test_init_start_download_exception_cleanup(self, mock_download, mock_cleanup):
         mock_download.side_effect = Exception("Download failed")
@@ -76,7 +84,9 @@ class TestSegmentedFileDownloaderInitAndLifecycle(unittest.TestCase):
         mock_download.assert_called_once()
         mock_cleanup.assert_called_once()
 
-    @patch("macrosynergy.download.dataquery_file_api.SegmentedFileDownloader.cleanup")
+    @patch(
+        "macrosynergy.download.dataquery_file_api.segmented_file_downloader.SegmentedFileDownloader.cleanup"
+    )
     @patch("pathlib.Path.mkdir", MagicMock())
     def test_context_manager_lifecycle(self, mock_cleanup):
         with SegmentedFileDownloader(**self.base_args) as downloader:
@@ -108,7 +118,7 @@ class TestSegmentedFileDownloaderInitAndLifecycle(unittest.TestCase):
 
 
 @patch(
-    "macrosynergy.download.dataquery_file_api.SegmentedFileDownloader._wait_for_api_call",
+    "macrosynergy.download.dataquery_file_api.segmented_file_downloader.SegmentedFileDownloader._wait_for_api_call",
     MagicMock(),
 )
 class TestSegmentedFileDownloaderNetworking(unittest.TestCase):
@@ -265,7 +275,7 @@ class TestSegmentedFileDownloaderOrchestration(unittest.TestCase):
         mock_rmtree.assert_called_once_with(self.downloader.temp_dir)
 
     @patch(
-        "macrosynergy.download.dataquery_file_api.SegmentedFileDownloader._download_chunk"
+        "macrosynergy.download.dataquery_file_api.segmented_file_downloader.SegmentedFileDownloader._download_chunk"
     )
     @patch("concurrent.futures.as_completed", return_value=[])
     @patch("concurrent.futures.ThreadPoolExecutor")
@@ -298,13 +308,13 @@ class TestSegmentedFileDownloaderOrchestration(unittest.TestCase):
         mock_executor.shutdown.assert_called_once_with(wait=False, cancel_futures=True)
 
     @patch(
-        "macrosynergy.download.dataquery_file_api.SegmentedFileDownloader._assemble_parts"
+        "macrosynergy.download.dataquery_file_api.segmented_file_downloader.SegmentedFileDownloader._assemble_parts"
     )
     @patch(
-        "macrosynergy.download.dataquery_file_api.SegmentedFileDownloader._download_chunks_concurrently"
+        "macrosynergy.download.dataquery_file_api.segmented_file_downloader.SegmentedFileDownloader._download_chunks_concurrently"
     )
     @patch(
-        "macrosynergy.download.dataquery_file_api.SegmentedFileDownloader._get_file_size"
+        "macrosynergy.download.dataquery_file_api.segmented_file_downloader.SegmentedFileDownloader._get_file_size"
     )
     @patch("pathlib.Path.exists", return_value=False)
     def test_download_main_success(
@@ -329,7 +339,7 @@ class TestSegmentedFileDownloaderOrchestration(unittest.TestCase):
 
     @patch("time.sleep", MagicMock())
     @patch(
-        "macrosynergy.download.dataquery_file_api.SegmentedFileDownloader._get_file_size"
+        "macrosynergy.download.dataquery_file_api.segmented_file_downloader.SegmentedFileDownloader._get_file_size"
     )
     @patch("pathlib.Path.exists", return_value=True)
     def test_download_main_retry_and_succeed(
@@ -338,7 +348,7 @@ class TestSegmentedFileDownloaderOrchestration(unittest.TestCase):
         mock_get_size.side_effect = [requests.exceptions.ConnectionError, 1024]
 
         with patch(
-            "macrosynergy.download.dataquery_file_api.SegmentedFileDownloader._download_chunks_concurrently"
+            "macrosynergy.download.dataquery_file_api.segmented_file_downloader.SegmentedFileDownloader._download_chunks_concurrently"
         ):
             with patch("builtins.open", mock_open()):
                 with patch("shutil.copyfileobj"):
@@ -354,7 +364,7 @@ class TestSegmentedFileDownloaderOrchestration(unittest.TestCase):
 
     @patch("time.sleep", MagicMock())
     @patch(
-        "macrosynergy.download.dataquery_file_api.SegmentedFileDownloader._get_file_size"
+        "macrosynergy.download.dataquery_file_api.segmented_file_downloader.SegmentedFileDownloader._get_file_size"
     )
     @patch("pathlib.Path.exists", return_value=True)
     def test_download_main_fails_after_retries(
@@ -372,7 +382,7 @@ class TestSegmentedFileDownloaderOrchestration(unittest.TestCase):
 
     @patch("time.sleep", MagicMock())
     @patch(
-        "macrosynergy.download.dataquery_file_api.SegmentedFileDownloader._get_file_size"
+        "macrosynergy.download.dataquery_file_api.segmented_file_downloader.SegmentedFileDownloader._get_file_size"
     )
     def test_download_debug_mode(self, mock_get_size, mock_mkdir, mock_rmtree):
         self.downloader.debug = True
@@ -386,10 +396,10 @@ class TestSegmentedFileDownloaderOrchestration(unittest.TestCase):
 
     @patch("time.sleep", MagicMock())
     @patch(
-        "macrosynergy.download.dataquery_file_api.SegmentedFileDownloader._download_chunks_concurrently"
+        "macrosynergy.download.dataquery_file_api.segmented_file_downloader.SegmentedFileDownloader._download_chunks_concurrently"
     )
     @patch(
-        "macrosynergy.download.dataquery_file_api.SegmentedFileDownloader._get_file_size"
+        "macrosynergy.download.dataquery_file_api.segmented_file_downloader.SegmentedFileDownloader._get_file_size"
     )
     @patch("pathlib.Path.exists", return_value=True)
     def test_cleanup_on_concurrent_download_failure(
