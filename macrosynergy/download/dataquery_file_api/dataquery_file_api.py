@@ -268,31 +268,22 @@ classes/methods.
 """
 
 import os
-import threading
 import pandas as pd
 import polars as pl
 
-import functools
 import time
 from pathlib import Path
 from enum import Enum
 
 import concurrent.futures as cf
 import logging
-import shutil
 import traceback as tb
-import uuid
 from typing import Dict, Any, Optional, List, Tuple, Union, Sequence
 from tqdm import tqdm
 import json
 import calendar
 import datetime
-import requests
-from macrosynergy.compat import (
-    PD_2_0_OR_LATER,
-    PYTHON_3_8_OR_LATER,
-    POLARS_0_17_13_OR_EARLIER,
-)
+from macrosynergy.compat import PYTHON_3_8_OR_LATER
 from macrosynergy.management.constants import JPMAQS_METRICS
 from macrosynergy.download.dataquery import JPMAQS_GROUP_ID
 from macrosynergy.download.fusion_interface import (
@@ -304,30 +295,34 @@ from macrosynergy.download.dataquery import OAUTH_TOKEN_URL
 from macrosynergy.download.exceptions import DownloadError, InvalidResponseError
 from macrosynergy.download.jpm_oauth import JPMorganOAuth
 
-
-DQ_FILE_API_BASE_URL: str = (
-    "https://api-strm-gw01.jpmchase.com/research/dataquery-authe/api/v2"
+from macrosynergy.download.dataquery_file_api.constants import (  # noqa: F401
+    JPMAQS_DATASET_THEME_MAPPING,
+    JPMAQS_EARLIEST_FILE_DATE,
+    DQ_FILE_API_BASE_URL,
+    DQ_FILE_API_SCOPE,
+    DQ_FILE_API_TIMEOUT,
+    DQ_FILE_API_HEADERS_TIMEOUT,
+    DQ_FILE_API_DELAY_PARAM,
+    DQ_FILE_API_DELAY_MARGIN,
+    DQ_FILE_API_SEGMENT_SIZE_MB,
+    DQ_FILE_API_STREAM_CHUNK_SIZE,
 )
-DQ_FILE_API_SCOPE: str = "JPMC:URI:RS-06785-DataQueryExternalApi-PROD"
-DQ_FILE_API_TIMEOUT: float = 300.0
-DQ_FILE_API_HEADERS_TIMEOUT: float = 60.0
-DQ_FILE_API_DELAY_PARAM: float = 0.04  # =1/25 ; 25 transactions per second
-DQ_FILE_API_DELAY_MARGIN: float = 1.05  # 5% safety margin
-DQ_FILE_API_SEGMENT_SIZE_MB: float = 8.0  # 8 MB
-DQ_FILE_API_STREAM_CHUNK_SIZE: int = 8192  # 8 KB
 
+from macrosynergy.download.dataquery_file_api.common import (
+    RateLimitedRequester,
+    pd_to_datetime_compat,
+    validate_dq_timestamp,
+    _large_delta_file_datetimes,
+    get_current_or_last_business_day,
+    pl_string_type,
+    _is_date_only_string,
+    _normalize_last_updated_cutoff,
+)
 
-JPMAQS_EARLIEST_FILE_DATE = "20220101"
-
-JPMAQS_DATASET_THEME_MAPPING = {
-    "Economic surprises": "JPMAQS_ECONOMIC_SURPRISES",
-    "Financial conditions": "JPMAQS_FINANCIAL_CONDITIONS",
-    "Generic returns": "JPMAQS_GENERIC_RETURNS",
-    "Macroeconomic balance sheets": "JPMAQS_MACROECONOMIC_BALANCE_SHEETS",
-    "Macroeconomic trends": "JPMAQS_MACROECONOMIC_TRENDS",
-    "Shocks and risk measures": "JPMAQS_SHOCKS_RISK_MEASURES",
-    "Stylized trading factors": "JPMAQS_STYLIZED_TRADING_FACTORS",
-}
+from macrosynergy.download.dataquery_file_api.file_selector import FileSelector
+from macrosynergy.download.dataquery_file_api.segmented_file_downloader import (
+    SegmentedFileDownloader,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -360,45 +355,6 @@ class DataQueryFileAPIOauth(JPMorganOAuth):
             verify=verify,
             **kwargs,
         )
-
-
-class RateLimitedRequester:
-    """
-    Provides a thread-safe rate-limiting mechanism for API requests.
-    """
-
-    def __init__(self, api_delay: float):
-        if api_delay < 0:
-            raise ValueError("`api_delay` must be non-negative.")
-        self._api_delay = api_delay
-        self._rate_limit_lock = threading.Lock()
-        self._last_api_call: Optional[datetime.datetime] = None
-
-    def _wait_for_api_call(self, api_delay: Optional[float] = None) -> bool:
-        """
-        Blocks until the required delay since the last API call has passed.
-        """
-        delay = self._api_delay if api_delay is None else api_delay
-        if delay <= 0:
-            return True
-
-        with self._rate_limit_lock:
-            now = datetime.datetime.now()
-            if self._last_api_call is None:
-                self._last_api_call = now
-                return True
-
-            diff = (now - self._last_api_call).total_seconds()
-            sleep_for = delay - diff
-            if sleep_for > 0:
-                if sleep_for > 1:
-                    logger.info(
-                        f"Sleeping for {sleep_for:.2f} seconds for API rate limit."
-                    )
-                time.sleep(sleep_for)
-
-            self._last_api_call = datetime.datetime.now()
-        return True
 
 
 class DataQueryFileAPIClient(RateLimitedRequester):
@@ -666,6 +622,7 @@ class DataQueryFileAPIClient(RateLimitedRequester):
             "start-date": start_date,
             "end-date": end_date,
         }
+        self._wait_for_api_call(1)
         payload = self._get(endpoint, params)
         df = pd.json_normalize(payload, record_path=["available-files"])
 
@@ -742,6 +699,7 @@ class DataQueryFileAPIClient(RateLimitedRequester):
         with cf.ThreadPoolExecutor() as executor:
             futures = {}
             for file_group_id in files_groups:
+                time.sleep(1)
                 futures[
                     executor.submit(
                         self.list_available_files,
@@ -2330,148 +2288,6 @@ def _construct_all_tickers_list(
     return tickers
 
 
-def _pd_to_datetime_compat(ts: str, utc: bool):
-    formats = [
-        "%Y%m%d",
-        "%Y%m%dT%H%M%S",
-        "%Y-%m-%d",
-        "%Y-%m-%dT%H:%M:%S",
-        # ISO with timezone information
-        "%Y-%m-%dT%H:%M:%SZ",  # UTC with Z (e.g. 2025-09-16T12:34:56Z)
-        "%Y-%m-%dT%H:%M:%S%z",  # With numeric offset (e.g. 2025-09-16T12:34:56+02:00 or +0200)
-    ]
-    formats_str = f"[{', '.join(formats).replace('%', '').upper()}]"
-    for fmt in formats:
-        try:
-            return pd.to_datetime(ts, format=fmt, utc=utc)
-        except (ValueError, TypeError):
-            continue
-    raise ValueError(
-        f"Timestamp '{ts}' does not match expected formats. Use one of {formats_str}."
-    )
-
-
-def _pd_to_utc_timestamp(ts: pd.Timestamp, utc: bool) -> pd.Timestamp:
-    if not utc:
-        return ts
-    if ts.tzinfo is None:
-        return ts.tz_localize("UTC")
-    return ts.tz_convert("UTC")
-
-
-def _pd_scalar_to_datetime_compat(
-    ts: Union[str, datetime.date, datetime.datetime, pd.Timestamp],
-    *,
-    format: str,
-    utc: bool,
-) -> pd.Timestamp:
-    if isinstance(ts, pd.Timestamp):
-        return _pd_to_utc_timestamp(ts, utc=utc)
-    if isinstance(ts, datetime.datetime):
-        return _pd_to_utc_timestamp(pd.Timestamp(ts), utc=utc)
-    if isinstance(ts, datetime.date):
-        return _pd_to_utc_timestamp(pd.Timestamp(ts), utc=utc)
-    if isinstance(ts, str):
-        if PD_2_0_OR_LATER:
-            return pd.to_datetime(ts, format=format, utc=utc)
-        return _pd_to_datetime_compat(ts, utc=utc)
-    raise TypeError(
-        "`ts` must be a string, date, datetime, pandas Timestamp, or a Series."
-    )
-
-
-def pd_to_datetime_compat(
-    ts: Union[str, datetime.date, datetime.datetime, pd.Timestamp, pd.Series],
-    format: str = "mixed",
-    utc: bool = True,
-):
-    """
-    Parse common timestamp-like inputs into pandas datetime objects.
-
-    - Scalars return a `pd.Timestamp`
-    - `pd.Series` returns a Series of Timestamps
-
-    Notes
-    -----
-    - Strings accept the same formats as `_pd_to_datetime_compat` (and in pandas>=2.0
-      also support `format="mixed"`).
-    - Non-string scalars (date/datetime/Timestamp) are converted via `pd.Timestamp`
-      and optionally localized/converted to UTC.
-    """
-
-    if isinstance(ts, pd.Series):
-        if PD_2_0_OR_LATER:
-            return pd.to_datetime(ts, format=format, utc=utc)
-        return ts.apply(
-            lambda x: _pd_scalar_to_datetime_compat(x, format=format, utc=utc)
-        )
-
-    return _pd_scalar_to_datetime_compat(ts, format=format, utc=utc)
-
-
-def pd_timestamp_compat(
-    ts: Optional[Union[str, datetime.date, datetime.datetime, pd.Timestamp]] = None,
-    *,
-    utc: bool = True,
-) -> pd.Timestamp:
-    """
-    Convert common timestamp-like inputs into a pandas Timestamp.
-
-    This is a thin wrapper around `pd_to_datetime_compat` for scalar inputs. It keeps
-    the legacy convenience of `ts=None` defaulting to "now".
-    """
-    if ts is None:
-        return pd.Timestamp.utcnow() if utc else pd.Timestamp.now()
-
-    out = pd_to_datetime_compat(ts, utc=utc)
-    if isinstance(out, pd.Series):
-        raise TypeError("`pd_timestamp_compat` expects a scalar input, not a Series.")
-    return out
-
-
-def get_current_or_last_business_day(
-    now_utc: Optional[
-        Union[str, datetime.date, datetime.datetime, pd.Timestamp]
-    ] = None,
-) -> pd.Timestamp:
-    """
-    Return "today" (UTC) if it's a weekday, otherwise the previous business day.
-
-    Notes
-    -----
-    - "Business day" is Monday-Friday (no holiday calendar).
-    - Returned Timestamp is UTC and normalized to midnight.
-    """
-    now_ts = pd_to_datetime_compat(
-        now_utc if now_utc is not None else pd.Timestamp.utcnow(), utc=True
-    ).normalize()
-    # Monday=0 ... Sunday=6; weekend => >=5
-    if now_ts.weekday() >= 5:
-        return (now_ts - pd.offsets.BDay(1)).normalize()
-    return now_ts
-
-
-def validate_dq_timestamp(
-    ts: str, var_name: str = None, raise_error: bool = True
-) -> bool:
-    """Validate a timestamp string for DataQuery API."""
-    try:
-        if PD_2_0_OR_LATER:
-            pd.to_datetime(ts, format="mixed", utc=True)
-        else:
-            pd_to_datetime_compat(ts, utc=True)
-        return True
-    except (ValueError, TypeError):
-        if raise_error:
-            vn = f"`{var_name}`" if var_name else "Timestamp"
-            raise ValueError(
-                f"Invalid {vn} format. Use YYYYMMDD, YYYYMMDDTHHMMSS, or a "
-                "recognized timestamp format with timezone."
-            )
-        else:
-            return False
-
-
 def get_client_id_secret() -> Optional[Tuple[str, str]]:
     """Retrieve client ID and secret from environment variables."""
     pairs = [
@@ -2488,58 +2304,6 @@ def get_client_id_secret() -> Optional[Tuple[str, str]]:
             return client_id, client_secret
 
     return None, None
-
-
-def _month_ends_between(
-    start: datetime.date,
-    end: datetime.date,
-) -> List[datetime.date]:
-    year, month = start.year, start.month
-    out = []
-    while (year, month) <= (end.year, end.month):
-        dtx = datetime.date(year, month, calendar.monthrange(year, month)[1])
-        if start <= dtx <= end:
-            out.append(dtx)
-        if month == 12:
-            year, month = year + 1, 1
-        else:
-            month += 1
-    return out
-
-
-def _previous_business_day(d: datetime.date) -> datetime.date:
-    if isinstance(d, datetime.datetime):
-        d = d.date()
-    while d.weekday() >= 5:  # 5=Sat, 6=Sun
-        d -= datetime.timedelta(days=1)
-    return d
-
-
-@functools.lru_cache(maxsize=1)
-def _large_delta_file_datetimes(as_str: bool = True) -> List[str]:
-    sd = pd_to_datetime_compat(JPMAQS_EARLIEST_FILE_DATE).date()
-    if isinstance(sd, datetime.datetime):
-        sd = sd.date()
-    ed = datetime.date.today()
-
-    listA = _month_ends_between(sd, ed)
-    listB = [_previous_business_day(d) for d in listA]
-
-    all_dates = sorted(set(listA + listB))
-    dt_list = [
-        datetime.datetime.combine(d, datetime.time(23, 59, 59)) for d in all_dates
-    ]
-    dt_list = sorted(map(pd_to_datetime_compat, dt_list))
-    if not as_str:
-        return dt_list
-
-    return [d.strftime("%Y%m%dT%H%M%S") for d in dt_list]
-
-
-def pl_string_type():
-    if POLARS_0_17_13_OR_EARLIER:
-        return pl.Utf8
-    return pl.String
 
 
 class JPMaQSParquetExpectedColumns(Enum):
@@ -2641,251 +2405,6 @@ def _delete_corrupt_files(
                     logger.warning(f"Failed to remove directory: {dir_path}")
 
     return sorted(map(str, removed_files))
-
-
-class SegmentedFileDownloader:
-    """
-    A utility class to manage the multi-part, concurrent download of a single large file.
-    """
-
-    def __init__(
-        self,
-        filename: str,
-        url: str,
-        headers: Dict[str, str],
-        params: Dict[str, str],
-        proxies: Optional[Dict[str, str]] = None,
-        chunk_size: int = DQ_FILE_API_STREAM_CHUNK_SIZE,
-        segment_size_mb: int = DQ_FILE_API_SEGMENT_SIZE_MB,
-        timeout: int = DQ_FILE_API_TIMEOUT,
-        api_delay: float = DQ_FILE_API_DELAY_PARAM,
-        api_delay_margin: float = DQ_FILE_API_DELAY_MARGIN,
-        headers_timeout: int = DQ_FILE_API_HEADERS_TIMEOUT,
-        max_concurrent_downloads: int = None,
-        max_file_retries: int = 3,
-        verify_ssl: bool = True,
-        start_download: bool = False,
-        *,
-        parent_requester: RateLimitedRequester,
-        debug: bool = False,
-    ):
-        """Initializes the downloader with URL, headers, and download parameters."""
-        if parent_requester is None:
-            raise ValueError("`parent_requester` must be provided for rate limiting.")
-        self.parent_requester: RateLimitedRequester = parent_requester
-        self.api_delay_seconds = api_delay * api_delay_margin
-        self.filename = Path(filename)
-        self.url = url
-        self.headers = headers
-        self.params = params
-        if not set(["file-group-id", "file-datetime"]).issubset(params):
-            raise ValueError(
-                "Missing required parameters: 'file-group-id' and 'file-datetime'"
-            )
-
-        self.file_id = params["file-group-id"] + "_" + params["file-datetime"]
-        self.proxies = proxies
-        self.out_dir = Path(self.filename.parent)
-        self.out_dir.mkdir(parents=True, exist_ok=True)
-        self.chunk_size = chunk_size
-        self.segment_size_mb = segment_size_mb
-        self.timeout = timeout
-        self.headers_timeout = headers_timeout
-        self.max_concurrent_downloads = max_concurrent_downloads
-        self.max_file_retries = max_file_retries
-        self.verify_ssl = verify_ssl
-        self.debug = debug
-        self.temp_dir = self.out_dir / f"_tmp_{self.filename.name}_{uuid.uuid4().hex}"
-
-        if start_download:
-            try:
-                self.download()
-            except Exception:
-                self.cleanup()
-                raise
-
-    def __enter__(self):
-        """Allows the downloader to be used as a context manager."""
-        return self
-
-    def __exit__(self, exc_type, exc_value, traceback):
-        """Ensures cleanup of temporary files upon exiting the context."""
-        if exc_type is not None:
-            logger.error(tb.format_exc())
-        self.cleanup()
-        return False
-
-    def _wait_for_api_call(self) -> bool:
-        return self.parent_requester._wait_for_api_call()
-
-    def log(self, msg: str, part_num: int = None, level: int = logging.INFO):
-        """Logs a message with downloader-specific context."""
-        part_info = f"[part={part_num}]" if part_num is not None else ""
-        logger.log(
-            level, f"[SegmentedFileDownloader][file={self.file_id}]{part_info} {msg}"
-        )
-
-    def download(self, retries: int = None) -> Path:
-        """Orchestrates the entire file download process, including retries."""
-        last_exception = None
-        if retries is None:
-            retries = self.max_file_retries
-
-        try:
-            self.log("Starting segmented file download")
-            start_time = time.time()
-            if self.temp_dir.exists():
-                shutil.rmtree(self.temp_dir)
-            self.temp_dir.mkdir(exist_ok=True, parents=True)
-
-            total_size = self._get_file_size()
-            self.log(f"File size: {total_size / (1024 * 1024):.2f} MB")
-
-            chunk_size = int(self.segment_size_mb * 1024 * 1024)
-            chunks = range(0, total_size, chunk_size)
-            self.log(f"Creating {len(chunks)} download tasks")
-
-            self._download_chunks_concurrently(chunks, total_size)
-
-            final_path = Path(self.filename).resolve()
-            self._assemble_parts(final_path, len(chunks))
-
-            duration = time.time() - start_time
-            self.log(f"Download complete in {duration:.2f} seconds.")
-            self.log(f"Saved to: {final_path}")
-            return final_path
-        except KeyboardInterrupt:
-            raise
-        except Exception as e:
-            last_exception = e
-            self.log(f"Download failed. Error: {e}", level=logging.ERROR)
-            if self.debug:
-                raise e
-            if retries > 0:
-                self.log(
-                    f"Retrying download (attempt {self.max_file_retries - retries + 1}/{self.max_file_retries})..."
-                )
-                time.sleep(self.api_delay_seconds)
-                self.cleanup()
-                return self.download(retries=retries - 1)
-
-            self.cleanup()
-
-        raise last_exception
-
-    def _get_file_size(self) -> int:
-        """Fetches the total size of the file using a HEAD request."""
-        self.log("Fetching file size...")
-        self._wait_for_api_call()
-        start_time = time.time()
-        response = requests.head(
-            self.url,
-            params=self.params,
-            headers=self.headers,
-            proxies=self.proxies,
-            timeout=self.headers_timeout,
-            verify=self.verify_ssl,
-        )
-        response.raise_for_status()
-        duration = time.time() - start_time
-        self.log(f"Received headers in {duration:.2f} seconds.")
-        cl_header = response.headers.get("Content-Length")
-        try:
-            content_length = int(cl_header)
-        except (ValueError, TypeError):
-            raise ValueError(
-                f"[SegmentedFileDownloader][file={self.file_id}] Invalid or missing Content-Length header: {cl_header}."
-            )
-        self.log(f"Content-Length: {content_length}")
-        return content_length
-
-    def _download_chunks_concurrently(self, chunks: range, total_size: int):
-        """Manages the parallel download of all file chunks."""
-        with cf.ThreadPoolExecutor(
-            max_workers=self.max_concurrent_downloads
-        ) as executor:
-            futures = []
-            for i, start in enumerate(chunks):
-                # wait before next API call
-                future = executor.submit(
-                    self._download_chunk,
-                    i,
-                    start,
-                    min(start + chunks.step - 1, total_size - 1),
-                )
-                futures.append(future)
-            try:
-                for future in cf.as_completed(futures):
-                    if future.exception():
-                        executor.shutdown(wait=False, cancel_futures=True)
-                        raise future.exception()
-            except KeyboardInterrupt:
-                executor.shutdown(wait=False, cancel_futures=True)
-                raise
-
-    def _download_chunk(self, part_num: int, start_byte: int, end_byte: int) -> None:
-        """Starts the download process for a single file chunk."""
-        self._download_chunk_retry(part_num, start_byte, end_byte, retries=1)
-
-    def _download_chunk_retry(
-        self, part_num: int, start_byte: int, end_byte: int, retries: int
-    ) -> None:
-        """Downloads a specific byte range of the file with a retry mechanism."""
-        self.log(f"Downloading bytes [{start_byte}-{end_byte}]", part_num=part_num)
-        segment_headers = self.headers.copy()
-        segment_headers["Range"] = f"bytes={start_byte}-{end_byte}"
-        part_path = self.temp_dir / f"part_{part_num}"
-
-        try:
-            self._wait_for_api_call()
-            with requests.get(
-                headers=segment_headers,
-                url=self.url,
-                params=self.params,
-                proxies=self.proxies,
-                stream=True,
-                timeout=self.timeout,
-                verify=self.verify_ssl,
-            ) as response:
-                response.raise_for_status()
-                with open(part_path, "wb") as f:
-                    for chunk in response.iter_content(chunk_size=self.chunk_size):
-                        f.write(chunk)
-            self.log("Finished download.", part_num=part_num)
-        except KeyboardInterrupt:
-            raise
-        except Exception as e:
-            if isinstance(e, requests.exceptions.HTTPError):
-                if hasattr(e, "response") and hasattr(e.response, "status_code"):
-                    if 400 <= e.response.status_code < 500:
-                        retries = 0
-                        raise e
-            self.log(
-                f"FAILED download. Error: {e}", part_num=part_num, level=logging.ERROR
-            )
-            if retries > 0:
-                self.log("Retrying download...", part_num=part_num)
-                self._download_chunk_retry(part_num, start_byte, end_byte, retries - 1)
-            else:
-                raise
-
-    def _assemble_parts(self, final_path: Path, num_parts: int):
-        """Combines the downloaded chunks into a single final file."""
-        self.log(f"Assembling {num_parts} parts")
-        with open(final_path, "wb") as final_file:
-            for i in range(num_parts):
-                part_path = self.temp_dir / f"part_{i}"
-                with open(part_path, "rb") as part_file:
-                    shutil.copyfileobj(part_file, final_file)
-        final_size = final_path.stat().st_size
-        self.log(f"Assembled file size: {final_size / (1024 * 1024):.2f} MB")
-        self.cleanup()
-
-    def cleanup(self):
-        """Removes the temporary directory and all downloaded parts."""
-        if self.temp_dir.exists():
-            shutil.rmtree(self.temp_dir)
-            self.log("Cleaned up temporary files.")
 
 
 def _check_lazy_load_inputs(
@@ -3027,78 +2546,6 @@ def _downloaded_files_df(
     return df
 
 
-def _is_date_only_string(x: Any) -> bool:
-    """
-    True for date-only strings like "YYYYMMDD" or "YYYY-MM-DD".
-
-    This is used to interpret "date-only" `since_datetime`/`to_datetime` inputs as
-    whole-day windows when selecting files or filtering by `last_updated`.
-    """
-    if not isinstance(x, str):
-        return False
-    return ("T" not in x) and (":" not in x)
-
-
-def _normalize_file_timestamp_cutoff(
-    x: Union[str, pd.Timestamp, datetime.date, datetime.datetime],
-) -> pd.Timestamp:
-    """
-    Normalize a file-vintage cutoff.
-
-    - For date-only strings, interpret as *end of that day* (inclusive).
-    - For datetime-like inputs, keep the exact timestamp.
-    """
-    ts = pd_to_datetime_compat(x)
-    if _is_date_only_string(x):
-        ts = ts.normalize() + pd.DateOffset(days=1) - pd.Timedelta(nanoseconds=1)
-    return ts
-
-
-def _normalize_last_updated_cutoff(
-    x: Union[str, pd.Timestamp, datetime.date, datetime.datetime],
-) -> pd.Timestamp:
-    """
-    Normalize a `last_updated` cutoff.
-
-    - For date-only strings, interpret as *end of that day* (inclusive) so that
-      updates on that date are retained.
-    - For datetime-like inputs, keep the exact timestamp.
-    """
-    return _normalize_file_timestamp_cutoff(x)
-
-
-def _covering_large_delta_timestamp(
-    to_ts: pd.Timestamp, delta_file_timestamps: Sequence[pd.Timestamp]
-) -> Optional[pd.Timestamp]:
-    """
-    For monthly "large delta" regimes, return the first month-end-ish delta timestamp
-    that covers `to_ts`, even if it is after `to_ts`.
-
-    This is needed because the monthly delta file for a given month can be timestamped
-    at month-end (or the previous business day), which may fall *after* a user's
-    requested `to_datetime` within the month. In that case, we still need to load the
-    covering delta file and then filter rows using `max_last_updated <= to_datetime`.
-    """
-    if not delta_file_timestamps:
-        return None
-
-    delta_ts_set = set(delta_file_timestamps)
-    large_delta_ts_all = _large_delta_file_datetimes(as_str=False)
-    if not large_delta_ts_all:
-        return None
-
-    # Candidates are "large delta" timestamps in the same (year, month) at or after to_ts.
-    candidates = [
-        ts
-        for ts in large_delta_ts_all
-        if (ts.year == to_ts.year and ts.month == to_ts.month and ts >= to_ts)
-    ]
-    for ts in sorted(candidates):
-        if ts in delta_ts_set:
-            return ts
-    return None
-
-
 def _month_end_dq_timestamp(
     x: Union[str, pd.Timestamp, datetime.date, datetime.datetime],
 ) -> str:
@@ -3113,550 +2560,6 @@ def _month_end_dq_timestamp(
     last_day = calendar.monthrange(y, m)[1]
     dt = datetime.datetime(y, m, last_day, 23, 59, 59)
     return dt.strftime("%Y%m%dT%H%M%S")
-
-
-class FileSelector:
-    """Helper class to reconcile API vs local file inventories."""
-
-    def __init__(
-        self,
-        api_files_df: Optional[pd.DataFrame],
-        local_files_df: Optional[pd.DataFrame],
-        file_name_col: str = "file-name",
-        tickers: Optional[List[str]] = None,
-        catalog_file: Optional[Union[str, Path]] = None,
-        case_sensitive: bool = False,
-    ) -> None:
-        self.file_name_col = str(file_name_col)
-        self.api_files_df = (
-            api_files_df.copy()
-            if isinstance(api_files_df, pd.DataFrame)
-            else pd.DataFrame()
-        )
-        self.local_files_df = (
-            local_files_df.copy()
-            if isinstance(local_files_df, pd.DataFrame)
-            else pd.DataFrame()
-        )
-
-        if self.file_name_col not in self.api_files_df.columns:
-            if "filename" in self.api_files_df.columns:
-                self.api_files_df[self.file_name_col] = self.api_files_df["filename"]
-            elif not self.api_files_df.empty:
-                raise ValueError(f"Missing `{self.file_name_col}` in api_files_df.")
-            else:
-                self.api_files_df[self.file_name_col] = pd.Series(dtype="object")
-
-        if self.file_name_col not in self.local_files_df.columns:
-            if "filename" in self.local_files_df.columns:
-                self.local_files_df[self.file_name_col] = self.local_files_df[
-                    "filename"
-                ]
-            elif not self.local_files_df.empty:
-                raise ValueError(f"Missing `{self.file_name_col}` in local_files_df.")
-            else:
-                self.local_files_df[self.file_name_col] = pd.Series(dtype="object")
-
-        self.tickers = (
-            [t.strip() for t in tickers if isinstance(t, str) and t.strip()]
-            if tickers
-            else []
-        )
-        self.catalog_file = Path(catalog_file) if catalog_file else None
-        self.case_sensitive = bool(case_sensitive)
-        self.datasets_for_tickers: List[str] = self._resolve_datasets_for_tickers()
-
-        self._dedupe_inventories()
-        self.files_df = self.api_files_df.merge(
-            self.local_files_df,
-            on=self.file_name_col,
-            how="outer",
-            suffixes=("_api", "_local"),
-        )
-        # Backwards compatible alias (internal / not user-facing).
-        self.merged_df = self.files_df
-
-    def _dedupe_inventories(self) -> None:
-        for attr in ("api_files_df", "local_files_df"):
-            df = getattr(self, attr)
-            if df.empty:
-                continue
-            if "last-modified" in df.columns:
-                df = df.sort_values("last-modified", ascending=False)
-            df = df.drop_duplicates(subset=[self.file_name_col], keep="first")
-            setattr(self, attr, df.reset_index(drop=True))
-
-    def _resolve_datasets_for_tickers(self) -> List[str]:
-        if not self.tickers:
-            return []
-        catalog_path: Optional[Path] = None
-        if self.catalog_file and self.catalog_file.is_file():
-            catalog_path = self.catalog_file
-        elif not self.local_files_df.empty and ("path" in self.local_files_df.columns):
-            df = self.local_files_df.copy()
-            if "dataset" in df.columns:
-                df = df[df["dataset"] == "JPMAQS_METADATA_CATALOG"]
-            else:
-                df = df[
-                    df[self.file_name_col]
-                    .astype(str)
-                    .str.startswith("JPMAQS_METADATA_CATALOG_")
-                ]
-            df = df[df["path"].notna()]
-            if (not df.empty) and ("file-timestamp" in df.columns):
-                df = df.sort_values("file-timestamp", ascending=False)
-            if not df.empty:
-                try:
-                    candidate = Path(str(df.iloc[0]["path"]))
-                    if candidate.is_file():
-                        catalog_path = candidate
-                except Exception:
-                    catalog_path = None
-
-        if catalog_path is None:
-            return []
-
-        try:
-            cat = pd.read_parquet(catalog_path)
-        except Exception:
-            return []
-
-        ticker_col = "Ticker" if "Ticker" in cat.columns else "ticker"
-        theme_col = "Theme" if "Theme" in cat.columns else "theme"
-        if ticker_col not in cat.columns or theme_col not in cat.columns:
-            return []
-
-        if self.case_sensitive:
-            mask = cat[ticker_col].astype(str).isin(self.tickers)
-        else:
-            req = {t.lower() for t in self.tickers}
-            mask = cat[ticker_col].astype(str).str.lower().isin(req)
-
-        ds = (
-            cat.loc[mask, theme_col]
-            .map(JPMAQS_DATASET_THEME_MAPPING)
-            .dropna()
-            .astype(str)
-            .unique()
-            .tolist()
-        )
-        return sorted(set(ds))
-
-    def _as_local_like_df(self, df: pd.DataFrame, *, source: str) -> pd.DataFrame:
-        if df.empty:
-            return df.copy()
-
-        out = df.copy()
-        if "filename" not in out.columns:
-            out["filename"] = out[self.file_name_col].astype(str)
-
-        if "dataset" not in out.columns:
-            base = out["filename"].astype(str).str.split(".", n=1).str[0]
-            out["dataset"] = base.str.rsplit("_", n=1).str[0]
-
-        if "e-dataset" not in out.columns:
-            out["e-dataset"] = (
-                out["dataset"].astype(str).str.replace(r"_DELTA$", "", regex=True)
-            )
-
-        if "file-timestamp" not in out.columns:
-            if source == "api" and "file-datetime" in out.columns:
-                out["file-timestamp"] = pd_to_datetime_compat(
-                    out["file-datetime"], utc=True
-                )
-            else:
-                base = out["filename"].astype(str).str.split(".", n=1).str[0]
-                ts_str = base.str.rsplit("_", n=1).str[-1]
-                out["file-timestamp"] = pd_to_datetime_compat(ts_str, utc=True)
-
-        out = out[out["file-timestamp"].notna()].copy()
-        if self.datasets_for_tickers:
-            out = out[out["e-dataset"].isin(self.datasets_for_tickers)].copy()
-
-        return out
-
-    def select_files_for_download(
-        self,
-        overwrite: bool = False,
-        since_datetime: Optional[Union[str, pd.Timestamp]] = None,
-        to_datetime: Optional[Union[str, pd.Timestamp]] = None,
-        include_delta_files: bool = True,
-        warn_if_no_full_snapshots: bool = False,
-        last_modified_col: str = "last-modified",
-        min_last_updated: Optional[Union[str, pd.Timestamp]] = None,
-        max_last_updated: Optional[Union[str, pd.Timestamp]] = None,
-    ) -> List[str]:
-        """Select API file-name(s) required for a load vintage that are missing/outdated locally."""
-        api_like = self._as_local_like_df(self.api_files_df, source="api")
-        if api_like.empty:
-            return []
-
-        selected_api = _select_local_files_for_load(
-            api_like,
-            since_datetime=since_datetime,
-            to_datetime=to_datetime,
-            include_delta_files=include_delta_files,
-            warn_if_no_full_snapshots=warn_if_no_full_snapshots,
-            min_last_updated=min_last_updated,
-            max_last_updated=max_last_updated,
-        )
-        required = set(selected_api["filename"].astype(str).tolist())
-        if not required:
-            return []
-        if overwrite:
-            return sorted(required)
-
-        local = self.local_files_df.copy()
-        if (not local.empty) and ("path" in local.columns):
-            local = local[
-                local["path"].notna() & local["path"].astype(str).str.len().gt(0)
-            ]
-            local = local[local["path"].apply(lambda p: Path(str(p)).is_file())]
-        present = (
-            set(local[self.file_name_col].astype(str).tolist())
-            if not local.empty
-            else set()
-        )
-        to_download = set(required - present)
-
-        if (
-            (last_modified_col in self.api_files_df.columns)
-            and (not self.local_files_df.empty)
-            and (last_modified_col in self.local_files_df.columns)
-        ):
-            adf = self.api_files_df.set_index(self.file_name_col)[last_modified_col]
-            ldf = self.local_files_df.set_index(self.file_name_col)[last_modified_col]
-            common = adf.index.intersection(ldf.index).intersection(list(required))
-            if len(common) > 0:
-                updated = common[adf.loc[common] > ldf.loc[common]]
-                to_download |= set(map(str, updated.tolist()))
-
-        return sorted(to_download)
-
-    def select_files_for_load(
-        self,
-        since_datetime: Optional[Union[str, pd.Timestamp]] = None,
-        to_datetime: Optional[Union[str, pd.Timestamp]] = None,
-        include_delta_files: bool = True,
-        warn_if_no_full_snapshots: bool = False,
-        min_last_updated: Optional[Union[str, pd.Timestamp]] = None,
-        max_last_updated: Optional[Union[str, pd.Timestamp]] = None,
-    ) -> pd.DataFrame:
-        """Select local snapshot/delta files to load from disk (drops rows without a valid file `path`)."""
-        if self.local_files_df.empty:
-            return self.local_files_df.copy()
-
-        if "path" not in self.local_files_df.columns:
-            return pd.DataFrame()
-
-        local_df = self.local_files_df.copy()
-        local_df = local_df[
-            local_df["path"].notna() & local_df["path"].astype(str).str.len().gt(0)
-        ]
-        local_df = local_df[local_df["path"].apply(lambda p: Path(str(p)).is_file())]
-        local_df = self._as_local_like_df(local_df, source="local")
-        if local_df.empty:
-            return local_df
-
-        return _select_local_files_for_load(
-            local_df,
-            since_datetime=since_datetime,
-            to_datetime=to_datetime,
-            include_delta_files=include_delta_files,
-            warn_if_no_full_snapshots=warn_if_no_full_snapshots,
-            min_last_updated=min_last_updated,
-            max_last_updated=max_last_updated,
-        )
-
-
-def _select_local_files_for_load(
-    files_df: pd.DataFrame,
-    *,
-    since_datetime: Optional[Union[str, pd.Timestamp]] = None,
-    to_datetime: Optional[Union[str, pd.Timestamp]] = None,
-    include_delta_files: bool = True,
-    warn_if_no_full_snapshots: bool = False,
-    min_last_updated: Optional[Union[str, pd.Timestamp]] = None,
-    max_last_updated: Optional[Union[str, pd.Timestamp]] = None,
-) -> pd.DataFrame:
-    """
-    Single-responsibility helper: choose which local snapshot/delta files to load.
-
-    The selection is per effective dataset ("e-dataset"):
-    - If full snapshots exist for the dataset and at least one snapshot is present in the
-      requested file-vintage window, load the latest snapshot in the window and any delta
-      files newer than that snapshot (also within the window).
-    - If no full snapshots exist at or before the requested vintage (effective delta-only
-      history), load *all* available deltas up to the requested vintage. For monthly "large
-      delta" regimes, also include the covering month-end delta file even if it timestamps
-      after `to_datetime` (row-level filtering is handled via `max_last_updated`).
-    """
-    if files_df.empty:
-        return files_df
-
-    df = files_df.copy()
-
-    if "e-dataset" in df.columns:
-        group_col = "e-dataset"
-    else:
-        group_col = "dataset"
-        if group_col not in df.columns:
-            raise ValueError("Expected column 'dataset' in files_df")
-        df[group_col] = (
-            df[group_col].astype(str).str.replace(r"_DELTA$", "", regex=True)
-        )
-
-    if "file-timestamp" not in df.columns:
-        raise ValueError("Expected column 'file-timestamp' in files_df")
-
-    since_ts = (
-        pd_to_datetime_compat(since_datetime) if since_datetime is not None else None
-    )
-    if since_ts is not None and _is_date_only_string(since_datetime):
-        since_ts = since_ts.normalize()
-
-    vintage_to_ts = (
-        _normalize_file_timestamp_cutoff(to_datetime)
-        if to_datetime is not None
-        else df["file-timestamp"].max()
-    )
-
-    # `last_updated` timestamps are row-content vintages. They can be non-monotonic with
-    # file timestamps, especially in monthly "large delta" regimes. Use them to guide
-    # delta coverage without allowing snapshots beyond the file-vintage cutoff.
-    content_to_ts: Optional[pd.Timestamp] = None
-    if (max_last_updated is not None) or (to_datetime is not None):
-        content_to_ts = _normalize_last_updated_cutoff(
-            max_last_updated if max_last_updated is not None else to_datetime
-        )
-
-    # For snapshot-led selection we keep the historical behaviour of treating
-    # (`since_datetime`, `to_datetime`) as an unordered window and swapping if needed.
-    window_since_ts = since_ts
-    window_to_ts = vintage_to_ts
-    if window_since_ts is not None and window_since_ts > window_to_ts:
-        window_since_ts, window_to_ts = window_to_ts, window_since_ts
-
-    earliest_snapshot_ts: Optional[pd.Timestamp] = None
-    if warn_if_no_full_snapshots and window_since_ts is not None:
-        is_delta_all = (
-            df["filename"].astype(str).str.contains("_DELTA", case=False, na=False)
-        )
-        is_metadata_all = (
-            df["filename"].astype(str).str.contains("_METADATA", case=False, na=False)
-        )
-        snapshots_all = df.loc[~is_delta_all & ~is_metadata_all].copy()
-        earliest_snapshot_ts = snapshots_all["file-timestamp"].min()
-        if pd.isna(earliest_snapshot_ts):
-            earliest_snapshot_ts = None
-
-    selected = []
-    for _, g in df.groupby(group_col):
-        if g.empty:
-            continue
-
-        is_delta_g = (
-            g["filename"].astype(str).str.contains("_DELTA", case=False, na=False)
-        )
-        is_metadata_g = (
-            g["filename"].astype(str).str.contains("_METADATA", case=False, na=False)
-        )
-        snapshots_all_g = g.loc[~is_delta_g & ~is_metadata_g].copy()
-
-        # Delta-only history (effective): no snapshots exist at or before the requested
-        # vintage. Snapshots can exist *later* in time (e.g. after source-side deletion
-        # of older snapshots), but are unusable for reconstructing an earlier vintage
-        # and should not block delta-only selection.
-        snapshots_upto_vintage_g = snapshots_all_g[
-            snapshots_all_g["file-timestamp"].le(vintage_to_ts)
-        ].copy()
-        if snapshots_upto_vintage_g.empty:
-            if not include_delta_files:
-                continue
-
-            deltas_all = g.loc[is_delta_g].copy()
-            if deltas_all.empty:
-                continue
-
-            effective_to_ts = vintage_to_ts
-            to_base_ts = content_to_ts if content_to_ts is not None else vintage_to_ts
-            if content_to_ts is not None and max_last_updated is not None:
-                effective_to_ts = max(effective_to_ts, content_to_ts)
-
-            if (to_datetime is not None) or (max_last_updated is not None):
-                # Prefer regular in-month deltas when they exist up to the requested
-                # vintage; only fall back to the covering month-end ("large delta")
-                # file when needed (regular deltas may be deleted/absent).
-                ts_ser = deltas_all["file-timestamp"]
-                in_month = (ts_ser.dt.year == to_base_ts.year) & (
-                    ts_ser.dt.month == to_base_ts.month
-                )
-                is_large_delta_ts = (
-                    (ts_ser.dt.hour == 23)
-                    & (ts_ser.dt.minute == 59)
-                    & (ts_ser.dt.second == 59)
-                )
-                has_regular_in_month = bool(
-                    (in_month & (ts_ser.le(to_base_ts)) & (~is_large_delta_ts)).any()
-                )
-
-                cover_ts = _covering_large_delta_timestamp(
-                    to_ts=to_base_ts,
-                    delta_file_timestamps=deltas_all["file-timestamp"].tolist(),
-                )
-                if cover_ts is not None and not has_regular_in_month:
-                    effective_to_ts = max(effective_to_ts, cover_ts)
-
-            deltas_sel = deltas_all[
-                deltas_all["file-timestamp"].le(effective_to_ts)
-            ].copy()
-            selected.append(deltas_sel)
-            continue
-
-        # Windowed candidate set (matches historical behaviour for snapshot-led selection).
-        if window_since_ts is not None:
-            g_window = g[
-                g["file-timestamp"].between(window_since_ts, window_to_ts)
-            ].copy()
-        else:
-            g_window = g[g["file-timestamp"].le(window_to_ts)].copy()
-        if g_window.empty:
-            continue
-
-        is_delta_w = (
-            g_window["filename"]
-            .astype(str)
-            .str.contains("_DELTA", case=False, na=False)
-        )
-        is_metadata_w = (
-            g_window["filename"]
-            .astype(str)
-            .str.contains("_METADATA", case=False, na=False)
-        )
-        snapshots_w = g_window.loc[~is_delta_w & ~is_metadata_w].copy()
-
-        # Snapshot-led selection (preserves the window semantics):
-        if snapshots_w.empty:
-            # No snapshots within the requested window: fall back to deltas in-window (if any).
-            if include_delta_files:
-                selected.append(g_window.loc[is_delta_w].copy())
-            continue
-
-        latest_snapshot_ts = snapshots_w["file-timestamp"].max()
-        snapshots_sel = snapshots_w[
-            snapshots_w["file-timestamp"] == latest_snapshot_ts
-        ].copy()
-        if not include_delta_files:
-            selected.append(snapshots_sel)
-            continue
-
-        deltas_w = g_window.loc[is_delta_w].copy()
-        deltas_sel = deltas_w[deltas_w["file-timestamp"] >= latest_snapshot_ts].copy()
-
-        # Monthly "large delta" regimes may require the covering month-end delta file even
-        # when it timestamps after the file-vintage window (`to_datetime`). Include it when
-        # regular in-month deltas are absent and a covering large-delta timestamp exists.
-        to_base_ts = content_to_ts if content_to_ts is not None else vintage_to_ts
-        deltas_all = g.loc[is_delta_g].copy()
-        if (not deltas_all.empty) and (
-            (to_datetime is not None) or (max_last_updated is not None)
-        ):
-            ts_ser = deltas_all["file-timestamp"]
-            in_month = (ts_ser.dt.year == to_base_ts.year) & (
-                ts_ser.dt.month == to_base_ts.month
-            )
-            is_large_delta_ts = (
-                (ts_ser.dt.hour == 23)
-                & (ts_ser.dt.minute == 59)
-                & (ts_ser.dt.second == 59)
-            )
-            has_regular_in_month = bool(
-                (in_month & (ts_ser.le(to_base_ts)) & (~is_large_delta_ts)).any()
-            )
-            cover_ts = _covering_large_delta_timestamp(
-                to_ts=to_base_ts,
-                delta_file_timestamps=ts_ser.tolist(),
-            )
-            if (
-                cover_ts is not None
-                and (not has_regular_in_month)
-                and cover_ts >= latest_snapshot_ts
-            ):
-                cover_df = deltas_all[deltas_all["file-timestamp"] == cover_ts].copy()
-                if not cover_df.empty:
-                    deltas_sel = pd.concat([deltas_sel, cover_df], ignore_index=True)
-        selected.append(pd.concat([snapshots_sel, deltas_sel], ignore_index=True))
-
-    out = (
-        pd.concat(selected, ignore_index=True).reset_index(drop=True)
-        if selected
-        else df.iloc[0:0].copy()
-    )
-
-    if out.empty:
-        return out
-
-    if warn_if_no_full_snapshots and window_since_ts is not None:
-        is_delta_out = (
-            out["filename"].astype(str).str.contains("_DELTA", case=False, na=False)
-        )
-        is_metadata_out = (
-            out["filename"].astype(str).str.contains("_METADATA", case=False, na=False)
-        )
-        snapshots_out = out.loc[~is_delta_out & ~is_metadata_out].copy()
-        if snapshots_out.empty and bool(is_delta_out.any()):
-            earliest_snapshot_str = None
-            if earliest_snapshot_ts is not None:
-                earliest_snapshot_str = earliest_snapshot_ts.strftime(
-                    "%Y-%m-%dT%H:%M:%SZ"
-                )
-            else:
-                earliest_snapshot_str = "N/A"
-            logger.warning(
-                "No full snapshots available in the requested window "
-                f"since={window_since_ts.strftime('%Y-%m-%dT%H:%M:%SZ')} "
-                f"to={window_to_ts.strftime('%Y-%m-%dT%H:%M:%SZ')} "
-                f"earliest_snapshot={earliest_snapshot_str}"
-            )
-
-    if not include_delta_files:
-        # keep only snapshots
-        is_delta = (
-            out["filename"].astype(str).str.contains("_DELTA", case=False, na=False)
-        )
-        is_metadata = (
-            out["filename"].astype(str).str.contains("_METADATA", case=False, na=False)
-        )
-        out = out.loc[~is_delta & ~is_metadata].copy()
-
-    out = out.sort_values([group_col, "file-timestamp", "filename"]).reset_index(
-        drop=True
-    )
-    return out
-
-
-def _filter_to_latest_files(
-    files_df: pd.DataFrame,
-    since_datetime: Optional[Union[str, pd.Timestamp]] = None,
-    to_datetime: Optional[Union[str, pd.Timestamp]] = None,
-    include_delta_files: bool = True,
-    delta_treatment: str = "all",
-    warn_if_no_full_snapshots: bool = False,
-) -> pd.DataFrame:
-    """
-    Backwards-compatible wrapper around `_select_local_files_for_load()`.
-
-    Historically this function selected the latest full snapshot per dataset (within an
-    optional window) plus any newer deltas. It now also supports "delta-only history"
-    regimes (no full snapshots available), including monthly "large delta" coverage.
-    """
-    return _select_local_files_for_load(
-        files_df,
-        since_datetime=since_datetime,
-        to_datetime=to_datetime,
-        include_delta_files=include_delta_files,
-        warn_if_no_full_snapshots=warn_if_no_full_snapshots,
-    )
 
 
 def lazy_load_from_parquets(
@@ -4096,20 +2999,20 @@ if __name__ == "__main__":
     test_xcats = ["RIR_NSA", "FXXR_NSA", "FXXR_VT10", "DU05YXR_NSA", "DU05YXR_VT10"]
     tickers = [f"{c}_{x}" for c in test_cids for x in test_xcats]
 
-    with DataQueryFileAPIClient(out_dir="./data/jpmaqs-data/") as dq:
-        df = dq.download(
-            tickers=tickers,
-            include_file_column=True,
-        )
-        print(df.head())
+    # with DataQueryFileAPIClient(out_dir="./data/jpmaqs-data/") as dq:
+    #     df = dq.download(
+    #         tickers=tickers,
+    #         include_file_column=True,
+    #     )
+    #     print(df.head())
+
+    # with DataQueryFileAPIClient(out_dir="./data/jpmaqs-data/") as dq:
+    #     df = dq.download_as_of(tickers=tickers, as_of_datetime="2025-11-12")
 
     with DataQueryFileAPIClient(out_dir="./data/jpmaqs-data/") as dq:
-        df = dq.download_as_of(tickers=tickers, as_of_datetime="2025-11-12")
-
-    with DataQueryFileAPIClient(out_dir="./data/jpmaqs-data/") as dq:
-        df = dq.download_as_of(tickers=tickers, as_of_datetime="2025-11-12T12:00:00")
+        df = dq.download_as_of(tickers=tickers, as_of_datetime="2025-10-08T12:16:14Z")
         assert df["real_date"].max() <= pd.Timestamp("2025-11-12")
-        assert df["last_updated"].max() <= pd.Timestamp("2025-11-12T12:00:00")
+        assert df["last_updated"].max() <= pd.Timestamp("2025-10-08T12:16:14")
         print(df.head())
 
     # with DataQueryFileAPIClient(out_dir="./data/jpmaqs-data/") as dq:
