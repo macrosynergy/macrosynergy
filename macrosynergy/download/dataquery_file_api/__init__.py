@@ -1,4 +1,4 @@
-from dataquery_file_api import (
+from .dataquery_file_api import (
     DataQueryFileAPIClient,
     DataQueryFileAPIOauth,
     JPMAQS_EARLIEST_FILE_DATE,
