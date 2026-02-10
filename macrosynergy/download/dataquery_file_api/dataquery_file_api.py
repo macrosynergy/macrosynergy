@@ -1576,57 +1576,12 @@ class DataQueryFileAPIClient(RateLimitedRequester):
                 since_datetime=selection_since,
                 to_datetime=selection_to,
                 include_delta_files=include_delta,
+                include_metadata_files=include_metadata,
                 warn_if_no_full_snapshots=bool(selection_since),
                 min_last_updated=_selection_min_last_updated,
                 max_last_updated=_selection_max_last_updated,
             )
         )
-
-        # Metadata files are intentionally excluded from FileSelector selection; handle them
-        # separately (they are small, and selection is not vintage-sensitive).
-        if include_metadata and (not files_df.empty):
-            meta_mask = (
-                files_df["file-name"]
-                .astype(str)
-                .str.contains("_METADATA", case=False, na=False)
-            )
-            meta_df = files_df.loc[meta_mask].copy()
-            if not meta_df.empty:
-                required_meta = set(meta_df["file-name"].astype(str).tolist())
-                if overwrite:
-                    to_download |= required_meta
-                else:
-                    local = downloaded_files_df.copy()
-                    if (not local.empty) and ("path" in local.columns):
-                        local = local[
-                            local["path"].notna()
-                            & local["path"].astype(str).str.len().gt(0)
-                        ]
-                        local = local[
-                            local["path"].apply(lambda p: Path(str(p)).is_file())
-                        ]
-                    present = (
-                        set(local["file-name"].astype(str).tolist())
-                        if not local.empty
-                        else set()
-                    )
-                    meta_to_download = set(required_meta - present)
-                    if (
-                        ("last-modified" in meta_df.columns)
-                        and (not downloaded_files_df.empty)
-                        and ("last-modified" in downloaded_files_df.columns)
-                    ):
-                        adf = meta_df.set_index("file-name")["last-modified"]
-                        ldf = downloaded_files_df.set_index("file-name")[
-                            "last-modified"
-                        ]
-                        common = adf.index.intersection(ldf.index).intersection(
-                            list(required_meta)
-                        )
-                        if len(common) > 0:
-                            updated = common[adf.loc[common] > ldf.loc[common]]
-                            meta_to_download |= set(map(str, updated.tolist()))
-                    to_download |= meta_to_download
 
         num_files_to_download = len(to_download)
         logger.info(f"Found {num_files_to_download} new files to download.")

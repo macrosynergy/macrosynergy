@@ -183,6 +183,7 @@ class FileSelector:
         since_datetime: Optional[Union[str, pd.Timestamp]] = None,
         to_datetime: Optional[Union[str, pd.Timestamp]] = None,
         include_delta_files: bool = True,
+        include_metadata_files: bool = False,
         warn_if_no_full_snapshots: bool = False,
         last_modified_col: str = "last-modified",
         min_last_updated: Optional[Union[str, pd.Timestamp]] = None,
@@ -203,6 +204,44 @@ class FileSelector:
             max_last_updated=max_last_updated,
         )
         required = set(selected_api["filename"].astype(str).tolist())
+
+        # Metadata files are also vintage-sensitive (the date window matters). When
+        # requested, include only metadata files that fall within the same vintage
+        # window semantics as snapshots/deltas (date-only strings are treated as
+        # whole-day cutoffs).
+        if include_metadata_files:
+            meta_mask = (
+                api_like["filename"]
+                .astype(str)
+                .str.contains("_METADATA", case=False, na=False)
+            )
+            meta_df = api_like.loc[meta_mask].copy()
+            if not meta_df.empty:
+                meta_since_ts = (
+                    pd_to_datetime_compat(since_datetime)
+                    if since_datetime is not None
+                    else None
+                )
+                if meta_since_ts is not None and _is_date_only_string(since_datetime):
+                    meta_since_ts = meta_since_ts.normalize()
+
+                meta_to_ts = (
+                    _normalize_file_timestamp_cutoff(to_datetime)
+                    if to_datetime is not None
+                    else meta_df["file-timestamp"].max()
+                )
+
+                if meta_since_ts is not None and meta_since_ts > meta_to_ts:
+                    meta_since_ts, meta_to_ts = meta_to_ts, meta_since_ts
+
+                if meta_since_ts is not None:
+                    meta_df = meta_df[
+                        meta_df["file-timestamp"].between(meta_since_ts, meta_to_ts)
+                    ].copy()
+                else:
+                    meta_df = meta_df[meta_df["file-timestamp"].le(meta_to_ts)].copy()
+
+                required |= set(meta_df["filename"].astype(str).tolist())
         if not required:
             return []
         if overwrite:
@@ -311,6 +350,7 @@ def _select_local_files_for_load(
     if "file-timestamp" not in df.columns:
         raise ValueError("Expected column 'file-timestamp' in files_df")
 
+    # ---- normalize inputs (window + vintages) ---------------------------------
     since_ts = (
         pd_to_datetime_compat(since_datetime) if since_datetime is not None else None
     )
@@ -332,165 +372,152 @@ def _select_local_files_for_load(
             max_last_updated if max_last_updated is not None else to_datetime
         )
 
-    # For snapshot-led selection we keep the historical behaviour of treating
+    # Snapshot-led selection keeps the historical behaviour of treating
     # (`since_datetime`, `to_datetime`) as an unordered window and swapping if needed.
     window_since_ts = since_ts
     window_to_ts = vintage_to_ts
     if window_since_ts is not None and window_since_ts > window_to_ts:
         window_since_ts, window_to_ts = window_to_ts, window_since_ts
 
-    earliest_snapshot_ts: Optional[pd.Timestamp] = None
-    if warn_if_no_full_snapshots and window_since_ts is not None:
-        is_delta_all = (
-            df["filename"].astype(str).str.contains("_DELTA", case=False, na=False)
-        )
-        is_metadata_all = (
-            df["filename"].astype(str).str.contains("_METADATA", case=False, na=False)
-        )
-        snapshots_all = df.loc[~is_delta_all & ~is_metadata_all].copy()
-        earliest_snapshot_ts = snapshots_all["file-timestamp"].min()
-        if pd.isna(earliest_snapshot_ts):
-            earliest_snapshot_ts = None
+    # ---- file type flags -------------------------------------------------------
+    filenames = df["filename"].astype(str)
+    is_delta = filenames.str.contains("_DELTA", case=False, na=False)
+    is_metadata = filenames.str.contains("_METADATA", case=False, na=False)
+    is_snapshot = ~is_delta & ~is_metadata
 
-    selected = []
-    for _, g in df.groupby(group_col):
-        if g.empty:
-            continue
-
-        is_delta_g = (
-            g["filename"].astype(str).str.contains("_DELTA", case=False, na=False)
-        )
-        is_metadata_g = (
-            g["filename"].astype(str).str.contains("_METADATA", case=False, na=False)
-        )
-        snapshots_all_g = g.loc[~is_delta_g & ~is_metadata_g].copy()
-
-        # Delta-only history (effective): no snapshots exist at or before the requested
-        # vintage. Snapshots can exist *later* in time (e.g. after source-side deletion
-        # of older snapshots), but are unusable for reconstructing an earlier vintage
-        # and should not block delta-only selection.
-        snapshots_upto_vintage_g = snapshots_all_g[
-            snapshots_all_g["file-timestamp"].le(vintage_to_ts)
-        ].copy()
-        if snapshots_upto_vintage_g.empty:
-            if not include_delta_files:
-                continue
-
-            deltas_all = g.loc[is_delta_g].copy()
-            if deltas_all.empty:
-                continue
-
-            effective_to_ts = vintage_to_ts
-            to_base_ts = content_to_ts if content_to_ts is not None else vintage_to_ts
-            if content_to_ts is not None and max_last_updated is not None:
-                effective_to_ts = max(effective_to_ts, content_to_ts)
-
-            if (to_datetime is not None) or (max_last_updated is not None):
-                ts_ser = deltas_all["file-timestamp"]
-                cover_ts = _covering_large_delta_timestamp(
-                    to_ts=to_base_ts,
-                    delta_file_timestamps=deltas_all["file-timestamp"].tolist(),
-                )
-                if cover_ts is not None:
-                    effective_to_ts = max(effective_to_ts, cover_ts)
-
-            deltas_sel = deltas_all[
-                deltas_all["file-timestamp"].le(effective_to_ts)
-            ].copy()
-            selected.append(deltas_sel)
-            continue
-
-        # Windowed candidate set (matches historical behaviour for snapshot-led selection).
-        if window_since_ts is not None:
-            g_window = g[
-                g["file-timestamp"].between(window_since_ts, window_to_ts)
-            ].copy()
-        else:
-            g_window = g[g["file-timestamp"].le(window_to_ts)].copy()
-        if g_window.empty:
-            continue
-
-        is_delta_w = (
-            g_window["filename"]
-            .astype(str)
-            .str.contains("_DELTA", case=False, na=False)
-        )
-        is_metadata_w = (
-            g_window["filename"]
-            .astype(str)
-            .str.contains("_METADATA", case=False, na=False)
-        )
-        snapshots_w = g_window.loc[~is_delta_w & ~is_metadata_w].copy()
-
-        # Snapshot-led selection (preserves the window semantics):
-        if snapshots_w.empty:
-            # No snapshots within the requested window: fall back to deltas in-window (if any).
-            if include_delta_files:
-                selected.append(g_window.loc[is_delta_w].copy())
-            continue
-
-        latest_snapshot_ts = snapshots_w["file-timestamp"].max()
-        snapshots_sel = snapshots_w[
-            snapshots_w["file-timestamp"] == latest_snapshot_ts
-        ].copy()
-        if not include_delta_files:
-            selected.append(snapshots_sel)
-            continue
-
-        deltas_w = g_window.loc[is_delta_w].copy()
-        deltas_sel = deltas_w[deltas_w["file-timestamp"] >= latest_snapshot_ts].copy()
-
-        # Monthly "large delta" regimes may require the covering month-end delta file even
-        # when it timestamps after the file-vintage window (`to_datetime`). Include it when
-        # regular in-month deltas are absent and a covering large-delta timestamp exists.
-        to_base_ts = content_to_ts if content_to_ts is not None else vintage_to_ts
-        deltas_all = g.loc[is_delta_g].copy()
-        if (not deltas_all.empty) and (
-            (to_datetime is not None) or (max_last_updated is not None)
-        ):
-            ts_ser = deltas_all["file-timestamp"]
-            in_month = (ts_ser.dt.year == to_base_ts.year) & (
-                ts_ser.dt.month == to_base_ts.month
-            )
-            is_large_delta_ts = (
-                (ts_ser.dt.hour == 23)
-                & (ts_ser.dt.minute == 59)
-                & (ts_ser.dt.second == 59)
-            )
-            has_regular_in_month = bool(
-                (in_month & (ts_ser.le(to_base_ts)) & (~is_large_delta_ts)).any()
-            )
-            cover_ts = _covering_large_delta_timestamp(
-                to_ts=to_base_ts,
-                delta_file_timestamps=ts_ser.tolist(),
-            )
-            if (
-                cover_ts is not None
-                and (not has_regular_in_month)
-                and cover_ts >= latest_snapshot_ts
-            ):
-                cover_df = deltas_all[deltas_all["file-timestamp"] == cover_ts].copy()
-                if not cover_df.empty:
-                    deltas_sel = pd.concat([deltas_sel, cover_df], ignore_index=True)
-        selected.append(pd.concat([snapshots_sel, deltas_sel], ignore_index=True))
-
-    out = (
-        pd.concat(selected, ignore_index=True).reset_index(drop=True)
-        if selected
-        else df.iloc[0:0].copy()
+    ts = df["file-timestamp"]
+    grp = df[group_col]
+    in_window = (
+        ts.le(window_to_ts)
+        if window_since_ts is None
+        else ts.between(window_since_ts, window_to_ts)
     )
 
+    # ---- snapshot availability summary ----------------------------------------
+    # Delta-only history (effective): no snapshots exist at or before the requested
+    # file-vintage cutoff (`vintage_to_ts`).
+    has_snapshot_upto_vintage = (is_snapshot & ts.le(vintage_to_ts)).groupby(grp).any()
+    has_snapshot_upto_vintage = grp.map(has_snapshot_upto_vintage).fillna(False)
+    is_delta_only_history = ~has_snapshot_upto_vintage
+
+    latest_snapshot_in_window = (
+        df.loc[is_snapshot & in_window].groupby(group_col)["file-timestamp"].max()
+    )
+    latest_snapshot_in_window = grp.map(latest_snapshot_in_window)
+    has_snapshot_in_window = latest_snapshot_in_window.notna()
+
+    # ---- large delta coverage summary (per dataset) ---------------------------
+    to_base_ts = content_to_ts if content_to_ts is not None else vintage_to_ts
+    need_cover = (to_datetime is not None) or (max_last_updated is not None)
+
+    cover_ts_by_group = pd.Series(dtype="object")
+    has_regular_in_month_by_group = pd.Series(dtype="bool")
+    if need_cover and bool(is_delta.any()):
+        deltas = df.loc[is_delta, [group_col, "file-timestamp"]].copy()
+
+        cover_ts_by_group = deltas.groupby(group_col)["file-timestamp"].apply(
+            lambda s: _covering_large_delta_timestamp(
+                to_ts=to_base_ts, delta_file_timestamps=s.tolist()
+            )
+        )
+
+        def _has_regular_in_month(s: pd.Series) -> bool:
+            in_month = (s.dt.year == to_base_ts.year) & (s.dt.month == to_base_ts.month)
+            is_large_delta_ts = (
+                (s.dt.hour == 23) & (s.dt.minute == 59) & (s.dt.second == 59)
+            )
+            return bool((in_month & (s.le(to_base_ts)) & (~is_large_delta_ts)).any())
+
+        has_regular_in_month_by_group = deltas.groupby(group_col)[
+            "file-timestamp"
+        ].apply(_has_regular_in_month)
+
+    cover_ts = grp.map(cover_ts_by_group)
+    cover_ts = pd.to_datetime(cover_ts, utc=True, errors="coerce")
+    has_regular_in_month = (
+        grp.map(has_regular_in_month_by_group).astype("boolean").fillna(False)
+    )
+
+    # ---- selection masks (vectorized) -----------------------------------------
+    cutoff_ts = vintage_to_ts
+    if content_to_ts is not None and max_last_updated is not None:
+        cutoff_ts = max(cutoff_ts, content_to_ts)
+
+    # Delta-only history: select all deltas up to the cutoff plus a covering large-delta
+    # file (which can be after the vintage cutoff).
+    mask_delta_only = (
+        include_delta_files & is_delta_only_history & is_delta & ts.le(cutoff_ts)
+    )
+    mask_delta_only_cover = (
+        include_delta_files
+        & need_cover
+        & is_delta_only_history
+        & is_delta
+        & cover_ts.notna()
+        & ts.eq(cover_ts)
+        & ts.gt(cutoff_ts)
+    )
+
+    # Snapshot-led history: window semantics apply.
+    mask_latest_snapshot = (
+        is_snapshot
+        & in_window
+        & has_snapshot_in_window
+        & ts.eq(latest_snapshot_in_window)
+    )
+
+    mask_window_deltas_no_snapshot = (
+        include_delta_files
+        & is_delta
+        & in_window
+        & has_snapshot_upto_vintage
+        & (~has_snapshot_in_window)
+    )
+    mask_window_deltas_after_snapshot = (
+        include_delta_files
+        & is_delta
+        & in_window
+        & has_snapshot_in_window
+        & ts.ge(latest_snapshot_in_window)
+    )
+
+    # Snapshot-led cover delta (only when regular in-month deltas are absent).
+    mask_snapshot_cover = (
+        include_delta_files
+        & need_cover
+        & is_delta
+        & has_snapshot_in_window
+        & cover_ts.notna()
+        & (~has_regular_in_month)
+        & cover_ts.ge(latest_snapshot_in_window)
+        & ts.eq(cover_ts)
+        & (~mask_window_deltas_after_snapshot)
+    )
+
+    out = df.loc[
+        mask_delta_only
+        | mask_delta_only_cover
+        | mask_latest_snapshot
+        | mask_window_deltas_no_snapshot
+        | mask_window_deltas_after_snapshot
+        | mask_snapshot_cover
+    ].copy()
+
     if out.empty:
-        return out
+        return df.iloc[0:0].copy()
+
+    # ---- warnings / final output shaping --------------------------------------
+    earliest_snapshot_ts: Optional[pd.Timestamp] = None
+    if warn_if_no_full_snapshots and window_since_ts is not None:
+        earliest_snapshot_ts = df.loc[is_snapshot, "file-timestamp"].min()
+        if pd.isna(earliest_snapshot_ts):
+            earliest_snapshot_ts = None
 
     if warn_if_no_full_snapshots and window_since_ts is not None:
         is_delta_out = (
             out["filename"].astype(str).str.contains("_DELTA", case=False, na=False)
         )
-        is_metadata_out = (
-            out["filename"].astype(str).str.contains("_METADATA", case=False, na=False)
-        )
-        snapshots_out = out.loc[~is_delta_out & ~is_metadata_out].copy()
+        snapshots_out = out.loc[~is_delta_out].copy()
         if snapshots_out.empty and bool(is_delta_out.any()):
             earliest_snapshot_str = None
             if earliest_snapshot_ts is not None:
