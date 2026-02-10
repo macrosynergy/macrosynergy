@@ -381,6 +381,7 @@ class RateLimitedRequester:
         delay = self._api_delay if api_delay is None else api_delay
         if delay <= 0:
             return True
+
         with self._rate_limit_lock:
             now = datetime.datetime.now()
             if self._last_api_call is None:
@@ -1519,6 +1520,10 @@ class DataQueryFileAPIClient(RateLimitedRequester):
         include_metadata: bool = True,
         file_group_ids: Optional[List[str]] = None,
         show_progress: bool = True,
+        _selection_since_datetime: Optional[str] = None,
+        _selection_to_datetime: Optional[str] = None,
+        _selection_min_last_updated: Optional[Union[str, pd.Timestamp]] = None,
+        _selection_max_last_updated: Optional[Union[str, pd.Timestamp]] = None,
     ) -> None:
         """
         Downloads a complete snapshot of files based on specified criteria.
@@ -1553,6 +1558,14 @@ class DataQueryFileAPIClient(RateLimitedRequester):
             from these groups will be downloaded.
         show_progress : bool
             If True, displays a progress bar for downloads.
+
+        Notes
+        -----
+        Internal parameters `_selection_since_datetime`, `_selection_to_datetime`,
+        `_selection_min_last_updated`, and `_selection_max_last_updated` are
+        used by `download()` to distinguish between:
+        - the API listing window (which may be expanded for "covering" monthly delta files),
+        - and the target user-requested vintage window (used for file selection).
         """
         Path(self.out_dir).mkdir(parents=True, exist_ok=True)
         start_time = time.time()
@@ -1587,24 +1600,90 @@ class DataQueryFileAPIClient(RateLimitedRequester):
             files_df = files_df[files_df["file-group-id"].isin(file_group_ids)].copy()
 
         downloaded_files_df = self.list_downloaded_files()
-        if not overwrite and not downloaded_files_df.empty:
-            files_df = files_df[
-                ~(files_df["file-name"].isin(downloaded_files_df["file-name"]))
-            ].copy()
-            num_files_to_download = len(files_df["file-name"])
+        selection_since = (
+            _selection_since_datetime
+            if _selection_since_datetime is not None
+            else since_datetime
+        )
+        selection_to = (
+            _selection_to_datetime
+            if _selection_to_datetime is not None
+            else to_datetime
+        )
 
-        num_files_to_download = len(files_df["file-name"])
+        selector = FileSelector(files_df, downloaded_files_df)
+        to_download = set(
+            selector.select_files_for_download(
+                overwrite=overwrite,
+                since_datetime=selection_since,
+                to_datetime=selection_to,
+                include_delta_files=include_delta,
+                warn_if_no_full_snapshots=bool(selection_since),
+                min_last_updated=_selection_min_last_updated,
+                max_last_updated=_selection_max_last_updated,
+            )
+        )
+
+        # Metadata files are intentionally excluded from FileSelector selection; handle them
+        # separately (they are small, and selection is not vintage-sensitive).
+        if include_metadata and (not files_df.empty):
+            meta_mask = (
+                files_df["file-name"]
+                .astype(str)
+                .str.contains("_METADATA", case=False, na=False)
+            )
+            meta_df = files_df.loc[meta_mask].copy()
+            if not meta_df.empty:
+                required_meta = set(meta_df["file-name"].astype(str).tolist())
+                if overwrite:
+                    to_download |= required_meta
+                else:
+                    local = downloaded_files_df.copy()
+                    if (not local.empty) and ("path" in local.columns):
+                        local = local[
+                            local["path"].notna()
+                            & local["path"].astype(str).str.len().gt(0)
+                        ]
+                        local = local[
+                            local["path"].apply(lambda p: Path(str(p)).is_file())
+                        ]
+                    present = (
+                        set(local["file-name"].astype(str).tolist())
+                        if not local.empty
+                        else set()
+                    )
+                    meta_to_download = set(required_meta - present)
+                    if (
+                        ("last-modified" in meta_df.columns)
+                        and (not downloaded_files_df.empty)
+                        and ("last-modified" in downloaded_files_df.columns)
+                    ):
+                        adf = meta_df.set_index("file-name")["last-modified"]
+                        ldf = downloaded_files_df.set_index("file-name")[
+                            "last-modified"
+                        ]
+                        common = adf.index.intersection(ldf.index).intersection(
+                            list(required_meta)
+                        )
+                        if len(common) > 0:
+                            updated = common[adf.loc[common] > ldf.loc[common]]
+                            meta_to_download |= set(map(str, updated.tolist()))
+                    to_download |= meta_to_download
+
+        num_files_to_download = len(to_download)
         logger.info(f"Found {num_files_to_download} new files to download.")
         if not num_files_to_download:
             logger.info("No new files to download.")
             return
 
-        files_df["download-priority"] = (
-            files_df["file-name"]
+        selected_df = files_df[files_df["file-name"].isin(list(to_download))].copy()
+        selected_df["download-priority"] = (
+            selected_df["file-name"]
+            .astype(str)
             .str.lower()
             .apply(lambda x: (3 if "_metadata" in x else (2 if "_delta" in x else 1)))
         )
-        download_order = files_df.sort_values(
+        download_order = selected_df.sort_values(
             by=["download-priority", "file-datetime", "file-name"],
         )["file-name"].tolist()
 
@@ -2046,12 +2125,17 @@ class DataQueryFileAPIClient(RateLimitedRequester):
                 since_datetime or get_current_or_last_business_day().strftime("%Y%m%d")
             )
             download_to_datetime = to_datetime
-            if requires_full_delta_history and to_datetime is not None:
-                # Monthly delta files can be timestamped at month-end, which can be after
-                # an in-month `to_datetime`. Expand the download window so the covering
-                # month-end delta file is available locally (row-level filtering is done
-                # via `max_last_updated` in the load step).
-                download_to_datetime = _month_end_dq_timestamp(to_datetime)
+            if to_datetime is not None and include_delta_files:
+                # Monthly "large delta" files can be timestamped at month-end (or previous
+                # business day), after an in-month `to_datetime`. Expand the download
+                # window so a covering month-end delta file is available locally.
+                #
+                # If `max_last_updated` is provided, treat it as the row-vintage intent and
+                # allow it to override the file-vintage window for delta coverage.
+                window_to_base = (
+                    max_last_updated if max_last_updated is not None else to_datetime
+                )
+                download_to_datetime = _month_end_dq_timestamp(window_to_base)
                 validate_dq_timestamp(download_to_datetime, var_name="to_datetime")
             if to_datetime is not None:
                 since_dt = pd_to_datetime_compat(download_since_datetime)
@@ -2081,6 +2165,10 @@ class DataQueryFileAPIClient(RateLimitedRequester):
                 include_full_snapshots=include_full_snapshots,
                 include_delta=include_delta_files,
                 include_metadata=include_metadata_files,
+                _selection_since_datetime=since_datetime,
+                _selection_to_datetime=to_datetime,
+                _selection_min_last_updated=min_last_updated,
+                _selection_max_last_updated=max_last_updated,
             )
             if not isinstance(cleanup_old_files_n_days, (type(None), int)):
                 raise ValueError(
@@ -3051,23 +3139,23 @@ class FileSelector:
             else pd.DataFrame()
         )
 
-        if (not self.api_files_df.empty) and (
-            self.file_name_col not in self.api_files_df.columns
-        ):
+        if self.file_name_col not in self.api_files_df.columns:
             if "filename" in self.api_files_df.columns:
                 self.api_files_df[self.file_name_col] = self.api_files_df["filename"]
-            else:
+            elif not self.api_files_df.empty:
                 raise ValueError(f"Missing `{self.file_name_col}` in api_files_df.")
+            else:
+                self.api_files_df[self.file_name_col] = pd.Series(dtype="object")
 
-        if (not self.local_files_df.empty) and (
-            self.file_name_col not in self.local_files_df.columns
-        ):
+        if self.file_name_col not in self.local_files_df.columns:
             if "filename" in self.local_files_df.columns:
                 self.local_files_df[self.file_name_col] = self.local_files_df[
                     "filename"
                 ]
-            else:
+            elif not self.local_files_df.empty:
                 raise ValueError(f"Missing `{self.file_name_col}` in local_files_df.")
+            else:
+                self.local_files_df[self.file_name_col] = pd.Series(dtype="object")
 
         self.tickers = (
             [t.strip() for t in tickers if isinstance(t, str) and t.strip()]
@@ -3195,6 +3283,8 @@ class FileSelector:
         include_delta_files: bool = True,
         warn_if_no_full_snapshots: bool = False,
         last_modified_col: str = "last-modified",
+        min_last_updated: Optional[Union[str, pd.Timestamp]] = None,
+        max_last_updated: Optional[Union[str, pd.Timestamp]] = None,
     ) -> List[str]:
         """Select API file-name(s) required for a load vintage that are missing/outdated locally."""
         api_like = self._as_local_like_df(self.api_files_df, source="api")
@@ -3207,6 +3297,8 @@ class FileSelector:
             to_datetime=to_datetime,
             include_delta_files=include_delta_files,
             warn_if_no_full_snapshots=warn_if_no_full_snapshots,
+            min_last_updated=min_last_updated,
+            max_last_updated=max_last_updated,
         )
         required = set(selected_api["filename"].astype(str).tolist())
         if not required:
@@ -3247,6 +3339,8 @@ class FileSelector:
         to_datetime: Optional[Union[str, pd.Timestamp]] = None,
         include_delta_files: bool = True,
         warn_if_no_full_snapshots: bool = False,
+        min_last_updated: Optional[Union[str, pd.Timestamp]] = None,
+        max_last_updated: Optional[Union[str, pd.Timestamp]] = None,
     ) -> pd.DataFrame:
         """Select local snapshot/delta files to load from disk (drops rows without a valid file `path`)."""
         if self.local_files_df.empty:
@@ -3270,6 +3364,8 @@ class FileSelector:
             to_datetime=to_datetime,
             include_delta_files=include_delta_files,
             warn_if_no_full_snapshots=warn_if_no_full_snapshots,
+            min_last_updated=min_last_updated,
+            max_last_updated=max_last_updated,
         )
 
 
@@ -3280,6 +3376,8 @@ def _select_local_files_for_load(
     to_datetime: Optional[Union[str, pd.Timestamp]] = None,
     include_delta_files: bool = True,
     warn_if_no_full_snapshots: bool = False,
+    min_last_updated: Optional[Union[str, pd.Timestamp]] = None,
+    max_last_updated: Optional[Union[str, pd.Timestamp]] = None,
 ) -> pd.DataFrame:
     """
     Single-responsibility helper: choose which local snapshot/delta files to load.
@@ -3288,10 +3386,10 @@ def _select_local_files_for_load(
     - If full snapshots exist for the dataset and at least one snapshot is present in the
       requested file-vintage window, load the latest snapshot in the window and any delta
       files newer than that snapshot (also within the window).
-    - If no full snapshots exist at all for the dataset (delta-only history), load *all*
-      available deltas up to the requested vintage. For monthly "large delta" regimes,
-      also include the covering month-end delta file even if it timestamps after
-      `to_datetime` (row-level filtering is handled via `max_last_updated`).
+    - If no full snapshots exist at or before the requested vintage (effective delta-only
+      history), load *all* available deltas up to the requested vintage. For monthly "large
+      delta" regimes, also include the covering month-end delta file even if it timestamps
+      after `to_datetime` (row-level filtering is handled via `max_last_updated`).
     """
     if files_df.empty:
         return files_df
@@ -3323,6 +3421,15 @@ def _select_local_files_for_load(
         else df["file-timestamp"].max()
     )
 
+    # `last_updated` timestamps are row-content vintages. They can be non-monotonic with
+    # file timestamps, especially in monthly "large delta" regimes. Use them to guide
+    # delta coverage without allowing snapshots beyond the file-vintage cutoff.
+    content_to_ts: Optional[pd.Timestamp] = None
+    if (max_last_updated is not None) or (to_datetime is not None):
+        content_to_ts = _normalize_last_updated_cutoff(
+            max_last_updated if max_last_updated is not None else to_datetime
+        )
+
     # For snapshot-led selection we keep the historical behaviour of treating
     # (`since_datetime`, `to_datetime`) as an unordered window and swapping if needed.
     window_since_ts = since_ts
@@ -3332,8 +3439,12 @@ def _select_local_files_for_load(
 
     earliest_snapshot_ts: Optional[pd.Timestamp] = None
     if warn_if_no_full_snapshots and window_since_ts is not None:
-        is_delta_all = df["filename"].astype(str).str.contains("_DELTA")
-        is_metadata_all = df["filename"].astype(str).str.contains("_METADATA")
+        is_delta_all = (
+            df["filename"].astype(str).str.contains("_DELTA", case=False, na=False)
+        )
+        is_metadata_all = (
+            df["filename"].astype(str).str.contains("_METADATA", case=False, na=False)
+        )
         snapshots_all = df.loc[~is_delta_all & ~is_metadata_all].copy()
         earliest_snapshot_ts = snapshots_all["file-timestamp"].min()
         if pd.isna(earliest_snapshot_ts):
@@ -3344,12 +3455,22 @@ def _select_local_files_for_load(
         if g.empty:
             continue
 
-        is_delta_g = g["filename"].astype(str).str.contains("_DELTA")
-        is_metadata_g = g["filename"].astype(str).str.contains("_METADATA")
+        is_delta_g = (
+            g["filename"].astype(str).str.contains("_DELTA", case=False, na=False)
+        )
+        is_metadata_g = (
+            g["filename"].astype(str).str.contains("_METADATA", case=False, na=False)
+        )
         snapshots_all_g = g.loc[~is_delta_g & ~is_metadata_g].copy()
 
-        # Delta-only history: no snapshots exist at all for this dataset.
-        if snapshots_all_g.empty:
+        # Delta-only history (effective): no snapshots exist at or before the requested
+        # vintage. Snapshots can exist *later* in time (e.g. after source-side deletion
+        # of older snapshots), but are unusable for reconstructing an earlier vintage
+        # and should not block delta-only selection.
+        snapshots_upto_vintage_g = snapshots_all_g[
+            snapshots_all_g["file-timestamp"].le(vintage_to_ts)
+        ].copy()
+        if snapshots_upto_vintage_g.empty:
             if not include_delta_files:
                 continue
 
@@ -3358,13 +3479,33 @@ def _select_local_files_for_load(
                 continue
 
             effective_to_ts = vintage_to_ts
-            if to_datetime is not None:
+            to_base_ts = content_to_ts if content_to_ts is not None else vintage_to_ts
+            if content_to_ts is not None and max_last_updated is not None:
+                effective_to_ts = max(effective_to_ts, content_to_ts)
+
+            if (to_datetime is not None) or (max_last_updated is not None):
+                # Prefer regular in-month deltas when they exist up to the requested
+                # vintage; only fall back to the covering month-end ("large delta")
+                # file when needed (regular deltas may be deleted/absent).
+                ts_ser = deltas_all["file-timestamp"]
+                in_month = (ts_ser.dt.year == to_base_ts.year) & (
+                    ts_ser.dt.month == to_base_ts.month
+                )
+                is_large_delta_ts = (
+                    (ts_ser.dt.hour == 23)
+                    & (ts_ser.dt.minute == 59)
+                    & (ts_ser.dt.second == 59)
+                )
+                has_regular_in_month = bool(
+                    (in_month & (ts_ser.le(to_base_ts)) & (~is_large_delta_ts)).any()
+                )
+
                 cover_ts = _covering_large_delta_timestamp(
-                    to_ts=vintage_to_ts,
+                    to_ts=to_base_ts,
                     delta_file_timestamps=deltas_all["file-timestamp"].tolist(),
                 )
-                if cover_ts is not None:
-                    effective_to_ts = cover_ts
+                if cover_ts is not None and not has_regular_in_month:
+                    effective_to_ts = max(effective_to_ts, cover_ts)
 
             deltas_sel = deltas_all[
                 deltas_all["file-timestamp"].le(effective_to_ts)
@@ -3382,8 +3523,16 @@ def _select_local_files_for_load(
         if g_window.empty:
             continue
 
-        is_delta_w = g_window["filename"].astype(str).str.contains("_DELTA")
-        is_metadata_w = g_window["filename"].astype(str).str.contains("_METADATA")
+        is_delta_w = (
+            g_window["filename"]
+            .astype(str)
+            .str.contains("_DELTA", case=False, na=False)
+        )
+        is_metadata_w = (
+            g_window["filename"]
+            .astype(str)
+            .str.contains("_METADATA", case=False, na=False)
+        )
         snapshots_w = g_window.loc[~is_delta_w & ~is_metadata_w].copy()
 
         # Snapshot-led selection (preserves the window semantics):
@@ -3403,6 +3552,39 @@ def _select_local_files_for_load(
 
         deltas_w = g_window.loc[is_delta_w].copy()
         deltas_sel = deltas_w[deltas_w["file-timestamp"] >= latest_snapshot_ts].copy()
+
+        # Monthly "large delta" regimes may require the covering month-end delta file even
+        # when it timestamps after the file-vintage window (`to_datetime`). Include it when
+        # regular in-month deltas are absent and a covering large-delta timestamp exists.
+        to_base_ts = content_to_ts if content_to_ts is not None else vintage_to_ts
+        deltas_all = g.loc[is_delta_g].copy()
+        if (not deltas_all.empty) and (
+            (to_datetime is not None) or (max_last_updated is not None)
+        ):
+            ts_ser = deltas_all["file-timestamp"]
+            in_month = (ts_ser.dt.year == to_base_ts.year) & (
+                ts_ser.dt.month == to_base_ts.month
+            )
+            is_large_delta_ts = (
+                (ts_ser.dt.hour == 23)
+                & (ts_ser.dt.minute == 59)
+                & (ts_ser.dt.second == 59)
+            )
+            has_regular_in_month = bool(
+                (in_month & (ts_ser.le(to_base_ts)) & (~is_large_delta_ts)).any()
+            )
+            cover_ts = _covering_large_delta_timestamp(
+                to_ts=to_base_ts,
+                delta_file_timestamps=ts_ser.tolist(),
+            )
+            if (
+                cover_ts is not None
+                and (not has_regular_in_month)
+                and cover_ts >= latest_snapshot_ts
+            ):
+                cover_df = deltas_all[deltas_all["file-timestamp"] == cover_ts].copy()
+                if not cover_df.empty:
+                    deltas_sel = pd.concat([deltas_sel, cover_df], ignore_index=True)
         selected.append(pd.concat([snapshots_sel, deltas_sel], ignore_index=True))
 
     out = (
@@ -3415,8 +3597,12 @@ def _select_local_files_for_load(
         return out
 
     if warn_if_no_full_snapshots and window_since_ts is not None:
-        is_delta_out = out["filename"].astype(str).str.contains("_DELTA")
-        is_metadata_out = out["filename"].astype(str).str.contains("_METADATA")
+        is_delta_out = (
+            out["filename"].astype(str).str.contains("_DELTA", case=False, na=False)
+        )
+        is_metadata_out = (
+            out["filename"].astype(str).str.contains("_METADATA", case=False, na=False)
+        )
         snapshots_out = out.loc[~is_delta_out & ~is_metadata_out].copy()
         if snapshots_out.empty and bool(is_delta_out.any()):
             earliest_snapshot_str = None
@@ -3435,8 +3621,12 @@ def _select_local_files_for_load(
 
     if not include_delta_files:
         # keep only snapshots
-        is_delta = out["filename"].astype(str).str.contains("_DELTA")
-        is_metadata = out["filename"].astype(str).str.contains("_METADATA")
+        is_delta = (
+            out["filename"].astype(str).str.contains("_DELTA", case=False, na=False)
+        )
+        is_metadata = (
+            out["filename"].astype(str).str.contains("_METADATA", case=False, na=False)
+        )
         out = out.loc[~is_delta & ~is_metadata].copy()
 
     out = out.sort_values([group_col, "file-timestamp", "filename"]).reset_index(
@@ -3548,13 +3738,14 @@ def lazy_load_from_parquets(
         and (to_datetime is None)
     ):
         effective_to_datetime = pd.Timestamp.utcnow().strftime("%Y%m%dT%H%M%S")
-    available_files_df: pd.DataFrame = _filter_to_latest_files(
-        files_df=all_data_files_df,
+    fs = FileSelector(api_files_df=None, local_files_df=all_data_files_df)
+    available_files_df: pd.DataFrame = fs.select_files_for_load(
         since_datetime=since_datetime,
         to_datetime=effective_to_datetime,
         include_delta_files=include_delta_files,
-        delta_treatment=delta_treatment,
         warn_if_no_full_snapshots=warn_if_no_full_snapshots,
+        min_last_updated=min_last_updated,
+        max_last_updated=max_last_updated,
     )
     if datasets:
         datasets = sorted(set([d.replace("_DELTA", "") for d in datasets]))

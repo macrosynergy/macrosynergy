@@ -512,6 +512,35 @@ class TestFileSelectorSelectFilesForDownload(unittest.TestCase):
             ],
         )
 
+    def test_select_files_for_download_max_last_updated_overrides_file_vintage_for_cover_delta(
+        self,
+    ):
+        api_df = pd.DataFrame(
+            [
+                {
+                    "file-name": "JPMAQS_SHOCKS_RISK_MEASURES_DELTA_20250930T235959.parquet",
+                    "file-datetime": pd.Timestamp("2025-09-30T23:59:59Z"),
+                },
+                {
+                    "file-name": "JPMAQS_SHOCKS_RISK_MEASURES_DELTA_20251031T235959.parquet",
+                    "file-datetime": pd.Timestamp("2025-10-31T23:59:59Z"),
+                },
+            ]
+        )
+        fs = FileSelector(api_df, EMPTY_LOCAL_FILES_DF.copy())
+        out = fs.select_files_for_download(
+            to_datetime="20250915",
+            max_last_updated="20251008",
+            include_delta_files=True,
+        )
+        self.assertEqual(
+            out,
+            [
+                "JPMAQS_SHOCKS_RISK_MEASURES_DELTA_20250930T235959.parquet",
+                "JPMAQS_SHOCKS_RISK_MEASURES_DELTA_20251031T235959.parquet",
+            ],
+        )
+
     def test_select_files_for_download_delta_only_history_excludes_when_include_delta_false(
         self,
     ):
@@ -810,6 +839,70 @@ class TestFileSelectorSelectFilesForLoad(unittest.TestCase):
             self.assertCountEqual(
                 out["filename"].astype(str).tolist(),
                 [p_prev.name, p_large.name],
+            )
+
+    def test_select_files_for_load_ignores_snapshots_after_vintage_and_uses_large_delta_cover(
+        self,
+    ):
+        with tempfile.TemporaryDirectory() as td:
+            td_path = Path(td)
+            p_prev = (
+                td_path
+                / "JPMAQS_SHOCKS_RISK_MEASURES_DELTA_20250930T235959.parquet"
+            )
+            p_cover = (
+                td_path
+                / "JPMAQS_SHOCKS_RISK_MEASURES_DELTA_20251031T235959.parquet"
+            )
+            p_future_snap = td_path / "JPMAQS_SHOCKS_RISK_MEASURES_20260204.parquet"
+            for p in (p_prev, p_cover, p_future_snap):
+                p.write_bytes(b"x")
+
+            local_df = pd.DataFrame(
+                [
+                    {"file-name": p_prev.name, "path": str(p_prev)},
+                    {"file-name": p_cover.name, "path": str(p_cover)},
+                    {"file-name": p_future_snap.name, "path": str(p_future_snap)},
+                ]
+            )
+            fs = FileSelector(EMPTY_API_FILES_DF.copy(), local_df)
+            out = fs.select_files_for_load(
+                to_datetime="20251008", include_delta_files=True
+            )
+            self.assertCountEqual(
+                out["filename"].astype(str).tolist(),
+                [p_prev.name, p_cover.name],
+            )
+
+    def test_select_files_for_load_max_last_updated_overrides_file_vintage_for_cover_delta(
+        self,
+    ):
+        with tempfile.TemporaryDirectory() as td:
+            td_path = Path(td)
+            p_sep = (
+                td_path / "JPMAQS_SHOCKS_RISK_MEASURES_DELTA_20250930T235959.parquet"
+            )
+            p_oct = (
+                td_path / "JPMAQS_SHOCKS_RISK_MEASURES_DELTA_20251031T235959.parquet"
+            )
+            for p in (p_sep, p_oct):
+                p.write_bytes(b"x")
+
+            local_df = pd.DataFrame(
+                [
+                    {"file-name": p_sep.name, "path": str(p_sep)},
+                    {"file-name": p_oct.name, "path": str(p_oct)},
+                ]
+            )
+            fs = FileSelector(EMPTY_API_FILES_DF.copy(), local_df)
+            out = fs.select_files_for_load(
+                to_datetime="20250915",
+                max_last_updated="20251008",
+                include_delta_files=True,
+            )
+            self.assertCountEqual(
+                out["filename"].astype(str).tolist(),
+                [p_sep.name, p_oct.name],
             )
 
     def test_select_files_for_load_delta_only_excludes_when_include_delta_false(self):
@@ -1388,9 +1481,15 @@ class TestDataQueryFileAPIClientHistoricalDeltaBootstrap(unittest.TestCase):
                     "file-name": [
                         "JPMAQS_GENERIC_RETURNS_DELTA_20240310T120000.parquet"
                     ],
-                    "path": [str(Path(td) / "dummy")],
+                    "path": [
+                        str(
+                            Path(td)
+                            / "JPMAQS_GENERIC_RETURNS_DELTA_20240310T120000.parquet"
+                        )
+                    ],
                 }
             )
+            Path(downloaded_df.iloc[0]["path"]).write_bytes(b"x")
 
             with ExitStack() as stack:
                 stack.enter_context(
@@ -1450,7 +1549,6 @@ class TestDataQueryFileAPIClientHistoricalDeltaBootstrap(unittest.TestCase):
                 expected = [
                     "JPMAQS_GENERIC_RETURNS_DELTA_20240229T235959.parquet",
                     "JPMAQS_GENERIC_RETURNS_DELTA_20240329T235959.parquet",
-                    "JPMAQS_GENERIC_RETURNS_DELTA_20240331T235959.parquet",
                 ]
                 called = mock_dlm.call_args.kwargs["filenames"]
                 self.assertListEqual(called, expected)
