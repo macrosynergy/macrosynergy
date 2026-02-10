@@ -1153,6 +1153,158 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
         )
         self.assertEqual(mock_download_multi.call_args[1]["filenames"], ["f1.parquet"])
 
+    @patch(
+        "macrosynergy.download.dataquery_file_api.dataquery_file_api.DataQueryFileAPIOauth"
+    )
+    @patch.object(DataQueryFileAPIClient, "download_multiple_files")
+    @patch.object(DataQueryFileAPIClient, "list_downloaded_files")
+    @patch.object(DataQueryFileAPIClient, "filter_available_files_by_datetime")
+    def test_download_full_snapshot_metadata_skipped_when_local_present_and_up_to_date(
+        self,
+        mock_filter_files,
+        mock_list_downloaded_files,
+        mock_download_multi,
+        _mock_oauth,
+    ):
+        with tempfile.TemporaryDirectory() as td:
+            meta_path = Path(td) / "A_metadata_20250201T110000.parquet"
+            meta_path.write_bytes(b"x")
+
+            api_df = pd.DataFrame(
+                {
+                    "file-name": [
+                        "B_full_20250201.parquet",
+                        "A_metadata_20250201T110000.parquet",
+                    ],
+                    "file-datetime": [
+                        "20250201T000000",
+                        "20250201T110000",
+                    ],
+                    "last-modified": pd.to_datetime(
+                        ["2025-02-01T00:00:00Z", "2025-02-01T12:00:00Z"], utc=True
+                    ),
+                }
+            )
+            mock_filter_files.return_value = api_df
+            mock_list_downloaded_files.return_value = pd.DataFrame(
+                {
+                    "file-name": ["A_metadata_20250201T110000.parquet"],
+                    "path": [str(meta_path)],
+                    "last-modified": pd.to_datetime(["2025-02-01T12:00:00Z"], utc=True),
+                }
+            )
+
+            client = DataQueryFileAPIClient(
+                client_id="id", client_secret="secret", out_dir=self.test_dir
+            )
+            client.download_full_snapshot(
+                since_datetime="20250201", show_progress=False
+            )
+
+            filenames = mock_download_multi.call_args[1]["filenames"]
+            self.assertEqual(filenames, ["B_full_20250201.parquet"])
+
+    @patch(
+        "macrosynergy.download.dataquery_file_api.dataquery_file_api.DataQueryFileAPIOauth"
+    )
+    @patch.object(DataQueryFileAPIClient, "download_multiple_files")
+    @patch.object(DataQueryFileAPIClient, "list_downloaded_files")
+    @patch.object(DataQueryFileAPIClient, "filter_available_files_by_datetime")
+    def test_download_full_snapshot_metadata_redownloaded_when_api_last_modified_newer(
+        self,
+        mock_filter_files,
+        mock_list_downloaded_files,
+        mock_download_multi,
+        _mock_oauth,
+    ):
+        with tempfile.TemporaryDirectory() as td:
+            meta_path = Path(td) / "A_metadata_20250201T110000.parquet"
+            meta_path.write_bytes(b"x")
+
+            api_df = pd.DataFrame(
+                {
+                    "file-name": [
+                        "B_full_20250201.parquet",
+                        "A_metadata_20250201T110000.parquet",
+                    ],
+                    "file-datetime": [
+                        "20250201T000000",
+                        "20250201T110000",
+                    ],
+                    "last-modified": pd.to_datetime(
+                        ["2025-02-01T00:00:00Z", "2025-02-01T13:00:00Z"], utc=True
+                    ),
+                }
+            )
+            mock_filter_files.return_value = api_df
+            mock_list_downloaded_files.return_value = pd.DataFrame(
+                {
+                    "file-name": ["A_metadata_20250201T110000.parquet"],
+                    "path": [str(meta_path)],
+                    "last-modified": pd.to_datetime(["2025-02-01T12:00:00Z"], utc=True),
+                }
+            )
+
+            client = DataQueryFileAPIClient(
+                client_id="id", client_secret="secret", out_dir=self.test_dir
+            )
+            client.download_full_snapshot(
+                since_datetime="20250201", show_progress=False
+            )
+
+            filenames = mock_download_multi.call_args[1]["filenames"]
+            self.assertEqual(
+                filenames,
+                [
+                    "B_full_20250201.parquet",
+                    "A_metadata_20250201T110000.parquet",
+                ],
+            )
+
+    @patch(
+        "macrosynergy.download.dataquery_file_api.dataquery_file_api.DataQueryFileAPIOauth"
+    )
+    @patch.object(DataQueryFileAPIClient, "download_multiple_files")
+    @patch.object(DataQueryFileAPIClient, "list_downloaded_files")
+    @patch.object(DataQueryFileAPIClient, "filter_available_files_by_datetime")
+    def test_download_full_snapshot_include_metadata_false_excludes_metadata_files(
+        self,
+        mock_filter_files,
+        mock_list_downloaded_files,
+        mock_download_multi,
+        _mock_oauth,
+    ):
+        # Even if metadata rows are present in the API listing, `include_metadata=False`
+        # should prevent them from being downloaded.
+        api_df = pd.DataFrame(
+            {
+                "file-name": [
+                    "B_full_20250201.parquet",
+                    "A_metadata_20250201T110000.parquet",
+                ],
+                "file-datetime": [
+                    "20250201T000000",
+                    "20250201T110000",
+                ],
+            }
+        )
+        mock_filter_files.return_value = api_df
+        mock_list_downloaded_files.return_value = pd.DataFrame(
+            columns=["file-name", "path", "last-modified"]
+        )
+
+        client = DataQueryFileAPIClient(
+            client_id="id", client_secret="secret", out_dir=self.test_dir
+        )
+        client.download_full_snapshot(
+            since_datetime="20250201",
+            include_metadata=False,
+            show_progress=False,
+        )
+
+        filenames = mock_download_multi.call_args[1]["filenames"]
+        self.assertEqual(filenames, ["B_full_20250201.parquet"])
+
     @patch("pandas.Timestamp.utcnow")
     @patch.object(DataQueryFileAPIClient, "filter_available_files_by_datetime")
     def test_download_full_snapshot_defaults_to_last_business_day_on_weekend(

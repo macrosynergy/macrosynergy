@@ -481,6 +481,45 @@ class TestFileSelectorSelectFilesForDownload(unittest.TestCase):
         out = fs.select_files_for_download(to_datetime="20240102T235959")
         self.assertEqual(out, ["DATASET1_20240102.parquet"])
 
+    def test_select_files_for_download_metadata_files_are_vintage_sensitive_when_requested(
+        self,
+    ):
+        api_df = pd.DataFrame(
+            [
+                {
+                    "file-name": "DATASET1_20240102.parquet",
+                    "file-datetime": pd.Timestamp("2024-01-02T00:00:00Z"),
+                },
+                {
+                    "file-name": "DATASET1_METADATA_20240102.json",
+                    "file-datetime": pd.Timestamp("2024-01-02T00:00:00Z"),
+                },
+                {
+                    "file-name": "DATASET1_METADATA_20240102T010101.json",
+                    "file-datetime": pd.Timestamp("2024-01-02T01:01:01Z"),
+                },
+                # Outside the selection `to_datetime`, but could be present in an expanded
+                # API listing window.
+                {
+                    "file-name": "DATASET1_METADATA_20240103.json",
+                    "file-datetime": pd.Timestamp("2024-01-03T00:00:00Z"),
+                },
+            ]
+        )
+        fs = FileSelector(api_df, EMPTY_LOCAL_FILES_DF.copy())
+        out = fs.select_files_for_download(
+            to_datetime="20240102T235959",
+            include_metadata_files=True,
+        )
+        self.assertCountEqual(
+            out,
+            [
+                "DATASET1_20240102.parquet",
+                "DATASET1_METADATA_20240102.json",
+                "DATASET1_METADATA_20240102T010101.json",
+            ],
+        )
+
     def test_select_files_for_download_load_delta_only_large_delta_cover(self):
         api_df = pd.DataFrame(
             [
