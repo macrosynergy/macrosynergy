@@ -1022,7 +1022,6 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
         client.download_full_snapshot(since_datetime="20250201", show_progress=False)
 
         expected_order = [
-            "A_full_20250101.parquet",
             "A_full_20250201.parquet",
             "B_full_20250201.parquet",
             "C_delta_20250201T110456.parquet",
