@@ -9,7 +9,7 @@ import polars as pl
 import pandas as pd
 import shutil
 
-from macrosynergy.download.dataquery_file_api import (
+from macrosynergy.download.dataquery_file_api.dataquery_file_api import (
     _check_lazy_load_inputs,
     _list_downloaded_files,
     _downloaded_files_df,

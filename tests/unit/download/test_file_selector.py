@@ -139,7 +139,7 @@ from unittest.mock import patch
 
 import pandas as pd
 
-from macrosynergy.download.dataquery_file_api import (
+from macrosynergy.download.dataquery_file_api.dataquery_file_api import (
     DataQueryFileAPIClient,
     FileSelector,
     JPMAQS_DATASET_THEME_MAPPING,

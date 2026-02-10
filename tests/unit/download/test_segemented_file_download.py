@@ -7,7 +7,7 @@ import shutil  # noqa
 import uuid  # noqa
 import concurrent.futures  # noqa
 
-from macrosynergy.download.dataquery_file_api import SegmentedFileDownloader
+from macrosynergy.download.dataquery_file_api.dataquery_file_api import SegmentedFileDownloader
 from macrosynergy.compat import PYTHON_3_8_OR_LATER
 
 

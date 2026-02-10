@@ -9,7 +9,7 @@ import logging
 import tempfile
 from pathlib import Path
 from macrosynergy.compat import PD_2_0_OR_LATER, PYTHON_3_8_OR_LATER
-from macrosynergy.download.dataquery_file_api import (
+from macrosynergy.download.dataquery_file_api.dataquery_file_api import (
     validate_dq_timestamp,
     get_client_id_secret,
     get_current_or_last_business_day,
