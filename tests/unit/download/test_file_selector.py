@@ -1430,9 +1430,9 @@ class TestDataQueryFileAPIClientHistoricalDeltaBootstrap(unittest.TestCase):
                 mock_get_ds.assert_called_once()
 
                 dl_kwargs = mock_download.call_args.kwargs
-                self.assertEqual(dl_kwargs["since_datetime"], JPMAQS_EARLIEST_FILE_DATE)
-                self.assertEqual(dl_kwargs["to_datetime"], "20240331T235959")
-                self.assertFalse(dl_kwargs["include_full_snapshots"])
+                self.assertEqual(dl_kwargs["since_datetime"], "20240301")
+                self.assertEqual(dl_kwargs["to_datetime"], "20240315")
+                self.assertTrue(dl_kwargs["include_full_snapshots"])
                 self.assertTrue(dl_kwargs["include_delta"])
                 self.assertFalse(dl_kwargs["include_metadata"])
                 self.assertIn("JPMAQS_GENERIC_RETURNS", dl_kwargs["file_group_ids"])
@@ -1441,7 +1441,7 @@ class TestDataQueryFileAPIClientHistoricalDeltaBootstrap(unittest.TestCase):
                 )
 
                 load_kwargs = mock_load.call_args.kwargs
-                self.assertIsNone(load_kwargs["since_datetime"])
+                self.assertEqual(load_kwargs["since_datetime"], "20240301")
                 self.assertEqual(load_kwargs["to_datetime"], "20240315")
 
                 _mock_get_client.assert_not_called()
@@ -1500,23 +1500,6 @@ class TestDataQueryFileAPIClientHistoricalDeltaBootstrap(unittest.TestCase):
                 ]
             )
 
-            def fake_filter_available_files_by_datetime(
-                *,
-                since_datetime,
-                to_datetime,
-                include_full_snapshots,
-                include_delta,
-                include_metadata,
-            ):
-                self.assertEqual(since_datetime, JPMAQS_EARLIEST_FILE_DATE)
-                self.assertEqual(to_datetime, "20240331T235959")
-                self.assertFalse(include_full_snapshots)
-                self.assertTrue(include_delta)
-                self.assertFalse(include_metadata)
-                return available_df[
-                    ~available_df["file-name"].str.lower().str.contains("_metadata")
-                ].copy()
-
             downloaded_df = pd.DataFrame(
                 {
                     "file-name": [
@@ -1562,8 +1545,8 @@ class TestDataQueryFileAPIClientHistoricalDeltaBootstrap(unittest.TestCase):
                 stack.enter_context(
                     patch.object(
                         client,
-                        "filter_available_files_by_datetime",
-                        side_effect=fake_filter_available_files_by_datetime,
+                        "list_available_files_for_all_file_groups",
+                        return_value=available_df.copy(),
                     )
                 )
                 stack.enter_context(

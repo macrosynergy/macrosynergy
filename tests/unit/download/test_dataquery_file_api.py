@@ -1069,16 +1069,16 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
 
     @patch("macrosynergy.download.dataquery_file_api.dataquery_file_api.logger")
     @patch.object(DataQueryFileAPIClient, "download_multiple_files")
-    @patch.object(DataQueryFileAPIClient, "filter_available_files_by_datetime")
+    @patch.object(DataQueryFileAPIClient, "list_available_files_for_all_file_groups")
     def test_download_full_snapshot(
-        self, mock_filter_files, mock_download_multi, mock_logger
+        self, mock_list_all_files, mock_download_multi, mock_logger
     ):
         class_dir = os.path.join(self.test_dir, "class", "dir")
         client = DataQueryFileAPIClient(
             client_id="id", client_secret="secret", out_dir=class_dir
         )
         self.assertEqual(Path(client.out_dir), Path(class_dir) / "jpmaqs-download")
-        mock_filter_files.return_value = pd.DataFrame(
+        mock_list_all_files.return_value = pd.DataFrame(
             {
                 "file-name": [
                     "C_delta_20250201T110456.parquet",
@@ -1129,14 +1129,14 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
         )
 
     @patch.object(DataQueryFileAPIClient, "download_multiple_files")
-    @patch.object(DataQueryFileAPIClient, "filter_available_files_by_datetime")
+    @patch.object(DataQueryFileAPIClient, "list_available_files_for_all_file_groups")
     def test_download_full_snapshot_with_since_datetime(
-        self, mock_filter_files, mock_download_multi
+        self, mock_list_all_files, mock_download_multi
     ):
         client = DataQueryFileAPIClient(
             client_id="id", client_secret="secret", out_dir=self.test_dir
         )
-        mock_filter_files.return_value = pd.DataFrame(
+        mock_list_all_files.return_value = pd.DataFrame(
             {
                 "file-name": ["f1.parquet"],
                 "file-datetime": ["20230101T000000"],
@@ -1144,13 +1144,6 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
         )
         client.download_full_snapshot(since_datetime="20230101", show_progress=False)
 
-        mock_filter_files.assert_called_once_with(
-            since_datetime="20230101",
-            to_datetime=None,
-            include_full_snapshots=True,
-            include_delta=True,
-            include_metadata=True,
-        )
         self.assertEqual(mock_download_multi.call_args[1]["filenames"], ["f1.parquet"])
 
     @patch(
@@ -1158,10 +1151,10 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
     )
     @patch.object(DataQueryFileAPIClient, "download_multiple_files")
     @patch.object(DataQueryFileAPIClient, "list_downloaded_files")
-    @patch.object(DataQueryFileAPIClient, "filter_available_files_by_datetime")
+    @patch.object(DataQueryFileAPIClient, "list_available_files_for_all_file_groups")
     def test_download_full_snapshot_metadata_skipped_when_local_present_and_up_to_date(
         self,
-        mock_filter_files,
+        mock_list_all_files,
         mock_list_downloaded_files,
         mock_download_multi,
         _mock_oauth,
@@ -1185,7 +1178,7 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
                     ),
                 }
             )
-            mock_filter_files.return_value = api_df
+            mock_list_all_files.return_value = api_df
             mock_list_downloaded_files.return_value = pd.DataFrame(
                 {
                     "file-name": ["A_metadata_20250201T110000.parquet"],
@@ -1209,10 +1202,10 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
     )
     @patch.object(DataQueryFileAPIClient, "download_multiple_files")
     @patch.object(DataQueryFileAPIClient, "list_downloaded_files")
-    @patch.object(DataQueryFileAPIClient, "filter_available_files_by_datetime")
+    @patch.object(DataQueryFileAPIClient, "list_available_files_for_all_file_groups")
     def test_download_full_snapshot_metadata_redownloaded_when_api_last_modified_newer(
         self,
-        mock_filter_files,
+        mock_list_all_files,
         mock_list_downloaded_files,
         mock_download_multi,
         _mock_oauth,
@@ -1236,7 +1229,7 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
                     ),
                 }
             )
-            mock_filter_files.return_value = api_df
+            mock_list_all_files.return_value = api_df
             mock_list_downloaded_files.return_value = pd.DataFrame(
                 {
                     "file-name": ["A_metadata_20250201T110000.parquet"],
@@ -1266,10 +1259,10 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
     )
     @patch.object(DataQueryFileAPIClient, "download_multiple_files")
     @patch.object(DataQueryFileAPIClient, "list_downloaded_files")
-    @patch.object(DataQueryFileAPIClient, "filter_available_files_by_datetime")
+    @patch.object(DataQueryFileAPIClient, "list_available_files_for_all_file_groups")
     def test_download_full_snapshot_include_metadata_false_excludes_metadata_files(
         self,
-        mock_filter_files,
+        mock_list_all_files,
         mock_list_downloaded_files,
         mock_download_multi,
         _mock_oauth,
@@ -1288,7 +1281,7 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
                 ],
             }
         )
-        mock_filter_files.return_value = api_df
+        mock_list_all_files.return_value = api_df
         mock_list_downloaded_files.return_value = pd.DataFrame(
             columns=["file-name", "path", "last-modified"]
         )
@@ -1306,36 +1299,39 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
         self.assertEqual(filenames, ["B_full_20250201.parquet"])
 
     @patch("pandas.Timestamp.utcnow")
-    @patch.object(DataQueryFileAPIClient, "filter_available_files_by_datetime")
+    @patch(
+        "macrosynergy.download.dataquery_file_api.dataquery_file_api.FileSelector.select_files_for_download"
+    )
+    @patch.object(DataQueryFileAPIClient, "list_available_files_for_all_file_groups")
     def test_download_full_snapshot_defaults_to_last_business_day_on_weekend(
-        self, mock_filter_files, mock_utcnow
+        self, mock_list_all_files, mock_select, mock_utcnow
     ):
         client = DataQueryFileAPIClient(
             client_id="id", client_secret="secret", out_dir=self.test_dir
         )
         # Sunday (UTC)
         mock_utcnow.return_value = pd.Timestamp("2023-01-08T01:02:03Z")
-        mock_filter_files.return_value = pd.DataFrame(columns=["file-name"])
+        mock_list_all_files.return_value = pd.DataFrame(columns=["file-name"])
+        mock_select.return_value = []
 
         client.download_full_snapshot(since_datetime=None, show_progress=False)
 
-        mock_filter_files.assert_called_once()
         if PYTHON_3_8_OR_LATER:
-            called_since = mock_filter_files.call_args.kwargs["since_datetime"]
+            called_since = mock_select.call_args.kwargs["since_datetime"]
         else:
-            called_since = mock_filter_files.call_args[1]["since_datetime"]
+            called_since = mock_select.call_args[1]["since_datetime"]
         self.assertEqual(called_since, "20230106")
 
     @patch("macrosynergy.download.dataquery_file_api.dataquery_file_api.logger")
     @patch.object(DataQueryFileAPIClient, "download_multiple_files")
-    @patch.object(DataQueryFileAPIClient, "filter_available_files_by_datetime")
+    @patch.object(DataQueryFileAPIClient, "list_available_files_for_all_file_groups")
     def test_download_full_snapshot_no_new_files(
-        self, mock_filter_files, mock_download_multi, mock_logger
+        self, mock_list_all_files, mock_download_multi, mock_logger
     ):
         client = DataQueryFileAPIClient(
             client_id="id", client_secret="secret", out_dir=self.test_dir
         )
-        mock_filter_files.return_value = pd.DataFrame(columns=["file-name"])
+        mock_list_all_files.return_value = pd.DataFrame(columns=["file-name"])
         client.download_full_snapshot(
             since_datetime="20230102T000000", show_progress=False
         )
@@ -1343,14 +1339,14 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
         mock_logger.info.assert_any_call("No new files to download.")
 
     @patch.object(DataQueryFileAPIClient, "download_multiple_files")
-    @patch.object(DataQueryFileAPIClient, "filter_available_files_by_datetime")
+    @patch.object(DataQueryFileAPIClient, "list_available_files_for_all_file_groups")
     def test_download_full_snapshot_file_group_ids(
-        self, mock_filter_files, mock_download_multi
+        self, mock_list_all_files, mock_download_multi
     ):
         client = DataQueryFileAPIClient(
             client_id="id", client_secret="secret", out_dir=self.test_dir
         )
-        mock_filter_files.return_value = pd.DataFrame(
+        mock_list_all_files.return_value = pd.DataFrame(
             {
                 "file-group-id": ["FG1", "FG2", "FG1"],
                 "file-name": ["f1", "f2", "f3"],
@@ -1463,10 +1459,10 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
     @patch.object(DataQueryFileAPIClient, "filter_to_valid_tickers")
     @patch.object(DataQueryFileAPIClient, "download_catalog_file")
     @patch.object(DataQueryFileAPIClient, "get_datasets_for_indicators")
-    @patch.object(DataQueryFileAPIClient, "list_available_files")
+    @patch.object(DataQueryFileAPIClient, "list_available_files_for_all_file_groups")
     def test_download_historical_to_datetime_bootstraps_full_delta_history(
         self,
-        mock_list_available_files,
+        mock_list_all_files,
         mock_get_datasets_for_indicators,
         mock_download_catalog_file,
         mock_filter_to_valid_tickers,
@@ -1483,12 +1479,16 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
         mock_get_datasets_for_indicators.return_value = ["JPMAQS_GENERIC_RETURNS"]
 
         # Full snapshots exist, but only from a later date onward.
-        mock_list_available_files.return_value = pd.DataFrame(
+        mock_list_all_files.return_value = pd.DataFrame(
             {
+                "file-name": [
+                    "JPMAQS_GENERIC_RETURNS_20250602.parquet",
+                    "JPMAQS_GENERIC_RETURNS_20250603.parquet",
+                ],
                 "file-datetime": [
                     pd.Timestamp("2025-06-02T00:00:00Z"),
                     pd.Timestamp("2025-06-03T00:00:00Z"),
-                ]
+                ],
             }
         )
 
@@ -1505,17 +1505,17 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
         self.assertIs(out, sentinel)
         if PYTHON_3_8_OR_LATER:
             kwargs = mock_download_full_snapshot.call_args.kwargs
-            self.assertEqual(kwargs["since_datetime"], JPMAQS_EARLIEST_FILE_DATE)
-            self.assertEqual(kwargs["to_datetime"], "20250331T235959")
-            self.assertFalse(kwargs["include_full_snapshots"])
+            self.assertEqual(kwargs["since_datetime"], "20250327")
+            self.assertEqual(kwargs["to_datetime"], "20250328")
+            self.assertTrue(kwargs["include_full_snapshots"])
 
             load_kwargs = mock_load_data.call_args.kwargs
             self.assertIsNone(load_kwargs["since_datetime"])
         else:
             kwargs = mock_download_full_snapshot.call_args[1]
-            self.assertEqual(kwargs["since_datetime"], JPMAQS_EARLIEST_FILE_DATE)
-            self.assertEqual(kwargs["to_datetime"], "20250331T235959")
-            self.assertFalse(kwargs["include_full_snapshots"])
+            self.assertEqual(kwargs["since_datetime"], "20250327")
+            self.assertEqual(kwargs["to_datetime"], "20250328")
+            self.assertTrue(kwargs["include_full_snapshots"])
 
             load_kwargs = mock_load_data.call_args[1]
             self.assertIsNone(load_kwargs["since_datetime"])
