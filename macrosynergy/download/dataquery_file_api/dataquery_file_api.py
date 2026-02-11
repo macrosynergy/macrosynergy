@@ -316,6 +316,7 @@ from macrosynergy.download.dataquery_file_api.common import (
     get_current_or_last_business_day,
     pl_string_type,
     _is_date_only_string,
+    _normalize_file_timestamp_cutoff,
     _normalize_last_updated_cutoff,
 )
 
@@ -436,6 +437,22 @@ class DataQueryFileAPIClient(RateLimitedRequester):
         if exc_type is not None:
             logger.error(tb.format_exc())
         return False
+
+    @property
+    def file_selector(self) -> FileSelector:
+        """
+        Cached `FileSelector` instance for this client.
+
+        The selector is refreshed by download operations with the latest unfiltered API
+        inventory (full history) and the current local cache inventory.
+        """
+        if not hasattr(self, "_file_selector"):
+            self._file_selector = FileSelector(
+                api_files_df=None,
+                local_files_df=None,
+                file_name_col="file-name",
+            )
+        return self._file_selector
 
     @staticmethod
     def _normalize_out_dir(out_dir: Union[str, Path]) -> str:
@@ -1486,19 +1503,19 @@ class DataQueryFileAPIClient(RateLimitedRequester):
         """
         Downloads a complete snapshot of files based on specified criteria.
 
-        This method fetches a list of files modified within a given time window and
-        then downloads them. It can be customized to download only specific file types
-        or from a specific list of file groups.
+        This method fetches the full available-file inventory from the API (unbounded
+        by `since_datetime` / `to_datetime`) and delegates vintage-aware selection to
+        `FileSelector`. The vintage window (`since_datetime`, `to_datetime`) controls
+        which files are selected for download, not which files are listed from the API.
 
         Parameters
         ----------
         since_datetime : Optional[str]
-            Download files modified since this timestamp (inclusive).
+            Vintage window start (inclusive) used for file selection.
             Defaults to the start of the current day (UTC).
         to_datetime : Optional[str]
-            Download files modified up to this timestamp (inclusive).
-            Note: `since_datetime` and `to_datetime` only affect which files are downloaded.
-            Loading uses all locally available cached snapshot/delta files.
+            Vintage window end (inclusive) used for file selection.
+            Note: loading uses all locally available cached snapshot/delta files.
         overwrite : bool
             If True, overwrites files if they already exist. Default is False.
         chunk_size : Optional[int]
@@ -1521,9 +1538,9 @@ class DataQueryFileAPIClient(RateLimitedRequester):
         -----
         Internal parameters `_selection_since_datetime`, `_selection_to_datetime`,
         `_selection_min_last_updated`, and `_selection_max_last_updated` are
-        used by `download()` to distinguish between:
-        - the API listing window (which may be expanded for "covering" monthly delta files),
-        - and the target user-requested vintage window (used for file selection).
+        used by higher-level helpers (such as `download()`) to pass selection intent that
+        differs from the raw `since_datetime`/`to_datetime` window (for example, when row-
+        vintage cutoffs via `max_last_updated` affect delta coverage decisions).
         """
         Path(self.out_dir).mkdir(parents=True, exist_ok=True)
         start_time = time.time()
@@ -1541,23 +1558,34 @@ class DataQueryFileAPIClient(RateLimitedRequester):
         )
 
         validate_dq_timestamp(since_datetime, var_name="since_datetime")
-
-        files_df = self.filter_available_files_by_datetime(
-            since_datetime=since_datetime,
-            to_datetime=to_datetime,
-            include_full_snapshots=include_full_snapshots,
-            include_delta=include_delta,
-            include_metadata=include_metadata,
-        )
+        if to_datetime is not None:
+            validate_dq_timestamp(to_datetime, var_name="to_datetime")
+            since_dt = pd_to_datetime_compat(since_datetime)
+            to_dt = pd_to_datetime_compat(to_datetime)
+            if to_dt < since_dt:
+                new_since = (to_dt - pd.offsets.BDay(1)).strftime("%Y%m%d")
+                logger.warning(
+                    "`to_datetime` is before `since_datetime`; adjusting "
+                    "`since_datetime` to be one business day before `to_datetime`. "
+                    f"New `since_datetime`: {new_since}"
+                )
+                since_datetime = new_since
+                validate_dq_timestamp(since_datetime, var_name="since_datetime")
 
         if file_group_ids is not None:
             if not isinstance(file_group_ids, list) or not all(
                 isinstance(x, str) for x in file_group_ids
             ):
                 raise ValueError("`file_group_ids` must be a list of strings.")
-            files_df = files_df[files_df["file-group-id"].isin(file_group_ids)].copy()
 
-        downloaded_files_df = self.list_downloaded_files()
+        # Always provide the selector with an unfiltered API inventory so it can make
+        # consistent vintage decisions from the full history.
+        selector = self.file_selector
+        api_files_df = self.list_available_files_for_all_file_groups()
+
+        downloaded_files_df = self.list_downloaded_files(
+            include_last_modified_columns=False
+        )
         selection_since = (
             _selection_since_datetime
             if _selection_since_datetime is not None
@@ -1569,12 +1597,14 @@ class DataQueryFileAPIClient(RateLimitedRequester):
             else to_datetime
         )
 
-        selector = FileSelector(files_df, downloaded_files_df)
+        selector.refresh(api_files_df=api_files_df, local_files_df=downloaded_files_df)
         to_download = set(
             selector.select_files_for_download(
                 overwrite=overwrite,
                 since_datetime=selection_since,
                 to_datetime=selection_to,
+                file_group_ids=file_group_ids,
+                include_full_snapshots=include_full_snapshots,
                 include_delta_files=include_delta,
                 include_metadata_files=include_metadata,
                 warn_if_no_full_snapshots=bool(selection_since),
@@ -1589,7 +1619,9 @@ class DataQueryFileAPIClient(RateLimitedRequester):
             logger.info("No new files to download.")
             return
 
-        selected_df = files_df[files_df["file-name"].isin(list(to_download))].copy()
+        selected_df = api_files_df[
+            api_files_df["file-name"].isin(list(to_download))
+        ].copy()
         selected_df["download-priority"] = (
             selected_df["file-name"]
             .astype(str)
@@ -1820,19 +1852,12 @@ class DataQueryFileAPIClient(RateLimitedRequester):
         base_datasets = [d for d in base_datasets if d != self.catalog_file_group_id]
         if not base_datasets:
             return None
-
-        earliest_by_dataset: List[pd.Timestamp] = []
-        for ds in base_datasets:
-            df = self.list_available_files(file_group_id=ds)
-            if df.empty:
-                return None
-            if "file-datetime" not in df.columns:
-                raise InvalidResponseError(
-                    f'Missing "file-datetime" in available-files response for {ds}'
-                )
-            earliest_by_dataset.append(df["file-datetime"].min())
-
-        return max(earliest_by_dataset) if earliest_by_dataset else None
+        selector = self.file_selector
+        selector.refresh(api_files_df=self.list_available_files_for_all_file_groups())
+        return selector.effective_snapshot_switchover_ts(
+            file_group_ids=base_datasets,
+            catalog_file_group_id=self.catalog_file_group_id,
+        )
 
     def download(
         self,
@@ -1940,9 +1965,9 @@ class DataQueryFileAPIClient(RateLimitedRequester):
 
             Note for historical ("delta-only") vintages:
             - If `to_datetime` falls within a month where only monthly delta files exist,
-              the client may expand the download window to the month-end timestamp so the
-              covering delta file is available locally. Row-level filtering is then
-              enforced via `max_last_updated` during the load step.
+              the selector may still include the covering month-end delta file even if its
+              file timestamp is after `to_datetime`. Row-level filtering is then enforced
+              via `max_last_updated` during the load step.
         skip_download : bool
             If True, do not download snapshot/delta/metadata files and only load from the
             local cache. The catalog is still downloaded/validated. Default is False.
@@ -1966,24 +1991,28 @@ class DataQueryFileAPIClient(RateLimitedRequester):
             raise ValueError(
                 "At least one ticker must be specified via `tickers`, or `cids` & `xcats`."
             )
-        else:
-            valid_tickers = self.filter_to_valid_tickers(
-                tickers=rqstd_tickers, catalog_file=catalog_file
-            )
-            valid_norm = {t.lower() for t in valid_tickers}
-            missing = sorted({t for t in rqstd_tickers if t.lower() not in valid_norm})
-            if not valid_tickers:
-                raise ValueError(
-                    "No valid tickers found with the provided `tickers`, `cids`, and `xcats`."
-                )
-            if missing:
-                lmiss = min(5, len(missing))
-                nmore = f"{len(missing) - lmiss} more" if len(missing) > lmiss else ""
-                miss_str = "[" + ", ".join(missing[:lmiss]) + "..." + nmore + "]"
-                miss_str = f"{len(missing)} tickers requested do not exist in the catalog, these are: {miss_str}"
-                logger.warning(miss_str)
 
-            rqstd_tickers = valid_tickers
+        valid_tickers = self.filter_to_valid_tickers(
+            tickers=rqstd_tickers, catalog_file=catalog_file
+        )
+        if not valid_tickers:
+            raise ValueError(
+                "No valid tickers found with the provided `tickers`, `cids`, and `xcats`."
+            )
+
+        valid_norm = {t.lower() for t in valid_tickers}
+        missing = sorted({t for t in rqstd_tickers if t.lower() not in valid_norm})
+        if missing:
+            lmiss = min(5, len(missing))
+            nmore = f"{len(missing) - lmiss} more" if len(missing) > lmiss else ""
+            miss_str = "[" + ", ".join(missing[:lmiss]) + "..." + nmore + "]"
+            miss_str = (
+                f"{len(missing)} tickers requested do not exist in the catalog, "
+                f"these are: {miss_str}"
+            )
+            logger.warning(miss_str)
+
+        rqstd_tickers = valid_tickers
 
         datasets_to_download = self.get_datasets_for_indicators(
             tickers=rqstd_tickers, catalog_file=catalog_file
@@ -1991,95 +2020,40 @@ class DataQueryFileAPIClient(RateLimitedRequester):
         if datasets_to_download and include_delta_files:
             datasets_to_download += [f"{ds}_DELTA" for ds in datasets_to_download]
         if not skip_download:
-            # If the user requests a historical vintage (`to_datetime`) that predates the
-            # earliest available full snapshots, JPMaQS data can only be reconstructed by
-            # applying the entire delta history since `JPMAQS_EARLIEST_FILE_DATE`.
-            requires_full_delta_history = False
-            switchover_ts: Optional[pd.Timestamp] = None
-            if to_datetime is not None:
+            download_since_datetime = since_datetime
+            if download_since_datetime is None:
+                if to_datetime is not None:
+                    validate_dq_timestamp(to_datetime, var_name="to_datetime")
+                    to_dt = pd_to_datetime_compat(to_datetime)
+                    download_since_datetime = (to_dt - pd.offsets.BDay(1)).strftime(
+                        "%Y%m%d"
+                    )
+                else:
+                    download_since_datetime = (
+                        get_current_or_last_business_day().strftime("%Y%m%d")
+                    )
+
+            if (to_datetime is not None) and (not include_delta_files):
                 validate_dq_timestamp(to_datetime, var_name="to_datetime")
-                to_ts = pd_to_datetime_compat(to_datetime)
-
-                if (
-                    isinstance(to_datetime, str)
-                    and ("T" not in to_datetime)
-                    and (":" not in to_datetime)
-                ):
-                    to_ts = (
-                        to_ts.normalize()
-                        + pd.DateOffset(days=1)
-                        - pd.Timedelta(nanoseconds=1)
-                    )
-
-                earliest_file_ts = pd_to_datetime_compat(JPMAQS_EARLIEST_FILE_DATE)
-                if to_ts < earliest_file_ts:
-                    raise ValueError(
-                        "`to_datetime` is earlier than the earliest supported JPMaQS "
-                        f"file date ({JPMAQS_EARLIEST_FILE_DATE})."
-                    )
-
+                to_ts = _normalize_file_timestamp_cutoff(to_datetime)
                 switchover_ts = self._get_effective_snapshot_switchover_ts(
                     datasets=datasets_to_download
                 )
                 if switchover_ts is None or to_ts < switchover_ts:
-                    requires_full_delta_history = True
-                    if not include_delta_files:
-                        raise ValueError(
-                            "The requested vintage predates the earliest available full "
-                            "snapshots, so `include_delta_files` must be True."
-                        )
-                    logger.info(
-                        "No full snapshots are available for the requested vintage "
-                        f"(to_datetime={to_datetime}, switchover={switchover_ts}); "
-                        f"downloading all delta files since {JPMAQS_EARLIEST_FILE_DATE}."
+                    raise ValueError(
+                        "The requested vintage predates the earliest available full "
+                        "snapshots, so `include_delta_files` must be True."
                     )
-
-            download_since_datetime = (
-                since_datetime or get_current_or_last_business_day().strftime("%Y%m%d")
-            )
-            download_to_datetime = to_datetime
-            if to_datetime is not None and include_delta_files:
-                # Monthly "large delta" files can be timestamped at month-end (or previous
-                # business day), after an in-month `to_datetime`. Expand the download
-                # window so a covering month-end delta file is available locally.
-                #
-                # If `max_last_updated` is provided, treat it as the row-vintage intent and
-                # allow it to override the file-vintage window for delta coverage.
-                window_to_base = (
-                    max_last_updated if max_last_updated is not None else to_datetime
-                )
-                download_to_datetime = _month_end_dq_timestamp(window_to_base)
-                validate_dq_timestamp(download_to_datetime, var_name="to_datetime")
-            if to_datetime is not None:
-                since_dt = pd_to_datetime_compat(download_since_datetime)
-                to_dt = pd_to_datetime_compat(to_datetime)
-                if to_dt < since_dt:
-                    new_since = (to_dt - pd.offsets.BDay(1)).strftime("%Y%m%d")
-                    logger.warning(
-                        "`to_datetime` is before `since_datetime`; adjusting "
-                        "`since_datetime` to be one business day before `to_datetime`. "
-                        f"New `since_datetime`: {new_since}"
-                    )
-                    download_since_datetime = new_since
-
-            include_full_snapshots = True
-            effective_since_datetime_for_load = since_datetime
-            if requires_full_delta_history:
-                download_since_datetime = JPMAQS_EARLIEST_FILE_DATE
-                include_full_snapshots = False
-                effective_since_datetime_for_load = None
 
             self.download_full_snapshot(
                 since_datetime=download_since_datetime,
-                to_datetime=download_to_datetime,
+                to_datetime=to_datetime,
                 file_group_ids=datasets_to_download,
                 overwrite=overwrite,
                 show_progress=show_progress,
-                include_full_snapshots=include_full_snapshots,
+                include_full_snapshots=True,
                 include_delta=include_delta_files,
                 include_metadata=include_metadata_files,
-                _selection_since_datetime=since_datetime,
-                _selection_to_datetime=to_datetime,
                 _selection_min_last_updated=min_last_updated,
                 _selection_max_last_updated=max_last_updated,
             )
@@ -2097,6 +2071,7 @@ class DataQueryFileAPIClient(RateLimitedRequester):
                     "`cleanup_old_files_n_days` is ignored when `skip_download=True`."
                 )
 
+        load_since_datetime = since_datetime
         return self.load_data(
             tickers=rqstd_tickers,
             metrics=metrics,
@@ -2110,9 +2085,7 @@ class DataQueryFileAPIClient(RateLimitedRequester):
             categorical_dataframe=categorical_dataframe,
             include_delta_files=include_delta_files,
             delta_treatment=delta_treatment,
-            since_datetime=effective_since_datetime_for_load
-            if (not skip_download)
-            else since_datetime,
+            since_datetime=load_since_datetime,
             to_datetime=to_datetime,
             catalog_file=catalog_file,
             datasets=datasets_to_download,

@@ -78,6 +78,115 @@ class FileSelector:
         # Backwards compatible alias (internal / not user-facing).
         self.merged_df = self.files_df
 
+    def refresh(
+        self,
+        *,
+        api_files_df: Optional[pd.DataFrame] = None,
+        local_files_df: Optional[pd.DataFrame] = None,
+    ) -> None:
+        """
+        Refresh cached API and/or local inventories in-place.
+
+        This is intended for reusing a single `FileSelector` instance across multiple
+        selection operations (for example when the client downloads files and the local
+        inventory changes).
+        """
+        if api_files_df is not None:
+            self.api_files_df = (
+                api_files_df.copy()
+                if isinstance(api_files_df, pd.DataFrame)
+                else pd.DataFrame()
+            )
+        if local_files_df is not None:
+            self.local_files_df = (
+                local_files_df.copy()
+                if isinstance(local_files_df, pd.DataFrame)
+                else pd.DataFrame()
+            )
+
+        for attr in ("api_files_df", "local_files_df"):
+            df = getattr(self, attr)
+            if self.file_name_col not in df.columns:
+                if "filename" in df.columns:
+                    df[self.file_name_col] = df["filename"]
+                elif df.empty:
+                    df[self.file_name_col] = pd.Series(dtype="object")
+                else:
+                    raise ValueError(f"Missing `{self.file_name_col}` in {attr}.")
+            setattr(self, attr, df)
+
+        # Prefer enriching local inventory with API `last-modified` without forcing an
+        # upstream API call in `list_downloaded_files()`.
+        if (
+            (not self.local_files_df.empty)
+            and ("last-modified" not in self.local_files_df.columns)
+            and ("last-modified" in self.api_files_df.columns)
+        ):
+            lm = self.api_files_df[[self.file_name_col, "last-modified"]].copy()
+            lm = lm.drop_duplicates(subset=[self.file_name_col], keep="first")
+            self.local_files_df = self.local_files_df.merge(lm, on=self.file_name_col, how="left")
+
+        if self.tickers:
+            self.datasets_for_tickers = self._resolve_datasets_for_tickers()
+
+        self._dedupe_inventories()
+        self.files_df = self.api_files_df.merge(
+            self.local_files_df,
+            on=self.file_name_col,
+            how="outer",
+            suffixes=("_api", "_local"),
+        )
+        self.merged_df = self.files_df
+
+    def effective_snapshot_switchover_ts(
+        self,
+        *,
+        file_group_ids: List[str],
+        catalog_file_group_id: Optional[str] = None,
+    ) -> Optional[pd.Timestamp]:
+        """
+        Return the effective (per-request) earliest full-snapshot timestamp.
+
+        Notes
+        -----
+        JPMaQS can remove older full snapshots over time. For a given set of datasets
+        we define the "switchover" as the *latest* of the datasets' earliest currently
+        available full snapshots. If any dataset has no full snapshots at all, returns
+        None.
+        """
+        if not file_group_ids:
+            return None
+
+        base_datasets = sorted(
+            {
+                str(d).replace("_DELTA", "")
+                for d in file_group_ids
+                if isinstance(d, str) and d and ("_METADATA" not in d.upper())
+            }
+        )
+        if catalog_file_group_id is not None:
+            base_datasets = [d for d in base_datasets if d != catalog_file_group_id]
+        if not base_datasets:
+            return None
+
+        api_like = self._as_local_like_df(self.api_files_df, source="api")
+        if api_like.empty:
+            return None
+
+        filenames = api_like["filename"].astype(str)
+        is_snapshot = ~filenames.str.contains("_DELTA", case=False, na=False) & ~filenames.str.contains(
+            "_METADATA", case=False, na=False
+        )
+
+        earliest_by_dataset: List[pd.Timestamp] = []
+        for ds in base_datasets:
+            ds_snapshots = api_like.loc[is_snapshot & api_like["dataset"].astype(str).eq(ds)]
+            if ds_snapshots.empty:
+                return None
+            earliest_by_dataset.append(ds_snapshots["file-timestamp"].min())
+
+        return max(earliest_by_dataset) if earliest_by_dataset else None
+
     def _dedupe_inventories(self) -> None:
         for attr in ("api_files_df", "local_files_df"):
             df = getattr(self, attr)
@@ -182,6 +291,8 @@ class FileSelector:
         overwrite: bool = False,
         since_datetime: Optional[Union[str, pd.Timestamp]] = None,
         to_datetime: Optional[Union[str, pd.Timestamp]] = None,
+        file_group_ids: Optional[List[str]] = None,
+        include_full_snapshots: bool = True,
         include_delta_files: bool = True,
         include_metadata_files: bool = False,
         warn_if_no_full_snapshots: bool = False,
@@ -193,6 +304,19 @@ class FileSelector:
         api_like = self._as_local_like_df(self.api_files_df, source="api")
         if api_like.empty:
             return []
+
+        if file_group_ids is not None:
+            if (not isinstance(file_group_ids, list)) or (not all(isinstance(x, str) for x in file_group_ids)):
+                raise ValueError("`file_group_ids` must be a list of strings.")
+            if "file-group-id" in api_like.columns:
+                api_like = api_like[api_like["file-group-id"].isin(file_group_ids)].copy()
+
+        if not include_full_snapshots:
+            is_snapshot = (
+                ~api_like["filename"].astype(str).str.contains("_DELTA", case=False, na=False)
+                & ~api_like["filename"].astype(str).str.contains("_METADATA", case=False, na=False)
+            )
+            api_like = api_like.loc[~is_snapshot].copy()
 
         selected_api = _select_local_files_for_load(
             api_like,
