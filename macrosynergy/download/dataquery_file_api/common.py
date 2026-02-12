@@ -9,6 +9,9 @@ import polars as pl
 import threading
 import logging
 import time
+from enum import Enum
+
+from pathlib import Path
 
 from macrosynergy.compat import PD_2_0_OR_LATER, POLARS_0_17_13_OR_EARLIER
 
@@ -54,6 +57,34 @@ class RateLimitedRequester:
 
             self._last_api_call = datetime.datetime.now()
         return True
+
+
+def pl_string_type():
+    if POLARS_0_17_13_OR_EARLIER:
+        return pl.Utf8
+    return pl.String
+
+
+class JPMaQSParquetExpectedColumns(Enum):
+    TICKER = {
+        "ticker": pl_string_type(),
+        "real_date": pl.Date,
+        "value": pl.Float64,
+        "grading": pl.Float64,
+        "eop_lag": pl.Float64,
+        "mop_lag": pl.Float64,
+        "last_updated": pl.Datetime(time_unit="us", time_zone=None),
+    }
+    METADATA = {
+        "Theme": pl_string_type(),
+        "Group": pl_string_type(),
+        "Category": pl_string_type(),
+        "Market Group": pl_string_type(),
+        "Market": pl_string_type(),
+        "Ticker": pl_string_type(),
+        "Definition": pl_string_type(),
+        "Last Updated": pl.Datetime(time_unit="ns", time_zone=None),
+    }
 
 
 def _pd_to_datetime_compat(ts: str, utc: bool):
@@ -244,12 +275,6 @@ def _large_delta_file_datetimes(as_str: bool = True) -> List[str]:
     return [d.strftime("%Y%m%dT%H%M%S") for d in dt_list]
 
 
-def pl_string_type():
-    if POLARS_0_17_13_OR_EARLIER:
-        return pl.Utf8
-    return pl.String
-
-
 def _is_date_only_string(x: Any) -> bool:
     """
     True for date-only strings like "YYYYMMDD" or "YYYY-MM-DD".
@@ -320,3 +345,56 @@ def _covering_large_delta_timestamp(
         if ts in delta_ts_set:
             return ts
     return None
+
+
+def _list_downloaded_files(files_dir: Path, file_format: str = "parquet") -> List[Path]:
+    files_dir = Path(files_dir)
+    assert files_dir.is_dir(), f"No such directory: {files_dir}"
+    if file_format not in ["parquet", "json"]:
+        raise ValueError("`file_format` must be one of 'parquet' or 'json'.")
+    files = sorted(files_dir.glob(f"**/*.{file_format}"))
+    return files
+
+
+def _downloaded_files_df(
+    files_dir: Path,
+    file_format: str = "parquet",
+    include_effective_dataset_column: bool = True,
+    include_metadata_files: bool = False,
+) -> pd.DataFrame:
+    """
+    Build a DataFrame of locally downloaded DataQuery files.
+
+    Notes
+    -----
+    - `dataset` is the DataQuery "file-group-id" part of the filename (everything before
+      the trailing timestamp segment).
+    - `e-dataset` ("effective dataset") maps delta datasets back to their base dataset:
+      delta file-groups (those ending with `_DELTA`) are treated as updates to the base
+      dataset, not a separate dataset in their own right.
+    """
+    if not Path(files_dir).is_dir():
+        return pd.DataFrame(columns=["path", "filename", "filetype", "dataset"])
+    files_list = _list_downloaded_files(files_dir, file_format)
+    df = pd.DataFrame({"path": files_list})
+    if df.empty:
+        return df
+    df["path"] = df["path"].apply(lambda x: Path(x).resolve())
+    df["filename"] = df["path"].apply(lambda x: Path(x).name)
+    if not include_metadata_files:
+        df = df[~df["filename"].str.contains("_METADATA")].copy()
+    df["filetype"] = df["path"].apply(lambda x: Path(x).suffix.split(".")[-1])
+
+    df["dataset"] = df["filename"].apply(
+        lambda x: str(x).split(".")[0].rsplit("_", 1)[0]
+    )
+    df["file-datetime"] = df["filename"].apply(
+        lambda x: str(x).split(".")[0].rsplit("_", 1)[-1]
+    )
+    df["file-timestamp"] = df["file-datetime"].apply(
+        lambda x: pd_to_datetime_compat(x, utc=True)
+    )
+    if include_effective_dataset_column:
+        df["e-dataset"] = df["dataset"].str.replace(r"_DELTA$", "", regex=True)
+    df = df.reset_index(drop=True)
+    return df
