@@ -1274,7 +1274,7 @@ class DataQueryFileAPIClient(RateLimitedRequester):
 
     def list_downloaded_files(
         self,
-        include_last_modified_columns: bool = True,
+        include_last_modified_columns: bool = False,
     ) -> pd.DataFrame:
         col_order = [
             "filename",
