@@ -9,7 +9,7 @@ import polars as pl
 import pandas as pd
 import shutil
 
-from macrosynergy.download.dataquery_file_api.dataquery_file_api import (
+from macrosynergy.download.dataquery_file_api.file_loader import (
     _check_lazy_load_inputs,
     _list_downloaded_files,
     _downloaded_files_df,
@@ -17,11 +17,15 @@ from macrosynergy.download.dataquery_file_api.dataquery_file_api import (
     _ensure_columns,
     _to_output_schema,
     _filter_lazy_frame_by_tickers,
-    _delete_corrupt_files,
-    _large_delta_file_datetimes,
     _expr_split_ticker,
     _lazy_load_filtered_parquets,
 )
+
+from macrosynergy.download.dataquery_file_api.dataquery_file_api import (
+    _delete_corrupt_files,
+    _large_delta_file_datetimes,
+)
+
 from macrosynergy.download.dataquery_file_api.file_selector import (
     _select_local_files_for_load,
 )

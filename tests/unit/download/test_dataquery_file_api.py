@@ -9,7 +9,9 @@ import logging
 import tempfile
 from pathlib import Path
 from macrosynergy.compat import PD_2_0_OR_LATER, PYTHON_3_8_OR_LATER
-from macrosynergy.download.dataquery_file_api.common import pd_timestamp_compat
+from macrosynergy.download.dataquery_file_api.common import (
+    pd_timestamp_compat,
+)
 from macrosynergy.download.dataquery_file_api.dataquery_file_api import (
     validate_dq_timestamp,
     get_client_id_secret,
@@ -21,7 +23,6 @@ from macrosynergy.download.dataquery_file_api.dataquery_file_api import (
     DownloadError,
     InvalidResponseError,
     DQ_FILE_API_SCOPE,
-    JPMAQS_EARLIEST_FILE_DATE,
     JPMAQS_DATASET_THEME_MAPPING,
 )
 
@@ -137,7 +138,7 @@ class TestRateLimiting(unittest.TestCase):
                 return next(now_times)
 
         with patch(
-            "macrosynergy.download.dataquery_file_api.dataquery_file_api.datetime.datetime",
+            "macrosynergy.download.dataquery_file_api.common.datetime.datetime",
             FakeDateTime,
         ):
             requester._wait_for_api_call()
