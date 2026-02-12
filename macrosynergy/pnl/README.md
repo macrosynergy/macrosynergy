@@ -6,11 +6,11 @@ Subpackage for calculating Profits and Loss (PnL) of positions (portfolios).
 
 The module `naive_pnl.py` is the entry point. It is run using the `NaivePnL` class. The class is designed to facilitate PnL estimation without taking into account position sizes, transaction costs, or leverage rules. It is a simple way to estimate PnLs to test out trading strategies or to illustrate the potential PnLs of a set of trading signals.
 
+## Proxy PnL
+
 ```{warning}
 Proxy PNL is currently an experimental functionality and is in beta-testing. It should not be used in production.
 ```
-
-## Proxy PnL
 
 With the entry point to this module being the `ProxyPnL` class, the purpose of this set of functions or class is to facilitate PnL estimation under the consideration of
 
