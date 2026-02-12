@@ -870,11 +870,16 @@ class DataQueryFileAPIClient(RateLimitedRequester):
         max_retries: int = 3,
     ) -> str:
         """
-        Downloads a single Parquet file to the client's output directory.
+        Download a single DataQuery file to the client's output directory.
 
-        This method can be called with either (`file_group_id` and `file_datetime`)
-        or a `filename`. For large files, it automatically uses the
-        `SegmentedFileDownloader` for a robust, multi-part download.
+        This method can be called with either (`file_group_id` and `file_datetime`) or
+        a `filename`.
+
+        - Snapshot/delta datasets are typically `.parquet`.
+        - Some metadata file groups publish `.json` files (pass `filename=...`).
+
+        For large snapshot files, it automatically uses the `SegmentedFileDownloader`
+        for a robust, multi-part download.
 
         Parameters
         ----------
@@ -1165,36 +1170,74 @@ class DataQueryFileAPIClient(RateLimitedRequester):
         overwrite: bool = False,
         timeout: Optional[float] = DQ_FILE_API_TIMEOUT,
     ) -> str:
-        # check if file already exists
+        """
+        Download (or resolve) the most recent JPMaQS catalog parquet file.
+
+        The catalog is used for ticker validation and mapping tickers to underlying
+        JPMaQS datasets.
+
+        Notes
+        -----
+        - If today's catalog file already exists locally and `overwrite=False`, this
+          method returns it without making API calls.
+        - Otherwise, this downloads the latest available catalog file from DataQuery.
+        - If the download fails but an older local catalog exists, the method falls back
+          to the most recent local catalog and logs a warning.
+        """
         file_path = None
+        latest_local_catalog_path = None
         existing_files = self.list_downloaded_files()
-        if not overwrite and not existing_files.empty:
-            todayts = pd.Timestamp.utcnow().strftime("%Y%m%d")
-            today_file = f"JPMAQS_METADATA_CATALOG_{todayts}.parquet"
-            if today_file in sorted(existing_files["file-name"]):
-                file_path = existing_files[existing_files["file-name"] == today_file][
-                    "path"
-                ].values[0]
-                logger.info(f"Catalog file already downloaded: {file_path}")
-                return str(file_path)
+        if (not overwrite) and (not existing_files.empty):
+            local_catalogs = existing_files[
+                existing_files["dataset"].astype(str).eq(self.catalog_file_group_id)
+                & existing_files["file-name"]
+                .astype(str)
+                .str.lower()
+                .str.endswith(".parquet")
+            ].copy()
+            if not local_catalogs.empty:
+                todayts = pd.Timestamp.utcnow().strftime("%Y%m%d")
+                today_file = f"JPMAQS_METADATA_CATALOG_{todayts}.parquet"
+                if today_file in set(local_catalogs["file-name"].astype(str).tolist()):
+                    file_path = local_catalogs[
+                        local_catalogs["file-name"].astype(str).eq(today_file)
+                    ]["path"].values[0]
+                    logger.info(f"Catalog file already downloaded (today): {file_path}")
+                    return str(file_path)
 
-        available_catalogs = self.list_available_files(self.catalog_file_group_id)
-        if available_catalogs.empty:
-            raise DownloadError("No catalog files available for download.")
-        latest_catalog = available_catalogs.sort_values(
-            by=["file-datetime", "last-modified"], ascending=False
-        ).iloc[0]
-        latest_filename = latest_catalog["file-name"]
-        logger.info(f"Latest catalog file identified: {latest_filename}")
+                # Keep the latest local catalog as a fallback.
+                if "file-timestamp" in local_catalogs.columns:
+                    local_catalogs = local_catalogs.sort_values(
+                        by=["file-timestamp", "file-name"], ascending=False
+                    )
+                latest_local_catalog_path = local_catalogs.iloc[0]["path"]
 
-        if file_path is None:
+        try:
+            available_catalogs = self.list_available_files(self.catalog_file_group_id)
+            if available_catalogs.empty:
+                raise DownloadError("No catalog files available for download.")
+            latest_catalog = available_catalogs.sort_values(
+                by=["file-datetime", "last-modified"], ascending=False
+            ).iloc[0]
+            latest_filename = latest_catalog["file-name"]
+            logger.info(f"Latest catalog file identified: {latest_filename}")
+
             file_path = self.download_file(
                 filename=latest_filename,
                 overwrite=overwrite,
                 timeout=timeout,
             )
-
-        return str(file_path)
+            return str(file_path)
+        except KeyboardInterrupt:
+            raise
+        except Exception as e:
+            if (not overwrite) and (latest_local_catalog_path is not None):
+                logger.warning(
+                    "Failed to download the latest catalog file; falling back to most recent "
+                    f"local catalog at '{latest_local_catalog_path}'. Error: {e}"
+                )
+                return str(latest_local_catalog_path)
+            raise
 
     def get_datasets_for_indicators(
         self,
@@ -1204,6 +1247,17 @@ class DataQueryFileAPIClient(RateLimitedRequester):
         case_sensitive: bool = False,
         catalog_file: Optional[str] = None,
     ) -> List[str]:
+        """
+        Return the list of JPMaQS datasets that contain the requested tickers.
+
+        This loads the JPMaQS catalog parquet and maps the catalog `Theme` column to
+        DataQuery file-group-ids via `JPMAQS_DATASET_THEME_MAPPING`.
+
+        Notes
+        -----
+        - Unknown themes are mapped to `"UnknownTheme"` (to avoid `NaN` propagation and
+          sorting issues) and logged as a warning.
+        """
         tickers = _construct_all_tickers_list(tickers=tickers, cids=cids, xcats=xcats)
         if not tickers or not any(t.strip() for t in tickers):
             raise ValueError("No valid tickers to search for.")
@@ -1213,6 +1267,7 @@ class DataQueryFileAPIClient(RateLimitedRequester):
         catalog_df.loc[:, "Dataset"] = catalog_df["Theme"].map(
             JPMAQS_DATASET_THEME_MAPPING
         )
+        catalog_df.loc[:, "Dataset"] = catalog_df["Dataset"].fillna("UnknownTheme")
         if not set(catalog_df["Theme"]) == set(JPMAQS_DATASET_THEME_MAPPING.keys()):
             missing_themes = set(catalog_df["Theme"]) - set(
                 JPMAQS_DATASET_THEME_MAPPING.keys()
@@ -1323,12 +1378,11 @@ class DataQueryFileAPIClient(RateLimitedRequester):
             pd_to_datetime_compat(date) if date is not None else pd.Timestamp.utcnow()
         ).normalize()
         if date > pd.Timestamp.utcnow().normalize():
-            new_dt = pd.Timestamp.utcnow().normalize()
-            logger.warning(
-                f"Provided date {date.date()} is in the future."
-                f" Setting date to today: {new_dt.date()}."
+            today_utc = pd.Timestamp.utcnow().normalize()
+            raise ValueError(
+                "Provided `date` is in the future (UTC). "
+                f"Requested: {date.date()}, today (UTC): {today_utc.date()}."
             )
-            date = new_dt
         if not skip_download:
             to_dt = date + pd.offsets.BDay(1) - pd.Timedelta(seconds=1)
             self.download_full_snapshot(
@@ -1752,12 +1806,14 @@ class DataQueryFileAPIClient(RateLimitedRequester):
             Default is "latest".
         since_datetime : Optional[str]
             Restrict which locally available snapshot/delta files are considered to those
-            modified since this timestamp (inclusive). If None, all locally available files
-            are considered.
+            with file timestamps on/after this cutoff (inclusive). This uses the file
+            timestamp embedded in the filename (`file-datetime`), not the HTTP metadata
+            field `last-modified`. If None, all locally available files are considered.
         to_datetime : Optional[str]
             Restrict which locally available snapshot/delta files are considered to those
-            modified up to this timestamp (inclusive). If None, all locally available files
-            are considered.
+            with file timestamps on/before this cutoff (inclusive). This uses the file
+            timestamp embedded in the filename (`file-datetime`). If None, all locally
+            available files are considered.
 
             Notes:
             - If `to_datetime` is provided and `max_last_updated` is not, the loader
@@ -2015,12 +2071,15 @@ class DataQueryFileAPIClient(RateLimitedRequester):
         overwrite : bool
             If True, overwrites files if they already exist. Default is False.
         since_datetime : Optional[str]
-            Download files modified since this timestamp (inclusive).
-            Defaults to the start of the current day (UTC).
+            File-vintage window start (inclusive) for selecting which snapshot/delta/metadata
+            files to download. This is based on the file timestamp (`file-datetime`) rather
+            than the HTTP metadata field `last-modified`. Defaults to the start of the
+            current day (UTC).
         to_datetime : Optional[str]
-            Download files modified up to this timestamp (inclusive).
-            Note: `since_datetime` and `to_datetime` only affect which files are downloaded.
-            The returned timeseries is controlled by `start_date`/`end_date`.
+            File-vintage window end (inclusive) for selecting which snapshot/delta/metadata
+            files to download. Note: `since_datetime` and `to_datetime` only affect which
+            files are downloaded; the returned timeseries is controlled by
+            `start_date`/`end_date`.
 
             Note for historical ("delta-only") vintages:
             - If `to_datetime` falls within a month where only monthly delta files exist,
@@ -2029,7 +2088,9 @@ class DataQueryFileAPIClient(RateLimitedRequester):
               via `max_last_updated` during the load step.
         skip_download : bool
             If True, do not download snapshot/delta/metadata files and only load from the
-            local cache. The catalog is still downloaded/validated. Default is False.
+            local cache. In this mode, the client will use the most recent *local* catalog
+            parquet file and will not make any network requests. If no local catalog is
+            available, this method returns an empty DataFrame. Default is False.
         cleanup_old_files_n_days : Optional[int]
             If set to an integer value, deletes files older than this number of days
             from the local cache after the download is complete. This integer value is
@@ -2041,7 +2102,60 @@ class DataQueryFileAPIClient(RateLimitedRequester):
         Union[pd.DataFrame, pl.DataFrame, pl.LazyFrame]
             A DataFrame containing the requested data.
         """
-        catalog_file = self.download_catalog_file()
+
+        def _empty_for_type(df_type: str):
+            if df_type == "pandas":
+                return pd.DataFrame()
+            if df_type == "polars":
+                return pl.DataFrame()
+            if df_type == "polars-lazy":
+                return pl.DataFrame().lazy()
+            return pd.DataFrame()
+
+        def _most_recent_local_catalog() -> Optional[str]:
+            existing = self.list_downloaded_files(include_last_modified_columns=False)
+            if existing.empty:
+                return None
+            local_catalogs = existing[
+                existing["dataset"].astype(str).eq(self.catalog_file_group_id)
+                & existing["file-name"].astype(str).str.lower().str.endswith(".parquet")
+            ].copy()
+            if local_catalogs.empty:
+                return None
+            if "file-timestamp" in local_catalogs.columns:
+                local_catalogs = local_catalogs.sort_values(
+                    by=["file-timestamp", "file-name"], ascending=False
+                )
+            return str(local_catalogs.iloc[0]["path"])
+
+        catalog_file = None
+        if skip_download:
+            catalog_file = _most_recent_local_catalog()
+            if not catalog_file:
+                logger.warning(
+                    "skip_download=True but no local JPMaQS catalog parquet file was found. "
+                    "Run download() once with skip_download=False to populate the cache. "
+                    "Returning an empty DataFrame."
+                )
+                return _empty_for_type(dataframe_type)
+        else:
+            try:
+                catalog_file = self.download_catalog_file()
+            except DownloadError as e:
+                # If the API has no catalog (or catalog download fails), fall back to a
+                # local cache if possible.
+                catalog_file = _most_recent_local_catalog()
+                if catalog_file:
+                    logger.warning(
+                        "Failed to download the JPMaQS catalog file; falling back to the "
+                        f"most recent local catalog at '{catalog_file}'. Error: {e}"
+                    )
+                else:
+                    logger.warning(
+                        f"Failed to download the JPMaQS catalog file and no local catalog exists. "
+                        f"Returning an empty DataFrame. Error: {e}"
+                    )
+                    return _empty_for_type(dataframe_type)
 
         rqstd_tickers = _construct_all_tickers_list(
             tickers=tickers, cids=cids, xcats=xcats
@@ -2076,6 +2190,15 @@ class DataQueryFileAPIClient(RateLimitedRequester):
         datasets_to_download = self.get_datasets_for_indicators(
             tickers=rqstd_tickers, catalog_file=catalog_file
         )
+        if "UnknownTheme" in datasets_to_download:
+            logger.warning(
+                "Some tickers map to unknown catalog themes. "
+                "These will be ignored for download selection until "
+                "`JPMAQS_DATASET_THEME_MAPPING` is updated."
+            )
+            datasets_to_download = [
+                d for d in datasets_to_download if d != "UnknownTheme"
+            ]
         if datasets_to_download and include_delta_files:
             datasets_to_download += [f"{ds}_DELTA" for ds in datasets_to_download]
         if not skip_download:

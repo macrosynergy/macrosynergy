@@ -154,6 +154,25 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
         self.addCleanup(self.temp_dir.cleanup)
         self.test_dir = self.temp_dir.name
 
+    def _write_local_catalog_file(
+        self,
+        client: DataQueryFileAPIClient,
+        *,
+        file_datetime: str = "20230101",
+    ) -> str:
+        """
+        Create a dummy local catalog parquet file inside the client's cache directory.
+
+        Some `download(..., skip_download=True)` unit tests require a local catalog to
+        exist because `skip_download=True` now implies *no network calls*, including
+        avoiding `download_catalog_file()`.
+        """
+        file_date_dir = pd.to_datetime(file_datetime, utc=True).strftime("%Y-%m-%d")
+        pth = Path(client.out_dir) / file_date_dir / f"JPMAQS_METADATA_CATALOG_{file_datetime}.parquet"
+        pth.parent.mkdir(parents=True, exist_ok=True)
+        pth.touch()
+        return str(pth)
+
     @patch(
         "macrosynergy.download.dataquery_file_api.dataquery_file_api.DataQueryFileAPIOauth"
     )
@@ -1768,6 +1787,7 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
         client = DataQueryFileAPIClient(
             client_id="id", client_secret="secret", out_dir=self.test_dir
         )
+        self._write_local_catalog_file(client, file_datetime="20230101")
         mock_download_catalog_file.return_value = (
             "JPMAQS_METADATA_CATALOG_20230101.parquet"
         )
@@ -1800,6 +1820,7 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
         client = DataQueryFileAPIClient(
             client_id="id", client_secret="secret", out_dir=self.test_dir
         )
+        self._write_local_catalog_file(client, file_datetime="20230101")
         mock_catalog.return_value = "JPMAQS_METADATA_CATALOG_20230101.parquet"
         mock_filter.return_value = []
 
@@ -1907,6 +1928,7 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
         client = DataQueryFileAPIClient(
             client_id="id", client_secret="secret", out_dir=self.test_dir
         )
+        self._write_local_catalog_file(client, file_datetime="20230101")
         mock_download_catalog_file.return_value = (
             "JPMAQS_METADATA_CATALOG_20230101.parquet"
         )
@@ -1943,6 +1965,7 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
         client = DataQueryFileAPIClient(
             client_id="id", client_secret="secret", out_dir=self.test_dir
         )
+        self._write_local_catalog_file(client, file_datetime="20230101")
         mock_download_catalog_file.return_value = (
             "JPMAQS_METADATA_CATALOG_20230101.parquet"
         )
@@ -2076,6 +2099,7 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
         client = DataQueryFileAPIClient(
             client_id="id", client_secret="secret", out_dir=self.test_dir
         )
+        self._write_local_catalog_file(client, file_datetime="20230101")
         mock_download_catalog_file.return_value = (
             "JPMAQS_METADATA_CATALOG_20230101.parquet"
         )
@@ -2263,14 +2287,11 @@ class TestDataQueryFileAPIClientNotificationLoading(unittest.TestCase):
             }
         )
 
-        client._load_metadata_jsons(date="2026-01-25")
-
-        if PYTHON_3_8_OR_LATER:
-            warning_msgs = [c.args[0] for c in mock_logger.warning.call_args_list]
-        else:
-            warning_msgs = [c[0][0] for c in mock_logger.warning.call_args_list]
-        self.assertTrue(any("Provided date" in msg for msg in warning_msgs))
-        mock_download_full_snapshot.assert_called_once()
+        with self.assertRaisesRegex(ValueError, "future"):
+            client._load_metadata_jsons(date="2026-01-25")
+        mock_logger.warning.assert_not_called()
+        mock_download_full_snapshot.assert_not_called()
+        mock_list_downloaded_files.assert_not_called()
 
     @patch("macrosynergy.download.dataquery_file_api.dataquery_file_api.logger")
     def test_get_revisions_notifications(self, mock_logger):

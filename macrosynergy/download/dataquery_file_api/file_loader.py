@@ -1,3 +1,20 @@
+"""
+JPMaQS DataQuery File API - local parquet loader.
+
+This module contains the local-cache loading utilities used by
+`DataQueryFileAPIClient.load_data()` and `DataQueryFileAPIClient.download()`.
+
+Notes
+-----
+- The loader assumes JPMaQS snapshot/delta parquet files follow a canonical schema
+  (see `JPMaQSParquetExpectedColumns`). If files have schema drift (extra/missing
+  columns or incompatible dtypes), loading may fail or columns may be coerced.
+- `DataQueryFileAPIClient.delete_corrupt_files()` performs a *strict* schema check
+  (exact Polars schema equality) when deciding whether a parquet file is "corrupt".
+  This is intentional and can delete files that are readable but do not match the
+  expected schema exactly.
+"""
+
 from typing import Dict, List, Optional, Sequence, Tuple, Union
 import os
 from pathlib import Path
