@@ -53,12 +53,25 @@ class TestExpandingIncrement(unittest.TestCase):
             dtype=np.float32,
         )
 
+        # Add NaNs into the data to ensure splitter can handle it
+        nan_cids = ["AUD", "CAD"]
+        nan_xcats = ["RIR", "GROWTH"]
+
+        nan_idxs = (
+            df.loc[pd.IndexSlice[nan_cids, :], :]
+            .groupby(level="cid")
+            .head(180) # first 180 days missing for nan_cids
+            .index
+        )
+        df.loc[nan_idxs, nan_xcats] = np.nan
+
         # Create sample X and y dataframes resampled at monthly frequency
         self.X = df.drop(columns="XR")
         self.X = self.X.groupby(level=0).resample("M", level="real_date").mean()
 
         self.y = df["XR"]
         self.y = self.y.groupby(level=0).resample("M", level="real_date").last()
+        self.y.loc[np.random.rand(len(self.y)) < 0.15] = np.nan
 
     @classmethod
     def tearDownClass(self) -> None:
@@ -233,7 +246,7 @@ class TestExpandingIncrement(unittest.TestCase):
         try:
             splitter.visualise_splits(X=self.X, y=self.y)
         except Exception as e:
-            self.fail(f"Unexpected exception: {e}")    
+            self.fail(f"Unexpected exception: {e}")
 
 class TestExpandingFrequency(unittest.TestCase):
     @classmethod
