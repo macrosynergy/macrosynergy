@@ -126,7 +126,6 @@ class BasePanelSplit(BaseCrossValidator, ABC):
         tick_fontsize=None,
         label_fontsize=None,
         subtitle_fontsize=None,
-        drop_nas=True,
     ):
         """
         Visualise the cross-validation splits.
@@ -150,9 +149,6 @@ class BasePanelSplit(BaseCrossValidator, ABC):
             Integer specifying the size of the y-axis labels. Default is None.
         subtitle_fontsize : int, optional
             Integer specifying the size of the subplot titles. Default is None.
-        drop_nas : bool, optional
-            Whether to drop rows with NaN values in the dataframe. Default is True.
-            If False, only the rows with NaN values in the dependent variable are dropped.
         """
         sns.set_theme(style="whitegrid", palette="colorblind")
 
@@ -178,12 +174,7 @@ class BasePanelSplit(BaseCrossValidator, ABC):
             if not isinstance(subtitle_fontsize, int):
                 raise TypeError("subtitle_size must be an integer.")
 
-        # Obtain relevant data
-        if drop_nas:
-            Xy: pd.DataFrame = pd.concat([X, y], axis=1).dropna()
-        else:
-            Xy = pd.concat([X, y], axis=1).dropna(subset=[y.name])
-
+        Xy: pd.DataFrame = pd.concat([X, y], axis=1)
         cross_sections = np.array(sorted(Xy.index.get_level_values(0).unique()))
         real_dates = Xy.index.get_level_values(1).unique().sort_values()
 
@@ -371,9 +362,6 @@ class WalkForwardPanelSplit(BasePanelSplit, ABC):
         The maximum number of time periods in each training set. If the maximum is
         exceeded, the earliest periods are cut off. This effectively creates rolling
         training sets. Default is None.
-    drop_nas : bool, optional
-        Whether to drop rows with NaN values in the dataframe. Default is True.
-        If False, only the rows with NaN values in the dependent variable are dropped.
 
     Notes
     -----
@@ -388,7 +376,6 @@ class WalkForwardPanelSplit(BasePanelSplit, ABC):
         min_periods,
         start_date=None,
         max_periods=None,
-        drop_nas = True,
     ):
         # Checks
         self._check_wf_params(
@@ -396,7 +383,6 @@ class WalkForwardPanelSplit(BasePanelSplit, ABC):
             min_periods=min_periods,
             start_date=start_date,
             max_periods=max_periods,
-            drop_nas=drop_nas,
         )
 
         # Attributes
@@ -404,9 +390,8 @@ class WalkForwardPanelSplit(BasePanelSplit, ABC):
         self.min_periods = min_periods
         self.start_date = pd.Timestamp(start_date) if start_date else None
         self.max_periods = max_periods
-        self.drop_nas = drop_nas
 
-    def _check_wf_params(self, min_cids, min_periods, start_date, max_periods, drop_nas):
+    def _check_wf_params(self, min_cids, min_periods, start_date, max_periods):
         """
         Type and value checks for the class initialisation parameters.
 
@@ -420,8 +405,6 @@ class WalkForwardPanelSplit(BasePanelSplit, ABC):
             The targeted final date in the initial training set in ISO 8601 format.
         max_periods : int
             The maximum number of time periods in each training set.
-        drop_nas : bool
-            Whether to drop rows with NaN values in the dataframe.
         """
         # min_cids
         if not isinstance(min_cids, int):
@@ -454,9 +437,6 @@ class WalkForwardPanelSplit(BasePanelSplit, ABC):
             raise ValueError(
                 f"max_periods must be an integer greater than 0. Got {max_periods}."
             )
-        # drop_nas
-        if not isinstance(drop_nas, bool):
-            raise TypeError(f"drop_nas must be a boolean. Got {type(drop_nas)}.")
 
     def _check_split_params(self, X, y, groups):
         """

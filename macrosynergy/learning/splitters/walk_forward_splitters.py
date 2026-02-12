@@ -41,9 +41,6 @@ class ExpandingIncrementPanelSplit(WalkForwardPanelSplit):
         The maximum number of time periods in each training set. If the maximum is
         exceeded, the earliest periods are cut off. This effectively creates rolling
         training sets. Default is None.
-    drop_nas : bool
-        Whether to drop rows with NaN values in the dataframe. Default is True.
-        If False, only the rows with NaN values in the dependent variable are dropped.
 
     Notes
     -----
@@ -66,7 +63,6 @@ class ExpandingIncrementPanelSplit(WalkForwardPanelSplit):
         min_periods=500,
         start_date=None,
         max_periods=None,
-        drop_nas = True,
     ):
         # Checks
         super().__init__(
@@ -74,7 +70,6 @@ class ExpandingIncrementPanelSplit(WalkForwardPanelSplit):
             min_periods=min_periods,
             start_date=start_date,
             max_periods=max_periods,
-            drop_nas=drop_nas,
         )
         self._check_init_params(
             train_intervals=train_intervals,
@@ -116,15 +111,7 @@ class ExpandingIncrementPanelSplit(WalkForwardPanelSplit):
         train_indices = []
         test_indices = []
 
-        if self.drop_nas:
-            Xy = pd.concat([X, y], axis=1).dropna()
-        else:
-            # Drop only the rows with NaN values in the dependent variable
-            if isinstance(y, pd.Series):
-                y = y.to_frame()
-            Xy = pd.concat([X, y], axis=1).dropna(subset=y.columns)
-            Xy = Xy.dropna(subset=X.columns, how='all')
-
+        Xy = pd.concat([X, y], axis=1)
         real_dates = Xy.index.get_level_values(1)
         splits = self._determine_unique_training_times(Xy, real_dates)
 
@@ -259,7 +246,7 @@ class ExpandingIncrementPanelSplit(WalkForwardPanelSplit):
         subtitle_fontsize : int, optional
             Integer specifying the size of the subplot titles. Default is None.
         """
-        super().visualise_splits(X, y, figsize, show_title, tick_fontsize, label_fontsize, subtitle_fontsize, drop_nas=self.drop_nas)
+        super().visualise_splits(X, y, figsize, show_title, tick_fontsize, label_fontsize, subtitle_fontsize)
 
     def _check_init_params(
         self,
@@ -330,9 +317,6 @@ class ExpandingFrequencyPanelSplit(WalkForwardPanelSplit):
         The maximum number of time periods in each training set. If the maximum is
         exceeded, the earliest periods are cut off. This effectively creates rolling
         training sets. Default is None.
-    drop_nas : bool
-        Whether to drop rows with NaN values in the dataframe. Default is True.
-        If False, only the rows with NaN values in the dependent variable are dropped.
 
     Notes
     -----
@@ -369,7 +353,6 @@ class ExpandingFrequencyPanelSplit(WalkForwardPanelSplit):
         min_periods=500,
         start_date=None,
         max_periods=None,
-        drop_nas=True,
     ):
         # Checks
         super().__init__(
@@ -377,7 +360,6 @@ class ExpandingFrequencyPanelSplit(WalkForwardPanelSplit):
             min_periods=min_periods,
             start_date=start_date,
             max_periods=max_periods,
-            drop_nas=drop_nas,
         )
         self._check_init_params(
             expansion_freq=expansion_freq,
@@ -428,14 +410,7 @@ class ExpandingFrequencyPanelSplit(WalkForwardPanelSplit):
         train_indices = []
         test_indices = []
 
-        if self.drop_nas:
-            Xy = pd.concat([X, y], axis=1).dropna()
-        else:
-            if isinstance(y, pd.Series):
-                y = y.to_frame()
-            Xy = pd.concat([X, y], axis=1).dropna(subset=y.columns)
-            Xy = Xy.dropna(subset=X.columns, how='all')
-
+        Xy = pd.concat([X, y], axis=1)
         real_dates = Xy.index.get_level_values(1)
         splits = self._determine_unique_training_times(Xy, real_dates)
 
@@ -610,7 +585,7 @@ class ExpandingFrequencyPanelSplit(WalkForwardPanelSplit):
         subtitle_fontsize : int, optional
             Integer specifying the size of the subplot titles. Default is None.
         """
-        super().visualise_splits(X, y, figsize, show_title, tick_fontsize, label_fontsize, subtitle_fontsize, drop_nas=self.drop_nas)
+        super().visualise_splits(X, y, figsize, show_title, tick_fontsize, label_fontsize, subtitle_fontsize)
 
 if __name__ == "__main__":
     from macrosynergy.management.simulate import make_qdf
@@ -645,9 +620,9 @@ if __name__ == "__main__":
     y = dfd["XR"]
 
     # ExpandingIncrementPanelSplit
-    splitter = ExpandingIncrementPanelSplit(train_intervals=21 * 12, test_size=21 * 12, drop_nas=False, min_cids = 1, min_periods = 12*12)
+    splitter = ExpandingIncrementPanelSplit(train_intervals=21 * 12, test_size=21 * 12, min_cids = 1, min_periods = 12*12)
     splitter.visualise_splits(X, y)
 
     # ExpandingFrequencyPanelSplit
-    splitter = ExpandingFrequencyPanelSplit(expansion_freq="Y", test_freq="Y", drop_nas=False, min_cids = 1, min_periods = 12*12)
+    splitter = ExpandingFrequencyPanelSplit(expansion_freq="Y", test_freq="Y", min_cids = 1, min_periods = 12*12)
     splitter.visualise_splits(X, y)

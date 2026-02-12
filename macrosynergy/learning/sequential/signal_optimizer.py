@@ -321,7 +321,6 @@ class SignalOptimizer(BasePanelLearner):
             min_cids=min_cids,
             min_periods=min_periods,
             max_periods=max_periods,
-            drop_nas=self.drop_nas,
         )
 
         results = self.run(
