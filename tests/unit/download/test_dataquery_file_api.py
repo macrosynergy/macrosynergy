@@ -1555,15 +1555,64 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
         expected = pd.Timestamp("2025-03-28T23:59:59.999999999Z")
         self.assertEqual(passed_max, expected)
 
+    @patch(
+        "macrosynergy.download.dataquery_file_api.dataquery_file_api.lazy_load_from_parquets"
+    )
+    @patch.object(DataQueryFileAPIClient, "list_downloaded_files")
+    @patch.object(DataQueryFileAPIClient, "download_catalog_file")
+    @patch.object(DataQueryFileAPIClient, "filter_to_valid_tickers")
+    @patch.object(DataQueryFileAPIClient, "get_datasets_for_indicators")
+    def test_load_data_raises_when_to_datetime_before_earliest_file_date(
+        self,
+        mock_get_datasets_for_indicators,
+        mock_filter_to_valid_tickers,
+        mock_download_catalog_file,
+        mock_list_downloaded_files,
+        mock_lazy_load,
+    ):
+        client = DataQueryFileAPIClient(
+            client_id="id", client_secret="secret", out_dir=self.test_dir
+        )
+        mock_download_catalog_file.return_value = (
+            "JPMAQS_METADATA_CATALOG_20230101.parquet"
+        )
+        mock_filter_to_valid_tickers.return_value = ["USD_GROWTH"]
+        mock_get_datasets_for_indicators.return_value = ["JPMAQS_GENERIC_RETURNS"]
+        mock_list_downloaded_files.return_value = pd.DataFrame(
+            [
+                {
+                    "file-name": "JPMAQS_GENERIC_RETURNS_20220103.parquet",
+                    "dataset": "JPMAQS_GENERIC_RETURNS",
+                    "file-timestamp": pd.Timestamp("2022-01-03T00:00:00Z"),
+                    "path": "x",
+                }
+            ]
+        )
+
+        with self.assertRaises(ValueError) as cm:
+            client.load_data(tickers=["USD_GROWTH"], to_datetime="20210101")
+        self.assertIn("2022-01-03T00:00:00Z", str(cm.exception))
+        mock_lazy_load.assert_not_called()
+
     @patch.object(DataQueryFileAPIClient, "download")
+    @patch.object(DataQueryFileAPIClient, "list_available_files_for_all_file_groups")
     @patch(
         "macrosynergy.download.dataquery_file_api.dataquery_file_api.DataQueryFileAPIOauth"
     )
     def test_download_as_of_date_only_defaults_to_eod_utc(
-        self, _mock_oauth, mock_download
+        self, _mock_oauth, mock_list_all_files, mock_download
     ):
         client = DataQueryFileAPIClient(
             client_id="id", client_secret="secret", out_dir=self.test_dir
+        )
+        mock_list_all_files.return_value = pd.DataFrame(
+            [
+                {
+                    "file-name": "JPMAQS_METADATA_CATALOG_20220101.parquet",
+                    "file-datetime": pd.Timestamp("2022-01-01T00:00:00Z"),
+                    "is-available": True,
+                }
+            ]
         )
         sentinel = pd.DataFrame({"a": [1]})
         mock_download.return_value = sentinel
@@ -1583,17 +1632,27 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
 
         self.assertEqual(kwargs["to_datetime"], "20250328")
         self.assertEqual(kwargs["max_last_updated"], "2025-03-28T23:59:59Z")
-        self.assertEqual(kwargs["since_datetime"], "20250328")
+        self.assertIsNone(kwargs["since_datetime"])
 
     @patch.object(DataQueryFileAPIClient, "download")
+    @patch.object(DataQueryFileAPIClient, "list_available_files_for_all_file_groups")
     @patch(
         "macrosynergy.download.dataquery_file_api.dataquery_file_api.DataQueryFileAPIOauth"
     )
     def test_download_as_of_datetime_preserves_time_component(
-        self, _mock_oauth, mock_download
+        self, _mock_oauth, mock_list_all_files, mock_download
     ):
         client = DataQueryFileAPIClient(
             client_id="id", client_secret="secret", out_dir=self.test_dir
+        )
+        mock_list_all_files.return_value = pd.DataFrame(
+            [
+                {
+                    "file-name": "JPMAQS_METADATA_CATALOG_20220101.parquet",
+                    "file-datetime": pd.Timestamp("2022-01-01T00:00:00Z"),
+                    "is-available": True,
+                }
+            ]
         )
         mock_download.return_value = pd.DataFrame()
 
@@ -1610,7 +1669,85 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
             kwargs = mock_download.call_args[1]
         self.assertEqual(kwargs["to_datetime"], "2025-03-28T12:34:56Z")
         self.assertEqual(kwargs["max_last_updated"], "2025-03-28T12:34:56Z")
-        self.assertEqual(kwargs["since_datetime"], "20250328")
+        self.assertIsNone(kwargs["since_datetime"])
+
+    @patch.object(DataQueryFileAPIClient, "download")
+    @patch.object(DataQueryFileAPIClient, "list_available_files_for_all_file_groups")
+    @patch(
+        "macrosynergy.download.dataquery_file_api.dataquery_file_api.DataQueryFileAPIOauth"
+    )
+    def test_download_as_of_raises_when_before_earliest_file_date(
+        self, _mock_oauth, mock_list_all_files, mock_download
+    ):
+        client = DataQueryFileAPIClient(
+            client_id="id", client_secret="secret", out_dir=self.test_dir
+        )
+        mock_list_all_files.return_value = pd.DataFrame(
+            [
+                {
+                    "file-name": "JPMAQS_METADATA_CATALOG_20220101.parquet",
+                    "file-datetime": pd.Timestamp("2022-01-01T00:00:00Z"),
+                    "is-available": True,
+                }
+            ]
+        )
+        with self.assertRaises(ValueError) as cm:
+            client.download_as_of(
+                tickers=["USD_GROWTH"],
+                as_of_datetime="20210101",
+                show_progress=False,
+                cleanup_old_files_n_days=None,
+            )
+        self.assertIn("2022-01-01T00:00:00Z", str(cm.exception))
+        mock_download.assert_not_called()
+
+    @patch.object(DataQueryFileAPIClient, "download")
+    @patch("pandas.Timestamp.utcnow")
+    @patch(
+        "macrosynergy.download.dataquery_file_api.dataquery_file_api.DataQueryFileAPIOauth"
+    )
+    def test_download_as_of_future_datetime_raises(
+        self, _mock_oauth, mock_now, mock_download
+    ):
+        client = DataQueryFileAPIClient(
+            client_id="id", client_secret="secret", out_dir=self.test_dir
+        )
+        mock_now.return_value = pd.Timestamp("2026-02-11T12:34:56Z")
+        mock_download.return_value = pd.DataFrame()
+
+        with self.assertRaises(ValueError) as cm:
+            client.download_as_of(
+                tickers=["USD_GROWTH"],
+                as_of_datetime="2029-10-08T06:00:00Z",
+                show_progress=False,
+                cleanup_old_files_n_days=None,
+            )
+        self.assertIn("now (UTC)", str(cm.exception))
+        mock_download.assert_not_called()
+
+    @patch.object(DataQueryFileAPIClient, "download")
+    @patch("pandas.Timestamp.utcnow")
+    @patch(
+        "macrosynergy.download.dataquery_file_api.dataquery_file_api.DataQueryFileAPIOauth"
+    )
+    def test_download_as_of_future_date_only_raises(
+        self, _mock_oauth, mock_now, mock_download
+    ):
+        client = DataQueryFileAPIClient(
+            client_id="id", client_secret="secret", out_dir=self.test_dir
+        )
+        mock_now.return_value = pd.Timestamp("2026-02-11T12:34:56Z")
+        mock_download.return_value = pd.DataFrame()
+
+        with self.assertRaises(ValueError) as cm:
+            client.download_as_of(
+                tickers=["USD_GROWTH"],
+                as_of_datetime="2029-10-08",
+                show_progress=False,
+                cleanup_old_files_n_days=None,
+            )
+        self.assertIn("today (UTC)", str(cm.exception))
+        mock_download.assert_not_called()
 
     @patch("macrosynergy.download.dataquery_file_api.dataquery_file_api.logger")
     @patch.object(DataQueryFileAPIClient, "download_catalog_file")

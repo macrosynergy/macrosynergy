@@ -124,7 +124,9 @@ class FileSelector:
         ):
             lm = self.api_files_df[[self.file_name_col, "last-modified"]].copy()
             lm = lm.drop_duplicates(subset=[self.file_name_col], keep="first")
-            self.local_files_df = self.local_files_df.merge(lm, on=self.file_name_col, how="left")
+            self.local_files_df = self.local_files_df.merge(
+                lm, on=self.file_name_col, how="left"
+            )
 
         if self.tickers:
             self.datasets_for_tickers = self._resolve_datasets_for_tickers()
@@ -174,13 +176,15 @@ class FileSelector:
             return None
 
         filenames = api_like["filename"].astype(str)
-        is_snapshot = ~filenames.str.contains("_DELTA", case=False, na=False) & ~filenames.str.contains(
-            "_METADATA", case=False, na=False
-        )
+        is_snapshot = ~filenames.str.contains(
+            "_DELTA", case=False, na=False
+        ) & ~filenames.str.contains("_METADATA", case=False, na=False)
 
         earliest_by_dataset: List[pd.Timestamp] = []
         for ds in base_datasets:
-            ds_snapshots = api_like.loc[is_snapshot & api_like["dataset"].astype(str).eq(ds)]
+            ds_snapshots = api_like.loc[
+                is_snapshot & api_like["dataset"].astype(str).eq(ds)
+            ]
             if ds_snapshots.empty:
                 return None
             earliest_by_dataset.append(ds_snapshots["file-timestamp"].min())
@@ -306,15 +310,20 @@ class FileSelector:
             return []
 
         if file_group_ids is not None:
-            if (not isinstance(file_group_ids, list)) or (not all(isinstance(x, str) for x in file_group_ids)):
+            if (not isinstance(file_group_ids, list)) or (
+                not all(isinstance(x, str) for x in file_group_ids)
+            ):
                 raise ValueError("`file_group_ids` must be a list of strings.")
             if "file-group-id" in api_like.columns:
-                api_like = api_like[api_like["file-group-id"].isin(file_group_ids)].copy()
+                api_like = api_like[
+                    api_like["file-group-id"].isin(file_group_ids)
+                ].copy()
 
         if not include_full_snapshots:
-            is_snapshot = (
-                ~api_like["filename"].astype(str).str.contains("_DELTA", case=False, na=False)
-                & ~api_like["filename"].astype(str).str.contains("_METADATA", case=False, na=False)
+            is_snapshot = ~api_like["filename"].astype(str).str.contains(
+                "_DELTA", case=False, na=False
+            ) & ~api_like["filename"].astype(str).str.contains(
+                "_METADATA", case=False, na=False
             )
             api_like = api_like.loc[~is_snapshot].copy()
 
@@ -432,6 +441,21 @@ class FileSelector:
             min_last_updated=min_last_updated,
             max_last_updated=max_last_updated,
         )
+
+    def oldest_api_file_timestamp(self) -> Optional[pd.Timestamp]:
+        """
+        Return the oldest file timestamp present in the API inventory (UTC).
+
+        Assumes `api_files_df` is an unfiltered API inventory (full history), as provided
+        by `DataQueryFileAPIClient.list_available_files_for_all_file_groups()`.
+        """
+        api_like = self._as_local_like_df(self.api_files_df, source="api")
+        if api_like.empty:
+            return None
+        ts = api_like["file-timestamp"].min()
+        if pd.isna(ts):
+            return None
+        return ts
 
 
 def _select_local_files_for_load(
@@ -642,14 +666,12 @@ def _select_local_files_for_load(
             out["filename"].astype(str).str.contains("_DELTA", case=False, na=False)
         )
         snapshots_out = out.loc[~is_delta_out].copy()
-        if snapshots_out.empty and bool(is_delta_out.any()):
-            earliest_snapshot_str = None
-            if earliest_snapshot_ts is not None:
-                earliest_snapshot_str = earliest_snapshot_ts.strftime(
-                    "%Y-%m-%dT%H:%M:%SZ"
-                )
-            else:
-                earliest_snapshot_str = "N/A"
+        if (
+            snapshots_out.empty
+            and bool(is_delta_out.any())
+            and (earliest_snapshot_ts is not None)
+        ):
+            earliest_snapshot_str = earliest_snapshot_ts.strftime("%Y-%m-%dT%H:%M:%SZ")
             logger.warning(
                 "No full snapshots available in the requested window "
                 f"since={window_since_ts.strftime('%Y-%m-%dT%H:%M:%SZ')} "

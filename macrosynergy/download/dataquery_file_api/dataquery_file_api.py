@@ -429,6 +429,7 @@ class DataQueryFileAPIClient(RateLimitedRequester):
             resource=self.scope,
             verify=self.verify_ssl,
         )
+        self._file_selector = None
 
     def __enter__(self):
         return self
@@ -446,10 +447,16 @@ class DataQueryFileAPIClient(RateLimitedRequester):
         The selector is refreshed by download operations with the latest unfiltered API
         inventory (full history) and the current local cache inventory.
         """
-        if not hasattr(self, "_file_selector"):
+        if self._file_selector is None:
+            logger.debug(
+                "Initializing FileSelector with unfiltered API file inventory via "
+                "`list_available_files_for_all_file_groups()`."
+            )
+            api_files_df = self.list_available_files_for_all_file_groups()
+            local_files_df = self.list_downloaded_files()
             self._file_selector = FileSelector(
-                api_files_df=None,
-                local_files_df=None,
+                api_files_df=api_files_df,
+                local_files_df=local_files_df,
                 file_name_col="file-name",
             )
         return self._file_selector
@@ -1581,7 +1588,10 @@ class DataQueryFileAPIClient(RateLimitedRequester):
         # Always provide the selector with an unfiltered API inventory so it can make
         # consistent vintage decisions from the full history.
         selector = self.file_selector
-        api_files_df = self.list_available_files_for_all_file_groups()
+        api_files_df = selector.api_files_df
+        if api_files_df is None or api_files_df.empty:
+            api_files_df = self.list_available_files_for_all_file_groups()
+            selector.refresh(api_files_df=api_files_df)
 
         downloaded_files_df = self.list_downloaded_files(
             include_last_modified_columns=False
@@ -1598,20 +1608,28 @@ class DataQueryFileAPIClient(RateLimitedRequester):
         )
 
         selector.refresh(api_files_df=api_files_df, local_files_df=downloaded_files_df)
-        to_download = set(
-            selector.select_files_for_download(
-                overwrite=overwrite,
-                since_datetime=selection_since,
-                to_datetime=selection_to,
-                file_group_ids=file_group_ids,
-                include_full_snapshots=include_full_snapshots,
-                include_delta_files=include_delta,
-                include_metadata_files=include_metadata,
-                warn_if_no_full_snapshots=bool(selection_since),
-                min_last_updated=_selection_min_last_updated,
-                max_last_updated=_selection_max_last_updated,
-            )
+        oldest_ts = selector.oldest_api_file_timestamp()
+        if (selection_to is not None) and (oldest_ts is not None):
+            to_cutoff = _normalize_file_timestamp_cutoff(selection_to)
+            if to_cutoff < oldest_ts:
+                raise ValueError(
+                    "`to_datetime` predates the oldest available JPMaQS file "
+                    "timestamp reported by the API "
+                    f"({oldest_ts.strftime('%Y-%m-%dT%H:%M:%SZ')})."
+                )
+        to_download = selector.select_files_for_download(
+            overwrite=overwrite,
+            since_datetime=selection_since,
+            to_datetime=selection_to,
+            file_group_ids=file_group_ids,
+            include_full_snapshots=include_full_snapshots,
+            include_delta_files=include_delta,
+            include_metadata_files=include_metadata,
+            warn_if_no_full_snapshots=bool(selection_since),
+            min_last_updated=_selection_min_last_updated,
+            max_last_updated=_selection_max_last_updated,
         )
+        to_download = list(set(to_download))
 
         num_files_to_download = len(to_download)
         logger.info(f"Found {num_files_to_download} new files to download.")
@@ -1619,9 +1637,7 @@ class DataQueryFileAPIClient(RateLimitedRequester):
             logger.info("No new files to download.")
             return
 
-        selected_df = api_files_df[
-            api_files_df["file-name"].isin(list(to_download))
-        ].copy()
+        selected_df = api_files_df[api_files_df["file-name"].isin(to_download)].copy()
         selected_df["download-priority"] = (
             selected_df["file-name"]
             .astype(str)
@@ -1797,6 +1813,48 @@ class DataQueryFileAPIClient(RateLimitedRequester):
             )
             if datasets_to_download and include_delta_files:
                 datasets_to_download += [f"{ds}_DELTA" for ds in datasets_to_download]
+
+        if to_datetime is not None:
+            if isinstance(to_datetime, str):
+                validate_dq_timestamp(to_datetime, var_name="to_datetime")
+            local_files_df = self.list_downloaded_files(
+                include_last_modified_columns=False
+            )
+            if (not local_files_df.empty) and (
+                "file-timestamp" in local_files_df.columns
+            ):
+                is_parquet = (
+                    local_files_df["file-name"]
+                    .astype(str)
+                    .str.lower()
+                    .str.endswith(".parquet")
+                )
+                is_metadata = (
+                    local_files_df["file-name"]
+                    .astype(str)
+                    .str.contains("_METADATA", case=False, na=False)
+                )
+                is_catalog = (
+                    local_files_df["dataset"].astype(str).eq(self.catalog_file_group_id)
+                )
+                data_df = local_files_df.loc[
+                    is_parquet & (~is_metadata) & (~is_catalog)
+                ]
+                oldest_local_ts = (
+                    data_df["file-timestamp"].min()
+                    if (not data_df.empty) and ("file-timestamp" in data_df.columns)
+                    else None
+                )
+                if pd.isna(oldest_local_ts):
+                    oldest_local_ts = None
+                if oldest_local_ts is not None:
+                    to_cutoff = _normalize_file_timestamp_cutoff(to_datetime)
+                    if to_cutoff < oldest_local_ts:
+                        raise ValueError(
+                            "`to_datetime` predates the oldest JPMaQS data file timestamp "
+                            "found in the local cache "
+                            f"({oldest_local_ts.strftime('%Y-%m-%dT%H:%M:%SZ')})."
+                        )
 
         effective_max_last_updated = max_last_updated
         if to_datetime is not None and max_last_updated is None:
@@ -2023,7 +2081,6 @@ class DataQueryFileAPIClient(RateLimitedRequester):
             download_since_datetime = since_datetime
             if download_since_datetime is None:
                 if to_datetime is not None:
-                    validate_dq_timestamp(to_datetime, var_name="to_datetime")
                     to_dt = pd_to_datetime_compat(to_datetime)
                     download_since_datetime = (to_dt - pd.offsets.BDay(1)).strftime(
                         "%Y%m%d"
@@ -2128,9 +2185,8 @@ class DataQueryFileAPIClient(RateLimitedRequester):
           uses the date itself as the *file-vintage* cutoff (`to_datetime="YYYYMMDD"`).
           If you want an intraday vintage, pass an explicit datetime string with timezone
           (e.g., "2025-11-12T06:30:00Z").
-        - This wrapper sets `since_datetime` to the as-of date (UTC), to ensure the relevant
-          snapshot/delta files for that day are downloaded into an empty cache without relying
-          on the "today" default.
+        - If `as_of_datetime` is in the future (relative to the current UTC timestamp),
+          this method raises a `ValueError` (future vintages are not supported).
         """
         if args:
             raise TypeError(
@@ -2143,8 +2199,15 @@ class DataQueryFileAPIClient(RateLimitedRequester):
 
         as_of_ts = pd_to_datetime_compat(as_of_datetime)
         as_of_day = as_of_ts.normalize()
+        now_ts = pd_to_datetime_compat(pd.Timestamp.utcnow()).tz_convert("UTC")
+        today_utc = now_ts.normalize()
 
         if _is_date_only_string(as_of_datetime):
+            if as_of_day > today_utc:
+                raise ValueError(
+                    "`as_of_datetime` is in the future (UTC). "
+                    f"Requested: {as_of_day.date()}, today (UTC): {today_utc.date()}."
+                )
             # Date-only: interpret as the full day (end-of-day) for the row-level cutoff,
             # but use the date itself as the file-vintage cutoff.
             to_datetime_str = as_of_day.strftime("%Y%m%d")
@@ -2152,13 +2215,25 @@ class DataQueryFileAPIClient(RateLimitedRequester):
                 as_of_day + pd.DateOffset(days=1) - pd.Timedelta(seconds=1)
             ).strftime("%Y-%m-%dT%H:%M:%SZ")
         else:
+            if as_of_ts > now_ts:
+                raise ValueError(
+                    "`as_of_datetime` is in the future (UTC). "
+                    f"Requested: {as_of_ts.strftime('%Y-%m-%dT%H:%M:%SZ')}, "
+                    f"now (UTC): {now_ts.strftime('%Y-%m-%dT%H:%M:%SZ')}."
+                )
             # Datetime: treat as a precise vintage.
             to_datetime_str = as_of_ts.strftime("%Y-%m-%dT%H:%M:%SZ")
             max_last_updated_str = to_datetime_str
 
-        # Download window start: use the as-of date (not "today") so an empty cache can
-        # still download the relevant file-vintage for that day.
-        since_str = as_of_day.strftime("%Y%m%d")
+        oldest_ts = self.file_selector.oldest_api_file_timestamp()
+        if oldest_ts is not None:
+            to_cutoff = _normalize_file_timestamp_cutoff(to_datetime_str)
+            if to_cutoff < oldest_ts:
+                raise ValueError(
+                    "`as_of_datetime` predates the oldest available JPMaQS file timestamp "
+                    "reported by the API "
+                    f"({oldest_ts.strftime('%Y-%m-%dT%H:%M:%SZ')})."
+                )
 
         # Main driver remains `self.download()`; keep logic out of this wrapper.
         return self.download(
@@ -2177,10 +2252,11 @@ class DataQueryFileAPIClient(RateLimitedRequester):
             delta_treatment=delta_treatment,
             show_progress=show_progress,
             overwrite=overwrite,
-            since_datetime=since_str,
+            since_datetime=None,
             to_datetime=to_datetime_str,
             skip_download=skip_download,
             cleanup_old_files_n_days=cleanup_old_files_n_days,
+            include_metadata_files=False,
             **kwargs,
         )
 
@@ -2564,6 +2640,17 @@ def lazy_load_from_parquets(
         file_format=file_format,
         include_metadata_files=False,  # no metadata files - cannot scan with QDF like schema
     )
+    if to_datetime is not None and (not all_data_files_df.empty):
+        if "file-timestamp" in all_data_files_df.columns:
+            oldest_local_ts = all_data_files_df["file-timestamp"].min()
+            if pd.notna(oldest_local_ts):
+                to_cutoff = _normalize_file_timestamp_cutoff(to_datetime)
+                if to_cutoff < oldest_local_ts:
+                    raise ValueError(
+                        "`to_datetime` predates the oldest JPMaQS data file timestamp "
+                        "found in the local cache "
+                        f"({oldest_local_ts.strftime('%Y-%m-%dT%H:%M:%SZ')})."
+                    )
     effective_to_datetime = to_datetime
     if (
         warn_if_no_full_snapshots
