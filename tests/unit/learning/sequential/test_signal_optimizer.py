@@ -1506,7 +1506,6 @@ class TestAll(unittest.TestCase):
                 test_size=1,
                 min_cids=1,
                 min_periods=12,
-                drop_nas=False
             ).split(self.so_no_na.X, self.so_no_na.y)
         )
         first_date = (
@@ -1951,7 +1950,6 @@ class TestAll(unittest.TestCase):
                 test_size=1,
                 min_cids=1,
                 min_periods=12,
-                drop_nas=drop_nas,
             ).split(so.X, so.y)
         )
         first_date = (
@@ -1983,7 +1981,7 @@ class TestAll(unittest.TestCase):
             xcats=self.xcats,
             drop_nas=drop_nas
         )
-        outer_splitter = ExpandingIncrementPanelSplit(drop_nas=drop_nas)
+        outer_splitter = ExpandingIncrementPanelSplit()
 
         # Valid parameters
         valid_params = {
@@ -2062,7 +2060,6 @@ class TestAll(unittest.TestCase):
             min_cids=1,
             min_periods=12,
             max_periods=None,
-            drop_nas=drop_nas,
         )
 
         so1 = SignalOptimizer(
