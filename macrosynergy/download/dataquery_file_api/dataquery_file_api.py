@@ -452,7 +452,9 @@ class DataQueryFileAPIClient(RateLimitedRequester):
                 "`list_available_files_for_all_file_groups()`."
             )
             api_files_df = self.list_available_files_for_all_file_groups()
-            local_files_df = self.list_downloaded_files()
+            local_files_df = self.list_downloaded_files(
+                include_last_modified_columns=False
+            )
             self._file_selector = FileSelector(
                 api_files_df=api_files_df,
                 local_files_df=local_files_df,
@@ -606,7 +608,7 @@ class DataQueryFileAPIClient(RateLimitedRequester):
     @cache_decorator(ttl=60)
     def list_available_files(
         self,
-        file_group_id: str,
+        file_group_id: Optional[str] = None,
         group_id: str = JPMAQS_GROUP_ID,
         start_date: str = JPMAQS_EARLIEST_FILE_DATE,
         end_date: str = None,
@@ -618,8 +620,9 @@ class DataQueryFileAPIClient(RateLimitedRequester):
 
         Parameters
         ----------
-        file_group_id : str
-            The identifier for the file group (e.g., "JPMAQS_MACROECONOMIC_BALANCE_SHEETS").
+        file_group_id : Optional[str]
+            The identifier for the file group (e.g. "JPMAQS_MACROECONOMIC_BALANCE_SHEETS").
+            If None, returns all files for the group_id. Defaults to None.
         group_id : str
             The identifier for the data provider group.
         start_date : str
@@ -672,6 +675,7 @@ class DataQueryFileAPIClient(RateLimitedRequester):
                 df[col] = pd_to_datetime_compat(df[col], utc=True)
         return df
 
+    @cache_decorator(ttl=60)
     def list_available_files_for_all_file_groups(
         self,
         group_id: str = JPMAQS_GROUP_ID,
@@ -713,33 +717,26 @@ class DataQueryFileAPIClient(RateLimitedRequester):
         pd.DataFrame
             A consolidated DataFrame of all available files.
         """
-        files_groups = self.list_group_files(
-            include_full_snapshots=include_full_snapshots,
-            include_delta=include_delta,
-            include_metadata=include_metadata,
-        )["file-group-id"].tolist()
-        results = []
-        with cf.ThreadPoolExecutor() as executor:
-            futures = {}
-            for file_group_id in files_groups:
-                time.sleep(1)
-                futures[
-                    executor.submit(
-                        self.list_available_files,
-                        group_id=group_id,
-                        file_group_id=file_group_id,
-                        start_date=start_date,
-                        end_date=end_date,
-                        convert_metadata_timestamps=convert_metadata_timestamps,
-                        include_unavailable=include_unavailable,
-                    )
-                ] = file_group_id
+        files_df = self.list_available_files(
+            file_group_id=None,
+            group_id=group_id,
+            convert_metadata_timestamps=convert_metadata_timestamps,
+            start_date=start_date,
+            end_date=end_date,
+            include_unavailable=include_unavailable,
+        )
 
-            for future in cf.as_completed(futures):
-                available_files = future.result()
-                results.append(available_files)
-
-        files_df = pd.concat(results).reset_index(drop=True)
+        delta_mask = files_df["file-name"].str.contains("_DELTA_")
+        metadata_mask = files_df["file-name"].str.contains("_METADATA_")
+        full_snapshot_mask = ~(delta_mask | metadata_mask)
+        mask = pd.Series(False, index=files_df.index)
+        if include_full_snapshots:
+            mask |= full_snapshot_mask
+        if include_delta:
+            mask |= delta_mask
+        if include_metadata:
+            mask |= metadata_mask
+        files_df = files_df[mask].copy()
 
         return files_df
 
@@ -753,7 +750,12 @@ class DataQueryFileAPIClient(RateLimitedRequester):
         include_unavailable: bool = False,
     ) -> pd.DataFrame:
         """
-        Retrieves files whose 'last-modified' timestamp falls within a datetime window.
+        Retrieve files whose *file timestamp* (`file-datetime`) falls within a datetime window.
+
+        Notes
+        -----
+        Despite the wording in older docs, this method filters on `file-datetime`
+        (file-vintage timestamp), not `last-modified`.
 
         Parameters
         ----------
@@ -776,7 +778,7 @@ class DataQueryFileAPIClient(RateLimitedRequester):
         Returns
         -------
         pd.DataFrame
-            A DataFrame of files modified within the specified time window.
+            A DataFrame of files whose `file-datetime` falls in the specified window.
         """
         if since_datetime is None:
             since_datetime = pd.Timestamp.utcnow().strftime("%Y%m%d")
