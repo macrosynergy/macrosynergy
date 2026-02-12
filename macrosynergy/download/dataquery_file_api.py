@@ -173,6 +173,7 @@ from macrosynergy.download.fusion_interface import (
     request_wrapper_stream_bytes_to_disk,
     _wait_for_api_call,
     convert_ticker_based_parquet_file_to_qdf,
+    cache_decorator,
 )
 from macrosynergy.download.dataquery import OAUTH_TOKEN_URL
 from macrosynergy.download.exceptions import DownloadError, InvalidResponseError
@@ -432,9 +433,10 @@ class DataQueryFileAPIClient:
 
         return df
 
+    @cache_decorator(ttl=60)
     def list_available_files(
         self,
-        file_group_id: str,
+        file_group_id: Optional[str] = None,
         group_id: str = JPMAQS_GROUP_ID,
         start_date: str = JPMAQS_EARLIEST_FILE_DATE,
         end_date: str = None,
@@ -446,8 +448,9 @@ class DataQueryFileAPIClient:
 
         Parameters
         ----------
-        file_group_id : str
-            The identifier for the file group (e.g., "JPMAQS_MACROECONOMIC_BALANCE_SHEETS").
+        file_group_id : Optional[str]
+            The identifier for the file group (e.g. "JPMAQS_MACROECONOMIC_BALANCE_SHEETS").
+            If None, returns all files for the group_id. Defaults to None.
         group_id : str
             The identifier for the data provider group.
         start_date : str
@@ -473,6 +476,7 @@ class DataQueryFileAPIClient:
             "start-date": start_date,
             "end-date": end_date,
         }
+        _wait_for_api_call(1)
         payload = self._get(endpoint, params)
         df = pd.json_normalize(payload, record_path=["available-files"])
 
@@ -499,6 +503,7 @@ class DataQueryFileAPIClient:
                 df[col] = pd_to_datetime_compat(df[col], utc=True)
         return df
 
+    @cache_decorator(ttl=60)
     def list_available_files_for_all_file_groups(
         self,
         group_id: str = JPMAQS_GROUP_ID,
@@ -540,35 +545,48 @@ class DataQueryFileAPIClient:
         pd.DataFrame
             A consolidated DataFrame of all available files.
         """
-        files_groups = self.list_group_files(
-            include_full_snapshots=include_full_snapshots,
-            include_delta=include_delta,
-            include_metadata=include_metadata,
-        )["file-group-id"].tolist()
-        results = []
-        with cf.ThreadPoolExecutor() as executor:
-            futures = {}
-            for file_group_id in files_groups:
-                futures[
-                    executor.submit(
-                        self.list_available_files,
-                        group_id=group_id,
-                        file_group_id=file_group_id,
-                        start_date=start_date,
-                        end_date=end_date,
-                        convert_metadata_timestamps=convert_metadata_timestamps,
-                        include_unavailable=include_unavailable,
-                    )
-                ] = file_group_id
-                time.sleep(DQ_FILE_API_DELAY_PARAM)
+        files_df = self.list_available_files(
+            file_group_id=None,
+            group_id=group_id,
+            start_date=start_date,
+            end_date=end_date,
+            convert_metadata_timestamps=convert_metadata_timestamps,
+            include_unavailable=include_unavailable,
+        )
 
-            for future in cf.as_completed(futures):
-                available_files = future.result()
-                results.append(available_files)
+        if files_df.empty:
+            return files_df
 
-        files_df = pd.concat(results).reset_index(drop=True)
+        if not any([include_full_snapshots, include_delta, include_metadata]):
+            raise ValueError(
+                "At least one of `include_full_snapshots`, `include_delta`, or "
+                "`include_metadata` must be True"
+            )
 
-        return files_df
+        if "file-name" not in files_df.columns:
+            raise InvalidResponseError('Missing "file-name" in response')
+
+        delta_mask = (
+            files_df["file-name"]
+            .astype(str)
+            .str.contains("_DELTA_", case=False, na=False)
+        )
+        metadata_mask = (
+            files_df["file-name"]
+            .astype(str)
+            .str.contains("_METADATA_", case=False, na=False)
+        )
+        full_snapshot_mask = ~(delta_mask | metadata_mask)
+
+        mask = pd.Series(False, index=files_df.index)
+        if include_full_snapshots:
+            mask |= full_snapshot_mask
+        if include_delta:
+            mask |= delta_mask
+        if include_metadata:
+            mask |= metadata_mask
+
+        return files_df.loc[mask].copy()
 
     def filter_available_files_by_datetime(
         self,
