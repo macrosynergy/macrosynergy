@@ -168,7 +168,11 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
         avoiding `download_catalog_file()`.
         """
         file_date_dir = pd.to_datetime(file_datetime, utc=True).strftime("%Y-%m-%d")
-        pth = Path(client.out_dir) / file_date_dir / f"JPMAQS_METADATA_CATALOG_{file_datetime}.parquet"
+        pth = (
+            Path(client.out_dir)
+            / file_date_dir
+            / f"JPMAQS_METADATA_CATALOG_{file_datetime}.parquet"
+        )
         pth.parent.mkdir(parents=True, exist_ok=True)
         pth.touch()
         return str(pth)
@@ -432,32 +436,27 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
             client.list_available_files(file_group_id="test_id")
 
     @patch.object(DataQueryFileAPIClient, "list_available_files")
-    @patch.object(DataQueryFileAPIClient, "list_group_files")
-    def test_list_available_files_for_all_with_conversion(
-        self, mock_list_groups, mock_list_available
-    ):
+    def test_list_available_files_for_all_with_conversion(self, mock_list_available):
         client = DataQueryFileAPIClient(
             client_id="id", client_secret="secret", out_dir=self.test_dir
         )
-        mock_list_groups.return_value = pd.DataFrame({"file-group-id": ["FG1"]})
         mock_list_available.return_value = pd.DataFrame(
             {
                 "file-datetime": pd.to_datetime(["20230101T120000"], utc=True),
                 "last-modified": pd.to_datetime(["20230101T120000"], utc=True),
+                "file-name": ["FG1_20230101.parquet"],
             }
         )
         df = client.list_available_files_for_all_file_groups()
         self.assertTrue(pd.api.types.is_datetime64_any_dtype(df["file-datetime"]))
 
     @patch.object(DataQueryFileAPIClient, "list_available_files")
-    @patch.object(DataQueryFileAPIClient, "list_group_files")
     def test_list_available_files_for_all_missing_column_error(
-        self, mock_list_groups, mock_list_available
+        self, mock_list_available
     ):
         client = DataQueryFileAPIClient(
             client_id="id", client_secret="secret", out_dir=self.test_dir
         )
-        mock_list_groups.return_value = pd.DataFrame({"file-group-id": ["FG1"]})
         mock_list_available.side_effect = InvalidResponseError(
             'Missing "last-modified" in response'
         )

@@ -720,15 +720,36 @@ class DataQueryFileAPIClient(RateLimitedRequester):
         files_df = self.list_available_files(
             file_group_id=None,
             group_id=group_id,
-            convert_metadata_timestamps=convert_metadata_timestamps,
             start_date=start_date,
             end_date=end_date,
+            convert_metadata_timestamps=convert_metadata_timestamps,
             include_unavailable=include_unavailable,
         )
 
-        delta_mask = files_df["file-name"].str.contains("_DELTA_")
-        metadata_mask = files_df["file-name"].str.contains("_METADATA_")
+        if files_df.empty:
+            return files_df
+
+        if not any([include_full_snapshots, include_delta, include_metadata]):
+            raise ValueError(
+                "At least one of `include_full_snapshots`, `include_delta`, or "
+                "`include_metadata` must be True"
+            )
+
+        if "file-name" not in files_df.columns:
+            raise InvalidResponseError('Missing "file-name" in response')
+
+        delta_mask = (
+            files_df["file-name"]
+            .astype(str)
+            .str.contains("_DELTA_", case=False, na=False)
+        )
+        metadata_mask = (
+            files_df["file-name"]
+            .astype(str)
+            .str.contains("_METADATA_", case=False, na=False)
+        )
         full_snapshot_mask = ~(delta_mask | metadata_mask)
+
         mask = pd.Series(False, index=files_df.index)
         if include_full_snapshots:
             mask |= full_snapshot_mask
@@ -736,9 +757,8 @@ class DataQueryFileAPIClient(RateLimitedRequester):
             mask |= delta_mask
         if include_metadata:
             mask |= metadata_mask
-        files_df = files_df[mask].copy()
 
-        return files_df
+        return files_df.loc[mask].copy()
 
     def filter_available_files_by_datetime(
         self,
