@@ -689,9 +689,7 @@ class DataQueryFileAPIClient(RateLimitedRequester):
     ) -> pd.DataFrame:
         """
         Fetches and consolidates available files for all relevant file groups.
-
-        This method concurrently queries for available files across all specified
-        file group types (full snapshots, deltas, metadata) for a given provider.
+        This method is simply a convenience wrapper for `list_available_files`.
 
         Parameters
         ----------
