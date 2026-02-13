@@ -24,8 +24,11 @@ def view_performance(
     bms: Optional[str] = None,
     title: Optional[str] = None,
     title_fontsize: int = 16,
+    ylab: Optional[str] = None,
     size: Tuple[float] = (14, 8),
     labels: Optional[Union[List[str], dict]] = None,
+    legend_loc: str = "upper center",
+    legend_bbox_to_anchor: Optional[Tuple[float]] = None,
     return_metrics: bool = False,
     return_fig: bool = False,
 ):
@@ -35,6 +38,7 @@ def view_performance(
     Creates a bar chart showing performance metrics (annualized returns, standard
     deviation, Sharpe ratio, Sortino ratio, and optionally benchmark correlation)
     across cross-sections, categories, or specific tickers.
+    
 
     Parameters
     ----------
@@ -63,11 +67,19 @@ def view_performance(
         Chart title. If None, a default title is generated.
     title_fontsize : int
         Font size of the title. Default is 16.
+    ylab : str, optional
+        Y-axis label. Default is no label.
     size : Tuple[float]
         Tuple of width and height of graph. Default is (14, 8).
     labels : Union[List[str], dict], optional
         Custom labels for the compared items. If dict, maps from cid/xcat/ticker to
         label. If list, must match the order of items being compared.
+    legend_loc : str
+        Location of legend; passed to matplotlib.pyplot.legend(). Default is 'upper
+        center'.
+    legend_bbox_to_anchor : Tuple[float], optional
+        Passed to matplotlib.pyplot.legend(). Default is None, which positions the
+        legend below the plot.
     return_metrics : bool
         If True, return the metrics DataFrame instead of plotting. Default is False.
     return_fig : bool
@@ -184,6 +196,23 @@ def view_performance(
             dfx = dfx.groupby(["real_date", "xcat"], observed=True)[val].mean().reset_index()
             dfx["cid"] = "ALL"  # Mark as aggregated
 
+    # Check if dataframe is empty after filtering
+    if dfx.empty:
+        available_xcats = df["xcat"].unique().tolist()
+        available_cids = df["cid"].unique().tolist()
+        error_msg = (
+            f"No data found after filtering. "
+            f"Available xcats: {available_xcats}, "
+            f"Available cids: {available_cids}. "
+        )
+        if tickers is not None:
+            error_msg += f"Requested tickers: {tickers}. "
+        elif xcats is not None:
+            error_msg += f"Requested xcats: {xcats}. "
+        if cids is not None:
+            error_msg += f"Requested cids: {cids}. "
+        raise ValueError(error_msg)
+
     # Calculate metrics
     metrics_df = _calculate_performance_metrics(
         dfx,
@@ -213,13 +242,20 @@ def view_performance(
         return metrics_df
 
     # Create visualization
+    # Get date range for title (safe from NaT since we checked dfx is not empty)
+    start_date = start if start is not None else dfx["real_date"].min().strftime("%Y-%m-%d")
+    end_date = end if end is not None else dfx["real_date"].max().strftime("%Y-%m-%d")
+
     fig = _plot_performance_bars(
         metrics_df,
         title=title,
         title_fontsize=title_fontsize,
+        ylab=ylab,
         size=size,
-        start=dfx["real_date"].min().strftime("%Y-%m-%d") if start is None else start,
-        end=dfx["real_date"].max().strftime("%Y-%m-%d") if end is None else end,
+        legend_loc=legend_loc,
+        legend_bbox_to_anchor=legend_bbox_to_anchor,
+        start=start_date,
+        end=end_date,
     )
 
     if return_fig:
@@ -341,7 +377,10 @@ def _plot_performance_bars(
     metrics_df: pd.DataFrame,
     title: Optional[str] = None,
     title_fontsize: int = 16,
+    ylab: Optional[str] = None,
     size: Tuple[float] = (14, 8),
+    legend_loc: str = "upper center",
+    legend_bbox_to_anchor: Optional[Tuple[float]] = None,
     start: Optional[str] = None,
     end: Optional[str] = None,
 ) -> plt.Figure:
@@ -369,8 +408,8 @@ def _plot_performance_bars(
         The created figure.
     """
 
-    # Set style
-    sns.set_theme(style="whitegrid")
+    # Set style to match view_ranges
+    sns.set_theme(style="darkgrid")
 
     # Reshape data for seaborn: need long format with columns [item, metric, value]
     # Transpose so items are in index and metrics are columns
@@ -390,31 +429,43 @@ def _plot_performance_bars(
     fig, ax = plt.subplots(figsize=size)
 
     # Create grouped bar plot with items on x-axis and metrics as hue
+    # Use Paired palette to match view_ranges
     sns.barplot(
         data=df_long,
         x='item',
         y='value',
         hue='metric',
         ax=ax,
-        palette='Set2',
+        palette='Paired',
     )
 
-    # Customize plot
-    ax.set_xlabel("", fontsize=12)
-    ax.set_ylabel("Value", fontsize=12)
+    # Rotate x-axis labels to prevent overlap
+    plt.setp(ax.get_xticklabels(), rotation=45, ha='right')
+
+    # Customize plot to match view_ranges style
+    ax.set_xlabel("")
+    if ylab is None:
+        ylab = ""
+    ax.set_ylabel(ylab)
 
     if title is None:
         if start is not None and end is not None:
-            title = f"Comparative Return Performance from {start} to {end}"
+            title = f"Performance metrics from {start} to {end}"
         else:
-            title = "Comparative Return Performance"
+            title = "Performance metrics"
 
-    ax.set_title(title, fontsize=title_fontsize)
-    ax.axhline(0, color='black', linewidth=0.8, linestyle='-')
-    ax.grid(True, alpha=0.3, axis='y')
+    ax.set_title(title, fontdict={"fontsize": title_fontsize})
 
-    # Position legend
-    ax.legend(loc='upper center', bbox_to_anchor=(0.5, -0.15), ncol=3)
+    # Match view_ranges styling
+    ax.xaxis.grid(True)
+    ax.axhline(0, ls="--", linewidth=1, color="black")
+
+    # Position legend to match view_ranges (below the plot)
+    if legend_bbox_to_anchor is None:
+        n_metrics = len(metrics_df.index)
+        legend_bbox_to_anchor = (0.5, -0.15 - 0.05 * max(0, (n_metrics - 2)))
+
+    ax.legend(loc=legend_loc, bbox_to_anchor=legend_bbox_to_anchor, ncol=3)
 
     plt.tight_layout()
 
