@@ -472,10 +472,11 @@ class DataQueryFileAPIClient:
         endpoint = "/group/files/available-files"
         params = {
             "group-id": group_id,
-            "file-group-id": file_group_id,
             "start-date": start_date,
             "end-date": end_date,
         }
+        if file_group_id is not None:
+            params["file-group-id"] = file_group_id
         _wait_for_api_call(1)
         payload = self._get(endpoint, params)
         df = pd.json_normalize(payload, record_path=["available-files"])
