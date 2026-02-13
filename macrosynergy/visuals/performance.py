@@ -22,6 +22,7 @@ def view_performance(
     end: Optional[str] = None,
     val: str = "value",
     bms: Optional[str] = None,
+    metrics: Optional[List[str]] = None,
     title: Optional[str] = None,
     title_fontsize: int = 16,
     ylab: Optional[str] = None,
@@ -63,6 +64,10 @@ def view_performance(
     bms : str, optional
         Benchmark ticker (format: "CID_XCAT") for correlation calculation. If None,
         benchmark correlation is not shown.
+    metrics : List[str], optional
+        List of metrics to display. Available options: "Return %", "St. Dev. %",
+        "Sharpe Ratio", "Sortino Ratio", and "{bms} correl" (if bms provided).
+        If None, all available metrics are shown. Default is None.
     title : str, optional
         Chart title. If None, a default title is generated.
     title_fontsize : int
@@ -101,18 +106,6 @@ def view_performance(
     - Sharpe Ratio: Annualized return / annualized standard deviation
     - Sortino Ratio: Annualized return / downside deviation
     - Benchmark correlation: Correlation with benchmark return series (if bms provided)
-
-    Examples
-    --------
-    >>> # Compare returns across cids for a single xcat
-    >>> view_performance(df, xcats=['FXXR_NSA'], cids=['USD', 'EUR', 'GBP'])
-
-    >>> # Compare returns across xcats for all cids
-    >>> view_performance(df, xcats=['FXXR_NSA', 'EQXR_NSA'], cids=['ALL'])
-
-    >>> # Compare specific tickers with benchmark
-    >>> view_performance(df, tickers=['USD_FXXR_NSA', 'EUR_FXXR_NSA'],
-    ...                  bms='USD_EQXR_NSA')
     """
 
     df = QuantamentalDataFrame(df)
@@ -223,6 +216,19 @@ def view_performance(
         start=start,
         end=end
     )
+
+    # Filter metrics if specified
+    if metrics is not None:
+        # Validate requested metrics
+        available_metrics = metrics_df.index.tolist()
+        invalid_metrics = [m for m in metrics if m not in available_metrics]
+        if invalid_metrics:
+            raise ValueError(
+                f"Invalid metrics: {invalid_metrics}. "
+                f"Available metrics: {available_metrics}"
+            )
+        # Filter to requested metrics
+        metrics_df = metrics_df.loc[metrics, :]
 
     # Apply custom labels if provided
     if labels is not None:
@@ -508,6 +514,14 @@ if __name__ == "__main__":
     print("\nTest 3: Compare tickers with benchmark")
     view_performance(
         dfd,
-        tickers=["AUD_FXXR_NSA", "GBP_FXXR_NSA", "USD_FXXR_NSA"],
+        tickers=["AUD_FXXR_NSA", "GBP_FXXR_NSA", "USD_FXXR_NSA", "USD_EQXR_NSA"],
         bms="USD_EQXR_NSA"
+    )
+    
+    # Test 4: Filter metrics
+    view_performance(
+        dfd,
+        tickers=["AUD_FXXR_NSA", "GBP_FXXR_NSA", "USD_FXXR_NSA", "USD_EQXR_NSA"],
+        bms="USD_EQXR_NSA",
+        metrics=["USD_EQXR_NSA correl"]
     )
