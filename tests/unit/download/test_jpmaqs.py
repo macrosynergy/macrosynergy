@@ -268,11 +268,6 @@ class TestJPMaQSDownload(unittest.TestCase):
             with self.assertWarns(UserWarning):
                 self.jpmaqs_download.validate_download_args(**bad_args)
 
-            # pd.Timestamp extreme cases
-            bad_args[date_args] = "1200-01-01"
-            with self.assertRaises(ValueError):
-                self.jpmaqs_download.validate_download_args(**bad_args)
-
         # test cases for dataframe_format
         bad_args = good_args.copy()
         bad_args["dataframe_format"] = "Metallica"

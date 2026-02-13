@@ -2,6 +2,12 @@ from . import PYTHON_3_8_OR_LATER
 import pandas as pd
 from packaging import version
 
+try:
+    import polars as pl
+except ImportError:
+    pl = None
+
+
 if PYTHON_3_8_OR_LATER:
     RESAMPLE_NUMERIC_ONLY = {"numeric_only": True}
     JOBLIB_RETURN_AS = {"return_as": "generator"}
@@ -26,3 +32,9 @@ PD_2_0_OR_LATER: bool = version.parse(pd.__version__) >= version.parse("2.0.0")
 # Availability of pd.DataFrame.applymap/map
 # https://pandas.pydata.org/pandas-docs/version/2.1/reference/api/pandas.DataFrame.map.html
 PD_NEW_MAP: bool = version.parse(pd.__version__) >= version.parse("2.1.0")
+
+POLARS_0_17_13_OR_EARLIER = False
+if pl is not None:
+    POLARS_0_17_13_OR_EARLIER = version.parse(pl.__version__) <= version.parse(
+        "0.17.13"
+    )

@@ -9,23 +9,26 @@ import polars as pl
 import pandas as pd
 import shutil
 
-from macrosynergy.download.dataquery_file_api import (
-    _atomic_sink_csv,
-    _atomic_sink_parquet,
-    convert_ticker_based_parquet_file_to_qdf_pl,
+from macrosynergy.download.dataquery_file_api.file_loader import (
     _check_lazy_load_inputs,
     _list_downloaded_files,
     _downloaded_files_df,
-    _filter_to_latest_files,
     lazy_load_from_parquets,
-    _identify_schema_type,
-    JPMaQSParquetSchemaKind,
     _ensure_columns,
     _to_output_schema,
     _filter_lazy_frame_by_tickers,
-    _delete_corrupt_files,
+    _expr_split_ticker,
+    _lazy_load_filtered_parquets,
 )
-from macrosynergy.compat import PYTHON_3_8_OR_LATER
+
+from macrosynergy.download.dataquery_file_api.dataquery_file_api import (
+    _delete_corrupt_files,
+    _large_delta_file_datetimes,
+)
+
+from macrosynergy.download.dataquery_file_api.file_selector import (
+    _select_local_files_for_load,
+)
 
 
 def suppress_logging(func):
@@ -49,216 +52,17 @@ def _make_sample_parquet(path: Path) -> pl.DataFrame:
                 datetime.date(2024, 2, 29),
             ],
             "value": [1.1, 2.2],
-            "grading": ["A", "B"],
-            "eop_lag": [0, 1],
-            "mop_lag": [0, 1],
-            "last_updated": ["2024-03-01", "2024-03-02"],
+            "grading": [1.0, 3.0],
+            "eop_lag": [0.0, 1.0],
+            "mop_lag": [0.0, 1.0],
+            "last_updated": [
+                datetime.datetime(2024, 3, 1, 12, 0, 0),
+                datetime.datetime(2024, 3, 2, 12, 0, 0),
+            ],
         }
     )
     df.write_parquet(path)
     return df
-
-
-@unittest.skipUnless(PYTHON_3_8_OR_LATER, "Requires Python 3.8+")
-class TestQDFConvertPolars(unittest.TestCase):
-    def setUp(self):
-        self.tmpdir = Path(tempfile.mkdtemp())
-
-    def tearDown(self):
-        for item in self.tmpdir.iterdir():
-            try:
-                if item.is_file() or item.is_symlink():
-                    item.unlink()
-                elif item.is_dir():
-                    for sub in item.iterdir():
-                        sub.unlink(missing_ok=True)
-                    item.rmdir()
-            except Exception:
-                pass
-        try:
-            self.tmpdir.rmdir()
-        except Exception:
-            pass
-
-    def _read_csv_df(self, path: Path) -> pl.DataFrame:
-        return pl.read_csv(path, infer_schema_length=0)
-
-    def _no_sidecars(self) -> bool:
-        return not list(self.tmpdir.glob(".*.inprogress"))
-
-    def test_passthrough_to_csv_without_qdf(self):
-        src = self.tmpdir / "input.parquet"
-        original = _make_sample_parquet(src)
-
-        convert_ticker_based_parquet_file_to_qdf_pl(
-            filename=str(src), as_csv=True, qdf=False, keep_raw_data=True
-        )
-
-        out_csv = self.tmpdir / "input.csv"
-        self.assertTrue(out_csv.is_file())
-
-        got = self._read_csv_df(out_csv).with_columns(
-            pl.col("real_date").str.strptime(pl.Date, "%Y-%m-%d", strict=False)
-        )
-
-        self.assertSetEqual(set(got.columns), set(original.columns))
-        self.assertEqual(
-            sorted(got["ticker"].to_list()), sorted(original["ticker"].to_list())
-        )
-        self.assertTrue(self._no_sidecars())
-
-    def test_qdf_parquet_overwrite_in_place(self):
-        src = self.tmpdir / "market.parquet"
-        _make_sample_parquet(src)
-
-        convert_ticker_based_parquet_file_to_qdf_pl(
-            filename=str(src), as_csv=False, qdf=True, keep_raw_data=False
-        )
-
-        self.assertTrue(src.is_file())
-        got = pl.read_parquet(src)
-        self.assertNotIn("ticker", got.columns)
-        self.assertTrue({"cid", "xcat"}.issubset(set(got.columns)))
-        self.assertEqual(got["cid"].to_list(), ["USD", "JPY"])
-        self.assertEqual(got["xcat"].to_list(), ["GROWTH", "INFL"])
-        self.assertTrue(self._no_sidecars())
-
-    def test_qdf_parquet_keep_raw_data(self):
-        src = self.tmpdir / "series.parquet"
-        _make_sample_parquet(src)
-
-        convert_ticker_based_parquet_file_to_qdf_pl(
-            filename=str(src), as_csv=False, qdf=True, keep_raw_data=True
-        )
-
-        qdf_path = self.tmpdir / "series_qdf.parquet"
-        self.assertTrue(src.is_file())
-        self.assertTrue(qdf_path.is_file())
-
-        got = pl.read_parquet(qdf_path)
-        self.assertNotIn("ticker", got.columns)
-        self.assertTrue({"cid", "xcat"}.issubset(set(got.columns)))
-        self.assertEqual(got["cid"].to_list(), ["USD", "JPY"])
-
-    def test_qdf_csv_outputs_selected_columns(self):
-        src = self.tmpdir / "x.parquet"
-        _make_sample_parquet(src)
-
-        convert_ticker_based_parquet_file_to_qdf_pl(
-            filename=str(src), as_csv=True, qdf=True, keep_raw_data=True
-        )
-
-        out_csv = self.tmpdir / "x_qdf.csv"
-        self.assertTrue(out_csv.is_file())
-
-        got = self._read_csv_df(out_csv)
-        expected = {
-            "real_date",
-            "value",
-            "grading",
-            "eop_lag",
-            "mop_lag",
-            "last_updated",
-            "cid",
-            "xcat",
-        }
-        self.assertTrue(expected.issubset(set(got.columns)))
-        self.assertNotIn("ticker", got.columns)
-
-    @suppress_logging
-    def test_missing_file_raises(self):
-        missing = self.tmpdir / "nope.parquet"
-        with self.assertRaises(FileNotFoundError):
-            convert_ticker_based_parquet_file_to_qdf_pl(filename=str(missing))
-
-    def test_atomic_sink_parquet_cleans_sidecar_on_failure(self):
-        src = self.tmpdir / "boom.parquet"
-        _make_sample_parquet(src)
-
-        lf = pl.scan_parquet(str(src))
-        final_out = self.tmpdir / "target.parquet"
-        sidecar = self.tmpdir / ".target.parquet.inprogress"
-
-        with patch.object(
-            pl.LazyFrame, "sink_parquet", side_effect=RuntimeError("fail")
-        ):
-            with self.assertRaises(RuntimeError):
-                _atomic_sink_parquet(lf, final_out, sidecar, compression="zstd")
-
-        self.assertFalse(sidecar.exists())
-        self.assertFalse(final_out.exists())
-
-    def test_atomic_sink_csv_cleans_sidecar_on_failure(self):
-        src = self.tmpdir / "boomcsv.parquet"
-        _make_sample_parquet(src)
-
-        lf = pl.scan_parquet(str(src))
-        final_out = self.tmpdir / "out.csv"
-        sidecar = self.tmpdir / ".out.csv.inprogress"
-
-        with patch.object(
-            pl.LazyFrame, "sink_csv", side_effect=RuntimeError("csvfail")
-        ):
-            with self.assertRaises(RuntimeError):
-                _atomic_sink_csv(lf, final_out, sidecar)
-
-        self.assertFalse(sidecar.exists())
-        self.assertFalse(final_out.exists())
-
-    @suppress_logging
-    def test_inplace_overwrite_preserves_source_on_failure(self):
-        src = self.tmpdir / "inplace.parquet"
-        original_df = _make_sample_parquet(src)
-
-        with patch.object(pl.LazyFrame, "sink_parquet", side_effect=IOError("forced")):
-            with self.assertRaises(IOError):
-                convert_ticker_based_parquet_file_to_qdf_pl(
-                    filename=str(src), as_csv=False, qdf=True, keep_raw_data=False
-                )
-
-        self.assertTrue(src.is_file())
-        roundtrip = pl.read_parquet(src)
-        self.assertSetEqual(set(roundtrip.columns), set(original_df.columns))
-        self.assertEqual(roundtrip.shape, original_df.shape)
-        self.assertTrue(self._no_sidecars())
-
-    def test_qdf_handles_multi_part_xcat_and_various_cids(self):
-        src = self.tmpdir / "variety.parquet"
-        tickers = [
-            "USD_GROWTH_X1_D1M1",
-            "CAD_GDP_XY",
-            "JPY_INFL",
-            "INR_PROD_ABC_DEF",
-            "CNY_SALES_A1",
-            "CHF_CPI_12M",
-            "EUR_RATE_ABC_12",
-            "AUD_TRADE_BAL",
-        ]
-        df = pl.DataFrame(
-            {
-                "ticker": tickers,
-                "real_date": [datetime.date(2024, 1, 1)] * len(tickers),
-                "value": list(range(len(tickers))),
-                "grading": ["A"] * len(tickers),
-                "eop_lag": [0] * len(tickers),
-                "mop_lag": [0] * len(tickers),
-                "last_updated": ["2024-03-01"] * len(tickers),
-            }
-        )
-        df.write_parquet(src)
-
-        convert_ticker_based_parquet_file_to_qdf_pl(
-            filename=str(src), as_csv=False, qdf=True, keep_raw_data=True
-        )
-
-        qdf_path = self.tmpdir / "variety_qdf.parquet"
-        got = pl.read_parquet(qdf_path).select("cid", "xcat")
-
-        expected_cid = [t.split("_", 1)[0] for t in tickers]
-        expected_xcat = [t.split("_", 1)[1] for t in tickers]
-
-        self.assertEqual(got["cid"].to_list(), expected_cid)
-        self.assertEqual(got["xcat"].to_list(), expected_xcat)
 
 
 def _make_ticker_parquet(path: Path, data: dict):
@@ -275,7 +79,6 @@ def pd_to_datetime_compat(x, **kwargs):
     return pd.to_datetime(x, errors="coerce", **kwargs)
 
 
-@unittest.skipUnless(PYTHON_3_8_OR_LATER, "Requires Python 3.8+")
 class TestLazyLoad(unittest.TestCase):
     def setUp(self):
         self.tmpdir = Path(tempfile.mkdtemp())
@@ -300,14 +103,20 @@ class TestLazyLoad(unittest.TestCase):
                 "value": [1.1, 2.1, 3.1],
             },
         )
-        (self.tmpdir / "DATASET1_20240102_DELTA.parquet").touch()
+        _make_ticker_parquet(
+            self.tmpdir / "DATASET1_DELTA_20240102T010101.parquet",
+            {
+                "ticker": ["USD_INFL"],
+                "real_date": [datetime.date(2023, 1, 2)],
+                "value": [1.2],
+            },
+        )
 
         sub_dir = self.tmpdir / "subdir"
-        _make_qdf_parquet(
+        _make_ticker_parquet(
             sub_dir / "DATASET2_20240103.parquet",
             {
-                "cid": ["USD", "GBP"],
-                "xcat": ["GROWTH", "GROWTH"],
+                "ticker": ["USD_GROWTH", "GBP_GROWTH"],
                 "real_date": [datetime.date(2023, 2, 1), datetime.date(2023, 2, 1)],
                 "value": [5.0, 6.0],
             },
@@ -323,11 +132,29 @@ class TestLazyLoad(unittest.TestCase):
         filenames = sorted([p.name for p in files])
         self.assertIn("DATASET1_20240101.parquet", filenames)
         self.assertIn("DATASET1_20240102.parquet", filenames)
-        self.assertIn("DATASET1_20240102_DELTA.parquet", filenames)
+        self.assertIn("DATASET1_DELTA_20240102T010101.parquet", filenames)
         self.assertIn("DATASET2_20240103.parquet", filenames)
 
+    def test_lazy_load_from_parquets_raises_clean_error_when_only_metadata_exists(self):
+        # Simulate a cache that only has metadata/catalog parquet files.
+        empty_dir = self.tmpdir / "only_metadata"
+        empty_dir.mkdir(parents=True, exist_ok=True)
+        (empty_dir / "JPMAQS_METADATA_CATALOG_20240101.parquet").touch()
+
+        with self.assertRaises(FileNotFoundError) as ctx:
+            lazy_load_from_parquets(
+                files_dir=empty_dir,
+                tickers=["USD_INFL"],
+                datasets=["JPMAQS_GENERIC_RETURNS"],
+                dataframe_type="polars-lazy",
+            )
+
+        msg = str(ctx.exception)
+        self.assertIn("metadata/catalog only", msg.lower())
+        self.assertIn("business days", msg.lower())
+
     @patch(
-        "macrosynergy.download.dataquery_file_api.pd_to_datetime_compat",
+        "macrosynergy.download.dataquery_file_api.dataquery_file_api.pd_to_datetime_compat",
         pd_to_datetime_compat,
     )
     def test_downloaded_files_df(self):
@@ -336,31 +163,208 @@ class TestLazyLoad(unittest.TestCase):
         self.assertNotIn("DATASET2_20240103_METADATA.json", df["filename"].to_list())
         ds1_latest = df[df["filename"] == "DATASET1_20240102.parquet"].iloc[0]
         self.assertEqual(ds1_latest["dataset"], "DATASET1")
-        self.assertEqual(ds1_latest["file-timestamp"], pd.Timestamp("2024-01-02"))
+        self.assertEqual(
+            ds1_latest["file-timestamp"], pd.Timestamp("2024-01-02T00:00:00Z")
+        )
 
     @patch(
-        "macrosynergy.download.dataquery_file_api.pd_to_datetime_compat",
+        "macrosynergy.download.dataquery_file_api.dataquery_file_api.pd_to_datetime_compat",
+        pd_to_datetime_compat,
+    )
+    def test_downloaded_files_df_effective_dataset_delta_and_non_delta(self):
+        _make_ticker_parquet(
+            self.tmpdir / "BETA_20240101.parquet",
+            {
+                "ticker": ["USD_INFL"],
+                "real_date": [datetime.date(2024, 1, 1)],
+                "value": [1.0],
+            },
+        )
+        (self.tmpdir / "BETA_DELTA_20240101T010101.parquet").touch()
+
+        df = _downloaded_files_df(self.tmpdir, file_format="parquet")
+
+        non_delta = df[df["filename"] == "BETA_20240101.parquet"].iloc[0]
+        self.assertEqual(non_delta["dataset"], "BETA")
+        self.assertEqual(non_delta["e-dataset"], "BETA")
+
+        delta = df[df["filename"] == "BETA_DELTA_20240101T010101.parquet"].iloc[0]
+        self.assertEqual(delta["dataset"], "BETA_DELTA")
+        self.assertEqual(delta["e-dataset"], "BETA")
+
+    @patch(
+        "macrosynergy.download.dataquery_file_api.dataquery_file_api.pd_to_datetime_compat",
         pd_to_datetime_compat,
     )
     def test_filter_to_latest_files(self):
         df = _downloaded_files_df(self.tmpdir, file_format="parquet")
-        latest = _filter_to_latest_files(df)
-        self.assertEqual(len(latest), 2)
+        latest = _select_local_files_for_load(df)
+        self.assertEqual(len(latest), 3)
         filenames = latest["filename"].to_list()
         self.assertIn("DATASET1_20240102.parquet", filenames)
         self.assertIn("DATASET2_20240103.parquet", filenames)
-        self.assertNotIn("DATASET1_20240102_DELTA.parquet", filenames)
+        self.assertIn("DATASET1_DELTA_20240102T010101.parquet", filenames)
 
-    def test_identify_schema_type(self):
-        lf_ticker = pl.LazyFrame({"ticker": ["A_B"], "value": [1]})
-        lf_qdf = pl.LazyFrame({"cid": ["A"], "xcat": ["B"], "value": [1]})
-        lf_bad = pl.LazyFrame({"col1": ["A"], "col2": ["B"]})
-        self.assertEqual(
-            _identify_schema_type(lf_ticker), JPMaQSParquetSchemaKind.TICKER
+    def test_select_local_files_for_load_includes_covering_month_end_large_delta(self):
+        # Delta-only history (no snapshots). JPMaQS monthly "large delta" files are
+        # timestamped at month-end (or the previous business day) 23:59:59, which can be
+        # after an in-month `to_datetime` request.
+        df = pd.DataFrame(
+            {
+                "path": [
+                    self.tmpdir
+                    / "JPMAQS_GENERIC_RETURNS_DELTA_20240229T235959.parquet",
+                    # 2024-03-31 is a Sunday, so "previous business day" is 2024-03-29.
+                    self.tmpdir
+                    / "JPMAQS_GENERIC_RETURNS_DELTA_20240329T235959.parquet",
+                ],
+                "filename": [
+                    "JPMAQS_GENERIC_RETURNS_DELTA_20240229T235959.parquet",
+                    "JPMAQS_GENERIC_RETURNS_DELTA_20240329T235959.parquet",
+                ],
+                "dataset": [
+                    "JPMAQS_GENERIC_RETURNS_DELTA",
+                    "JPMAQS_GENERIC_RETURNS_DELTA",
+                ],
+                "e-dataset": ["JPMAQS_GENERIC_RETURNS", "JPMAQS_GENERIC_RETURNS"],
+                "file-timestamp": [
+                    pd.Timestamp("2024-02-29T23:59:59Z"),
+                    pd.Timestamp("2024-03-29T23:59:59Z"),
+                ],
+            }
         )
-        self.assertEqual(_identify_schema_type(lf_qdf), JPMaQSParquetSchemaKind.QDF)
-        with self.assertRaises(ValueError):
-            _identify_schema_type(lf_bad)
+
+        out = _select_local_files_for_load(
+            df,
+            since_datetime="20240320",  # should be ignored for delta-only history
+            to_datetime="20240315",
+            include_delta_files=True,
+        )
+
+        self.assertIn(
+            "JPMAQS_GENERIC_RETURNS_DELTA_20240329T235959.parquet",
+            out["filename"].tolist(),
+        )
+        self.assertIn(
+            "JPMAQS_GENERIC_RETURNS_DELTA_20240229T235959.parquet",
+            out["filename"].tolist(),
+        )
+
+    def test_select_local_files_for_load_prefers_earliest_covering_large_delta_when_multiple(
+        self,
+    ):
+        # If both (prev business day) and (month-end) delta files exist for the same month,
+        # selection should include the earliest timestamp that still covers `to_datetime`.
+        df = pd.DataFrame(
+            {
+                "path": [
+                    self.tmpdir
+                    / "JPMAQS_GENERIC_RETURNS_DELTA_20240329T235959.parquet",
+                    self.tmpdir
+                    / "JPMAQS_GENERIC_RETURNS_DELTA_20240331T235959.parquet",
+                ],
+                "filename": [
+                    "JPMAQS_GENERIC_RETURNS_DELTA_20240329T235959.parquet",
+                    "JPMAQS_GENERIC_RETURNS_DELTA_20240331T235959.parquet",
+                ],
+                "dataset": [
+                    "JPMAQS_GENERIC_RETURNS_DELTA",
+                    "JPMAQS_GENERIC_RETURNS_DELTA",
+                ],
+                "e-dataset": ["JPMAQS_GENERIC_RETURNS", "JPMAQS_GENERIC_RETURNS"],
+                "file-timestamp": [
+                    pd.Timestamp("2024-03-29T23:59:59Z"),
+                    pd.Timestamp("2024-03-31T23:59:59Z"),
+                ],
+            }
+        )
+
+        out = _select_local_files_for_load(
+            df,
+            to_datetime="20240315",
+            include_delta_files=True,
+        )
+
+        filenames = out["filename"].tolist()
+        self.assertIn("JPMAQS_GENERIC_RETURNS_DELTA_20240329T235959.parquet", filenames)
+        self.assertNotIn(
+            "JPMAQS_GENERIC_RETURNS_DELTA_20240331T235959.parquet", filenames
+        )
+
+    def test_select_local_files_for_load_does_not_include_future_month_large_delta(
+        self,
+    ):
+        # A future month's large delta should not be pulled in for a `to_datetime` in an earlier month.
+        df = pd.DataFrame(
+            {
+                "path": [
+                    self.tmpdir
+                    / "JPMAQS_GENERIC_RETURNS_DELTA_20240329T235959.parquet",
+                    self.tmpdir
+                    / "JPMAQS_GENERIC_RETURNS_DELTA_20240430T235959.parquet",
+                ],
+                "filename": [
+                    "JPMAQS_GENERIC_RETURNS_DELTA_20240329T235959.parquet",
+                    "JPMAQS_GENERIC_RETURNS_DELTA_20240430T235959.parquet",
+                ],
+                "dataset": [
+                    "JPMAQS_GENERIC_RETURNS_DELTA",
+                    "JPMAQS_GENERIC_RETURNS_DELTA",
+                ],
+                "e-dataset": ["JPMAQS_GENERIC_RETURNS", "JPMAQS_GENERIC_RETURNS"],
+                "file-timestamp": [
+                    pd.Timestamp("2024-03-29T23:59:59Z"),
+                    pd.Timestamp("2024-04-30T23:59:59Z"),
+                ],
+            }
+        )
+
+        out = _select_local_files_for_load(
+            df,
+            to_datetime="20240315",
+            include_delta_files=True,
+        )
+
+        filenames = out["filename"].tolist()
+        self.assertIn("JPMAQS_GENERIC_RETURNS_DELTA_20240329T235959.parquet", filenames)
+        self.assertNotIn(
+            "JPMAQS_GENERIC_RETURNS_DELTA_20240430T235959.parquet", filenames
+        )
+
+    @patch("macrosynergy.download.dataquery_file_api.file_selector.logger")
+    def test_filter_to_latest_files_warns_when_window_has_only_deltas(
+        self, mock_logger
+    ):
+        df = pd.DataFrame(
+            {
+                "path": [
+                    self.tmpdir / "DATASET1_20231231.parquet",
+                    self.tmpdir / "DATASET1_DELTA_20240101T010101.parquet",
+                ],
+                "filename": [
+                    "DATASET1_20231231.parquet",
+                    "DATASET1_DELTA_20240101T010101.parquet",
+                ],
+                "dataset": ["DATASET1", "DATASET1_DELTA"],
+                "e-dataset": ["DATASET1", "DATASET1"],
+                "file-timestamp": [
+                    pd.Timestamp("2023-12-31T00:00:00Z"),
+                    pd.Timestamp("2024-01-01T01:01:01Z"),
+                ],
+            }
+        )
+        _select_local_files_for_load(
+            files_df=df,
+            include_delta_files=True,
+            warn_if_no_full_snapshots=True,
+            since_datetime="20240101",
+            to_datetime="20240101",
+        )
+        mock_logger.warning.assert_any_call(
+            "No full snapshots available in the requested window "
+            "since=2024-01-01T00:00:00Z to=2024-01-01T23:59:59Z "
+            "earliest_snapshot=2023-12-31T00:00:00Z"
+        )
 
     def test_ensure_columns(self):
         lf = pl.LazyFrame({"a": [1], "b": [2]})
@@ -374,18 +378,23 @@ class TestLazyLoad(unittest.TestCase):
     def test_to_output_schema(self):
         lf_ticker = pl.LazyFrame({"ticker": ["A_B"], "value": [1]})
         df_qdf = _to_output_schema(
-            lf_ticker, JPMaQSParquetSchemaKind.TICKER, want_qdf=True
+            lf_ticker,
+            include_file_column=None,
+            want_qdf=True,
         ).collect()
         self.assertIn("cid", df_qdf.columns)
         self.assertIn("xcat", df_qdf.columns)
         self.assertNotIn("ticker", df_qdf.columns)
 
-        lf_qdf = pl.LazyFrame({"cid": ["C"], "xcat": ["D"], "value": [2]})
+        lf_ticker2 = pl.LazyFrame({"ticker": ["C_D"], "value": [2]})
         df_ticker = _to_output_schema(
-            lf_qdf, JPMaQSParquetSchemaKind.QDF, want_qdf=False
+            lf_ticker2,
+            include_file_column=None,
+            want_qdf=False,
         ).collect()
         self.assertIn("ticker", df_ticker.columns)
         self.assertNotIn("cid", df_ticker.columns)
+        self.assertNotIn("xcat", df_ticker.columns)
         self.assertEqual(df_ticker["ticker"][0], "C_D")
 
     def test_filter_lazy_frame_by_tickers(self):
@@ -396,34 +405,54 @@ class TestLazyLoad(unittest.TestCase):
             }
         )
         filt = _filter_lazy_frame_by_tickers(
-            lf, JPMaQSParquetSchemaKind.TICKER, ["A_B"], None, None
+            lf,
+            ["A_B"],
+            None,
+            None,
+            None,
+            None,
         )
         self.assertEqual(filt.collect().shape[0], 1)
         self.assertEqual(filt.collect()["ticker"][0], "A_B")
 
         filt_date = _filter_lazy_frame_by_tickers(
-            lf, JPMaQSParquetSchemaKind.TICKER, ["A_B", "C_D"], "2023-01-15", None
+            lf,
+            ["A_B", "C_D"],
+            "2023-01-15",
+            None,
+            None,
+            None,
         )
-        self.assertEqual(filt_date.collect().shape[0], 2)
+        self.assertEqual(filt_date.collect().shape[0], 1)
 
     @patch(
-        "macrosynergy.download.dataquery_file_api.pd_to_datetime_compat",
+        "macrosynergy.download.dataquery_file_api.dataquery_file_api.pd_to_datetime_compat",
         pd_to_datetime_compat,
     )
     def test_lazy_load_basic_filtering(self):
-        df = lazy_load_from_parquets(self.tmpdir, tickers=["JPY_INFL"])
+        df = lazy_load_from_parquets(
+            self.tmpdir,
+            tickers=["JPY_INFL"],
+            since_datetime="20240101",
+            include_delta_files=False,
+        )
         self.assertEqual(len(df), 1)
         self.assertEqual(df.iloc[0]["cid"], "JPY")
         self.assertEqual(df.iloc[0]["value"], 3.1)
 
-        df_qdf = lazy_load_from_parquets(self.tmpdir, cids=["USD"], xcats=["GROWTH"])
+        df_qdf = lazy_load_from_parquets(
+            self.tmpdir,
+            tickers=["USD_GROWTH"],
+            since_datetime="20240101",
+            include_delta_files=False,
+        )
         self.assertEqual(len(df_qdf), 1)
         self.assertEqual(df_qdf.iloc[0]["cid"], "USD")
         self.assertEqual(df_qdf.iloc[0]["xcat"], "GROWTH")
         self.assertEqual(df_qdf.iloc[0]["value"], 5.0)
 
     @patch(
-        "macrosynergy.download.dataquery_file_api.pd_to_datetime_compat",
+        "macrosynergy.download.dataquery_file_api.dataquery_file_api.pd_to_datetime_compat",
         pd_to_datetime_compat,
     )
     def test_lazy_load_date_and_dataset_filters(self):
@@ -435,35 +464,88 @@ class TestLazyLoad(unittest.TestCase):
         df_ds = lazy_load_from_parquets(
             self.tmpdir,
             datasets=["DATASET2"],
-            cids=["USD", "GBP"],
-            xcats=["GROWTH"],
+            tickers=["USD_GROWTH", "GBP_GROWTH"],
         )
         self.assertEqual(len(df_ds), 2)
         self.assertTrue(set(df_ds["cid"].to_list()) == {"USD", "GBP"})
 
+    def test_lazy_load_raises_when_no_indicators(self):
+        with self.assertRaisesRegex(ValueError, "No tickers specified"):
+            lazy_load_from_parquets(self.tmpdir, include_delta_files=False)
+
+    def test_lazy_load_raises_when_tickers_not_found(self):
+        # Add a local JPMaQS catalog file so validation uses the catalog (not per-parquet scans).
+        catalog_file = self.tmpdir / "JPMAQS_METADATA_CATALOG_20240101.parquet"
+        _make_qdf_parquet(
+            catalog_file,
+            {
+                "Ticker": [
+                    "USD_INFL",
+                    "EUR_INFL",
+                    "JPY_INFL",
+                    "USD_GROWTH",
+                    "GBP_GROWTH",
+                ],
+                "Theme": ["DATASET1"] * 5,
+            },
+        )
+        with self.assertRaisesRegex(ValueError, "JPMaQS catalog"):
+            lazy_load_from_parquets(
+                self.tmpdir,
+                tickers=["ZZZ_DOES_NOT_EXIST"],
+                include_delta_files=False,
+                catalog_file=str(catalog_file),
+            )
+
     @patch(
-        "macrosynergy.download.dataquery_file_api.pd_to_datetime_compat",
+        "macrosynergy.download.dataquery_file_api.dataquery_file_api.pd_to_datetime_compat",
         pd_to_datetime_compat,
     )
     def test_lazy_load_output_formats(self):
         pl_df = lazy_load_from_parquets(
-            self.tmpdir, tickers=["USD_INFL"], dataframe_type="polars"
+            self.tmpdir,
+            tickers=["USD_INFL"],
+            dataframe_type="polars",
+            include_file_column=True,
+            since_datetime="20240101",
+            include_delta_files=False,
         )
         self.assertIsInstance(pl_df, pl.DataFrame)
         self.assertEqual(pl_df.shape[0], 1)
+        self.assertEqual(pl_df.schema["source_file"], pl.Categorical)
 
         lazy_df = lazy_load_from_parquets(
-            self.tmpdir, tickers=["USD_INFL"], dataframe_type="polars-lazy"
+            self.tmpdir,
+            tickers=["USD_INFL"],
+            dataframe_type="polars-lazy",
+            include_file_column=True,
+            since_datetime="20240101",
+            include_delta_files=False,
         )
         self.assertIsInstance(lazy_df, pl.LazyFrame)
-        self.assertEqual(lazy_df.collect().shape[0], 1)
+        collected = lazy_df.collect()
+        self.assertEqual(collected.shape[0], 1)
+        self.assertEqual(collected.schema["source_file"], pl.Categorical)
 
         df_wide = lazy_load_from_parquets(
-            self.tmpdir, cids=["USD"], xcats=["GROWTH"], dataframe_format="tickers"
+            self.tmpdir,
+            tickers=["USD_GROWTH"],
+            dataframe_format="tickers",
+            since_datetime="20240101",
+            include_delta_files=False,
         )
         self.assertIn("ticker", df_wide.columns)
         self.assertNotIn("cid", df_wide.columns)
         self.assertEqual(df_wide.iloc[0]["ticker"], "USD_GROWTH")
+
+    def test_lazy_load_datasets_type_validation(self):
+        with self.assertRaisesRegex(ValueError, "`datasets` must be a list of strings"):
+            lazy_load_from_parquets(
+                self.tmpdir,
+                tickers=["USD_INFL"],
+                datasets="DATASET2",  # invalid type: should be list[str]
+                include_delta_files=False,
+            )
 
     def test_check_lazy_load_inputs_raises(self):
         with self.assertRaises(FileNotFoundError):
@@ -476,6 +558,9 @@ class TestLazyLoad(unittest.TestCase):
                 [],
                 None,
                 None,
+                None,
+                None,
+                "latest",
                 "qdf",
                 "pandas",
                 True,
@@ -490,6 +575,9 @@ class TestLazyLoad(unittest.TestCase):
                 [],
                 None,
                 None,
+                None,
+                None,
+                "latest",
                 "qdf",
                 "pandas",
                 True,
@@ -504,6 +592,9 @@ class TestLazyLoad(unittest.TestCase):
                 [],
                 None,
                 None,
+                None,
+                None,
+                "latest",
                 "bad",
                 "pandas",
                 True,
@@ -515,10 +606,11 @@ class TestCorruptedFilesHandling(unittest.TestCase):
         # _make_sample_parquet with 4 paths
         self.tmpdir = Path(tempfile.mkdtemp())
         self.created_filenames = [
-            "good1.parquet",
-            "good2.parquet",
+            "jpmaqs_good1.parquet",
+            "jpmaqs_good2.parquet",
             "corrupted.parquet",
-            "good3.parquet",
+            "jpmaqs_corrupted.parquet",
+            "jpmaqs_good3.parquet",
         ]
         for fname in self.created_filenames:
             path = self.tmpdir / fname
@@ -542,6 +634,281 @@ class TestCorruptedFilesHandling(unittest.TestCase):
         current_files = list(Path(self.tmpdir).glob("*.parquet"))
         self.assertEqual(len(current_files), 3)
         self.assertFalse(corrupt_file_path in current_files)
+
+
+class TestCorruptedFilesDirectoryCleanup(unittest.TestCase):
+    def setUp(self):
+        self.tmpdir = Path(tempfile.mkdtemp())
+        keep_dir = self.tmpdir / "keep"
+        keep_dir.mkdir(parents=True, exist_ok=True)
+        (keep_dir / "keep.txt").write_text("keep", encoding="utf-8")
+
+    def tearDown(self):
+        if self.tmpdir.exists():
+            shutil.rmtree(self.tmpdir)
+
+    @suppress_logging
+    def test_delete_corrupt_files_removes_empty_directories_when_root_dir_provided(
+        self,
+    ):
+        nested_dir = self.tmpdir / "jpmaqs-download" / "2023-01-01"
+        nested_dir.mkdir(parents=True, exist_ok=True)
+        corrupt_file = nested_dir / "f1.json"
+        corrupt_file.write_text("{}", encoding="utf-8")
+
+        removed = _delete_corrupt_files(
+            files=[corrupt_file], extensions=["json"], root_dir=self.tmpdir
+        )
+
+        self.assertEqual(removed, [str(corrupt_file)])
+        self.assertFalse(corrupt_file.exists())
+        self.assertFalse(nested_dir.exists())
+        self.assertFalse((self.tmpdir / "jpmaqs-download").exists())
+        self.assertTrue((self.tmpdir / "keep" / "keep.txt").exists())
+
+    @suppress_logging
+    def test_delete_corrupt_files_does_not_remove_non_empty_directories(self):
+        nested_dir = self.tmpdir / "jpmaqs-download" / "2023-01-01"
+        nested_dir.mkdir(parents=True, exist_ok=True)
+        corrupt_file = nested_dir / "bad.json"
+        corrupt_file.write_text("{}", encoding="utf-8")
+        keep_file = nested_dir / "good.json"
+        keep_file.write_text('{"a": 1}', encoding="utf-8")
+
+        removed = _delete_corrupt_files(
+            files=[corrupt_file, keep_file], extensions=["json"], root_dir=self.tmpdir
+        )
+
+        self.assertEqual(removed, [str(corrupt_file)])
+        self.assertFalse(corrupt_file.exists())
+        self.assertTrue(keep_file.exists())
+        self.assertTrue(nested_dir.exists())
+
+
+class TestLargeDeltaFileDatetimes(unittest.TestCase):
+    def test_large_delta_datetimes_formatting(self):
+        as_strings = _large_delta_file_datetimes()
+        as_timestamps = _large_delta_file_datetimes(as_str=False)
+
+        self.assertGreater(len(as_strings), 0)
+        self.assertEqual(len(as_strings), len(as_timestamps))
+        self.assertEqual(len(as_strings), len(set(as_strings)))
+        self.assertTrue(all(isinstance(x, str) for x in as_strings))
+        self.assertTrue(all(isinstance(x, pd.Timestamp) for x in as_timestamps))
+        self.assertListEqual(
+            as_strings, [ts.strftime("%Y%m%dT%H%M%S") for ts in as_timestamps]
+        )
+        self.assertTrue(
+            all(
+                ts.hour == 23 and ts.minute == 59 and ts.second == 59
+                for ts in as_timestamps
+            )
+        )
+        self.assertListEqual(as_strings, sorted(as_strings))
+
+
+class TestLazyLoadFilteredParquets(unittest.TestCase):
+    def setUp(self):
+        self.tmpdir = Path(tempfile.mkdtemp())
+        self.ticker_file = self.tmpdir / "DATASETX_20240101.parquet"
+        self.qdf_file = self.tmpdir / "DATASETX_20240102.parquet"
+
+        ticker_df = pl.DataFrame(
+            {
+                "ticker": ["USD_INFL", "EUR_INFL"],
+                "real_date": [datetime.date(2024, 1, 1), datetime.date(2024, 1, 1)],
+                "value": [1.0, 2.0],
+                "last_updated": [
+                    datetime.datetime(2024, 1, 2, 0, 0),
+                    datetime.datetime(2024, 1, 2, 0, 0),
+                ],
+            }
+        )
+        ticker_df.write_parquet(self.ticker_file)
+
+        qdf_df = pl.DataFrame(
+            {
+                "ticker": ["USD_INFL", "USD_INFL"],
+                "real_date": [datetime.date(2024, 1, 1), datetime.date(2024, 2, 1)],
+                "value": [10.0, 20.0],
+                "last_updated": [
+                    datetime.datetime(2024, 1, 3, 0, 0),
+                    datetime.datetime(2024, 2, 2, 0, 0),
+                ],
+            }
+        )
+        qdf_df.write_parquet(self.qdf_file)
+
+    def tearDown(self):
+        shutil.rmtree(self.tmpdir)
+
+    def test_expr_split_ticker_handles_extra_segments(self):
+        cid_expr, xcat_expr = _expr_split_ticker(pl.col("ticker"))
+        lf = pl.LazyFrame({"ticker": ["USD_GROWTH_EXTRA", "EUR_CPI"]})
+        result = lf.select(cid_expr.alias("cid"), xcat_expr.alias("xcat")).collect()
+
+        self.assertEqual(result["cid"].to_list(), ["USD", "EUR"])
+        self.assertEqual(result["xcat"].to_list(), ["GROWTH_EXTRA", "CPI"])
+
+    def test_lazy_load_filtered_parquets_latest_dedup(self):
+        lf = _lazy_load_filtered_parquets(
+            paths=[str(self.ticker_file), str(self.qdf_file)],
+            tickers=["USD_INFL", "EUR_INFL"],
+            start_date=None,
+            end_date=None,
+            min_last_updated=None,
+            max_last_updated=None,
+            delta_treatment="latest",
+            include_file_column="source_file",
+            return_qdf=True,
+        )
+        df = lf.collect()
+
+        self.assertIn("source_file", df.columns)
+        self.assertEqual(df.schema["source_file"], pl.Utf8)
+        self.assertEqual(df.height, 3)
+
+        usd_jan = df.filter(
+            (pl.col("cid") == "USD")
+            & (pl.col("xcat") == "INFL")
+            & (pl.col("real_date") == datetime.date(2024, 1, 1))
+        )
+        self.assertEqual(usd_jan.height, 1)
+        self.assertEqual(usd_jan["value"][0], 10.0)
+        usd_source = str(usd_jan["source_file"][0])
+        self.assertEqual(usd_source, self.qdf_file.name)
+        self.assertNotIn("\\", usd_source)
+        self.assertNotIn("/", usd_source)
+
+        eur_row = df.filter((pl.col("cid") == "EUR") & (pl.col("xcat") == "INFL"))
+        self.assertEqual(eur_row.height, 1)
+        self.assertEqual(eur_row["value"][0], 2.0)
+        eur_source = str(eur_row["source_file"][0])
+        self.assertEqual(eur_source, self.ticker_file.name)
+        self.assertNotIn("\\", eur_source)
+        self.assertNotIn("/", eur_source)
+
+    def test_lazy_load_filtered_parquets_earliest_ticker_schema(self):
+        lf = _lazy_load_filtered_parquets(
+            paths=[str(self.ticker_file), str(self.qdf_file)],
+            tickers=["USD_INFL"],
+            start_date=None,
+            end_date=None,
+            min_last_updated=None,
+            max_last_updated=None,
+            delta_treatment="earliest",
+            include_file_column="source_file",
+            return_qdf=False,
+        )
+        df = lf.collect()
+
+        self.assertIn("ticker", df.columns)
+        self.assertNotIn("cid", df.columns)
+        self.assertEqual(df.filter(pl.col("ticker") == "USD_INFL").height, 2)
+        self.assertEqual(df.schema["source_file"], pl.Utf8)
+
+        usd_jan = df.filter(
+            (pl.col("ticker") == "USD_INFL")
+            & (pl.col("real_date") == datetime.date(2024, 1, 1))
+        )
+        self.assertEqual(usd_jan.height, 1)
+        self.assertEqual(usd_jan["value"][0], 1.0)
+        usd_source = str(usd_jan["source_file"][0])
+        self.assertEqual(usd_source, self.ticker_file.name)
+        self.assertNotIn("\\", usd_source)
+        self.assertNotIn("/", usd_source)
+
+    def test_lazy_load_filtered_parquets_requires_paths(self):
+        call_kwargs = dict(
+            paths=[],
+            tickers=["USD_INFL"],
+            start_date=None,
+            end_date=None,
+            min_last_updated=None,
+            max_last_updated=None,
+            delta_treatment="all",
+            include_file_column=None,
+            return_qdf=True,
+        )
+        with self.assertRaises(ValueError):
+            _lazy_load_filtered_parquets(**call_kwargs)
+
+
+class TestLazyLoadDatasetsFilterSemantics(unittest.TestCase):
+    @patch(
+        "macrosynergy.download.dataquery_file_api.dataquery_file_api.pd_to_datetime_compat",
+        pd_to_datetime_compat,
+    )
+    def test_datasets_filter_matches_effective_dataset_and_respects_include_delta(self):
+        tmpdir = Path(tempfile.mkdtemp())
+        try:
+            snap_path = tmpdir / "DATASET1_20240102.parquet"
+            delta_path = tmpdir / "DATASET1_DELTA_20240102T010101.parquet"
+
+            _make_ticker_parquet(
+                snap_path,
+                {
+                    "ticker": ["USD_INFL"],
+                    "real_date": [datetime.date(2024, 1, 1)],
+                    "value": [1.0],
+                    "last_updated": [datetime.datetime(2024, 1, 2, 0, 0)],
+                },
+            )
+            _make_ticker_parquet(
+                delta_path,
+                {
+                    "ticker": ["USD_INFL"],
+                    "real_date": [datetime.date(2024, 1, 1)],
+                    "value": [2.0],
+                    "last_updated": [datetime.datetime(2024, 1, 3, 0, 0)],
+                },
+            )
+
+            # Base dataset selection includes delta files when `include_delta_files=True`.
+            df = lazy_load_from_parquets(
+                tmpdir,
+                datasets=["DATASET1"],
+                tickers=["USD_INFL"],
+                include_delta_files=True,
+                delta_treatment="latest",
+            )
+            self.assertEqual(len(df), 1)
+            self.assertEqual(df.iloc[0]["value"], 2.0)
+
+            # Same dataset selection excludes delta files when `include_delta_files=False`.
+            df_no_delta = lazy_load_from_parquets(
+                tmpdir,
+                datasets=["DATASET1"],
+                tickers=["USD_INFL"],
+                include_delta_files=False,
+                delta_treatment="latest",
+            )
+            self.assertEqual(len(df_no_delta), 1)
+            self.assertEqual(df_no_delta.iloc[0]["value"], 1.0)
+
+            # Passing a delta dataset name still filters by the effective (base) dataset;
+            # `include_delta_files` remains the sole control for delta inclusion.
+            df_delta_name = lazy_load_from_parquets(
+                tmpdir,
+                datasets=["DATASET1_DELTA"],
+                tickers=["USD_INFL"],
+                include_delta_files=True,
+                delta_treatment="latest",
+            )
+            self.assertEqual(len(df_delta_name), 1)
+            self.assertEqual(df_delta_name.iloc[0]["value"], 2.0)
+
+            df_delta_name_no_delta = lazy_load_from_parquets(
+                tmpdir,
+                datasets=["DATASET1_DELTA"],
+                tickers=["USD_INFL"],
+                include_delta_files=False,
+                delta_treatment="latest",
+            )
+            self.assertEqual(len(df_delta_name_no_delta), 1)
+            self.assertEqual(df_delta_name_no_delta.iloc[0]["value"], 1.0)
+        finally:
+            shutil.rmtree(tmpdir)
 
 
 if __name__ == "__main__":

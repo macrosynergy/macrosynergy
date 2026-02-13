@@ -144,9 +144,17 @@ def request_wrapper(
     api_delay: float = FUSION_API_DELAY,
     timeout: Optional[float] = None,
     verify_ssl: bool = True,
+    skip_wait: bool = False,
 ) -> Union[Dict[str, Any], str, bytes]:
     """
     A wrapper function for making API requests to the JPMorgan Fusion API.
+
+    Notes
+    -----
+    By default, this function enforces a minimum delay between calls via
+    `_wait_for_api_call`. Set `skip_wait=True` to bypass the wait (primarily intended
+    for tests or controlled batch workflows where external rate limiting is handled
+    elsewhere).
     """
     if not isinstance(method, str):
         raise TypeError("Method must be a string.")
@@ -163,7 +171,8 @@ def request_wrapper(
         as_json = True
     raw_response: Optional[requests.Response] = None
     try:
-        _wait_for_api_call(api_delay=api_delay)
+        if not skip_wait:
+            _wait_for_api_call(api_delay=api_delay)
         response = requests.request(
             method=method.upper(),
             url=url,
@@ -237,6 +246,7 @@ def request_wrapper_stream_bytes_to_disk(
     api_delay: float = FUSION_API_DELAY,
     timeout: Optional[float] = None,
     verify_ssl: bool = True,
+    skip_wait: bool = False,
 ) -> None:
     """
     Stream a request's response bytes directly to disk, chunk by chunk.
@@ -267,6 +277,9 @@ def request_wrapper_stream_bytes_to_disk(
         Timeout for the request (defaults to None).
     verify_ssl : bool
         Whether to verify SSL certificates (defaults to True).
+    skip_wait : bool
+        If True, bypasses the internal `_wait_for_api_call` delay enforcement (intended
+        for tests or when external/global rate limiting is handled elsewhere).
     """
     if not isinstance(method, str):
         raise TypeError("Method must be a string.")
@@ -274,7 +287,8 @@ def request_wrapper_stream_bytes_to_disk(
         raise ValueError(
             f"Invalid method: {method}. Must be 'GET' for streaming to disk."
         )
-    _wait_for_api_call(api_delay=api_delay)
+    if not skip_wait:
+        _wait_for_api_call(api_delay=api_delay)
     with requests.request(
         method=method.upper(),
         url=url,
@@ -902,7 +916,10 @@ def coerce_real_date(table: pa.Table) -> pa.Table:
         col = pc.utf8_slice_codeunits(col, 0, 10)
         ts = pc.strptime(col, format="%Y-%m-%d", unit="s")
         dates = pc.cast(ts, pa.date32())
-
+    elif pa.types.is_large_string(t):
+        col = pc.utf8_slice_codeunits(col, 0, 10)
+        ts = pc.strptime(col, format="%Y-%m-%d", unit="s")
+        dates = pc.cast(ts, pa.date32())
     else:
         raise TypeError(f"Unsupported type for real_date: {t}")
 

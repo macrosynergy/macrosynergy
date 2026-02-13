@@ -127,6 +127,20 @@ class TestRequestWrapper(unittest.TestCase):
                     headers=self.HDRS,
                 )
 
+    def test_skip_wait_skips_wait_for_api_call(self):
+        resp = self._make_response(status=200, content=b"{}", json_data={"ok": True})
+        with patch("macrosynergy.download.fusion_interface._wait_for_api_call") as mock_wait:
+            with patch("requests.request", return_value=resp):
+                out = fusion_request_wrapper(
+                    "GET",
+                    self.URL,
+                    headers=self.HDRS,
+                    as_json=True,
+                    skip_wait=True,
+                )
+        mock_wait.assert_not_called()
+        self.assertEqual(out, {"ok": True})
+
     def test_json_decode_error(self):
         resp = self._make_response(content=b"notjson")
         self.assertRaisesMessage(Exception, "decode JSON", self._call, resp)
@@ -1153,6 +1167,29 @@ class TestRequestWrapperStreamBytesToDisk(unittest.TestCase):
             with open(file_path, "rb") as f:
                 content = f.read()
             self.assertEqual(content, b"abcdef")
+
+    @patch("macrosynergy.download.fusion_interface._wait_for_api_call")
+    @patch("requests.request")
+    def test_stream_bytes_to_disk_skip_wait_bypasses_rate_limit(
+        self, mock_request, mock_wait
+    ):
+        mock_resp = MagicMock()
+        mock_resp.__enter__.return_value = mock_resp
+        mock_resp.__exit__.return_value = False
+        mock_resp.raise_for_status.return_value = None
+        mock_resp.iter_content.return_value = [b"abc"]
+        mock_request.return_value = mock_resp
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            file_path = os.path.join(tmpdir, "testfile.bin")
+            request_wrapper_stream_bytes_to_disk(
+                filename=file_path,
+                url="http://example.com/file",
+                method="GET",
+                skip_wait=True,
+            )
+
+        mock_wait.assert_not_called()
 
     @patch(
         "macrosynergy.download.fusion_interface._wait_for_api_call", return_value=True
