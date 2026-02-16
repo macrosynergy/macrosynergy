@@ -525,6 +525,11 @@ def _select_local_files_for_load(
 
     df = files_df.copy()
 
+    if "file-timestamp" not in df.columns:
+        raise ValueError("Expected column 'file-timestamp' in files_df")
+    if "filename" not in df.columns:
+        raise ValueError("Expected column 'filename' in files_df")
+
     if "e-dataset" in df.columns:
         group_col = "e-dataset"
     else:
@@ -535,173 +540,169 @@ def _select_local_files_for_load(
             df[group_col].astype(str).str.replace(r"_DELTA$", "", regex=True)
         )
 
-    if "file-timestamp" not in df.columns:
-        raise ValueError("Expected column 'file-timestamp' in files_df")
+    base_columns = list(df.columns)
 
-    # ---- normalize inputs (window + vintages) ---------------------------------
-    since_ts = (
+    window_start_ts: Optional[pd.Timestamp] = (
         pd_to_datetime_compat(since_datetime) if since_datetime is not None else None
     )
-    if since_ts is not None and _is_date_only_string(since_datetime):
-        since_ts = since_ts.normalize()
+    if window_start_ts is not None and _is_date_only_string(since_datetime):
+        window_start_ts = window_start_ts.normalize()
 
-    vintage_to_ts = (
+    file_vintage_ts: pd.Timestamp = (
         _normalize_file_timestamp_cutoff(to_datetime)
         if to_datetime is not None
         else df["file-timestamp"].max()
     )
 
-    # `last_updated` timestamps are row-content vintages. They can be non-monotonic with
-    # file timestamps, especially in monthly "large delta" regimes. Use them to guide
-    # delta coverage without allowing snapshots beyond the file-vintage cutoff.
-    content_to_ts: Optional[pd.Timestamp] = None
-    if (max_last_updated is not None) or (to_datetime is not None):
-        content_to_ts = _normalize_last_updated_cutoff(
+    # Row-content vintage cutoff. This is used only to decide if we must include a
+    # covering month-end "large delta" file even when its file timestamp lies after
+    # `to_datetime` (file_vintage_ts).
+    content_vintage_ts: Optional[pd.Timestamp] = None
+    if (to_datetime is not None) or (max_last_updated is not None):
+        content_vintage_ts = _normalize_last_updated_cutoff(
             max_last_updated if max_last_updated is not None else to_datetime
         )
 
-    # Snapshot-led selection keeps the historical behaviour of treating
-    # (`since_datetime`, `to_datetime`) as an unordered window and swapping if needed.
-    window_since_ts = since_ts
-    window_to_ts = vintage_to_ts
-    if window_since_ts is not None and window_since_ts > window_to_ts:
-        window_since_ts, window_to_ts = window_to_ts, window_since_ts
+    window_end_ts: pd.Timestamp = file_vintage_ts
+    if window_start_ts is not None and window_start_ts > window_end_ts:
+        window_start_ts, window_end_ts = window_end_ts, window_start_ts
 
-    # ---- file type flags -------------------------------------------------------
     filenames = df["filename"].astype(str)
     is_delta = filenames.str.contains("_DELTA", case=False, na=False)
     is_metadata = filenames.str.contains("_METADATA", case=False, na=False)
     is_snapshot = ~is_delta & ~is_metadata
 
-    ts = df["file-timestamp"]
-    grp = df[group_col]
+    file_ts = df["file-timestamp"]
     in_window = (
-        ts.le(window_to_ts)
-        if window_since_ts is None
-        else ts.between(window_since_ts, window_to_ts)
+        file_ts.le(window_end_ts)
+        if window_start_ts is None
+        else file_ts.between(window_start_ts, window_end_ts)
     )
 
-    # ---- snapshot availability summary ----------------------------------------
-    # Delta-only history (effective): no snapshots exist at or before the requested
-    # file-vintage cutoff (`vintage_to_ts`).
-    has_snapshot_upto_vintage = (is_snapshot & ts.le(vintage_to_ts)).groupby(grp).any()
-    has_snapshot_upto_vintage = grp.map(has_snapshot_upto_vintage).fillna(False)
-    is_delta_only_history = ~has_snapshot_upto_vintage
-
-    latest_snapshot_in_window = (
-        df.loc[is_snapshot & in_window].groupby(group_col)["file-timestamp"].max()
+    # Dataset-level properties
+    df["has_snapshot_upto_vintage"] = (
+        (is_snapshot & file_ts.le(file_vintage_ts))
+        .groupby(df[group_col])
+        .transform("any")
+        .astype(bool)
     )
-    latest_snapshot_in_window = grp.map(latest_snapshot_in_window)
-    has_snapshot_in_window = latest_snapshot_in_window.notna()
+    df["is_delta_only_history"] = ~df["has_snapshot_upto_vintage"]
 
-    # ---- large delta coverage summary (per dataset) ---------------------------
-    to_base_ts = content_to_ts if content_to_ts is not None else vintage_to_ts
+    df["latest_snapshot_in_window"] = (
+        file_ts.where(is_snapshot & in_window).groupby(df[group_col]).transform("max")
+    )
+    df["has_snapshot_in_window"] = df["latest_snapshot_in_window"].notna()
+
     need_cover = (to_datetime is not None) or (max_last_updated is not None)
+    cover_basis_ts = (
+        content_vintage_ts if content_vintage_ts is not None else file_vintage_ts
+    )
 
-    cover_ts_by_group = pd.Series(dtype="object")
-    has_regular_in_month_by_group = pd.Series(dtype="bool")
+    # Keep tz-aware dtype even when the column is all-NaT to avoid tz comparison errors.
+    df["cover_ts"] = pd.to_datetime(
+        pd.Series(pd.NaT, index=df.index), utc=True, errors="coerce"
+    )
+    df["has_regular_in_month"] = False
+
     if need_cover and bool(is_delta.any()):
-        deltas = df.loc[is_delta, [group_col, "file-timestamp"]].copy()
+        delta_ts = df.loc[is_delta, "file-timestamp"]
+        delta_groups = df.loc[is_delta, group_col]
 
-        cover_ts_by_group = deltas.groupby(group_col)["file-timestamp"].apply(
+        cover_ts_by_group = delta_ts.groupby(delta_groups).apply(
             lambda s: _covering_large_delta_timestamp(
-                to_ts=to_base_ts, delta_file_timestamps=s.tolist()
+                to_ts=cover_basis_ts, delta_file_timestamps=s.tolist()
             )
         )
+        df["cover_ts"] = pd.to_datetime(
+            df[group_col].map(cover_ts_by_group), utc=True, errors="coerce"
+        )
 
-        def _has_regular_in_month(s: pd.Series) -> bool:
-            in_month = (s.dt.year == to_base_ts.year) & (s.dt.month == to_base_ts.month)
-            is_large_delta_ts = (
-                (s.dt.hour == 23) & (s.dt.minute == 59) & (s.dt.second == 59)
+        def _has_regular_in_month(file_timestamps: pd.Series) -> bool:
+            in_month = (file_timestamps.dt.year == cover_basis_ts.year) & (
+                file_timestamps.dt.month == cover_basis_ts.month
             )
-            return bool((in_month & (s.le(to_base_ts)) & (~is_large_delta_ts)).any())
+            is_large_delta_ts = (
+                (file_timestamps.dt.hour == 23)
+                & (file_timestamps.dt.minute == 59)
+                & (file_timestamps.dt.second == 59)
+            )
+            return bool(
+                (
+                    in_month & file_timestamps.le(cover_basis_ts) & (~is_large_delta_ts)
+                ).any()
+            )
 
-        has_regular_in_month_by_group = deltas.groupby(group_col)[
-            "file-timestamp"
-        ].apply(_has_regular_in_month)
+        regular_by_group = delta_ts.groupby(delta_groups).apply(_has_regular_in_month)
+        df["has_regular_in_month"] = (
+            df[group_col]
+            .map(regular_by_group)
+            .astype("boolean")
+            .fillna(False)
+            .astype(bool)
+        )
 
-    cover_ts = grp.map(cover_ts_by_group)
-    cover_ts = pd.to_datetime(cover_ts, utc=True, errors="coerce")
-    has_regular_in_month = (
-        grp.map(has_regular_in_month_by_group).astype("boolean").fillna(False)
-    )
+    cover_ts = df["cover_ts"]
+    latest_snapshot_ts = df["latest_snapshot_in_window"]
 
-    # ---- selection masks (vectorized) -----------------------------------------
-    cutoff_ts = vintage_to_ts
-    if content_to_ts is not None and max_last_updated is not None:
-        cutoff_ts = max(cutoff_ts, content_to_ts)
+    delta_cutoff_ts = file_vintage_ts
+    if content_vintage_ts is not None and max_last_updated is not None:
+        delta_cutoff_ts = max(delta_cutoff_ts, content_vintage_ts)
 
-    # Delta-only history: select all deltas up to the cutoff plus a covering large-delta
-    # file (which can be after the vintage cutoff).
-    mask_delta_only = (
-        include_delta_files & is_delta_only_history & is_delta & ts.le(cutoff_ts)
-    )
-    mask_delta_only_cover = (
-        include_delta_files
-        & need_cover
-        & is_delta_only_history
-        & is_delta
-        & cover_ts.notna()
-        & ts.eq(cover_ts)
-        & ts.gt(cutoff_ts)
-    )
+    selected = pd.Series(False, index=df.index)
 
-    # Snapshot-led history: window semantics apply.
-    mask_latest_snapshot = (
+    if include_delta_files:
+        selected |= df["is_delta_only_history"] & is_delta & file_ts.le(delta_cutoff_ts)
+        if need_cover:
+            selected |= (
+                df["is_delta_only_history"]
+                & is_delta
+                & cover_ts.notna()
+                & file_ts.eq(cover_ts)
+                & file_ts.gt(delta_cutoff_ts)
+            )
+
+    selected |= (
         is_snapshot
         & in_window
-        & has_snapshot_in_window
-        & ts.eq(latest_snapshot_in_window)
+        & df["has_snapshot_in_window"]
+        & file_ts.eq(latest_snapshot_ts)
     )
 
-    mask_window_deltas_no_snapshot = (
-        include_delta_files
-        & is_delta
-        & in_window
-        & has_snapshot_upto_vintage
-        & (~has_snapshot_in_window)
-    )
-    mask_window_deltas_after_snapshot = (
-        include_delta_files
-        & is_delta
-        & in_window
-        & has_snapshot_in_window
-        & ts.ge(latest_snapshot_in_window)
-    )
+    if include_delta_files:
+        selected |= (
+            is_delta
+            & in_window
+            & df["has_snapshot_upto_vintage"]
+            & (~df["has_snapshot_in_window"])
+        )
+        selected |= (
+            is_delta
+            & in_window
+            & df["has_snapshot_in_window"]
+            & file_ts.ge(latest_snapshot_ts)
+        )
+        if need_cover:
+            selected |= (
+                is_delta
+                & df["has_snapshot_in_window"]
+                & cover_ts.notna()
+                & (~df["has_regular_in_month"])
+                & cover_ts.ge(latest_snapshot_ts)
+                & file_ts.eq(cover_ts)
+            )
 
-    # Snapshot-led cover delta (only when regular in-month deltas are absent).
-    mask_snapshot_cover = (
-        include_delta_files
-        & need_cover
-        & is_delta
-        & has_snapshot_in_window
-        & cover_ts.notna()
-        & (~has_regular_in_month)
-        & cover_ts.ge(latest_snapshot_in_window)
-        & ts.eq(cover_ts)
-        & (~mask_window_deltas_after_snapshot)
-    )
-
-    out = df.loc[
-        mask_delta_only
-        | mask_delta_only_cover
-        | mask_latest_snapshot
-        | mask_window_deltas_no_snapshot
-        | mask_window_deltas_after_snapshot
-        | mask_snapshot_cover
-    ].copy()
+    out = df.loc[selected].copy()
 
     if out.empty:
-        return df.iloc[0:0].copy()
+        return df.iloc[0:0].copy()[base_columns]
 
-    # ---- warnings / final output shaping --------------------------------------
     earliest_snapshot_ts: Optional[pd.Timestamp] = None
-    if warn_if_no_full_snapshots and window_since_ts is not None:
+    if warn_if_no_full_snapshots and window_start_ts is not None:
         earliest_snapshot_ts = df.loc[is_snapshot, "file-timestamp"].min()
         if pd.isna(earliest_snapshot_ts):
             earliest_snapshot_ts = None
 
-    if warn_if_no_full_snapshots and window_since_ts is not None:
+    if warn_if_no_full_snapshots and window_start_ts is not None:
         is_delta_out = (
             out["filename"].astype(str).str.contains("_DELTA", case=False, na=False)
         )
@@ -714,13 +715,12 @@ def _select_local_files_for_load(
             earliest_snapshot_str = earliest_snapshot_ts.strftime("%Y-%m-%dT%H:%M:%SZ")
             logger.warning(
                 "No full snapshots available in the requested window "
-                f"since={window_since_ts.strftime('%Y-%m-%dT%H:%M:%SZ')} "
-                f"to={window_to_ts.strftime('%Y-%m-%dT%H:%M:%SZ')} "
+                f"since={window_start_ts.strftime('%Y-%m-%dT%H:%M:%SZ')} "
+                f"to={window_end_ts.strftime('%Y-%m-%dT%H:%M:%SZ')} "
                 f"earliest_snapshot={earliest_snapshot_str}"
             )
 
     if not include_delta_files:
-        # keep only snapshots
         is_delta = (
             out["filename"].astype(str).str.contains("_DELTA", case=False, na=False)
         )
@@ -732,4 +732,4 @@ def _select_local_files_for_load(
     out = out.sort_values([group_col, "file-timestamp", "filename"]).reset_index(
         drop=True
     )
-    return out
+    return out[base_columns]
