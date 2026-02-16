@@ -290,6 +290,46 @@ class FileSelector:
 
         return out
 
+    def _most_recent_local_catalog(
+        self,
+        *,
+        to_datetime: Optional[Union[str, pd.Timestamp]] = None,
+        catalog_file_group_id: str = "JPMAQS_METADATA_CATALOG",
+    ) -> Optional[str]:
+        if self.local_files_df.empty:
+            return None
+        if "path" not in self.local_files_df.columns:
+            return None
+
+        local_df = self.local_files_df.copy()
+        local_df = local_df[local_df["path"].notna()].copy()
+        if local_df.empty:
+            return None
+
+        local_like = self._as_local_like_df(local_df, source="local")
+        if local_like.empty:
+            return None
+
+        local_catalogs = local_like[
+            local_like["dataset"].astype(str).eq(str(catalog_file_group_id))
+            & local_like["filename"].astype(str).str.lower().str.endswith(".parquet")
+        ].copy()
+        if local_catalogs.empty:
+            return None
+
+        if to_datetime is not None:
+            cutoff = _normalize_file_timestamp_cutoff(to_datetime)
+            local_catalogs = local_catalogs[
+                local_catalogs["file-timestamp"] <= cutoff
+            ].copy()
+            if local_catalogs.empty:
+                return None
+
+        local_catalogs = local_catalogs.sort_values(
+            by=["file-timestamp", "filename"], ascending=False
+        )
+        return str(local_catalogs.iloc[0]["path"])
+
     def select_files_for_download(
         self,
         overwrite: bool = False,

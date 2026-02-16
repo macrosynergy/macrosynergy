@@ -259,6 +259,31 @@ class TestFileSelectorInit(unittest.TestCase):
         )
 
 
+class TestFileSelectorMostRecentLocalCatalog(unittest.TestCase):
+    def test_most_recent_local_catalog_respects_to_datetime_cutoff(self):
+        with tempfile.TemporaryDirectory() as td:
+            p1 = Path(td) / "JPMAQS_METADATA_CATALOG_20240101.parquet"
+            p2 = Path(td) / "JPMAQS_METADATA_CATALOG_20240105.parquet"
+            p3 = Path(td) / "JPMAQS_METADATA_CATALOG_20240110.parquet"
+            for p in (p1, p2, p3):
+                p.write_bytes(b"x")
+
+            local_df = pd.DataFrame(
+                [
+                    {"file-name": p1.name, "path": str(p1)},
+                    {"file-name": p2.name, "path": str(p2)},
+                    {"file-name": p3.name, "path": str(p3)},
+                ]
+            )
+            fs = FileSelector(EMPTY_API_FILES_DF.copy(), local_df)
+
+            self.assertEqual(fs._most_recent_local_catalog(), str(p3))
+            self.assertEqual(
+                fs._most_recent_local_catalog(to_datetime="20240105"), str(p2)
+            )
+            self.assertIsNone(fs._most_recent_local_catalog(to_datetime="20231231"))
+
+
 class TestFileSelectorSelectFilesForDownload(unittest.TestCase):
     def test_select_files_for_download_returns_empty_when_api_empty(self):
         fs = FileSelector(EMPTY_API_FILES_DF.copy(), EMPTY_LOCAL_FILES_DF.copy())

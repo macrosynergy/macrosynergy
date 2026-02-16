@@ -2141,8 +2141,9 @@ class DataQueryFileAPIClient(RateLimitedRequester):
         skip_download : bool
             If True, do not download snapshot/delta/metadata files and only load from the
             local cache. In this mode, the client will use the most recent *local* catalog
-            parquet file and will not make any network requests. If no local catalog is
-            available, this method returns an empty DataFrame. Default is False.
+            parquet file (at or before `to_datetime` if provided) and will not make any
+            network requests. If no local catalog is available, this method raises a
+            ValueError. Default is False.
         cleanup_old_files_n_days : Optional[int]
             If set to an integer value, deletes files older than this number of days
             from the local cache after the download is complete. This integer value is
@@ -2164,21 +2165,24 @@ class DataQueryFileAPIClient(RateLimitedRequester):
                 return pl.DataFrame().lazy()
             return pd.DataFrame()
 
-        def _most_recent_local_catalog() -> Optional[str]:
+        fs = None
+        if skip_download:
             existing = self.list_downloaded_files(include_last_modified_columns=False)
-            if existing.empty:
-                return None
-            local_catalogs = existing[
-                existing["dataset"].astype(str).eq(self.catalog_file_group_id)
-                & existing["file-name"].astype(str).str.lower().str.endswith(".parquet")
-            ].copy()
-            if local_catalogs.empty:
-                return None
-            if "file-timestamp" in local_catalogs.columns:
-                local_catalogs = local_catalogs.sort_values(
-                    by=["file-timestamp", "file-name"], ascending=False
-                )
-            return str(local_catalogs.iloc[0]["path"])
+            fs = FileSelector(
+                api_files_df=None,
+                local_files_df=existing,
+                file_name_col="file-name",
+            )
+        else:
+            fs = self.file_selector
+        _most_recent_local_catalog = fs._most_recent_local_catalog(
+            to_datetime=to_datetime
+        )
+        if skip_download and _most_recent_local_catalog is None:
+            raise ValueError(
+                "Cannot skip download when no local catalog file is available. "
+                "Please run this method once with `skip_download=False` to populate the cache."
+            )
 
         catalog_file = None
         if skip_download:
