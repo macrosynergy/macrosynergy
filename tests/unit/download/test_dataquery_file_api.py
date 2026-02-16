@@ -292,6 +292,7 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
             {
                 "file-datetime": pd.to_datetime(["20230101T120000"], utc=True),
                 "last-modified": pd.to_datetime(["20230101T120000"], utc=True),
+                "file-name": ["FG1_20230101.parquet"],
             }
         )
         df = client.list_available_files_for_all_file_groups()
