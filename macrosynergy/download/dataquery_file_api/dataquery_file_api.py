@@ -2319,16 +2319,17 @@ class DataQueryFileAPIClient(RateLimitedRequester):
         intent ("as of") into the correct `download()` arguments:
           - `to_datetime`: the file-vintage cutoff (which files can be used)
           - `max_last_updated`: the row-level vintage cutoff (which updates are allowed)
-
-        Notes
-        -----
-        - If `as_of_datetime` is date-only (e.g., "2025-11-12"), it is interpreted as
-          end-of-day UTC (23:59:59Z) for the *row-level* cutoff (`max_last_updated`), and
-          uses the date itself as the *file-vintage* cutoff (`to_datetime="YYYYMMDD"`).
-          If you want an intraday vintage, pass an explicit datetime string with timezone
-          (e.g., "2025-11-12T06:30:00Z").
-        - If `as_of_datetime` is in the future (relative to the current UTC timestamp),
-          this method raises a `ValueError` (future vintages are not supported).
+        
+        See func:`macrosynergy.download.dataquery_file_api.dataquery_file_api.DataQueryFileAPIClient.download()` 
+        for details on the other parameters and return value.
+        
+        Parameters
+        ----------
+        as_of_datetime : str
+            The point in time to view the data as of. This can be a date-only string
+            (e.g. "2023-12-31" or "20231231") or a datetime string 
+            (e.g. "2023-12-31T15:30:00Z" or "20231231153000"). Date-only strings are 
+            interpreted as end-of-day        
         """
         if args:
             raise TypeError(
