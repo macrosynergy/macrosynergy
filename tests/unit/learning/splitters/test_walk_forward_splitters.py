@@ -50,25 +50,23 @@ class TestExpandingIncrement(unittest.TestCase):
             dtype=np.float32,
         )
 
-        # Add NaNs into the data to ensure splitter can handle it
-        nan_cids = ["AUD", "CAD"]
-        nan_xcats = ["RIR", "GROWTH"]
-
-        nan_idxs = (
-            df.loc[pd.IndexSlice[nan_cids, :], :]
-            .groupby(level="cid")
-            .head(180) # first 180 days missing for nan_cids
-            .index
-        )
-        df.loc[nan_idxs, nan_xcats] = np.nan
-
         # Create sample X and y dataframes resampled at monthly frequency
         self.X = df.drop(columns="XR")
         self.X = self.X.groupby(level=0).resample("M", level="real_date").mean()
 
         self.y = df["XR"]
         self.y = self.y.groupby(level=0).resample("M", level="real_date").last()
-        self.y.loc[np.random.rand(len(self.y)) < 0.15] = np.nan
+
+        # Create X and y dataframes with NaNs
+        self.X_nan, self.y_nan = self.X.copy(), self.y.copy()
+
+        num_nans_per_cid = {"AUD": 7, "CAD": 5, "GBP": 2, "USD": 1}
+        nan_xcats = ["RIR", "GROWTH"]
+        for cid, num_nans in num_nans_per_cid.items():
+            idx = self.X_nan.loc[[cid], :,].head(num_nans).index
+            self.X_nan.loc[idx, nan_xcats] = np.nan
+
+        self.y_nan.loc[np.random.rand(len(self.y_nan)) < 0.15] = np.nan
 
         # Create X and y dataframes with NaNs
         self.X_nan, self.y_nan = self.X.copy(), self.y.copy()
