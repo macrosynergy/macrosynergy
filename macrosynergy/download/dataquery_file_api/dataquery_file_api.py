@@ -1732,6 +1732,40 @@ class DataQueryFileAPIClient(RateLimitedRequester):
         total_time = time.time() - start_time
         logger.info(f"Snapshot download completed in {total_time:.2f} seconds.")
 
+    def download_delta_files(
+        self,
+        since_datetime: Optional[str] = None,
+        to_datetime: Optional[str] = None,
+        overwrite: bool = False,
+        chunk_size: Optional[int] = None,
+        timeout: Optional[float] = DQ_FILE_API_TIMEOUT,
+        include_delta: bool = True,
+        include_metadata: bool = True,
+        file_group_ids: Optional[List[str]] = None,
+        show_progress: bool = True,
+        *args,
+        **kwargs,
+    ):
+        """
+        A convenience function to allow downloading only delta files within a given window.
+        This is a wrapper around `download_full_snapshot()` with `include_full_snapshots=False`.
+        """
+
+        return self.download_full_snapshot(
+            since_datetime=since_datetime,
+            to_datetime=to_datetime,
+            overwrite=overwrite,
+            chunk_size=chunk_size,
+            timeout=timeout,
+            include_full_snapshots=False,
+            include_delta=include_delta,
+            include_metadata=include_metadata,
+            file_group_ids=file_group_ids,
+            show_progress=show_progress,
+            *args,
+            **kwargs,
+        )
+
     def load_data(
         self,
         tickers: Optional[List[str]] = None,
