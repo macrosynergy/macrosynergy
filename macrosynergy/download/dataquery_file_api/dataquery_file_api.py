@@ -443,24 +443,40 @@ class DataQueryFileAPIClient(RateLimitedRequester):
         """
         Cached `FileSelector` instance for this client.
 
-        The selector is refreshed by download operations with the latest unfiltered API
-        inventory (full history) and the current local cache inventory.
+        Notes
+        -----
+        This property is intentionally designed so it does not fetch the API file
+        inventory when first accessed. Download operations (e.g. `download_full_snapshot`)
+        refresh the selector with the latest unfiltered API inventory as needed.
         """
         if self._file_selector is None:
-            logger.debug(
-                "Initializing FileSelector with unfiltered API file inventory via "
-                "`list_available_files_for_all_file_groups()`."
-            )
-            api_files_df = self.list_available_files_for_all_file_groups()
             local_files_df = self.list_downloaded_files(
                 include_last_modified_columns=False
             )
             self._file_selector = FileSelector(
-                api_files_df=api_files_df,
+                api_files_df=None,
                 local_files_df=local_files_df,
                 file_name_col="file-name",
             )
         return self._file_selector
+
+    def _refresh_file_selector(self) -> None:
+        """
+        Refresh the cached `FileSelector` local inventory from disk.
+
+        This is a lightweight, network-free refresh used after downloads so subsequent
+        selection/load operations see the updated local cache.
+        """
+        if self._file_selector is None:
+            return
+        try:
+            local_files_df = self.list_downloaded_files(
+                include_last_modified_columns=False
+            )
+            self._file_selector.refresh(local_files_df=local_files_df)
+        except Exception:
+            logger.warning("Failed to refresh file selector inventory after download.")
+            pass
 
     @staticmethod
     def _normalize_out_dir(out_dir: Union[str, Path]) -> str:
@@ -1196,66 +1212,50 @@ class DataQueryFileAPIClient(RateLimitedRequester):
 
         Notes
         -----
-        - If today's catalog file already exists locally and `overwrite=False`, this
-          method returns it without making API calls.
-        - Otherwise, this downloads the latest available catalog file from DataQuery.
-        - If the download fails but an older local catalog exists, the method falls back
-          to the most recent local catalog and logs a warning.
+        - The "latest" catalog is determined by an API call to
+          `list_available_files(self.catalog_file_group_id)`.
+        - If the latest catalog already exists locally and `overwrite=False`, this
+          method returns the local path (no download required).
+        - If the latest catalog cannot be downloaded, this method raises an error (no
+          fallback to older local catalogs).
         """
-        file_path = None
-        latest_local_catalog_path = None
-        existing_files = self.list_downloaded_files()
-        if (not overwrite) and (not existing_files.empty):
-            local_catalogs = existing_files[
-                existing_files["dataset"].astype(str).eq(self.catalog_file_group_id)
-                & existing_files["file-name"]
-                .astype(str)
-                .str.lower()
-                .str.endswith(".parquet")
-            ].copy()
-            if not local_catalogs.empty:
-                todayts = pd.Timestamp.utcnow().strftime("%Y%m%d")
-                today_file = f"JPMAQS_METADATA_CATALOG_{todayts}.parquet"
-                if today_file in set(local_catalogs["file-name"].astype(str).tolist()):
-                    file_path = local_catalogs[
-                        local_catalogs["file-name"].astype(str).eq(today_file)
-                    ]["path"].values[0]
-                    logger.info(f"Catalog file already downloaded (today): {file_path}")
-                    return str(file_path)
 
-                # Keep the latest local catalog as a fallback.
-                if "file-timestamp" in local_catalogs.columns:
-                    local_catalogs = local_catalogs.sort_values(
-                        by=["file-timestamp", "file-name"], ascending=False
-                    )
-                latest_local_catalog_path = local_catalogs.iloc[0]["path"]
+        available_catalogs = self.list_available_files(self.catalog_file_group_id)
+        if available_catalogs.empty:
+            raise DownloadError("No catalog files available for download.")
+
+        latest_catalog = available_catalogs.sort_values(
+            by=["file-datetime", "last-modified", "file-name"], ascending=False
+        ).iloc[0]
+        latest_filename = str(latest_catalog["file-name"])
+        logger.info(f"Latest catalog file identified: {latest_filename}")
+
+        existing_files = self.list_downloaded_files(include_last_modified_columns=False)
+        if (not overwrite) and (not existing_files.empty):
+            local_match = existing_files[
+                existing_files["file-name"].astype(str).eq(latest_filename)
+            ]
+            if not local_match.empty:
+                file_path = str(local_match.iloc[0]["path"])
+                logger.info(f"Catalog file already downloaded (latest): {file_path}")
+                self._refresh_file_selector()
+                return file_path
 
         try:
-            available_catalogs = self.list_available_files(self.catalog_file_group_id)
-            if available_catalogs.empty:
-                raise DownloadError("No catalog files available for download.")
-            latest_catalog = available_catalogs.sort_values(
-                by=["file-datetime", "last-modified"], ascending=False
-            ).iloc[0]
-            latest_filename = latest_catalog["file-name"]
-            logger.info(f"Latest catalog file identified: {latest_filename}")
-
             file_path = self.download_file(
                 filename=latest_filename,
                 overwrite=overwrite,
                 timeout=timeout,
             )
-            return str(file_path)
         except KeyboardInterrupt:
             raise
         except Exception as e:
-            if (not overwrite) and (latest_local_catalog_path is not None):
-                logger.warning(
-                    "Failed to download the latest catalog file; falling back to most recent "
-                    f"local catalog at '{latest_local_catalog_path}'. Error: {e}"
-                )
-                return str(latest_local_catalog_path)
-            raise
+            raise DownloadError(
+                f"Failed to download latest catalog file '{latest_filename}': {e}"
+            ) from e
+
+        self._refresh_file_selector()
+        return str(file_path)
 
     def get_datasets_for_indicators(
         self,
@@ -1658,13 +1658,11 @@ class DataQueryFileAPIClient(RateLimitedRequester):
             ):
                 raise ValueError("`file_group_ids` must be a list of strings.")
 
-        # Always provide the selector with an unfiltered API inventory so it can make
+        # Always refresh the selector with an unfiltered API inventory so it can make
         # consistent vintage decisions from the full history.
         selector = self.file_selector
-        api_files_df = selector.api_files_df
-        if api_files_df is None or api_files_df.empty:
-            api_files_df = self.list_available_files_for_all_file_groups()
-            selector.refresh(api_files_df=api_files_df)
+        api_files_df = self.list_available_files_for_all_file_groups()
+        selector.refresh(api_files_df=api_files_df)
 
         downloaded_files_df = self.list_downloaded_files(
             include_last_modified_columns=False
@@ -1728,6 +1726,8 @@ class DataQueryFileAPIClient(RateLimitedRequester):
             timeout=timeout,
             show_progress=show_progress,
         )
+
+        self._refresh_file_selector()
 
         total_time = time.time() - start_time
         logger.info(f"Snapshot download completed in {total_time:.2f} seconds.")
@@ -2175,10 +2175,10 @@ class DataQueryFileAPIClient(RateLimitedRequester):
             )
         else:
             fs = self.file_selector
-        _most_recent_local_catalog = fs._most_recent_local_catalog(
+        most_recent_local_catalog_path = fs._most_recent_local_catalog(
             to_datetime=to_datetime
         )
-        if skip_download and _most_recent_local_catalog is None:
+        if skip_download and most_recent_local_catalog_path is None:
             raise ValueError(
                 "Cannot skip download when no local catalog file is available. "
                 "Please run this method once with `skip_download=False` to populate the cache."
@@ -2186,21 +2186,14 @@ class DataQueryFileAPIClient(RateLimitedRequester):
 
         catalog_file = None
         if skip_download:
-            catalog_file = _most_recent_local_catalog()
-            if not catalog_file:
-                logger.warning(
-                    "skip_download=True but no local JPMaQS catalog parquet file was found. "
-                    "Run download() once with skip_download=False to populate the cache. "
-                    "Returning an empty DataFrame."
-                )
-                return _empty_for_type(dataframe_type)
+            catalog_file = str(most_recent_local_catalog_path)
         else:
             try:
                 catalog_file = self.download_catalog_file()
             except DownloadError as e:
                 # If the API has no catalog (or catalog download fails), fall back to a
                 # local cache if possible.
-                catalog_file = _most_recent_local_catalog()
+                catalog_file = most_recent_local_catalog_path
                 if catalog_file:
                     logger.warning(
                         "Failed to download the JPMaQS catalog file; falling back to the "
@@ -2403,7 +2396,10 @@ class DataQueryFileAPIClient(RateLimitedRequester):
             to_datetime_str = as_of_ts.strftime("%Y-%m-%dT%H:%M:%SZ")
             max_last_updated_str = to_datetime_str
 
-        oldest_ts = self.file_selector.oldest_api_file_timestamp()
+        selector = self.file_selector
+        if selector.api_files_df.empty:
+            selector.refresh(api_files_df=self.list_available_files_for_all_file_groups())
+        oldest_ts = selector.oldest_api_file_timestamp()
         if oldest_ts is not None:
             to_cutoff = _normalize_file_timestamp_cutoff(to_datetime_str)
             if to_cutoff < oldest_ts:
