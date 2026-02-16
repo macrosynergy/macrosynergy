@@ -9,6 +9,7 @@ from .timelines import timelines
 from .view_panel_dates import view_panel_dates
 from .correlation import view_correlation
 from .ranges import view_ranges
+from .performance import view_performance
 from .table import view_table
 from .multiple_reg_scatter import multiple_reg_scatter
 from .score_visualisers import ScoreVisualisers
@@ -25,6 +26,7 @@ __all__ = [
     "view_metrics",
     "Plotter",
     "view_ranges",
+    "view_performance",
     "view_table",
     "timelines",
     "view_panel_dates",
