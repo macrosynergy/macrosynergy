@@ -13,6 +13,7 @@ from sklearn.model_selection import (
 )
 
 from abc import ABC, abstractmethod
+from numbers import Integral
 
 
 class BasePanelSplit(BaseCrossValidator, ABC):
@@ -348,11 +349,15 @@ class WalkForwardPanelSplit(BasePanelSplit, ABC):
     ----------
     min_cids : int
         Minimum number of cross-sections required for the first training set.
-        Either start_date or (min_cids, min_periods) must be provided.
+        Either start_date or (min_cids, min_periods, min_xcats) must be provided.
         If both are provided, start_date takes precedence.
     min_periods : int
         Minimum number of time periods required for the first training set. Either
-        start_date or (min_cids, min_periods) must be provided. If both are
+        start_date or (min_cids, min_periods, min_xcats) must be provided. If both are
+        provided, start_date takes precedence.
+    min_xcats : int
+        Minimum number of xcats required for the first training set. Either
+        start_date or (min_cids, min_periods, min_xcats) must be provided. If both are
         provided, start_date takes precedence.
     start_date : str, optional
         The targeted final date in the initial training set in ISO 8601 format.
@@ -374,6 +379,7 @@ class WalkForwardPanelSplit(BasePanelSplit, ABC):
         self,
         min_cids,
         min_periods,
+        min_xcats,
         start_date=None,
         max_periods=None,
     ):
@@ -383,42 +389,55 @@ class WalkForwardPanelSplit(BasePanelSplit, ABC):
             min_periods=min_periods,
             start_date=start_date,
             max_periods=max_periods,
+            min_xcats=min_xcats,
         )
 
         # Attributes
         self.min_cids = min_cids
         self.min_periods = min_periods
+        self.min_xcats = min_xcats
         self.start_date = pd.Timestamp(start_date) if start_date else None
         self.max_periods = max_periods
 
-    def _check_wf_params(self, min_cids, min_periods, start_date, max_periods):
+    def _check_wf_params(
+        self, min_cids, min_periods, min_xcats, start_date, max_periods
+    ):
         """
         Type and value checks for the class initialisation parameters.
 
         Parameters
         ----------
-        min_cids : int
+        min_cids : Integral
             Minimum number of cross-sections required for the first training set.
-        min_periods : int
+        min_periods : Integral
             Minimum number of time periods required for the first training set.
+        min_xcats : Integral
+            Minimum number of features required for the first training set.
         start_date : str
             The targeted final date in the initial training set in ISO 8601 format.
-        max_periods : int
+        max_periods : Integral
             The maximum number of time periods in each training set.
         """
         # min_cids
-        if not isinstance(min_cids, int):
+        if not isinstance(min_cids, Integral):
             raise TypeError(f"min_cids must be an integer. Got {type(min_cids)}.")
         if min_cids < 1:
             raise ValueError(
                 f"min_cids must be an integer greater than 0. Got {min_cids}."
             )
         # min_periods
-        if not isinstance(min_periods, int):
+        if not isinstance(min_periods, Integral):
             raise TypeError(f"min_periods must be an integer. Got {type(min_periods)}.")
         if min_periods < 1:
             raise ValueError(
                 f"min_periods must be an integer greater than 0. Got {min_periods}."
+            )
+        # min_xcats
+        if not isinstance(min_xcats, Integral):
+            raise TypeError(f"min_xcats must be an integer. Got {type(min_xcats)}.")
+        if min_xcats < 1:
+            raise ValueError(
+                f"min_xcats must be an integer greater than 0. Got {min_xcats}."
             )
         # start_date
         if start_date is not None and not isinstance(start_date, str):
@@ -431,7 +450,7 @@ class WalkForwardPanelSplit(BasePanelSplit, ABC):
                     f"start_date must be in ISO 8601 format. Got {start_date}."
                 )
         # max_periods
-        if max_periods is not None and not isinstance(max_periods, int):
+        if max_periods is not None and not isinstance(max_periods, Integral):
             raise TypeError(f"max_periods must be an integer. Got {type(max_periods)}.")
         if max_periods is not None and max_periods < 1:
             raise ValueError(

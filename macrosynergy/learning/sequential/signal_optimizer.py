@@ -58,9 +58,11 @@ class SignalOptimizer(BasePanelLearner):
     generate_labels : callable
         Function to transform the response variable into either alternative regression
         targets or classification labels. Default is None.
-    drop_nas : bool
-        Whether to drop rows with NaN values in the dataframe. Default is True.
-        If False, only the rows with NaN values in the dependent variable are dropped.
+    drop_nas : bool, str
+        Strategy for dealing with NaNs in the data. Valid arguments are True, False,
+        "X", or "y". If True, then all NaNs are removed from the data. "X" means
+        only NaNs in independent variables are dropped. "y" means only NaNs in dependent
+        variables are dropped. Default is True.
 
     Notes
     -----
@@ -112,7 +114,7 @@ class SignalOptimizer(BasePanelLearner):
         lag=1,
         xcat_aggs=["last", "sum"],
         generate_labels=None,
-        drop_nas = True
+        drop_nas=True,
     ):
         # Run checks and necessary dataframe massaging
         super().__init__(

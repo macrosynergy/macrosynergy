@@ -27,11 +27,15 @@ class ExpandingIncrementPanelSplit(WalkForwardPanelSplit):
         test set. Default is 21.
     min_cids : int
         The minimum number of cross-sections required for the first training set. Default
-        is 4. Either start_date or (min_cids, min_periods) must be provided. If
+        is 4. Either start_date or (min_cids, min_periods, min_xcats) must be provided. If
         both are provided, start_date takes precedence.
     min_periods : int
         The minimum number of time periods required for the first training set. Default is
-        500. Either start_date or (min_cids, min_periods) must be provided. If
+        500. Either start_date or (min_cids, min_periods, min_xcats) must be provided. If
+        both are provided, start_date takes precedence.
+    min_xcats : int
+        The minimum number of xcats required for the first training set. Default is 1.
+        Either start_date or (min_cids, min_periods, min_xcats) must be provided. If
         both are provided, start_date takes precedence.
     start_date : Optional[str]
         The targeted final date in the initial training set in ISO 8601 format.
@@ -45,14 +49,15 @@ class ExpandingIncrementPanelSplit(WalkForwardPanelSplit):
     Notes
     -----
     The first training set is determined by the specification of either `start_date` or
-    by the parameters `min_cids` and `min_periods`. When `start_date` is provided, the
-    initial training set comprises all available data before and including the `start_date`,
-    unless `max_periods` is specified, in which case at most the last `max_periods` periods
-    prior to the `start_date` are included.
+    by the parameters `min_cids`, `min_periods`, and `min_xcats`. When `start_date` is
+    provided, the initial training set comprises all available data before and including
+    the `start_date`, unless `max_periods` is specified, in which case at most the last
+    `max_periods` periods prior to the `start_date` are included.
 
     If `start_date` is not provided, the first training set is determined by the
-    parameters `min_cids` and `min_periods`. This set comprises at least `min_periods`
-    time periods for at least `min_cids` cross-sections.
+    parameters `min_cids`, `min_periods`, and `min_xcats`. This set comprises at
+    least `min_xcats` categories for at least `min_periods` time periods for at
+    least `min_cids` cross-sections.
     """
 
     def __init__(
@@ -61,6 +66,7 @@ class ExpandingIncrementPanelSplit(WalkForwardPanelSplit):
         test_size=21,
         min_cids=4,
         min_periods=500,
+        min_xcats=1,
         start_date=None,
         max_periods=None,
     ):
@@ -68,6 +74,7 @@ class ExpandingIncrementPanelSplit(WalkForwardPanelSplit):
         super().__init__(
             min_cids=min_cids,
             min_periods=min_periods,
+            min_xcats=min_xcats,
             start_date=start_date,
             max_periods=max_periods,
         )
@@ -113,7 +120,7 @@ class ExpandingIncrementPanelSplit(WalkForwardPanelSplit):
 
         Xy = pd.concat([X, y], axis=1)
         real_dates = Xy.index.get_level_values(1)
-        splits = self._determine_unique_training_times(Xy, real_dates)
+        splits = self._determine_unique_training_times(X, real_dates)
 
         # Determine the training and test indices for each split
         train_splits: list = [
@@ -137,17 +144,16 @@ class ExpandingIncrementPanelSplit(WalkForwardPanelSplit):
 
             yield train_indices, test_indices
 
-    def _determine_unique_training_times(self, Xy, real_dates):
+    def _determine_unique_training_times(self, X, real_dates):
         """
         Returns the unique dates in each training split.
 
         Parameters
         ----------
-        Xy : pd.DataFrame
-            Combined pandas dataframe of features and the target variable, multi-indexed
-            by (cross-section, date).
+        X : pd.DataFrame
+            A pandas dataframe of features, multi-indexed by (cross-section, date).
         real_dates : pd.Index
-            The dates associated with each sample in Xy.
+            The dates associated with each sample in X.
 
         Notes
         -----
@@ -160,13 +166,32 @@ class ExpandingIncrementPanelSplit(WalkForwardPanelSplit):
         if self.start_date:
             date_last_train = self.start_date
         else:
-            init_mask = Xy.groupby(level=1).size().sort_index() >= self.min_cids
-            date_first_min_cids: pd.Timestamp = (
-                init_mask[init_mask == True].reset_index().real_date.min()
+            # Number of features with min_periods of non-NaN data
+            # for each cid/date pair
+            num_xcats_available = (
+                X.notna()
+                .groupby("cid")
+                .cumsum()
+                .ge(self.min_periods)
+                .sum(axis=1)
             )
-            date_last_train: pd.Timestamp = self.unique_dates[
-                self.unique_dates.get_loc(date_first_min_cids) + self.min_periods - 1
-            ]
+
+            # Number of cids with at least min_xcats available
+            cid_count = (
+                num_xcats_available
+                .ge(self.min_xcats)
+                .groupby("real_date")
+                .sum()
+            )
+
+            valid_dates = cid_count[cid_count >= self.min_cids].index
+            date_last_train: pd.Timestamp = valid_dates.min()
+
+            if not isinstance(date_last_train, pd.Timestamp):
+                raise ValueError(
+                    f"No splits that satisfy min_xcats {self.min_xcats}."
+                    f"Try reducing value passed to min_xcats."
+                )
 
         # Determine all remaining training splits
         splits = [self.unique_dates[self.unique_dates <= date_last_train]]
@@ -309,6 +334,10 @@ class ExpandingFrequencyPanelSplit(WalkForwardPanelSplit):
         Minimum number of time periods required for the initial training set. Default is
         500. Either start_date or (min_cids, min_periods, min_xcats) must be provided. If
         both are provided, start_date takes precedence.
+    min_xcats : int
+        Minimum number of xcats required for the initial training set. Default is 1.
+        Either start_date or (min_cids, min_periods, min_xcats) must be provided. If
+        both are provided, start_date takes precedence.
     start_date : Optional[str]
         First rebalancing date in ISO 8601 format. This is the last date of the first
         training set. Default is None. Either start_date or (min_cids, min_periods)
@@ -327,8 +356,8 @@ class ExpandingFrequencyPanelSplit(WalkForwardPanelSplit):
     `max_periods` periods prior to the `start_date` are included.
 
     If `start_date` is not provided, the first training set is determined by the parameters
-    `min_cids` and `min_periods`. This set comprises at least `min_periods`
-    time periods for at least `min_cids` cross-sections.
+    `min_cids`, `min_periods`, and `min_xcats`. This set comprises at least `min_xcats`
+    categories for at least `min_periods` time periods for at least `min_cids` cross-sections.
 
     This initial training set is immediately adjusted depending on the specified training
     interval frequency. For instance, if the training frequency is "M", the initial
@@ -351,6 +380,7 @@ class ExpandingFrequencyPanelSplit(WalkForwardPanelSplit):
         test_freq="D",
         min_cids=4,
         min_periods=500,
+        min_xcats=1,
         start_date=None,
         max_periods=None,
     ):
@@ -360,6 +390,7 @@ class ExpandingFrequencyPanelSplit(WalkForwardPanelSplit):
             min_periods=min_periods,
             start_date=start_date,
             max_periods=max_periods,
+            min_xcats=min_xcats,
         )
         self._check_init_params(
             expansion_freq=expansion_freq,
@@ -412,7 +443,7 @@ class ExpandingFrequencyPanelSplit(WalkForwardPanelSplit):
 
         Xy = pd.concat([X, y], axis=1)
         real_dates = Xy.index.get_level_values(1)
-        splits = self._determine_unique_training_times(Xy, real_dates)
+        splits = self._determine_unique_training_times(X, real_dates)
 
         train_splits: list = [
             splits[0] if not self.max_periods else splits[0][-self.max_periods :]
@@ -483,13 +514,32 @@ class ExpandingFrequencyPanelSplit(WalkForwardPanelSplit):
         if self.start_date:
             date_last_train = self.start_date
         else:
-            init_mask = Xy.groupby(level=1).size().sort_index() >= self.min_cids
-            date_first_min_cids: pd.Timestamp = (
-                init_mask[init_mask == True].reset_index().real_date.min()
+            # Number of features with min_periods of non-NaN data
+            # for each cid/date pair
+            num_xcats_available = (
+                Xy.notna()
+                .groupby("cid")
+                .cumsum()
+                .ge(self.min_periods)
+                .sum(axis=1)
             )
-            date_last_train: pd.Timestamp = self.unique_dates[
-                self.unique_dates.get_loc(date_first_min_cids) + self.min_periods - 1
-            ]
+
+            # Number of cids with at least min_xcats available
+            cid_count = (
+                num_xcats_available
+                .ge(self.min_xcats)
+                .groupby("real_date")
+                .sum()
+            )
+
+            valid_dates = cid_count[cid_count >= self.min_cids].index
+            date_last_train: pd.Timestamp = valid_dates.min()
+
+            if not isinstance(date_last_train, pd.Timestamp):
+                raise ValueError(
+                    f"No splits that satisfy min_xcats {self.min_xcats}."
+                    f"Try reducing value passed to min_xcats."
+                )
 
         # Determine all remaining training splits
         # To do this, loop through unique panel dates to create the training and test sets
