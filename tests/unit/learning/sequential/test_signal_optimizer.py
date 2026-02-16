@@ -170,14 +170,14 @@ class TestAll(unittest.TestCase):
         )
         self.so_with_calculated_preds = so
 
-        self.X, self.y, self.df_long = _get_X_y(so, drop_nas= True)
+        self.X, self.y, self.df_long = _get_X_y(so, drop_nas=True)
 
         # Create SignalOptimizer instances without NA drops
         self.so_no_na = SignalOptimizer(
             df = self.df,
             xcats = self.xcats,
             cids = self.cids,
-            drop_nas= False,
+            drop_nas="y", # drop NaNs in the response only
         )
 
         self.so_no_na.calculate_predictions(
@@ -228,7 +228,10 @@ class TestAll(unittest.TestCase):
 
     @parameterized.expand(
         itertools.product(
-            [True, False], [True, False], [None, lambda x: -1 if x < 0 else 1], [True, False]
+            [True, False],
+            [True, False],
+            [None, lambda x: -1 if x < 0 else 1],
+            [True, "y"]
         )
     )
     def test_valid_init(self, use_blacklist, use_cids, generate_labels, drop_nas):
@@ -478,12 +481,20 @@ class TestAll(unittest.TestCase):
                 xcats=self.xcats,
                 generate_labels="invalid",
             )
-        # drop_nas should be a boolean
+        # drop_nas should be a bool or string
         with self.assertRaises(TypeError):
             so = SignalOptimizer(
                 df=self.df,
                 xcats=self.xcats,
-                drop_nas="sdf",
+                drop_nas=[],
+            )
+
+        # if a string, drop_nas should be "X" or "y"
+        with self.assertRaises(ValueError):
+            so = SignalOptimizer(
+                df=self.df,
+                xcats=self.xcats,
+                drop_nas="Z",
             )
 
         # n_targets should be a positive integer
@@ -1905,8 +1916,8 @@ class TestAll(unittest.TestCase):
         self.assertTrue(df8.real_date.max() == last_date)
         self.assertTrue(len(df8.value.value_counts()) == 2)
 
-    @parameterized.expand([True, False])
-    def test_optional_hparam_validity(self, drop_nas: bool):
+    @parameterized.expand([True, "y"])
+    def test_optional_hparam_validity(self, drop_nas: bool | str):
         """
         I test that the pipelines run as expected when no hyperparameters are 
         entered. 
@@ -1917,7 +1928,7 @@ class TestAll(unittest.TestCase):
             cids=self.cids,
             drop_nas=drop_nas,
         )
-        if drop_nas:
+        if drop_nas == True:
             so.calculate_predictions(
                 name="test",
                 models={"LR": LinearRegression()},
@@ -1973,13 +1984,13 @@ class TestAll(unittest.TestCase):
         self.assertTrue(all(dfa.hparams=={}))
         self.assertTrue(all(dfa.n_splits_used==0))
 
-    @parameterized.expand([True, False])
-    def test_types_run(self, drop_nas: bool):
+    @parameterized.expand([True, "y"])
+    def test_types_run(self, drop_nas: bool | str):
         # Training set only
         so = SignalOptimizer(
             df=self.df,
             xcats=self.xcats,
-            drop_nas=drop_nas
+            drop_nas=drop_nas,
         )
         outer_splitter = ExpandingIncrementPanelSplit()
 
@@ -2048,7 +2059,7 @@ class TestAll(unittest.TestCase):
             ):
                 so._check_run(**invalid_case)
 
-    @parameterized.expand([["grid", None, True], ["prior", 1, False]])
+    @parameterized.expand([["grid", None, True], ["prior", 1, "X"]])
     def test_valid_worker(self, search_type, n_iter, drop_nas):
         search_type = "grid"
         n_iter = None
@@ -2465,7 +2476,7 @@ class TestAll(unittest.TestCase):
         so = SignalOptimizer(
             df=self.df,
             xcats=self.xcats,
-            drop_nas = False,
+            drop_nas="y",
         )
         with self.assertRaises(ValueError):
             so.get_optimized_signals(name="test2")
@@ -3318,8 +3329,8 @@ class TestAll(unittest.TestCase):
         correct_labels = sorted(list(set(correct_labels)))
         self.assertTrue(np.all(labels == correct_labels))
 
-    @parameterized.expand([True, False])
-    def test_invalid_plots(self, drop_nas: bool):
+    @parameterized.expand([True, "y"])
+    def test_invalid_plots(self, drop_nas: bool | str):
         so = SignalOptimizer(
             df=self.df,
             xcats=self.xcats,
@@ -3510,7 +3521,7 @@ class TestAll(unittest.TestCase):
             self.fail(f"feature_selection_heatmap raised an exception: {e}")
 
 
-def _get_X_y(so: SignalOptimizer, drop_nas: bool):
+def _get_X_y(so: SignalOptimizer, drop_nas: bool | str):
     df_long = categories_df(
             df=so.df,
             xcats=so.xcats,
@@ -3522,13 +3533,20 @@ def _get_X_y(so: SignalOptimizer, drop_nas: bool):
             lag=so.lag,
             xcat_aggs=so.xcat_aggs,
         )
-    if drop_nas:
-        df_long = df_long.dropna()
-    else:
-        df_long = df_long.dropna(subset=so.xcats[:-1], how="all")
-        df_long = df_long.dropna(subset=[so.xcats[-1]])
 
-    df_long = df_long.sort_index()
+    df_long = df_long.dropna(subset=so.xcats[:-so.n_targets], how="all")
+
+    # Handle remaining NaNs with specified strategy
+    if drop_nas == "X":
+        subset = so.xcats[:-so.n_targets]
+    elif drop_nas == "y":
+        subset = so.xcats[-so.n_targets:]
+    elif drop_nas == True:
+        subset = df_long.columns
+    else:
+        subset = []
+
+    df_long = df_long.dropna(subset=subset).sort_index()
 
     df_long.index.names = ["cid", "real_date"]
     new_outer_level = df_long.index.levels[0].astype("object")
