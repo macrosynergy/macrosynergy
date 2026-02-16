@@ -2385,8 +2385,6 @@ class DataQueryFileAPIClient(RateLimitedRequester):
                     "`as_of_datetime` is in the future (UTC). "
                     f"Requested: {as_of_day.date()}, today (UTC): {today_utc.date()}."
                 )
-            # Date-only: interpret as the full day (end-of-day) for the row-level cutoff,
-            # but use the date itself as the file-vintage cutoff.
             to_datetime_str = as_of_day.strftime("%Y%m%d")
             max_last_updated_str = (
                 as_of_day + pd.DateOffset(days=1) - pd.Timedelta(seconds=1)
@@ -2398,7 +2396,6 @@ class DataQueryFileAPIClient(RateLimitedRequester):
                     f"Requested: {as_of_ts.strftime('%Y-%m-%dT%H:%M:%SZ')}, "
                     f"now (UTC): {now_ts.strftime('%Y-%m-%dT%H:%M:%SZ')}."
                 )
-            # Datetime: treat as a precise vintage.
             to_datetime_str = as_of_ts.strftime("%Y-%m-%dT%H:%M:%SZ")
             max_last_updated_str = to_datetime_str
 
@@ -2412,7 +2409,6 @@ class DataQueryFileAPIClient(RateLimitedRequester):
                     f"({oldest_ts.strftime('%Y-%m-%dT%H:%M:%SZ')})."
                 )
 
-        # Main driver remains `self.download()`; keep logic out of this wrapper.
         return self.download(
             tickers=tickers,
             cids=cids,
@@ -2594,14 +2590,21 @@ if __name__ == "__main__":
     #     )
     #     print(df.head())
 
-    # with DataQueryFileAPIClient(out_dir="./data/jpmaqs-data/") as dq:
-    #     df = dq.download_as_of(tickers=tickers, as_of_datetime="2025-11-12")
-
     with DataQueryFileAPIClient(out_dir="./data/jpmaqs-data/") as dq:
-        df = dq.download_as_of(tickers=tickers, as_of_datetime="2025-10-08T12:16:14Z")
-        assert df["real_date"].max() <= pd.Timestamp("2025-11-12")
-        assert df["last_updated"].max() <= pd.Timestamp("2025-10-08T12:16:14")
-        print(df.head())
+        dq.download_delta_files(since_datetime="20220101")
+
+        # with DataQueryFileAPIClient(out_dir="./data/jpmaqs-data/") as dq:
+        df = dq.download_as_of(
+            tickers=tickers,
+            as_of_datetime="2026-01-13",
+            include_file_column=True,
+        )
+        df
+    # with DataQueryFileAPIClient(out_dir="./data/jpmaqs-data/") as dq:
+    #     df = dq.download_as_of(tickers=tickers, as_of_datetime="2025-10-08T12:16:14Z")
+    #     assert df["real_date"].max() <= pd.Timestamp("2025-11-12")
+    #     assert df["last_updated"].max() <= pd.Timestamp("2025-10-08T12:16:14")
+    #     print(df.head())
 
     # with DataQueryFileAPIClient(out_dir="./data/jpmaqs-data/") as dq:
     #     pl_df: pl.DataFrame = dq.download(
