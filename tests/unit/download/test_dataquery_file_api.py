@@ -10,6 +10,7 @@ from macrosynergy.download.dataquery_file_api import (
     validate_dq_timestamp,
     get_client_id_secret,
     DataQueryFileAPIClient,
+    JPMAQS_DATASET_THEME_MAPPING,
     DownloadError,
     InvalidResponseError,
     DQ_FILE_API_SCOPE,
@@ -657,7 +658,8 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
         # reset mocks
         mock_download.reset_mock()
         mock_read_parquet.reset_mock()
-        mock_df = pd.DataFrame({"Theme": ["Test Theme"]})
+        theme, expected_dataset = next(iter(JPMAQS_DATASET_THEME_MAPPING.items()))
+        mock_df = pd.DataFrame({"Theme": [theme, "Some unknown theme"]})
         mock_df.to_parquet = MagicMock()
         mock_df.to_csv = MagicMock()
         mock_read_parquet.return_value = mock_df
@@ -667,7 +669,8 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
         # add_dataset_column without as_csv
         client.download_catalog_file(add_dataset_column=True)
         mock_read_parquet.assert_called_once_with(fake_path_str)
-        self.assertEqual(mock_df["Dataset"].iloc[0], "JPMAQS_TEST_THEME")
+        self.assertEqual(mock_df["Dataset"].iloc[0], expected_dataset)
+        self.assertEqual(mock_df["Dataset"].iloc[1], "Unknown")
         mock_df.to_parquet.assert_called_once_with(fake_path_str, index=False)
         mock_df.to_csv.assert_not_called()
 
