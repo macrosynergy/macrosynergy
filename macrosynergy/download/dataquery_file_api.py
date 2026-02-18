@@ -190,6 +190,16 @@ DQ_FILE_API_DELAY_MARGIN: float = 1.1  # 10% safety margin
 DQ_FILE_API_SEGMENT_SIZE_MB: float = 8.0  # 8 MB
 DQ_FILE_API_STREAM_CHUNK_SIZE: int = 8192  # 8 KB
 
+JPMAQS_DATASET_THEME_MAPPING = {
+    "Economic surprises": "JPMAQS_ECONOMIC_SURPRISES",
+    "Financial conditions": "JPMAQS_FINANCIAL_CONDITIONS",
+    "Generic returns": "JPMAQS_GENERIC_RETURNS",
+    "Macroeconomic balance sheets": "JPMAQS_MACROECONOMIC_BALANCE_SHEETS",
+    "Macroeconomic trends": "JPMAQS_MACROECONOMIC_TRENDS",
+    "Shocks and risk measures": "JPMAQS_SHOCKS_RISK_MEASURES",
+    "Stylized trading factors": "JPMAQS_STYLIZED_TRADING_FACTORS",
+}
+
 
 JPMAQS_EARLIEST_FILE_DATE = "20220101"
 
@@ -1032,8 +1042,8 @@ class DataQueryFileAPIClient:
         df = pd.read_parquet(file_path)
 
         if add_dataset_column:
-            df.loc[:, "Dataset"] = df["Theme"].apply(
-                lambda x: "JPMAQS_" + str(x).upper().replace(" ", "_")
+            df.loc[:, "Dataset"] = (
+                df["Theme"].map(JPMAQS_DATASET_THEME_MAPPING).fillna("Unknown")
             )
 
         if as_csv:
