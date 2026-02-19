@@ -71,8 +71,8 @@ def view_performance(
         If None, all available metrics are shown. Default is None.
     sort_by : str, optional
         Metric name to sort the items by (e.g., "Sharpe Ratio", "Return %").
-        Items will be sorted in descending order by this metric. If None, items
-        are displayed in their original order. Default is None.
+        Items will be sorted in descending order by this metric. If None, defaults
+        to sorting by the first displayed metric. Default is None.
     title : str, optional
         Chart title. If None, a default title is generated.
     title_fontsize : int
@@ -235,18 +235,21 @@ def view_performance(
         # Filter to requested metrics
         metrics_df = metrics_df.loc[metrics, :]
 
-    # Sort by specified metric if provided
-    if sort_by is not None:
-        available_metrics = metrics_df.index.tolist()
-        if sort_by not in available_metrics:
-            raise ValueError(
-                f"Sort metric '{sort_by}' not found. "
-                f"Available metrics: {available_metrics}"
-            )
-        # Sort columns by the specified metric in descending order
-        sort_values = metrics_df.loc[sort_by, :]
-        sorted_columns = sort_values.sort_values(ascending=False).index
-        metrics_df = metrics_df[sorted_columns]
+    # Sort by specified metric (defaults to first metric if not specified)
+    if sort_by is None:
+        # Default to sorting by the first metric
+        sort_by = metrics_df.index[0]
+
+    available_metrics = metrics_df.index.tolist()
+    if sort_by not in available_metrics:
+        raise ValueError(
+            f"Sort metric '{sort_by}' not found. "
+            f"Available metrics: {available_metrics}"
+        )
+    # Sort columns by the specified metric in descending order
+    sort_values = metrics_df.loc[sort_by, :]
+    sorted_columns = sort_values.sort_values(ascending=False).index
+    metrics_df = metrics_df[sorted_columns]
 
     # Apply custom labels if provided
     if labels is not None:
