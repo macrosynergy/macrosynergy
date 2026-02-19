@@ -79,10 +79,14 @@ def _weighted_covariance(
 
     assert x.shape[0] == weightslen
     w: np.ndarray = weights_func(lback_periods=weightslen, half_life=half_life)
-    x_wsum, y_wsum = (w * x).sum(), (w * y).sum()
-    rss = (x - x_wsum) * (y - y_wsum)
 
-    return w.T.dot(rss)
+    err_str = f"weights produced by {weights_func.__name__} do not sum to 1"
+    assert np.isclose(w.sum(), 1), err_str
+
+    x_wsum, y_wsum = (w * x).sum(), (w * y).sum()
+    result = (x - x_wsum) * (y - y_wsum)
+
+    return w.T.dot(result)
 
 
 def estimate_variance_covariance(
