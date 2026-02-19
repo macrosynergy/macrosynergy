@@ -195,7 +195,7 @@ def _gen_contract_signals(
     return df_wide
 
 
-def _apply_hedge_ratios(
+def _basket_contract_signals(
     df_wide: pd.DataFrame,
     cids: List[str],
     sig: str,
@@ -333,7 +333,7 @@ def contract_signals(
         constituents of a hedge basket, if one is used.
     basket_weights : List[Union[Number, str]]
         list of weights of the hedge basket constituents. These can be either a list of
-        floats or a list of category tickers that serve as the basis of the weights. 
+        floats or a list of category tickers that serve as the basis of the weights.
         The former are fixed across time, the latter are variable. This must have the
         same length as `basket_contracts`.
     hedge_xcat : str
@@ -461,7 +461,7 @@ def contract_signals(
     ## Generate hedge contract signals
     df_hedge_signals: Optional[pd.DataFrame] = None
     if basket_contracts is not None:
-        df_hedge_signals: pd.DataFrame = _apply_hedge_ratios(
+        df_hedge_signals: pd.DataFrame = _basket_contract_signals(
             df_wide=df_wide,
             cids=cids,
             sig=sig,

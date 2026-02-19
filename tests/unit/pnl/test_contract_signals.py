@@ -9,7 +9,7 @@ from macrosynergy.pnl.contract_signals import (
     contract_signals,
     _gen_contract_signals,
     _add_hedged_signals,
-    _apply_hedge_ratios,
+    _basket_contract_signals,
     _check_scaling_args,
 )
 from macrosynergy.management.types import QuantamentalDataFrame
@@ -98,7 +98,7 @@ class TestContractSignals(unittest.TestCase):
         )
         self.assertTrue(list_of_cols_with_values == ["FX_CSIG"])
 
-    def test_apply_hedge_ratios(self):
+    def test_basket_contract_signals(self):
         test_df = qdf_to_ticker_df(self._testDF())
         good_args = dict(
             df_wide=test_df,
@@ -109,27 +109,27 @@ class TestContractSignals(unittest.TestCase):
             hedge_xcat=self.hedge_xcat,
         )
 
-        wide_df = _apply_hedge_ratios(**good_args)
+        wide_df = _basket_contract_signals(**good_args)
 
         # should all be 0 when basket_weights are 0
         bad_args = good_args.copy()
         bad_args["df_wide"].loc[:, :] = 1
         bad_args["basket_weights"] = [0, 0]
-        wide_df = _apply_hedge_ratios(**bad_args)
+        wide_df = _basket_contract_signals(**bad_args)
         self.assertTrue(np.allclose(wide_df.values, 0))
 
         # should be len(cids) * 1 (5) (adding 1 for each)
         bad_args = good_args.copy()
         bad_args["df_wide"].loc[:, :] = 1
         bad_args["basket_weights"] = [1, 1]
-        wide_df = _apply_hedge_ratios(**bad_args)
+        wide_df = _basket_contract_signals(**bad_args)
         self.assertTrue(np.all(wide_df.values == -len(self.cids)))
 
         bad_args = good_args.copy()
         bad_args["df_wide"].loc[:, :] = 1
         bad_args["basket_weights"] = [-1, 0]
         # bad_args["basket_contracts"] = ["USD_EQ", "EUR_EQ"]
-        wide_df = _apply_hedge_ratios(**bad_args)
+        wide_df = _basket_contract_signals(**bad_args)
         # nz_tickers -- columns with any non-zero values
         nz_tickers = list(
             (wide_df.columns[wide_df.apply(lambda x: x != 0).any()].unique())
@@ -138,7 +138,7 @@ class TestContractSignals(unittest.TestCase):
         self.assertTrue(nz_tickers[0] == "USD_EQ_CSIG")
         self.assertTrue(np.all(wide_df["USD_EQ_CSIG"].values == 5))
 
-    def test_apply_hedge_ratios_with_timeseries_scales(self):
+    def test_basket_contract_signals_with_timeseries_scales(self):
         test_df = self._testDF()
         test_df = qdf_to_ticker_df(test_df)
         test_df.loc[:, :] = 1.0
@@ -154,7 +154,7 @@ class TestContractSignals(unittest.TestCase):
         test_df.loc[test_df.index[1], "AUD_SIG"] = np.nan
         test_df.loc[test_df.index[2], "CAD_HR"] = np.nan
 
-        wide_df = _apply_hedge_ratios(
+        wide_df = _basket_contract_signals(
             df_wide=test_df,
             sig=self.sig,
             cids=self.cids,
