@@ -815,7 +815,7 @@ def _check_args(
         raise TypeError("`rebal_freq` must be a string.")
 
 
-    rebal_freq = _map_to_business_day_frequency(rebal_freq, valid_freqs=["D", "W", "M", "Q"])
+    _map_to_business_day_frequency(rebal_freq, valid_freqs=["D", "W", "M", "Q"])
 
     return (
         df,
