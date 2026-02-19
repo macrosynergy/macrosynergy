@@ -230,19 +230,17 @@ def _basket_contract_signals(
             cid_sig: str = _cid + "_" + sig
             cid_hr: str = _cid + "_" + hedge_xcat
 
-            hb_hratio: Union[Number, pd.Series]
+            weights: Union[Number, pd.Series]
             # If the scale is a string, it must be a category ticker
             # Otherwise it is a fixed numeric value
             if isinstance(basket_weights[hb_ix], str):
-                hb_hratio: pd.Series = df_wide[_cid + "_" + basket_weights[hb_ix]]
+                weights: pd.Series = df_wide[_cid + "_" + basket_weights[hb_ix]]
             else:
-                hb_hratio: Number = basket_weights[hb_ix]
-
-            # Flip the sign of the hedge ratio (to preserve hedge direction)
-            hb_hratio: Union[Number, pd.Series] = -1 * hb_hratio
+                weights: Number = basket_weights[hb_ix]
 
             # Add the basket position to the exisitng basket_pos column in the df
-            _posx: pd.Series = df_wide[cid_sig] * df_wide[cid_hr] * hb_hratio
+            # Also flip the sign of the hedge ratio (to preserve hedge direction)
+            _posx: pd.Series = df_wide[cid_sig] * df_wide[cid_hr] * weights * (-1)
             # set nans to zero, to avoid nans in the final result
             _posx = _posx.fillna(0.0)
             df_wide[basket_pos] += _posx
