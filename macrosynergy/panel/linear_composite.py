@@ -9,6 +9,7 @@ import warnings
 from packaging import version
 from macrosynergy.management.utils import reduce_df, is_valid_iso_date
 from macrosynergy.management.simulate import make_test_df
+from macrosynergy.management.utils.core import _map_to_business_day_frequency
 from macrosynergy.management.utils.df_utils import get_sops
 from macrosynergy.management.types import QuantamentalDataFrame
 
