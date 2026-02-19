@@ -813,13 +813,8 @@ def _check_args(
     if not isinstance(rebal_freq, str):
         raise TypeError("`rebal_freq` must be a string.")
 
-    try:
-        from macrosynergy.management.utils.core import _map_to_business_day_frequency
-        _map_to_business_day_frequency(rebal_freq, valid_freqs=["D", "W", "M", "Q"])
-    except (ValueError, Exception) as e:
-        raise ValueError(
-            f"`rebal_freq` must be one of 'D', 'W', 'M', 'Q'. Received '{rebal_freq}'."
-        ) from e
+
+    rebal_freq = _map_to_business_day_frequency(rebal_freq, valid_freqs=["D", "W", "M", "Q"])
 
     return (
         df,
