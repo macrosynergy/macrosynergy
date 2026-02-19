@@ -108,7 +108,7 @@ class ProxyPnL(object):
         ctypes: List[str],
         cscales: Optional[List[Union[Number, str]]] = None,
         csigns: Optional[List[int]] = None,
-        hbasket: Optional[List[str]] = None,
+        basket_contracts: Optional[List[str]] = None,
         hscales: Optional[List[Union[Number, str]]] = None,
         hedge_xcat: Optional[str] = None,
         blacklist: Optional[dict] = None,
@@ -136,7 +136,7 @@ class ProxyPnL(object):
             ctypes=ctypes,
             cscales=cscales,
             csigns=csigns,
-            hbasket=hbasket,
+            basket_contracts=basket_contracts,
             hscales=hscales,
             hedge_xcat=hedge_xcat,
             start=self.start,
@@ -362,7 +362,7 @@ if __name__ == "__main__":
         ctypes=["FX"],
         cscales=["FXXRxLEV10_NSA"],
         relative_value=False,
-        hbasket=["EUR_FX"],  # TODO invert asset class or returns?
+        basket_contracts=["EUR_FX"],  # TODO invert asset class or returns?
         hscales=["FXXRxLEV10_NSA"],
         hedge_xcat="FXEURBETA",
     )

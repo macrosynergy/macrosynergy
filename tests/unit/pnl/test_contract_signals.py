@@ -34,7 +34,7 @@ class TestContractSignals(unittest.TestCase):
         self.ctypes: List[str] = ["FX", "IRS", "CDS"]
         self.cscales: List[Number] = [1.0, 0.5, 0.1]
         self.csigns: List[int] = [1, -1, 1]
-        self.hbasket: List[str] = ["USD_EQ", "EUR_EQ"]
+        self.basket_contracts: List[str] = ["USD_EQ", "EUR_EQ"]
         self.hscales: List[Number] = [0.7, 0.3]
         self.sig = "SIG"
         self.hedge_xcat = "HR"
@@ -104,7 +104,7 @@ class TestContractSignals(unittest.TestCase):
             df_wide=test_df,
             sig=self.sig,
             cids=self.cids,
-            hbasket=self.hbasket,
+            basket_contracts=self.basket_contracts,
             hscales=self.hscales,
             hedge_xcat=self.hedge_xcat,
         )
@@ -128,7 +128,7 @@ class TestContractSignals(unittest.TestCase):
         bad_args = good_args.copy()
         bad_args["df_wide"].loc[:, :] = 1
         bad_args["hscales"] = [-1, 0]
-        # bad_args["hbasket"] = ["USD_EQ", "EUR_EQ"]
+        # bad_args["basket_contracts"] = ["USD_EQ", "EUR_EQ"]
         wide_df = _apply_hedge_ratios(**bad_args)
         # nz_tickers -- columns with any non-zero values
         nz_tickers = list(
@@ -158,14 +158,14 @@ class TestContractSignals(unittest.TestCase):
             df_wide=test_df,
             sig=self.sig,
             cids=self.cids,
-            hbasket=self.hbasket,
+            basket_contracts=self.basket_contracts,
             hscales=["HW1", "HW2"],
             hedge_xcat=self.hedge_xcat,
         )
 
         self.assertTrue(set(wide_df.columns) == {"USD_EQ_CSIG", "EUR_EQ_CSIG"})
 
-        for hb, hscale in zip(self.hbasket, ["HW1", "HW2"]):
+        for hb, hscale in zip(self.basket_contracts, ["HW1", "HW2"]):
             basket_pos = f"{hb}_CSIG"
             expected = pd.Series(0.0, index=test_df.index)
             for cid in self.cids:
@@ -190,8 +190,10 @@ class TestContractSignals(unittest.TestCase):
         dfcs.loc[:, :] = 1
         dfhr = qdf_to_ticker_df(
             make_test_df(
-                cids=get_cid(self.hbasket),
-                xcats=[f"{xc}_CSIG" for xc in list(set(get_xcat(self.hbasket)))],
+                cids=get_cid(self.basket_contracts),
+                xcats=[
+                    f"{xc}_CSIG" for xc in list(set(get_xcat(self.basket_contracts)))
+                ],
                 start=self.start,
                 end=self.end,
             )
@@ -207,7 +209,7 @@ class TestContractSignals(unittest.TestCase):
             ctypes=self.ctypes,
             cscales=self.cscales,
             csigns=self.csigns,
-            hbasket=self.hbasket,
+            basket_contracts=self.basket_contracts,
             hscales=self.hscales,
             hedge_xcat=self.hedge_xcat,
         ).copy()
@@ -217,14 +219,14 @@ class TestContractSignals(unittest.TestCase):
         # should raise error when the following pairs are not the same length
         # - cscales, csigns
         # - cscales, csigns
-        # - hscales, hbasket
-        for argx in ["cscales", "csigns", "hscales", "hbasket"]:
+        # - hscales, basket_contracts
+        for argx in ["cscales", "csigns", "hscales", "basket_contracts"]:
             bad_args = good_args.copy()
             bad_args[argx] = bad_args[argx][:-1]
             with self.assertRaises(ValueError):
                 _check_scaling_args(**bad_args)
 
-            if argx != "hbasket":
+            if argx != "basket_contracts":
                 bad_args[argx] = [(None, None) for _ in range(len(good_args[argx]))]
                 with self.assertRaises(TypeError):
                     _check_scaling_args(**bad_args)
@@ -252,7 +254,7 @@ class TestContractSignals(unittest.TestCase):
             ctypes=self.ctypes,
             cscales=self.cscales,
             csigns=self.csigns,
-            hbasket=self.hbasket,
+            basket_contracts=self.basket_contracts,
             hscales=self.hscales,
             hedge_xcat=self.hedge_xcat,
             sname=self.sname,

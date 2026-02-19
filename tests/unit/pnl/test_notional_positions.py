@@ -280,7 +280,7 @@ class TestNotionalPositions(unittest.TestCase):
         cscales = [1.0, 0.5, 0.1]
         csigns = [1, -1, 1]
 
-        hbasket = ["USD_EQ", "EUR_EQ"]
+        basket_contracts = ["USD_EQ", "EUR_EQ"]
         hscales = [0.7, 0.3]
 
         df_cs: pd.DataFrame = contract_signals(
@@ -290,7 +290,7 @@ class TestNotionalPositions(unittest.TestCase):
             ctypes=ctypes,
             cscales=cscales,
             csigns=csigns,
-            hbasket=hbasket,
+            basket_contracts=basket_contracts,
             hscales=hscales,
             hedge_xcat="HR",
         )
