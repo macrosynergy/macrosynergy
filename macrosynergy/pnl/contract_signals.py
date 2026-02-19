@@ -26,7 +26,7 @@ def _check_scaling_args(
     cscales: Optional[List[Union[Number, str]]] = None,
     csigns: Optional[List[int]] = None,
     basket_contracts: Optional[List[str]] = None,
-    hscales: Optional[List[Union[Number, str]]] = None,
+    basket_weights: Optional[List[Union[Number, str]]] = None,
     hedge_xcat: Optional[str] = None,
 ) -> Tuple[Any, Any, Any, Any, Any]:
     ## Check cscales and csigns
@@ -54,24 +54,24 @@ def _check_scaling_args(
     else:
         csigns: List[int] = [1] * len(ctypes)
 
-    ## Check basket_contracts and hscales
+    ## Check basket_contracts and basket_weights
     if basket_contracts is not None:
-        if not (bool(hedge_xcat) and bool(hscales)):
+        if not (bool(hedge_xcat) and bool(basket_weights)):
             raise ValueError(
-                "`hedge_xcat` and `hscales` must be provided if `basket_contracts` is provided"
+                "`hedge_xcat` and `basket_weights` must be provided if `basket_contracts` is provided"
             )
         else:
             # check that the number of scales is the same as the number of basket_contracts
-            if len(hscales) != len(basket_contracts):
+            if len(basket_weights) != len(basket_contracts):
                 raise ValueError(
-                    "`hscales` must be of the same length as `basket_contracts`"
+                    "`basket_weights` must be of the same length as `basket_contracts`"
                 )
-            if not all([isinstance(x, (str, Number)) for x in hscales]):
+            if not all([isinstance(x, (str, Number)) for x in basket_weights]):
                 raise TypeError(
-                    "`hscales` must be a List of strings or numerical values"
+                    "`basket_weights` must be a List of strings or numerical values"
                 )
 
-    return cscales, csigns, basket_contracts, hscales, hedge_xcat
+    return cscales, csigns, basket_contracts, basket_weights, hedge_xcat
 
 
 def _check_estimation_frequency(df_wide: pd.DataFrame, rebal_freq: str) -> pd.DataFrame:
@@ -200,7 +200,7 @@ def _apply_hedge_ratios(
     cids: List[str],
     sig: str,
     basket_contracts: List[str],
-    hscales: List[Union[Number, str]],
+    basket_weights: List[Union[Number, str]],
     hedge_xcat: str,
 ) -> pd.DataFrame:
     # check if the CID_SIG is in the dataframe
@@ -233,10 +233,10 @@ def _apply_hedge_ratios(
             hb_hratio: Union[Number, pd.Series]
             # If the scale is a string, it must be a category ticker
             # Otherwise it is a fixed numeric value
-            if isinstance(hscales[hb_ix], str):
-                hb_hratio: pd.Series = df_wide[_cid + "_" + hscales[hb_ix]]
+            if isinstance(basket_weights[hb_ix], str):
+                hb_hratio: pd.Series = df_wide[_cid + "_" + basket_weights[hb_ix]]
             else:
-                hb_hratio: Number = hscales[hb_ix]
+                hb_hratio: Number = basket_weights[hb_ix]
 
             # Flip the sign of the hedge ratio (to preserve hedge direction)
             hb_hratio: Union[Number, pd.Series] = -1 * hb_hratio
@@ -280,7 +280,7 @@ def contract_signals(
     cscales: Optional[List[Union[Number, str]]] = None,
     csigns: Optional[List[int]] = None,
     basket_contracts: Optional[List[str]] = None,
-    hscales: Optional[List[Union[Number, str]]] = None,
+    basket_weights: Optional[List[Union[Number, str]]] = None,
     hedge_xcat: Optional[str] = None,
     relative_value: bool = False,
     start: Optional[str] = None,
@@ -331,10 +331,11 @@ def contract_signals(
     basket_contracts : List[str]
         list of contract identifiers in the format "<cid>_<ctype>" that serve as
         constituents of a hedge basket, if one is used.
-    hscales : List[str|float]
-        list of scaling factors (weights) for the basket. These can be either a list of
-        floats or a list of category tickers that serve as basis of translation. The former
-        are fixed across time, the latter variable.
+    basket_weights : List[Union[Number, str]]
+        list of weights of the hedge basket constituents. These can be either a list of
+        floats or a list of category tickers that serve as the basis of the weights. 
+        The former are fixed across time, the latter are variable. This must have the
+        same length as `basket_contracts`.
     hedge_xcat : str
         category name for cross-section-specific hedge ratios. A hedge ratio is defined as
         the sensitivity of the cross-section specific position return to the hedge basket
@@ -370,7 +371,7 @@ def contract_signals(
         (cscales, "cscales", (list, NoneType)),
         (csigns, "csigns", (list, NoneType)),
         (basket_contracts, "basket_contracts", (list, NoneType)),
-        (hscales, "hscales", (list, NoneType)),
+        (basket_weights, "basket_weights", (list, NoneType)),
         (hedge_xcat, "hedge_xcat", (str, NoneType)),
         (relative_value, "relative_value", bool),
         (start, "start", (str, NoneType)),
@@ -414,12 +415,12 @@ def contract_signals(
         )
 
     ## Check the scaling and hedging arguments
-    cscales, csigns, basket_contracts, hscales, hedge_xcat = _check_scaling_args(
+    cscales, csigns, basket_contracts, basket_weights, hedge_xcat = _check_scaling_args(
         ctypes=ctypes,
         cscales=cscales,
         csigns=csigns,
         basket_contracts=basket_contracts,
-        hscales=hscales,
+        basket_weights=basket_weights,
         hedge_xcat=hedge_xcat,
     )
 
@@ -465,7 +466,7 @@ def contract_signals(
             cids=cids,
             sig=sig,
             basket_contracts=basket_contracts,
-            hscales=hscales,
+            basket_weights=basket_weights,
             hedge_xcat=hedge_xcat,
         )
 
@@ -530,7 +531,7 @@ def multi_signal_contract_signals(
         "cscales": (list, NoneType),
         "csigns": (list, NoneType),
         "basket_contracts": (list, NoneType),
-        "hscales": (list, NoneType),
+        "basket_weights": (list, NoneType),
         "hedge_xcat": (str, NoneType),
         "relative_value": bool,
         "start": (str, NoneType),
@@ -603,7 +604,7 @@ if __name__ == "__main__":
     csigns = [1, -1, 1]
 
     basket_contracts = ["USD_EQ", "EUR_EQ"]
-    hscales = [0.7, 0.3]
+    basket_weights = [0.7, 0.3]
 
     df_cs: pd.DataFrame = contract_signals(
         df=df,
@@ -613,7 +614,7 @@ if __name__ == "__main__":
         cscales=cscales,
         csigns=csigns,
         basket_contracts=basket_contracts,
-        hscales=hscales,
+        basket_weights=basket_weights,
         hedge_xcat="HR",
     )
     df_cs["xcat"].unique()

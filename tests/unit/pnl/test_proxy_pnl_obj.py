@@ -115,7 +115,7 @@ class TestProxyPNLObject(unittest.TestCase):
             cscales=[1.0, 0.5, 0.1],
             csigns=[1, -1, 1],
             basket_contracts=["USD_FX", "EUR_FX"],
-            hscales=[0.7, 0.3],
+            basket_weights=[0.7, 0.3],
             sig="SIG",
             hedge_xcat="HR",
         )

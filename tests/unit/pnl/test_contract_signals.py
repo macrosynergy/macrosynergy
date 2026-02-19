@@ -35,7 +35,7 @@ class TestContractSignals(unittest.TestCase):
         self.cscales: List[Number] = [1.0, 0.5, 0.1]
         self.csigns: List[int] = [1, -1, 1]
         self.basket_contracts: List[str] = ["USD_EQ", "EUR_EQ"]
-        self.hscales: List[Number] = [0.7, 0.3]
+        self.basket_weights: List[Number] = [0.7, 0.3]
         self.sig = "SIG"
         self.hedge_xcat = "HR"
         self.sname = "tEsT_sTrAT"
@@ -105,29 +105,29 @@ class TestContractSignals(unittest.TestCase):
             sig=self.sig,
             cids=self.cids,
             basket_contracts=self.basket_contracts,
-            hscales=self.hscales,
+            basket_weights=self.basket_weights,
             hedge_xcat=self.hedge_xcat,
         )
 
         wide_df = _apply_hedge_ratios(**good_args)
 
-        # should all be 0 when hscales are 0
+        # should all be 0 when basket_weights are 0
         bad_args = good_args.copy()
         bad_args["df_wide"].loc[:, :] = 1
-        bad_args["hscales"] = [0, 0]
+        bad_args["basket_weights"] = [0, 0]
         wide_df = _apply_hedge_ratios(**bad_args)
         self.assertTrue(np.allclose(wide_df.values, 0))
 
         # should be len(cids) * 1 (5) (adding 1 for each)
         bad_args = good_args.copy()
         bad_args["df_wide"].loc[:, :] = 1
-        bad_args["hscales"] = [1, 1]
+        bad_args["basket_weights"] = [1, 1]
         wide_df = _apply_hedge_ratios(**bad_args)
         self.assertTrue(np.all(wide_df.values == -len(self.cids)))
 
         bad_args = good_args.copy()
         bad_args["df_wide"].loc[:, :] = 1
-        bad_args["hscales"] = [-1, 0]
+        bad_args["basket_weights"] = [-1, 0]
         # bad_args["basket_contracts"] = ["USD_EQ", "EUR_EQ"]
         wide_df = _apply_hedge_ratios(**bad_args)
         # nz_tickers -- columns with any non-zero values
@@ -159,7 +159,7 @@ class TestContractSignals(unittest.TestCase):
             sig=self.sig,
             cids=self.cids,
             basket_contracts=self.basket_contracts,
-            hscales=["HW1", "HW2"],
+            basket_weights=["HW1", "HW2"],
             hedge_xcat=self.hedge_xcat,
         )
 
@@ -210,7 +210,7 @@ class TestContractSignals(unittest.TestCase):
             cscales=self.cscales,
             csigns=self.csigns,
             basket_contracts=self.basket_contracts,
-            hscales=self.hscales,
+            basket_weights=self.basket_weights,
             hedge_xcat=self.hedge_xcat,
         ).copy()
         # full run
@@ -219,8 +219,8 @@ class TestContractSignals(unittest.TestCase):
         # should raise error when the following pairs are not the same length
         # - cscales, csigns
         # - cscales, csigns
-        # - hscales, basket_contracts
-        for argx in ["cscales", "csigns", "hscales", "basket_contracts"]:
+        # - basket_weights, basket_contracts
+        for argx in ["cscales", "csigns", "basket_weights", "basket_contracts"]:
             bad_args = good_args.copy()
             bad_args[argx] = bad_args[argx][:-1]
             with self.assertRaises(ValueError):
@@ -255,7 +255,7 @@ class TestContractSignals(unittest.TestCase):
             cscales=self.cscales,
             csigns=self.csigns,
             basket_contracts=self.basket_contracts,
-            hscales=self.hscales,
+            basket_weights=self.basket_weights,
             hedge_xcat=self.hedge_xcat,
             sname=self.sname,
             relative_value=True,
