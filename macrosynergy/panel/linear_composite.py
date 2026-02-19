@@ -108,8 +108,7 @@ def linear_composite(
         Rebalancing frequency for weights. Must be one of "D" (daily), "W" (weekly),
         "M" (monthly), or "Q" (quarterly). Default is "D" (daily rebalancing).
         When set to a coarser frequency, weights are only updated at the start of
-        each period and held constant between rebalancing dates. This applies to
-        both fixed and dynamic weights, reducing turnover in portfolio construction.
+        each period and held constant between rebalancing dates.
 
     Returns
     -------

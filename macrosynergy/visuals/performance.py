@@ -23,6 +23,7 @@ def view_performance(
     val: str = "value",
     bms: Optional[str] = None,
     metrics: Optional[List[str]] = None,
+    sort_by: Optional[str] = None,
     title: Optional[str] = None,
     title_fontsize: int = 16,
     ylab: Optional[str] = None,
@@ -68,6 +69,10 @@ def view_performance(
         List of metrics to display. Available options: "Return %", "St. Dev. %",
         "Sharpe Ratio", "Sortino Ratio", and "{bms} correl" (if bms provided).
         If None, all available metrics are shown. Default is None.
+    sort_by : str, optional
+        Metric name to sort the items by (e.g., "Sharpe Ratio", "Return %").
+        Items will be sorted in descending order by this metric. If None, items
+        are displayed in their original order. Default is None.
     title : str, optional
         Chart title. If None, a default title is generated.
     title_fontsize : int
@@ -229,6 +234,19 @@ def view_performance(
             )
         # Filter to requested metrics
         metrics_df = metrics_df.loc[metrics, :]
+
+    # Sort by specified metric if provided
+    if sort_by is not None:
+        available_metrics = metrics_df.index.tolist()
+        if sort_by not in available_metrics:
+            raise ValueError(
+                f"Sort metric '{sort_by}' not found. "
+                f"Available metrics: {available_metrics}"
+            )
+        # Sort columns by the specified metric in descending order
+        sort_values = metrics_df.loc[sort_by, :]
+        sorted_columns = sort_values.sort_values(ascending=False).index
+        metrics_df = metrics_df[sorted_columns]
 
     # Apply custom labels if provided
     if labels is not None:
@@ -519,9 +537,19 @@ if __name__ == "__main__":
     )
     
     # Test 4: Filter metrics
+    print("\nTest 4: Filter specific metrics")
     view_performance(
         dfd,
         tickers=["AUD_FXXR_NSA", "GBP_FXXR_NSA", "USD_FXXR_NSA", "USD_EQXR_NSA"],
         bms="USD_EQXR_NSA",
         metrics=["USD_EQXR_NSA correl"]
+    )
+
+    # Test 5: Sort by Sharpe Ratio
+    print("\nTest 5: Sort by Sharpe Ratio")
+    view_performance(
+        dfd,
+        xcats=["FXXR_NSA"],
+        cids=["AUD", "CAD", "GBP", "USD"],
+        sort_by="Sharpe Ratio"
     )
