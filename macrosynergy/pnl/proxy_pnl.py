@@ -110,7 +110,7 @@ class ProxyPnL(object):
         csigns: Optional[List[int]] = None,
         hbasket: Optional[List[str]] = None,
         hscales: Optional[List[Union[Number, str]]] = None,
-        hratios: Optional[str] = None,
+        hedge_xcat: Optional[str] = None,
         blacklist: Optional[dict] = None,
         *args,
         **kwargs,
@@ -138,7 +138,7 @@ class ProxyPnL(object):
             csigns=csigns,
             hbasket=hbasket,
             hscales=hscales,
-            hratios=hratios,
+            hedge_xcat=hedge_xcat,
             start=self.start,
             end=self.end,
             blacklist=blacklist or self.blacklist,
@@ -364,7 +364,7 @@ if __name__ == "__main__":
         relative_value=False,
         hbasket=["EUR_FX"],  # TODO invert asset class or returns?
         hscales=["FXXRxLEV10_NSA"],
-        hratios="FXEURBETA",
+        hedge_xcat="FXEURBETA",
     )
     p.notional_positions(
         aum=100,

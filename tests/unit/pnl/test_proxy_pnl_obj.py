@@ -117,7 +117,7 @@ class TestProxyPNLObject(unittest.TestCase):
             hbasket=["USD_FX", "EUR_FX"],
             hscales=[0.7, 0.3],
             sig="SIG",
-            hratios="HR",
+            hedge_xcat="HR",
         )
 
     def get_notional_positions_args(self):
@@ -162,11 +162,10 @@ class TestProxyPNLObject(unittest.TestCase):
                 self.assertEqual(in_val, v)
 
     def test_flow(self):
-
         args = self.get_contract_signals_args()
         xcats = args["xcats"].copy()
         xcats += [f"{xc}XR" for xc in xcats]
-        xcats += [args["sig"]] + [args["hratios"]]
+        xcats += [args["sig"]] + [args["hedge_xcat"]]
         df = make_test_df(
             cids=args["cids"],
             xcats=xcats,

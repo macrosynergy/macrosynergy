@@ -37,7 +37,7 @@ class TestContractSignals(unittest.TestCase):
         self.hbasket: List[str] = ["USD_EQ", "EUR_EQ"]
         self.hscales: List[Number] = [0.7, 0.3]
         self.sig = "SIG"
-        self.hratios = "HR"
+        self.hedge_xcat = "HR"
         self.sname = "tEsT_sTrAT"
 
     def _testDF(self) -> QuantamentalDataFrame:
@@ -106,7 +106,7 @@ class TestContractSignals(unittest.TestCase):
             cids=self.cids,
             hbasket=self.hbasket,
             hscales=self.hscales,
-            hratios=self.hratios,
+            hedge_xcat=self.hedge_xcat,
         )
 
         wide_df = _apply_hedge_ratios(**good_args)
@@ -160,7 +160,7 @@ class TestContractSignals(unittest.TestCase):
             cids=self.cids,
             hbasket=self.hbasket,
             hscales=["HW1", "HW2"],
-            hratios=self.hratios,
+            hedge_xcat=self.hedge_xcat,
         )
 
         self.assertTrue(set(wide_df.columns) == {"USD_EQ_CSIG", "EUR_EQ_CSIG"})
@@ -171,7 +171,7 @@ class TestContractSignals(unittest.TestCase):
             for cid in self.cids:
                 contrib = (
                     test_df[f"{cid}_{self.sig}"]
-                    * test_df[f"{cid}_{self.hratios}"]
+                    * test_df[f"{cid}_{self.hedge_xcat}"]
                     * test_df[f"{cid}_{hscale}"]
                 ).fillna(0.0)
                 expected += contrib
@@ -209,7 +209,7 @@ class TestContractSignals(unittest.TestCase):
             csigns=self.csigns,
             hbasket=self.hbasket,
             hscales=self.hscales,
-            hratios=self.hratios,
+            hedge_xcat=self.hedge_xcat,
         ).copy()
         # full run
         _check_scaling_args(**good_args)
@@ -230,8 +230,8 @@ class TestContractSignals(unittest.TestCase):
                     _check_scaling_args(**bad_args)
 
         bad_args = good_args.copy()
-        # set hratios to None
-        bad_args["hratios"] = None
+        # set hedge_xcat to None
+        bad_args["hedge_xcat"] = None
         with self.assertRaises(ValueError):
             _check_scaling_args(**bad_args)
 
@@ -254,7 +254,7 @@ class TestContractSignals(unittest.TestCase):
             csigns=self.csigns,
             hbasket=self.hbasket,
             hscales=self.hscales,
-            hratios=self.hratios,
+            hedge_xcat=self.hedge_xcat,
             sname=self.sname,
             relative_value=True,
         )
