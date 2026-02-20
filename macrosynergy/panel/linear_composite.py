@@ -38,6 +38,7 @@ def linear_composite(
     new_cid="GLB",
     weight_lag: int = 0,
     rebal_freq: str = "D",
+    thresh: Optional[float] = None,
 ):
     """
     Weighted linear combinations of cross sections or categories
@@ -110,6 +111,11 @@ def linear_composite(
         "M" (monthly), or "Q" (quarterly). Default is "D" (daily rebalancing).
         When set to a coarser frequency, weights are only updated at the start of
         each period and held constant between rebalancing dates.
+    thresh : float, optional
+        Winsorization threshold for contributing series. If set, caps positive values
+        at `thresh` and floors negative values at `-thresh` for all input series before
+        calculating the composite. This reduces the impact of outliers. Default is None
+        (no winsorization).
 
     Returns
     -------
@@ -134,6 +140,7 @@ def linear_composite(
         new_cid,
         weight_lag,
         rebal_freq,
+        thresh,
         _xcat_agg,
         mode,
     ) = _check_args(
@@ -152,6 +159,7 @@ def linear_composite(
         new_cid=new_cid,
         weight_lag=weight_lag,
         rebal_freq=rebal_freq,
+        thresh=thresh,
     )
 
     # update local variables
@@ -200,6 +208,7 @@ def linear_composite(
             normalize_weights=normalize_weights,
             complete_xcats=complete_xcats,
             new_xcat=new_xcat,
+            thresh=thresh,
         )
 
     else:  # mode == "cid_agg" -- single xcat
@@ -218,6 +227,7 @@ def linear_composite(
             new_cid=new_cid,
             weight_lag=weight_lag,
             rebal_freq=rebal_freq,
+            thresh=thresh,
         )
     
     return QuantamentalDataFrame(result_df, categorical=result_as_categorical)
@@ -395,6 +405,7 @@ def linear_composite_cid_agg(
     new_cid="GLB",
     weight_lag: int = 0,
     rebal_freq: str = "D",
+    thresh: Optional[float] = None,
 ):
     """Linear composite of various cids for a given category across all periods."""
     if isinstance(weights, str):
@@ -432,6 +443,11 @@ def linear_composite_cid_agg(
         .set_index(["real_date", "cid"])["value"]
         .unstack(level=1)
     )
+
+    # Apply winsorization if thresh is specified
+    if thresh is not None:
+        data_df = data_df.clip(lower=-thresh, upper=thresh)
+
     # aligning the index of weights_df to the data one
     # so that we have the same set of dates and same set of CIDs -- thank you
     # @mikiinterfiore
@@ -479,6 +495,7 @@ def linear_composite_xcat_agg(
     normalize_weights: bool = True,
     complete_xcats: bool = True,
     new_xcat="NEW",
+    thresh: Optional[float] = None,
 ):
     """Linear composite of various xcats across all cids and periods"""
 
@@ -489,6 +506,11 @@ def linear_composite_xcat_agg(
 
     # Create wide dataframes for the data and weights
     data_df = df.set_index(["cid", "real_date", "xcat"])["value"].unstack(level=2)
+
+    # Apply winsorization if thresh is specified
+    if thresh is not None:
+        data_df = data_df.clip(lower=-thresh, upper=thresh)
+
     weights_df = pd.DataFrame(
         data=[weights_series.sort_index()],
         index=data_df.index,
@@ -641,6 +663,7 @@ def _check_args(
     new_cid="GLB",
     weight_lag: int = 0,
     rebal_freq: str = "D",
+    thresh: Optional[float] = None,
 ):
     """
     Check the arguments of linear_composite()
@@ -814,8 +837,14 @@ def _check_args(
     if not isinstance(rebal_freq, str):
         raise TypeError("`rebal_freq` must be a string.")
 
-
     _map_to_business_day_frequency(rebal_freq, valid_freqs=["D", "W", "M", "Q"])
+
+    # Validate thresh
+    if thresh is not None:
+        if not isinstance(thresh, (int, float)):
+            raise TypeError("`thresh` must be a numeric value (int or float).")
+        if thresh <= 0:
+            raise ValueError("`thresh` must be positive.")
 
     return (
         df,
@@ -833,6 +862,7 @@ def _check_args(
         new_cid,
         weight_lag,
         rebal_freq,
+        thresh,
         _xcat_agg,
         mode,
     )
