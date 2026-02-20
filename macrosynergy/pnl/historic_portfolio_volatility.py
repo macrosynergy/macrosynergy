@@ -83,10 +83,10 @@ def _weighted_covariance(
     err_str = f"weights produced by {weights_func.__name__} do not sum to 1"
     assert np.isclose(w.sum(), 1), err_str
 
-    x_wsum, y_wsum = (w * x).sum(), (w * y).sum()
-    result = (x - x_wsum) * (y - y_wsum)
+    x_mean, y_mean = (w * x).sum(), (w * y).sum()
+    array_of_products = (x - x_mean) * (y - y_mean)
 
-    return w.T.dot(result)
+    return w.T.dot(array_of_products)
 
 
 def estimate_variance_covariance(
