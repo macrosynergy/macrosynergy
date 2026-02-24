@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
+from sklearn.base import TransformerMixin
 from sklearn.feature_selection import SelectorMixin
 from sklearn.pipeline import Pipeline
 
@@ -212,6 +213,7 @@ class SignalOptimizer(BasePanelLearner):
         include_train_folds=False,
         min_cids=4,
         min_periods=12 * 3,
+        min_xcats=1,
         test_size=1,
         max_periods=None,
         split_functions=None,
@@ -271,6 +273,8 @@ class SignalOptimizer(BasePanelLearner):
         min_periods : int, optional
             Minimum number of periods required for the initial training set, in units of
             the frequency `freq` specified in the constructor. Default is 36.
+        min_xcats : int, optional
+            Minimum number of xcats required for the initial training set. Default is 1.
         test_size : int, optional
             Number of periods to pass before retraining a selected model. Default is 1.
         max_periods : int, optional
@@ -323,6 +327,7 @@ class SignalOptimizer(BasePanelLearner):
             min_cids=min_cids,
             min_periods=min_periods,
             max_periods=max_periods,
+            min_xcats=min_xcats,
         )
 
         results = self.run(
@@ -534,7 +539,7 @@ class SignalOptimizer(BasePanelLearner):
         if isinstance(optimal_model, Pipeline):
             final_estimator = optimal_model[-1]
             for _, transformer in reversed(optimal_model.steps):
-                if isinstance(transformer, SelectorMixin):
+                if isinstance(transformer, (SelectorMixin, TransformerMixin)):
                     feature_names = transformer.get_feature_names_out()
                     break
         else:
