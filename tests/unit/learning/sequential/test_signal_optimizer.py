@@ -601,7 +601,7 @@ class TestAll(unittest.TestCase):
             )
 
         # Models when NAs aren't dropped cannot admit models that don't support NAs
-        with self.assertRaises(ValueError):
+        with self.assertRaises(RuntimeError):
             self.so_no_na.calculate_predictions(
                 name="test",
                 models={"Lasso": Lasso()},

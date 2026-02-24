@@ -1377,6 +1377,16 @@ class BasePanelLearner(ABC):
                 raise ValueError(
                     "The entered models must have 'fit' and 'predict' methods."
                 )
+
+            # Check model runs successfully on X and y
+            try:
+                models[key].fit(self.X, self.y)
+            except Exception as e:
+                raise RuntimeError(
+                    f"Model {key} cannot be fit on the given X and y: {e}"
+                ) from e
+
+            # Check model is compatible with NaNs
             if self.drop_nas != True:
                 # Generate data with nas to check if the model can handle them
                 X = pd.DataFrame(
@@ -1401,7 +1411,7 @@ class BasePanelLearner(ABC):
                 try:
                     models[key].fit(X_fit, y_fit)
                 except Exception as e:
-                    raise ValueError(
+                    raise RuntimeError(
                         f"The model {key} cannot handle missing values: {e}"
                     ) from e
 
