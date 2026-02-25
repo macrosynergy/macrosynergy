@@ -9,6 +9,7 @@ from matplotlib import pyplot as plt
 
 from macrosynergy.management.simulate.simulate_quantamental_data import \
     make_test_df
+from macrosynergy.management.types import QuantamentalDataFrame
 from macrosynergy.management.utils import reduce_df
 from macrosynergy.pnl.multi_pnl import MultiPnL
 from macrosynergy.pnl.naive_pnl import NaivePnL
@@ -161,6 +162,88 @@ class TestMultiPnL(unittest.TestCase):
 
         self.assertEqual(labels_result["LONG/FXXR"], "FX")
         self.assertEqual(labels_result["LONG/EQXR"], "EQ")
+
+    def test_init_with_benchmark_success(self):
+        ma_pnl = MultiPnL(bms="AUD_EQXR", df=self.dfd)
+        self.assertTrue(ma_pnl.bm_bool)
+        self.assertIn("AUD_EQXR", ma_pnl._bm_dict)
+
+    def test_init_with_bms_without_df_raises(self):
+        with self.assertRaises(ValueError):
+            MultiPnL(bms="AUD_EQXR")
+
+    def test_init_with_missing_benchmark_raises(self):
+        with self.assertRaises(ValueError):
+            MultiPnL(bms="ZZZ_EQXR", df=self.dfd)
+
+    def test_evaluate_pnls_no_benchmark_unchanged(self):
+        ma_pnl = MultiPnL()
+        ma_pnl.add_pnl(self.pnl1, [self.PNL_XCAT_1, "LONG"])
+        ma_pnl.add_pnl(self.pnl2, [self.PNL_XCAT_2, "LONG"])
+        ma_pnl.combine_pnls(["LONG/FXXR", "LONG/EQXR"], composite_pnl_xcat="LONG")
+
+        eval_df = ma_pnl.evaluate_pnls([f"{self.PNL_XCAT_1}/EQXR", "LONG"])
+        self.assertFalse(any("correl" in idx for idx in eval_df.index.tolist()))
+
+    def test_evaluate_pnls_with_benchmark_adds_rows_all_pnls(self):
+        ma_pnl = MultiPnL(bms="AUD_EQXR", df=self.dfd)
+        ma_pnl.add_pnl(self.pnl1, [self.PNL_XCAT_1, "LONG"])
+        ma_pnl.add_pnl(self.pnl2, [self.PNL_XCAT_2, "LONG"])
+        ma_pnl.combine_pnls(["LONG/FXXR", "LONG/EQXR"], composite_pnl_xcat="LONG")
+
+        eval_df = ma_pnl.evaluate_pnls([f"{self.PNL_XCAT_1}/EQXR", "LONG"])
+        self.assertIn("AUD_EQXR correl", eval_df.index.tolist())
+        self.assertIn(f"{self.PNL_XCAT_1}/EQXR", eval_df.columns.tolist())
+        self.assertIn("LONG", eval_df.columns.tolist())
+
+    def test_benchmark_row_position(self):
+        ma_pnl = MultiPnL(bms="AUD_EQXR", df=self.dfd)
+        ma_pnl.add_pnl(self.pnl1, [self.PNL_XCAT_1, "LONG"])
+
+        eval_df = ma_pnl.evaluate_pnls([f"{self.PNL_XCAT_1}/EQXR"])
+        idx = eval_df.index.tolist()
+        self.assertLess(idx.index("AUD_EQXR correl"), idx.index("Traded Months"))
+
+    def test_multiple_benchmarks(self):
+        ma_pnl = MultiPnL(bms=["AUD_EQXR", "CAD_FXXR"], df=self.dfd)
+        ma_pnl.add_pnl(self.pnl1, [self.PNL_XCAT_1])
+
+        eval_df = ma_pnl.evaluate_pnls([f"{self.PNL_XCAT_1}/EQXR"])
+        idx = eval_df.index.tolist()
+        self.assertIn("AUD_EQXR correl", idx)
+        self.assertIn("CAD_FXXR correl", idx)
+        # both correl rows must appear before Traded Months
+        traded_pos = idx.index("Traded Months")
+        self.assertLess(idx.index("AUD_EQXR correl"), traded_pos)
+        self.assertLess(idx.index("CAD_FXXR correl"), traded_pos)
+
+    def test_correlation_value_sanity(self):
+        dates = pd.bdate_range("2020-01-01", periods=120)
+        vals = np.linspace(-1, 1, len(dates))
+
+        bm_df = pd.DataFrame(
+            {
+                "cid": "AUD",
+                "xcat": "EQXR",
+                "real_date": dates,
+                "value": vals,
+            }
+        )
+        ma_pnl = MultiPnL(bms="AUD_EQXR", df=bm_df)
+
+        pnl_df = pd.DataFrame(
+            {
+                "real_date": np.concatenate([dates.to_numpy(), dates.to_numpy()]),
+                "xcat": ["SYNTH"] * len(dates) + ["SYNTH_NEG"] * len(dates),
+                "value": np.concatenate([vals, -vals]),
+                "cid": "ALL",
+            }
+        )
+        ma_pnl.pnls_df = QuantamentalDataFrame(pnl_df)
+
+        eval_df = ma_pnl.evaluate_pnls()
+        self.assertTrue(np.isclose(eval_df.loc["AUD_EQXR correl", "SYNTH"], 1.0))
+        self.assertTrue(np.isclose(eval_df.loc["AUD_EQXR correl", "SYNTH_NEG"], -1.0))
 
 
 if __name__ == "__main__":
