@@ -7,8 +7,7 @@ import numpy as np
 import pandas as pd
 from matplotlib import pyplot as plt
 
-from macrosynergy.management.simulate.simulate_quantamental_data import \
-    make_test_df
+from tests.simulate import make_qdf
 from macrosynergy.management.types import QuantamentalDataFrame
 from macrosynergy.management.utils import reduce_df
 from macrosynergy.pnl.multi_pnl import MultiPnL
@@ -40,13 +39,19 @@ class TestMultiPnL(unittest.TestCase):
         self.PNL_XCAT_1 = "PNL_EQ"
         self.PNL_XCAT_2 = "PNL_FX"
 
-        dfd: pd.DataFrame = make_test_df(
-            cids=self.cids,
-            xcats=self.xcats,
-            start="2000-01-01",
-            end="2010-12-31",
+        df_cids = pd.DataFrame(
+            index=self.cids,
+            columns=["earliest", "latest", "mean_add", "sd_mult"],
         )
-        self.dfd: pd.DataFrame = dfd
+        df_cids.loc[:, :] = ["2000-01-01", "2010-12-31", 0, 1]
+
+        df_xcats = pd.DataFrame(
+            index=self.xcats,
+            columns=["earliest", "latest", "mean_add", "sd_mult", "ar_coef", "back_coef"],
+        )
+        df_xcats.loc[:, :] = ["2000-01-01", "2010-12-31", 0, 1, 0, 0]
+
+        self.dfd: pd.DataFrame = make_qdf(df_cids, df_xcats, back_ar=0.75)
 
         self.pnl1 = NaivePnL(
             self.dfd,
@@ -247,4 +252,8 @@ class TestMultiPnL(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    unittest.main()
+    # unittest.main()
+    tests = TestMultiPnL()
+    tests.setUpClass()
+    tests.setUp()
+    tests.test_evaluate_pnls_with_benchmark_adds_rows_all_pnls()
