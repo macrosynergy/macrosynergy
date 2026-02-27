@@ -1789,6 +1789,6 @@ class BasePanelLearner(ABC):
             List of tuples containing the attribute name, column name and value to filter on.
         """
         for attr, column, value in conditions:
-            df = getattr(self, attr)
-            if value in df[column].unique():
+            df = getattr(self, attr, None)
+            if df is not None and value in df[column].unique():
                 setattr(self, attr, df[df[column] != value])

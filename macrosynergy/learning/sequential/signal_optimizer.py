@@ -4,6 +4,7 @@ machine learning.
 """
 
 import numbers
+import warnings
 
 import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
@@ -147,15 +148,7 @@ class SignalOptimizer(BasePanelLearner):
                 "value": "float32",
             }
         )
-        self.feature_importances = pd.DataFrame(
-            columns=["real_date", "name"] + list(self.X.columns)
-        ).astype(
-            {
-                **{col: "float32" for col in self.X.columns},
-                "real_date": "datetime64[ns]",
-                "name": "category",
-            }
-        )
+
         self.intercepts = pd.DataFrame(
             columns=["real_date", "name", "intercepts"]
         ).astype(
@@ -163,16 +156,6 @@ class SignalOptimizer(BasePanelLearner):
                 "real_date": "datetime64[ns]",
                 "name": "category",
                 "intercepts": "float32",
-            }
-        )
-
-        self.selected_ftrs = pd.DataFrame(
-            columns=["real_date", "name"] + list(self.X.columns)
-        ).astype(
-            {
-                **{col: "int" for col in self.X.columns},
-                "real_date": "datetime64[ns]",
-                "name": "category",
             }
         )
 
@@ -196,6 +179,10 @@ class SignalOptimizer(BasePanelLearner):
                 "pearson": "float",
             }
         )
+
+        # Feature names may not be known now so we populate this later
+        self.feature_importances = None
+        self.selected_ftrs = None
 
     def calculate_predictions(
         self,
@@ -349,8 +336,8 @@ class SignalOptimizer(BasePanelLearner):
         prediction_data = []
         model_choice_data = []
         ftr_coef_data = []
-        intercept_data = []
         ftr_selection_data = []
+        intercept_data = []
         ftr_corr_data = []
 
         for split_result in results:
@@ -411,15 +398,34 @@ class SignalOptimizer(BasePanelLearner):
         )
 
         # Store feature coefficients
-        coef_df_long = pd.DataFrame(
-            columns=[col for col in self.feature_importances.columns if col != "name"],
-            data=ftr_coef_data,
+        ftr_importances_long = pd.DataFrame.from_records(ftr_coef_data)
+        ftr_importances_long = _insert_as_categorical(
+            df=ftr_importances_long,
+            column_name="name",
+            category_name=name,
+            column_idx=1,
         )
-        coef_df_long = _insert_as_categorical(coef_df_long, "name", name, 1)
-        self.feature_importances = concat_categorical(
-            self.feature_importances,
-            coef_df_long,
+        if isinstance(self.feature_importances, pd.DataFrame):
+            self.feature_importances = concat_categorical( # todo: cant use because column names can be different
+                df1=self.feature_importances, df2=ftr_importances_long
+            )
+        else:
+            self.feature_importances = ftr_importances_long
+
+        # Store selected features
+        selected_ftrs_long = pd.DataFrame.from_records(ftr_selection_data)
+        selected_ftrs_long = _insert_as_categorical(
+            df=selected_ftrs_long,
+            column_name="name",
+            category_name=name,
+            column_idx=1,
         )
+        if isinstance(self.selected_ftrs, pd.DataFrame):
+            self.selected_ftrs = concat_categorical( # todo: cant use because column names can be different
+                df1=self.selected_ftrs, df2=selected_ftrs_long
+            )
+        else:
+            self.selected_ftrs = selected_ftrs_long
 
         # Store intercept
         intercept_df_long = pd.DataFrame(
@@ -430,17 +436,6 @@ class SignalOptimizer(BasePanelLearner):
         self.intercepts = concat_categorical(
             self.intercepts,
             intercept_df_long,
-        )
-
-        # Store selected features
-        ftr_select_df_long = pd.DataFrame(
-            columns=[col for col in self.selected_ftrs.columns if col != "name"],
-            data=ftr_selection_data,
-        )
-        ftr_select_df_long = _insert_as_categorical(ftr_select_df_long, "name", name, 1)
-        self.selected_ftrs = concat_categorical(
-            self.selected_ftrs,
-            ftr_select_df_long,
         )
 
         ftr_corr_df_long = pd.DataFrame(
@@ -529,39 +524,46 @@ class SignalOptimizer(BasePanelLearner):
 
         prediction_data = [adjusted_test_index, preds]
 
-        feature_names = np.array(X_train.columns)
         if isinstance(optimal_model, Pipeline):
             final_estimator = optimal_model[-1]
-            for _, transformer in reversed(optimal_model.steps):
-                if isinstance(transformer, SelectorMixin):
-                    feature_names = transformer.get_feature_names_out()
-                    break
+            try:
+                feature_names = optimal_model[:-1].get_feature_names_out().tolist()
+            except AttributeError:
+                feature_names = []
+                warnings.warn(
+                    "Could not extract feature names from the pipeline's preprocessing "
+                    "steps. It's likely one or more steps do not have the "
+                    "get_feature_names_out method.",
+                    UserWarning,
+                )
         else:
             final_estimator = optimal_model
+            feature_names = list(getattr(final_estimator, "feature_names_in_", []))
 
+
+        if not feature_names:
+            warnings.warn(
+                "There were no feature names when fitting the model. One "
+                "or more pipeline steps likely do not have the get_feature_names_out"
+                "method.",
+                UserWarning
+            )
+
+        # Summarise feature importance
         coefs = np.full(X_train.shape[1], np.nan)
+        coefs = getattr(final_estimator, "coef_", coefs)
+        coefs = getattr(final_estimator, "feature_importances_", coefs)
 
-        if hasattr(final_estimator, "feature_importances_") or (
-            hasattr(final_estimator, "coef_")
-        ):
-            if hasattr(final_estimator, "feature_importances_"):
-                coef = final_estimator.feature_importances_
-            elif hasattr(final_estimator, "coef_"):
-                coef = final_estimator.coef_
-            # Reshape coefficients for storage compatibility
-            if coef.ndim == 1:
-                coefs = coef
-            elif coef.ndim == 2:
-                if coef.shape[0] == 1:
-                    coefs = coef.flatten()
-                elif self.n_targets > 1 and coef.shape[0] == self.n_targets:
-                    coefs = coef.mean(axis=0)
+        # Reshape coefficients for storage compatibility
+        if coefs.ndim > 2:
+            raise RuntimeError("coefs.ndim cannot be greater than 2")
+        coefs = np.atleast_2d(coefs).mean(axis=0)
 
-        coef_ftr_map = {ftr: coef for ftr, coef in zip(feature_names, coefs)}
-        coefs = [
-            coef_ftr_map[ftr] if ftr in coef_ftr_map else np.nan
-            for ftr in X_train.columns
-        ]
+        coef_ftr_map = dict(zip(feature_names, coefs))
+
+        # Create selected feature info
+        selected_ftr_map = {ftr: 1 for ftr in feature_names}
+
         if hasattr(final_estimator, "intercept_"):
             if isinstance(final_estimator.intercept_, np.ndarray):
                 if len(final_estimator.intercept_) == 1:
@@ -577,25 +579,15 @@ class SignalOptimizer(BasePanelLearner):
         else:
             intercepts = np.nan
 
-        # Get feature selection information
-        if len(feature_names) == X_train.shape[1]:
-            # Then all features were selected
-            ftr_selection_data = [timestamp] + [1 for _ in feature_names]
-        else:
-            # Then some features were excluded
-            ftr_selection_data = [timestamp] + [
-                1 if name in feature_names else 0 for name in np.array(X_train.columns)
-            ]
-
         ftr_corr_data = self._get_ftr_corr_data(
             pipeline_name, optimal_model, X_train, timestamp
         )
 
         # Store data
         split_result = {
-            "feature_importances": [timestamp] + coefs,
+            "feature_importances": {"real_date": timestamp, **coef_ftr_map},
             "intercepts": [timestamp, intercepts],
-            "selected_ftrs": ftr_selection_data,
+            "selected_ftrs": {"real_date": timestamp, **selected_ftr_map},
             "predictions": prediction_data,
             "ftr_corr": ftr_corr_data,
         }
