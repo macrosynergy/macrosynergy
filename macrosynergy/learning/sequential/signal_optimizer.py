@@ -150,15 +150,6 @@ class SignalOptimizer(BasePanelLearner):
                 "value": "float32",
             }
         )
-        self.feature_importances = pd.DataFrame(
-            columns=["real_date", "name"] + list(self.X.columns)
-        ).astype(
-            {
-                **{col: "float32" for col in self.X.columns},
-                "real_date": "datetime64[ns]",
-                "name": "category",
-            }
-        )
         self.intercepts = pd.DataFrame(
             columns=["real_date", "name", "intercepts"]
         ).astype(
@@ -166,16 +157,6 @@ class SignalOptimizer(BasePanelLearner):
                 "real_date": "datetime64[ns]",
                 "name": "category",
                 "intercepts": "float32",
-            }
-        )
-
-        self.selected_ftrs = pd.DataFrame(
-            columns=["real_date", "name"] + list(self.X.columns)
-        ).astype(
-            {
-                **{col: "int" for col in self.X.columns},
-                "real_date": "datetime64[ns]",
-                "name": "category",
             }
         )
 
@@ -199,6 +180,10 @@ class SignalOptimizer(BasePanelLearner):
                 "pearson": "float",
             }
         )
+
+        # Feature names cannot be known now so populate later
+        self.feature_importances = None
+        self.selected_ftrs = None
 
     def calculate_predictions(
         self,
@@ -355,8 +340,8 @@ class SignalOptimizer(BasePanelLearner):
         prediction_data = []
         model_choice_data = []
         ftr_coef_data = []
-        intercept_data = []
         ftr_selection_data = []
+        intercept_data = []
         ftr_corr_data = []
 
         for split_result in results:
@@ -417,15 +402,40 @@ class SignalOptimizer(BasePanelLearner):
         )
 
         # Store feature coefficients
-        coef_df_long = pd.DataFrame(
-            columns=[col for col in self.feature_importances.columns if col != "name"],
-            data=ftr_coef_data,
+        ftr_importances_long = _insert_as_categorical(
+            df=pd.DataFrame.from_records(ftr_coef_data),
+            column_name="name",
+            category_name=name,
+            column_idx=1,
         )
-        coef_df_long = _insert_as_categorical(coef_df_long, "name", name, 1)
-        self.feature_importances = concat_categorical(
-            self.feature_importances,
-            coef_df_long,
+        if isinstance(self.feature_importances, pd.DataFrame):
+            ftr_importances_long = pd.concat(
+                objs=(self.feature_importances, ftr_importances_long),
+                ignore_index=True,
+            )
+            self.feature_importances = ftr_importances_long[
+                ftr_importances_long.columns[~ftr_importances_long.isna().all()]
+            ]
+        else:
+            self.feature_importances = ftr_importances_long
+
+        # Store selected features
+        selected_ftrs_long = _insert_as_categorical(
+            df=pd.DataFrame.from_records(ftr_selection_data).fillna(0),
+            column_name="name",
+            category_name=name,
+            column_idx=1,
         )
+        if isinstance(self.selected_ftrs, pd.DataFrame):
+            selected_ftrs_long = pd.concat(
+                objs=(self.selected_ftrs, selected_ftrs_long),
+                ignore_index=True,
+            )
+            self.selected_ftrs = selected_ftrs_long[
+                selected_ftrs_long.columns[~selected_ftrs_long.isna().all()]
+            ]
+        else:
+            self.selected_ftrs = selected_ftrs_long
 
         # Store intercept
         intercept_df_long = pd.DataFrame(
@@ -436,17 +446,6 @@ class SignalOptimizer(BasePanelLearner):
         self.intercepts = concat_categorical(
             self.intercepts,
             intercept_df_long,
-        )
-
-        # Store selected features
-        ftr_select_df_long = pd.DataFrame(
-            columns=[col for col in self.selected_ftrs.columns if col != "name"],
-            data=ftr_selection_data,
-        )
-        ftr_select_df_long = _insert_as_categorical(ftr_select_df_long, "name", name, 1)
-        self.selected_ftrs = concat_categorical(
-            self.selected_ftrs,
-            ftr_select_df_long,
         )
 
         ftr_corr_df_long = pd.DataFrame(
@@ -537,48 +536,44 @@ class SignalOptimizer(BasePanelLearner):
 
         if isinstance(optimal_model, Pipeline):
             final_estimator = optimal_model[-1]
-            feature_names_getter = getattr(
-                optimal_model[-2], "get_feature_names_out", None
-            )
-
-            if feature_names_getter is not None:
-                feature_names = feature_names_getter()
-            else:
+            try:
+                feature_names = optimal_model[:-1].get_feature_names_out().tolist()
+            except AttributeError:
                 feature_names = []
                 warnings.warn(
-                    "Unable to infer feature names. This is likely because one or"
-                    "more steps in the Pipeline are missing the `get_feature_names_out` method."
-                    "This may make it impossible to produce feature selection and feature "
-                    "importance plots later on",
+                    "Could not extract feature names from the pipeline's preprocessing "
+                    "steps. It's likely one or more steps do not have the "
+                    "get_feature_names_out method.",
                     UserWarning,
                 )
         else:
             final_estimator = optimal_model
-            feature_names = np.array(X_train.columns)
+            feature_names = list(getattr(final_estimator, "feature_names_in_", []))
 
+
+        if not feature_names:
+            warnings.warn(
+                "There were no feature names when fitting the model. One "
+                "or more pipeline steps likely do not have the get_feature_names_out"
+                "method.",
+                UserWarning
+            )
+
+        # Summarise feature importance
         coefs = np.full(X_train.shape[1], np.nan)
+        coefs = getattr(final_estimator, "coef_", coefs)
+        coefs = getattr(final_estimator, "feature_importances_", coefs)
 
-        if hasattr(final_estimator, "feature_importances_") or (
-            hasattr(final_estimator, "coef_")
-        ):
-            if hasattr(final_estimator, "feature_importances_"):
-                coef = final_estimator.feature_importances_
-            elif hasattr(final_estimator, "coef_"):
-                coef = final_estimator.coef_
-            # Reshape coefficients for storage compatibility
-            if coef.ndim == 1:
-                coefs = coef
-            elif coef.ndim == 2:
-                if coef.shape[0] == 1:
-                    coefs = coef.flatten()
-                elif self.n_targets > 1 and coef.shape[0] == self.n_targets:
-                    coefs = coef.mean(axis=0)
+        # Reshape coefficients for storage compatibility
+        if coefs.ndim > 2:
+            raise RuntimeError("coefs.ndim cannot be greater than 2")
+        coefs = np.atleast_2d(coefs).mean(axis=0)
 
-        coef_ftr_map = {ftr: coef for ftr, coef in zip(feature_names, coefs)}
-        coefs = [
-            coef_ftr_map[ftr] if ftr in coef_ftr_map else np.nan
-            for ftr in X_train.columns
-        ]
+        coef_ftr_map = dict(zip(feature_names, coefs))
+
+        # Create selected feature info
+        selected_ftr_map = {ftr: 1 for ftr in feature_names}
+
         if hasattr(final_estimator, "intercept_"):
             if isinstance(final_estimator.intercept_, np.ndarray):
                 if len(final_estimator.intercept_) == 1:
@@ -594,20 +589,15 @@ class SignalOptimizer(BasePanelLearner):
         else:
             intercepts = np.nan
 
-        # Get feature selection information
-        ftr_selection_data = [timestamp] + [
-            1 if name in feature_names else 0 for name in X_train.columns
-        ]
-
         ftr_corr_data = self._get_ftr_corr_data(
             pipeline_name, optimal_model, X_train, timestamp
         )
 
         # Store data
         split_result = {
-            "feature_importances": [timestamp] + coefs,
+            "feature_importances": {"real_date": timestamp, **coef_ftr_map},
             "intercepts": [timestamp, intercepts],
-            "selected_ftrs": ftr_selection_data,
+            "selected_ftrs": {"real_date": timestamp, **selected_ftr_map},
             "predictions": prediction_data,
             "ftr_corr": ftr_corr_data,
         }
@@ -738,6 +728,11 @@ class SignalOptimizer(BasePanelLearner):
         pd.DataFrame
             Pandas dataframe of the selected features at each retraining date.
         """
+        if self.selected_ftrs is None:
+            raise ValueError(
+                "self.selected_ftrs is None. Please ensure calculate_predictions() "
+                "has been run."
+            )
         if name is None:
             return self.selected_ftrs
         else:
@@ -756,7 +751,12 @@ class SignalOptimizer(BasePanelLearner):
                         calculate_predictions() first.
                         """
                     )
-            return self.selected_ftrs[self.selected_ftrs.name.isin(name)]
+
+            selected_ftrs = self.selected_ftrs[self.selected_ftrs.name.isin(name)]
+            selected_ftrs = selected_ftrs[
+                selected_ftrs.columns[~selected_ftrs.isna().all()]
+            ]
+            return selected_ftrs
 
     def get_feature_importances(self, name=None):
         """
@@ -779,6 +779,12 @@ class SignalOptimizer(BasePanelLearner):
         Availability of feature importances is subject to the selected model having a
         `feature_importances_` or `coef_` attribute.
         """
+        if self.feature_importances is None:
+            raise ValueError(
+                "self.feature_importances is None. Please ensure calculate_predictions()"
+                " has been run."
+            )
+
         if name is None:
             return self.feature_importances
         else:
@@ -797,9 +803,14 @@ class SignalOptimizer(BasePanelLearner):
                         calculate_predictions() first.
                         """
                     )
-            return self.feature_importances[
+            feature_importances = self.feature_importances[
                 self.feature_importances.name.isin(name)
             ].sort_values(by="real_date")
+            feature_importances = feature_importances[
+                feature_importances.columns[~feature_importances.isna().all()]
+            ]
+
+            return feature_importances
 
     def get_intercepts(self, name=None):
         """
@@ -1027,13 +1038,6 @@ class SignalOptimizer(BasePanelLearner):
         """
         if not isinstance(name, str):
             raise TypeError("The pipeline name must be a string.")
-        if name not in self.selected_ftrs.name.unique():
-            raise ValueError(
-                f"""The pipeline name {name} is not in the list of already-calculated 
-                pipelines. Please check the pipeline name carefully. If correct, please 
-                run calculate_predictions() first.
-                """
-            )
         if title is None:
             title = f"Feature Selection Heatmap for {name}"
         if not isinstance(title, str):
@@ -1413,14 +1417,9 @@ class SignalOptimizer(BasePanelLearner):
         # Checks
         if not isinstance(name, str):
             raise TypeError("The pipeline name must be a string.")
-        if name not in self.feature_importances.name.unique():
-            raise ValueError(
-                f"""The pipeline name {name} is not in the list of already-calculated 
-                pipelines. Please check the pipeline name carefully. If correct, please 
-                run calculate_predictions() first.
-                """
-            )
+
         ftrcoef_df = self.get_feature_importances(name)
+
         if ftrcoef_df.iloc[:, 2:].isna().all().all():
             raise ValueError(
                 f"""There are no non-NA feature importances for the pipeline {name}.
@@ -1645,14 +1644,9 @@ class SignalOptimizer(BasePanelLearner):
         # Checks
         if not isinstance(name, str):
             raise TypeError("The pipeline name must be a string.")
-        if name not in self.feature_importances.name.unique():
-            raise ValueError(
-                f"""The pipeline name {name} is not in the list of already-calculated 
-                pipelines. Please check the pipeline name carefully. If correct, please 
-                run calculate_predictions() first.
-                """
-            )
+
         ftrcoef_df = self.get_feature_importances(name)
+
         if ftrcoef_df.iloc[:, 2:].isna().all().all():
             raise ValueError(
                 f"""There are no non-NA coefficients for the pipeline {name}.

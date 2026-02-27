@@ -296,16 +296,6 @@ class TestAll(unittest.TestCase):
             ),
         )
         pd.testing.assert_frame_equal(
-            so.feature_importances,
-            pd.DataFrame(columns=["real_date", "name"] + list(so.X.columns)).astype(
-                {
-                    **{col: "float32" for col in self.X.columns},
-                    "real_date": "datetime64[ns]",
-                    "name": "category",
-                }
-            ),
-        )
-        pd.testing.assert_frame_equal(
             so.intercepts,
             pd.DataFrame(columns=["real_date", "name", "intercepts"]).astype(
                 {
@@ -315,6 +305,8 @@ class TestAll(unittest.TestCase):
                 }
             ),
         )
+        assert so.feature_importances is None
+        assert so.selected_ftrs is None
 
         min_date = min(so.unique_date_levels)
         max_date = max(so.unique_date_levels)
@@ -2067,6 +2059,7 @@ class TestAll(unittest.TestCase):
     def test_valid_worker(self, search_type, n_iter, drop_nas):
         search_type = "grid"
         n_iter = None
+
         store_correlations = False
         # Check that the worker private method works as expected for a grid search
         outer_splitter = ExpandingIncrementPanelSplit(
@@ -2150,12 +2143,11 @@ class TestAll(unittest.TestCase):
             self.assertIsInstance(prediction_data[1], np.ndarray)
 
             ftr_data = split_result["feature_importances"]
-            self.assertIsInstance(ftr_data, list)
-            self.assertTrue(len(ftr_data) == 1 + 3)  # 3 ftrs + 2 extra columns
-            self.assertIsInstance(ftr_data[0], datetime.date)
-            for i in range(1, len(ftr_data)):
-                if ftr_data[i] != np.nan:
-                    self.assertIsInstance(ftr_data[i], (np.float64, np.float32, float))  # float or int
+            self.assertIsInstance(ftr_data, dict)
+            self.assertTrue(len(ftr_data) == 1 + 3) # 3 ftrs + date
+            self.assertIsInstance(ftr_data.pop("real_date"), datetime.date)
+            for val in ftr_data.values():
+                self.assertIsInstance(val, (np.float64, np.float32, float))  # float or int
 
             intercept_data = split_result["intercepts"]
             self.assertIsInstance(intercept_data, list)
@@ -2167,13 +2159,11 @@ class TestAll(unittest.TestCase):
                 self.assertIsInstance(intercept_data[1], (np.float64, np.float32, float))
 
             ftr_selection_data = split_result["selected_ftrs"]
-            self.assertIsInstance(ftr_selection_data, list)
-            self.assertTrue(
-                len(ftr_selection_data) == 1 + 3
-            )  # 3 ftrs + 2 extra columns
-            self.assertIsInstance(ftr_selection_data[0], datetime.date)
-            for i in range(1, len(ftr_selection_data)):
-                self.assertTrue(ftr_selection_data[i] in [0, 1])
+            self.assertIsInstance(ftr_selection_data, dict)
+            self.assertTrue(len(ftr_selection_data) == 1 + 3) # 3 ftrs + date
+            self.assertIsInstance(ftr_selection_data.pop("real_date"), datetime.date)
+            for val in ftr_selection_data.values():
+                self.assertTrue(val in [0, 1])
 
     def test_valid_store_correlation(self):
         search_type = "grid"
@@ -2246,13 +2236,11 @@ class TestAll(unittest.TestCase):
             self.assertIsInstance(prediction_data[1], np.ndarray)
 
             ftr_data = split_result["feature_importances"]
-            self.assertIsInstance(ftr_data, list)
-            self.assertTrue(len(ftr_data) == 1 + 3)  # 3 ftrs + 2 extra columns
-            self.assertIsInstance(ftr_data[0], datetime.date)
-            for i in range(1, len(ftr_data)):
-                # since self.pipelines renames features, there shouldn't be any
-                # feature importances associated with original features
-                assert np.isnan(ftr_data[i])
+            self.assertIsInstance(ftr_data, dict)
+            self.assertTrue(len(ftr_data) == 1 + 3) # 3 ftrs + date
+            self.assertIsInstance(ftr_data.pop("real_date"), datetime.date)
+            for val in ftr_data.values():
+                self.assertIsInstance(val, np.float32)
 
             intercept_data = split_result["intercepts"]
             self.assertIsInstance(intercept_data, list)
@@ -2264,15 +2252,11 @@ class TestAll(unittest.TestCase):
                 self.assertIsInstance(intercept_data[1], np.float32)
 
             ftr_selection_data = split_result["selected_ftrs"]
-            self.assertIsInstance(ftr_selection_data, list)
-            self.assertTrue(
-                len(ftr_selection_data) == 1 + 3
-            )  # 3 ftrs + 2 extra columns
-            self.assertIsInstance(ftr_selection_data[0], datetime.date)
-            for i in range(1, len(ftr_selection_data)):
-                # since self.pipelines renames features, none of the originals
-                # features should be selected. They should all be set to 0
-                assert ftr_selection_data[i] == 0
+            self.assertIsInstance(ftr_selection_data, dict)
+            self.assertTrue(len(ftr_selection_data) == 1 + 3)  # 3 ftrs + date
+            self.assertIsInstance(ftr_selection_data.pop("real_date"), datetime.date)
+            for val in ftr_selection_data.values():
+                self.assertTrue(val in [0, 1])
 
             ftr_correlation = split_result["ftr_corr"]
             self.assertIsInstance(ftr_correlation, list)
@@ -2604,8 +2588,7 @@ class TestAll(unittest.TestCase):
         self.assertTrue(selected_ftrs.name.unique()[0] == "test")
         self.assertTrue(selected_ftrs.isna().sum().sum() == 0)
 
-        # Test that get_selected_features is empty when feature names differ
-        # from original features
+        # Test that get_selected_features works when we rename features
         so = SignalOptimizer(
             df=self.df,
             xcats=self.xcats,
@@ -2630,12 +2613,123 @@ class TestAll(unittest.TestCase):
         selected_ftrs = so.get_selected_features(name="RF")
 
         self.assertIsInstance(selected_ftrs, pd.DataFrame)
+        self.assertEqual(selected_ftrs.shape[1], 4)
+        self.assertEqual(selected_ftrs.columns[0], "real_date")
+        self.assertEqual(selected_ftrs.columns[1], "name")
+        self.assertEqual(selected_ftrs.columns[[2, 3]].to_list(), ["pca0", "pca1"])
+        self.assertTrue(selected_ftrs[["pca0", "pca1"]].eq(1).all().all())
+
+        # Test case when different runs have different feature names
+        so = SignalOptimizer(
+            df=self.df,
+            xcats=self.xcats,
+            cids=self.cids,
+            drop_nas="y",
+        )
+
+        so.calculate_predictions(
+            name="RF1",
+            models={
+                "RF": Pipeline([
+                    ("imputer", KNNImputer(n_neighbors=12, weights="distance")),
+                    ("pca", PCA(n_components=3)),
+                    ("RF", RandomForestRegressor(n_estimators=10, max_depth=1))
+                ]),
+            },
+            n_jobs_outer=1,
+            min_cids=1,
+            min_periods=12
+        )
+
+        so.calculate_predictions(
+            name="RF2",
+            models={
+                "RF": Pipeline([
+                    ("imputer", KNNImputer(n_neighbors=12, weights="distance")),
+                    ("pca", PCA(n_components=2)),
+                    ("RF", RandomForestRegressor(n_estimators=10, max_depth=1))
+                ]),
+            },
+            n_jobs_outer=1,
+            min_cids=1,
+            min_periods=12
+        )
+
+        so.calculate_predictions(
+            name="RF2",
+            models={
+                "RF": Pipeline([
+                    ("imputer", KNNImputer(n_neighbors=12, weights="distance")),
+                    ("RF", RandomForestRegressor(n_estimators=10, max_depth=1))
+                ]),
+            },
+            n_jobs_outer=1,
+            min_cids=1,
+            min_periods=12
+        )
+
+        selected_ftrs = so.get_selected_features(name="RF1")
+
+        self.assertIsInstance(selected_ftrs, pd.DataFrame)
         self.assertEqual(selected_ftrs.shape[1], 5)
         self.assertEqual(selected_ftrs.columns[0], "real_date")
         self.assertEqual(selected_ftrs.columns[1], "name")
-        for i in range(2, 5):
-            self.assertEqual(selected_ftrs.columns[i], self.X.columns[i - 2])
-        self.assertTrue(selected_ftrs[selected_ftrs.columns[2:]].eq(0).all().all())
+        self.assertEqual(selected_ftrs.columns[[2, 3, 4]].tolist(), ["pca0", "pca1", "pca2"])
+        self.assertTrue(selected_ftrs[["pca0", "pca1", "pca2"]].eq(1).all().all())
+
+        selected_ftrs = so.get_selected_features(name="RF2")
+
+        self.assertIsInstance(selected_ftrs, pd.DataFrame)
+        self.assertEqual(selected_ftrs.shape[1], 5)
+        self.assertEqual(selected_ftrs.columns[0], "real_date")
+        self.assertEqual(selected_ftrs.columns[1], "name")
+        self.assertEqual(selected_ftrs.columns[[2, 3, 4]].tolist(), ["XR", "CPI", "GROWTH"])
+        self.assertTrue(selected_ftrs[["XR", "CPI", "GROWTH"]].eq(1).all().all())
+
+        # Test overriding a run with a subset of features
+        so = SignalOptimizer(
+            df=self.df,
+            xcats=self.xcats,
+            cids=self.cids,
+            drop_nas="y",
+        )
+
+        so.calculate_predictions(
+            name="RF",
+            models={
+                "RF": Pipeline([
+                    ("imputer", KNNImputer(n_neighbors=12, weights="distance")),
+                    ("pca", PCA(n_components=3)),
+                    ("RF", RandomForestRegressor(n_estimators=10, max_depth=1))
+                ]),
+            },
+            n_jobs_outer=1,
+            min_cids=1,
+            min_periods=12
+        )
+
+        so.calculate_predictions(
+            name="RF",
+            models={
+                "RF": Pipeline([
+                    ("imputer", KNNImputer(n_neighbors=12, weights="distance")),
+                    ("pca", PCA(n_components=2)),
+                    ("RF", RandomForestRegressor(n_estimators=10, max_depth=1))
+                ]),
+            },
+            n_jobs_outer=1,
+            min_cids=1,
+            min_periods=12
+        )
+
+        selected_ftrs = so.get_selected_features(name="RF")
+
+        self.assertIsInstance(selected_ftrs, pd.DataFrame)
+        self.assertEqual(selected_ftrs.shape[1], 4)
+        self.assertEqual(selected_ftrs.columns[0], "real_date")
+        self.assertEqual(selected_ftrs.columns[1], "name")
+        self.assertEqual(selected_ftrs.columns[[2, 3]].tolist(), ["pca0", "pca1"])
+        self.assertTrue(selected_ftrs[["pca0", "pca1"]].eq(1).all().all())
 
         # Test that get_selected_features works when not all features available due
         # to an Imputer dropping columns
