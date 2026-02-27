@@ -4,7 +4,7 @@ It also provides functionality to calculate a weighted aggregate PnL based on us
 for each PnL.
 """
 
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -179,8 +179,12 @@ class MultiPnL:
         self,
         pnl_xcats: List[str] = None,
         title: str = None,
-        title_fontsize: int = 14,
+        title_fontsize: int = 20,
         xcat_labels: Union[List[str], dict] = None,
+        figsize: Tuple = (12, 7),
+        tick_fontsize: int = 12,
+        label_fontsize: int = 12,
+        legend_fontsize: int = None,
     ):
         """
         Creates a plot of PnLs from added NaivePnL objects and/or
@@ -193,6 +197,18 @@ class MultiPnL:
             'xcat', or 'xcat/return_xcat'.
         title : str
             Title of the plot.
+        title_fontsize : int
+            font size for the title. Default is 20.
+        xcat_labels : Union[List[str], dict]
+            custom labels to be used for the PnLs.
+        figsize : Tuple
+            tuple of plot width and height. Default is (12, 7).
+        tick_fontsize : int
+            font size for the tick labels. Default is 12.
+        label_fontsize : int
+            font size for the axis labels. Default is 12.
+        legend_fontsize : int
+            font size for the legend. Default is None (uses matplotlib default).
         """
 
         self._check_pnls_added()
@@ -216,11 +232,28 @@ class MultiPnL:
 
         pnl_df.loc[:, "cumulative pnl"] = pnl_df.groupby("xcat")["value"].cumsum()
 
-        sns.lineplot(data=pnl_df, x="real_date", y="cumulative pnl", hue=("xcat"))
+        sns.set_theme(
+            style="whitegrid", palette="colorblind", rc={"figure.figsize": figsize}
+        )
+
+        sns.lineplot(
+            data=pnl_df,
+            x="real_date",
+            y="cumulative pnl",
+            hue="xcat",
+            estimator=None,
+            lw=1,
+        )
+        plt.axhline(y=0, color="black", linestyle="--", lw=1)
         plt.title(title, fontsize=title_fontsize)
-        plt.xlabel(None)
-        plt.ylabel("% risk capital, no compounding")
-        plt.legend(title="PnL Category(s)")
+        plt.xlabel(None, fontsize=label_fontsize)
+        plt.ylabel("% risk capital, no compounding", fontsize=label_fontsize)
+        plt.legend(
+            title="PnL Category(s)",
+            title_fontsize=legend_fontsize,
+            fontsize=legend_fontsize,
+        )
+        plt.tick_params(axis="both", labelsize=tick_fontsize)
         plt.show()
         pnl_df.drop(columns="cumulative pnl", inplace=True)
 
@@ -559,5 +592,5 @@ if __name__ == "__main__":
         composite_pnl_xcat="EQ_FX_LONG",
     )
     print(mapnl.evaluate_pnls(["PNL_FX", "PNL_EQ", "EQ_FX_LONG"]))
-    # mapnl.plot_pnls(["PNL_FX", "PNL_EQ"], xcat_labels=["EQ", "FX"], title="PnLs")
+    mapnl.plot_pnls(["PNL_FX", "PNL_EQ"], xcat_labels=["EQ", "FX"], title="PnLs")
     print(mapnl.evaluate_pnls())
