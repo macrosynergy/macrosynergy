@@ -26,6 +26,7 @@ from macrosynergy.learning import (ExpandingIncrementPanelSplit,
                                    RandomEffects, RollingKFoldPanelSplit,
                                    SignalOptimizer,
                                    regression_balanced_accuracy)
+from macrosynergy.learning.preprocessing.imputers.imputers import CrossSectionalImputer
 from macrosynergy.management.simulate import make_qdf
 from macrosynergy.management.utils.df_utils import categories_df
 
@@ -2246,8 +2247,9 @@ class TestAll(unittest.TestCase):
             self.assertTrue(len(ftr_data) == 1 + 3)  # 3 ftrs + 2 extra columns
             self.assertIsInstance(ftr_data[0], datetime.date)
             for i in range(1, len(ftr_data)):
-                if ftr_data[i] != np.nan:
-                    self.assertIsInstance(ftr_data[i], np.float32)
+                # since self.pipelines renames features, there shouldn't be any
+                # feature importances associated with original features
+                assert np.isnan(ftr_data[i])
 
             intercept_data = split_result["intercepts"]
             self.assertIsInstance(intercept_data, list)
@@ -2265,7 +2267,9 @@ class TestAll(unittest.TestCase):
             )  # 3 ftrs + 2 extra columns
             self.assertIsInstance(ftr_selection_data[0], datetime.date)
             for i in range(1, len(ftr_selection_data)):
-                self.assertTrue(ftr_selection_data[i] in [0, 1])
+                # since self.pipelines renames features, none of the originals
+                # features should be selected. They should all be set to 0
+                assert ftr_selection_data[i] == 0
 
             ftr_correlation = split_result["ftr_corr"]
             self.assertIsInstance(ftr_correlation, list)
@@ -2596,6 +2600,74 @@ class TestAll(unittest.TestCase):
             self.assertEqual(selected_ftrs.columns[i], self.X.columns[i - 2])
         self.assertTrue(selected_ftrs.name.unique()[0] == "test")
         self.assertTrue(selected_ftrs.isna().sum().sum() == 0)
+
+        # Test that get_selected_features is empty when feature names differ
+        # from original features
+        so = SignalOptimizer(
+            df=self.df,
+            xcats=self.xcats,
+            cids=self.cids,
+            drop_nas="y",
+        )
+
+        so.calculate_predictions(
+            name="RF",
+            models={
+                "RF": Pipeline([
+                    ("imputer", KNNImputer(n_neighbors=12, weights="distance")),
+                    ("pca", PCA(n_components=2)),
+                    ("RF", RandomForestRegressor(n_estimators=10, max_depth=1))
+                ])
+            },
+            n_jobs_outer=1,
+            min_cids=1,
+            min_periods=12
+        )
+
+        selected_ftrs = so.get_selected_features(name="RF")
+
+        self.assertIsInstance(selected_ftrs, pd.DataFrame)
+        self.assertEqual(selected_ftrs.shape[1], 5)
+        self.assertEqual(selected_ftrs.columns[0], "real_date")
+        self.assertEqual(selected_ftrs.columns[1], "name")
+        for i in range(2, 5):
+            self.assertEqual(selected_ftrs.columns[i], self.X.columns[i - 2])
+        self.assertTrue(selected_ftrs[selected_ftrs.columns[2:]].eq(0).all().all())
+
+        # Test that get_selected_features works when not all features available due
+        # to an Imputer dropping columns
+        so = SignalOptimizer(
+            df=self.df,
+            xcats=self.xcats,
+            cids=self.cids,
+            drop_nas="y",
+        )
+
+        so.calculate_predictions(
+            name="RF",
+            models={
+                "RF": Pipeline([
+                    ("imputer", CrossSectionalImputer(nan_threshold=0.01)),
+                    ("RF", RandomForestRegressor(n_estimators=10, max_depth=1))
+                ])
+            },
+            n_jobs_outer=1,
+            min_cids=1,
+            min_periods=12
+        )
+
+        selected_ftrs = so.get_selected_features(name="RF")
+
+        self.assertIsInstance(selected_ftrs, pd.DataFrame)
+        self.assertEqual(selected_ftrs.shape[1], 5)
+        self.assertEqual(selected_ftrs.columns[0], "real_date")
+        self.assertEqual(selected_ftrs.columns[1], "name")
+        for i in range(2, 5):
+            self.assertEqual(selected_ftrs.columns[i], self.X.columns[i - 2])
+        assert selected_ftrs["XR"].eq(1).all()
+        assert selected_ftrs["CPI"].unique().tolist() == [0, 1]
+
+
 
     def test_types_get_feature_importances(self):
         so = self.so_with_calculated_preds
