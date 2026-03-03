@@ -1,9 +1,19 @@
 from abc import ABC, abstractmethod
+from typing import Any, Protocol, Union, runtime_checkable, List, Set, Dict
 
 import numpy as np
 import pandas as pd
-from sklearn.base import BaseEstimator, TransformerMixin
+from sklearn.base import BaseEstimator, TransformerMixin, clone
+from sklearn.covariance import LedoitWolf
+from sklearn.ensemble import RandomForestRegressor
 from sklearn.utils.validation import check_is_fitted
+
+
+@runtime_checkable
+class Predictor(Protocol):
+    def fit(self, X: Any, y: Any) -> Any: ...
+    def predict(self, X: Any) -> Any: ...
+
 
 DATE_INDEX_NAME = "real_date"
 CIDS_INDEX_NAME = "cid"
@@ -188,7 +198,7 @@ class CrossSectionalImputer(BaseImputer):
 
     Parameters
     ----------
-    peer_map : dict[str, list[str]] | None
+    peer_map : dict[str, list[str]] or None
         Mapping from target cid -> list of peer cids to use for imputation.
         Example:
             {"CAD": ["USD", "GBP", "EUR"], "USD": ["CAD", "GBP", "EUR"]}
@@ -222,7 +232,7 @@ class CrossSectionalImputer(BaseImputer):
 
     def __init__(
         self,
-        peer_map: dict | None = None,
+        peer_map: Union[dict, None] = None,
         default_peers: str = "all",
         fallback: str = "global_mean",
         missing_values=np.nan,
@@ -248,7 +258,7 @@ class CrossSectionalImputer(BaseImputer):
         self.global_means_ = X.mean(axis=0, skipna=True)
         return self
 
-    def _resolve_peers(self, target_cid: str, all_cids: set[str]) -> list[str]:
+    def _resolve_peers(self, target_cid: str, all_cids: Set[str]) -> List[str]:
         # If user provided a peer_map and cid exists there, use it.
         if isinstance(self.peer_map, dict) and target_cid in self.peer_map:
             peers = list(self.peer_map[target_cid] or [])
@@ -305,3 +315,244 @@ class CrossSectionalImputer(BaseImputer):
             X_filled = X_filled.fillna(self.global_means_)
 
         return X_filled
+
+
+class EstimatorImputer(BaseImputer):
+    """
+    Impute missing values using a per-feature sklearn-compatible estimator
+    trained on the remaining features at fit time.
+
+    For each feature with missing values, a clone of the provided estimator is
+    trained using all other features as predictors, on rows where the target
+    feature is observed. At transform time the learned model fills in missing
+    values in that feature.
+
+    Parameters
+    ----------
+    estimator : BaseEstimator or None, default=None
+        Any sklearn-compatible estimator (e.g. RandomForestRegressor,
+        LinearRegression, Pipeline). If None, defaults to
+        RandomForestRegressor().
+    fallback : bool, default=True
+        If True, any values still missing after model-based imputation (e.g.
+        because a feature had too few observed rows to train a model) are
+        filled with the global column mean computed at fit time.
+    missing_values : scalar, default=np.nan
+        Value to treat as missing (converted to np.nan internally).
+    nan_threshold : float, default=1.0
+        If the proportion of NaNs in a column exceeds this threshold, the
+        column is dropped entirely.
+
+    Attributes
+    ----------
+    feature_names_in_ : ndarray of shape (n_features_in_,)
+        Names of features seen during fit.
+    missing_fraction_by_col_ : pd.Series
+        Fraction of missing values for each column.
+    missing_fraction_by_cid_and_col_ : pd.DataFrame
+        Fraction of missing values for each column split by cid.
+    dropped_features_ : list
+        Names of features dropped due to exceeding nan_threshold.
+    kept_features_ : list
+        Names of features retained after thresholding.
+    n_features_out_ : int
+        Number of features remaining after transform.
+    models_ : dict[str, Predictor]
+        Mapping from feature name -> fitted estimator.
+        Only populated for features that had at least one missing value during
+        fit and had enough observed rows to train a model.
+    predictor_means_ : pd.Series
+        Column means of the kept features (computed on training data, used to
+        fill missing predictor values before prediction).
+    """
+
+    def __init__(
+        self,
+        estimator: Union[BaseEstimator, None] = None,
+        fallback: bool = True,
+        missing_values=np.nan,
+        nan_threshold: float = 1.0,
+    ):
+        super().__init__(
+            missing_values=missing_values,
+            nan_threshold=nan_threshold,
+        )
+        self.estimator = estimator
+        self.fallback = fallback
+
+    # ------------------------------------------------------------------
+    # BaseImputer hooks
+    # ------------------------------------------------------------------
+    def _fit_fill_values(self, X: pd.DataFrame, y=None) -> "EstimatorImputer":
+        self.predictor_means_ = X.mean(axis=0, skipna=True)
+        self.models_: Dict[str, Predictor] = {}
+
+        base_estimator = (
+            self.estimator if self.estimator is not None else RandomForestRegressor()
+        )
+        features = list(X.columns)
+
+        for target_col in features:
+            target = X[target_col]
+            observed_mask = target.notna()
+
+            if observed_mask.all():
+                continue
+
+            if observed_mask.sum() < 2:
+                continue
+
+            predictor_cols = [c for c in features if c != target_col]
+            if not predictor_cols:
+                continue
+
+            X_train = X.loc[observed_mask, predictor_cols]
+            y_train = target.loc[observed_mask]
+
+            model = clone(base_estimator)
+            try:
+                model.fit(X_train, y_train)
+            except Exception as exc:
+                raise ValueError(
+                    f"Estimator failed to fit for target feature '{target_col}': {exc}"
+                ) from exc
+            self.models_[target_col] = model
+
+        return self
+
+    def _transform_with_fill_values(self, X: pd.DataFrame) -> pd.DataFrame:
+        X_filled = X.copy().astype(np.float64)
+        features = list(X.columns)
+
+        for target_col, model in self.models_.items():
+            missing_mask = X_filled[target_col].isna()
+            if not missing_mask.any():
+                continue
+
+            predictor_cols = [c for c in features if c != target_col]
+            X_pred = X_filled.loc[missing_mask, predictor_cols]
+            try:
+                X_filled.loc[missing_mask, target_col] = model.predict(X_pred)
+            except Exception as exc:
+                raise ValueError(
+                    f"Estimator failed to predict for target feature '{target_col}': {exc}"
+                ) from exc
+
+        if self.fallback:
+            X_filled = X_filled.fillna(self.predictor_means_)
+
+        return X_filled
+
+
+class GaussianConditionalImputer(BaseImputer):
+    """
+    Impute missing values using the closed-form Gaussian conditional mean.
+
+    For each row with missing values, the imputer partitions the feature
+    vector into observed (o) and missing (m) components and computes:
+
+        mu_{m|o} = mu_m + Sigma_{mo} @ Sigma_{oo}^{-1} @ (x_o - mu_o)
+
+    A single global Gaussian (mean + Ledoit-Wolf covariance) is fitted on
+    all complete rows across all cross-section identifiers.
+
+    Parameters
+    ----------
+    fallback : {"global", "mean", "none"}, default="global"
+        Strategy for any values still missing after conditional imputation:
+        - "mean": fill with column means
+        - "none": leave remaining NaNs in place
+    missing_values : scalar, default=np.nan
+        Value to treat as missing (converted to np.nan internally).
+    nan_threshold : float, default=1.0
+        If the proportion of NaNs in a column exceeds this threshold, the
+        column is dropped entirely.
+    """
+
+    _VALID_FALLBACKS = {"mean", "none"}
+
+    def __init__(
+        self,
+        fallback: str = "mean",
+        missing_values=np.nan,
+        nan_threshold: float = 1.0,
+    ):
+        if fallback not in self._VALID_FALLBACKS:
+            raise ValueError(
+                f"fallback must be one of {self._VALID_FALLBACKS}, got '{fallback}'"
+            )
+        super().__init__(
+            missing_values=missing_values,
+            nan_threshold=nan_threshold,
+        )
+        self.fallback = fallback
+
+    def _fit_fill_values(self, X: pd.DataFrame, y=None) -> "GaussianConditionalImputer":
+        self._fit_global_model(X)
+        return self
+
+    def _fit_global_model(self, X: pd.DataFrame) -> None:
+        complete_rows = X.dropna()
+        if len(complete_rows) >= 2:
+            lw = LedoitWolf().fit(complete_rows.values)
+            self.global_mean_ = lw.location_
+            self.global_covariance_ = lw.covariance_
+        else:
+            self.global_mean_ = X.mean(axis=0, skipna=True).values.astype(np.float64)
+            variances = X.var(axis=0, skipna=True).fillna(1.0).values
+            self.global_covariance_ = np.diag(variances)
+
+    def _transform_with_fill_values(self, X: pd.DataFrame) -> pd.DataFrame:
+        X_filled = X.copy().astype(np.float64)
+
+        for idx_label, row in X_filled.iterrows():
+            missing_mask = row.isna().values
+            if not missing_mask.any():
+                continue
+
+            if missing_mask.all():
+                X_filled.loc[idx_label, :] = np.nan
+                continue
+
+            imputed = self._conditional_mean(
+                x_observed=row.values,
+                mean=self.global_mean_,
+                cov=self.global_covariance_,
+                missing_mask=missing_mask,
+            )
+            X_filled.loc[idx_label, :] = imputed
+
+        if self.fallback == "mean":
+            fallback_means = pd.Series(
+                self.global_mean_, index=X.columns, dtype=np.float64
+            )
+            X_filled = X_filled.fillna(fallback_means)
+
+        return X_filled
+
+    @staticmethod
+    def _conditional_mean(
+        x_observed: np.ndarray,
+        mean: np.ndarray,
+        cov: np.ndarray,
+        missing_mask: np.ndarray,
+    ) -> np.ndarray:
+        obs_idx = np.where(~missing_mask)[0]
+        mis_idx = np.where(missing_mask)[0]
+
+        mu_o = mean[obs_idx]
+        mu_m = mean[mis_idx]
+        sigma_oo = cov[np.ix_(obs_idx, obs_idx)]
+        sigma_mo = cov[np.ix_(mis_idx, obs_idx)]
+
+        x_o = x_observed[obs_idx]
+
+        try:
+            w = np.linalg.solve(sigma_oo, x_o - mu_o)
+            imputed_missing = mu_m + sigma_mo @ w
+        except np.linalg.LinAlgError:
+            imputed_missing = np.full_like(mu_m, np.nan)
+
+        result = x_observed.copy()
+        result[missing_mask] = imputed_missing
+        return result

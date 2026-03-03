@@ -18,6 +18,11 @@ from .preprocessing import (
     BasePanelSelector,
     PanelPCA,
     KendallSignificanceSelector,
+    BaseImputer,
+    ConstantImputer,
+    CrossSectionalImputer,
+    EstimatorImputer,
+    GaussianConditionalImputer,
 )
 from .model_evaluation import (
     neg_mean_abs_corr,
@@ -91,6 +96,12 @@ __all__ = [
     "ZnScoreAverager",
     "PanelPCA",
     "PLSTransformer",
+    # imputers
+    "BaseImputer",
+    "ConstantImputer",
+    "CrossSectionalImputer",
+    "EstimatorImputer",
+    "GaussianConditionalImputer",
     # metrics
     "neg_mean_abs_corr",
     "panel_significance_probability",
