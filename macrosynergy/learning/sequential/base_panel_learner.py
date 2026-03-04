@@ -65,10 +65,12 @@ class BasePanelLearner(ABC):
         end : str, 
             End date for considered data in subsequent analysis in ISO 8601 format.
             Default is None i.e. the latest date in the dataframe.
-        blacklist : list, 
+        blacklist : dict or list[dict],
             Blacklisting dictionary specifying date ranges for which cross-sectional
             information should be excluded. The keys are cross-sections and the values
-            are tuples of start and end dates in ISO 8601 format. Default is None.
+            are tuples of start and end dates in ISO 8601 format. A list of dictionaries
+            can be passed as well, where the ith blacklisting dictionary corresponds to
+            the ith target. Default is None.
         freq : str, 
             Frequency of the data. Default is "M" for monthly.
         lag : int, 
@@ -145,44 +147,19 @@ class BasePanelLearner(ABC):
         self.drop_nas = drop_nas
 
         # Create long-format dataframe
-        if self.n_targets == 1:
-            df_long = (
-                categories_df(
-                    df=self.df,
-                    xcats=self.xcats,
-                    cids=self.cids,
-                    start=self.start,
-                    end=self.end,
-                    blacklist=self.blacklist,
-                    freq=self.freq,
-                    lag=self.lag,
-                    xcat_aggs=self.xcat_aggs,
-                )
-            )
-        else:
-            features_xcats = self.xcats[:-self.n_targets]
-            targets_xcats = self.xcats[-self.n_targets:]
-            dfs = []
-            for target in targets_xcats:
-                df_long = (
-                    categories_df(
-                        df=self.df,
-                        xcats=features_xcats + [target],
-                        cids=self.cids,
-                        start=self.start,
-                        end=self.end,
-                        blacklist=self.blacklist,
-                        freq=self.freq,
-                        lag=self.lag,
-                        xcat_aggs=self.xcat_aggs,
-                    )
-                )
-                dfs.append(df_long)
-            df_long = pd.concat(dfs, axis=1).sort_index()
-            # Filter out duplicate categories
-            df_features = df_long.iloc[:,:len(features_xcats)]
-            df_targets = df_long[targets_xcats]
-            df_long = pd.concat([df_features, df_targets], axis=1)
+        df_long = _create_long_format_df(
+            df=self.df,
+            xcats=self.xcats,
+            cids=self.cids,
+            n_targets=self.n_targets,
+            start=self.start,
+            end=self.end,
+            blacklist=self.blacklist,
+            freq=self.freq,
+            lag=self.lag,
+            xcat_aggs=self.xcat_aggs,
+        )
+
         if self.drop_nas:
             df_long = df_long.dropna().sort_index()
         else:
@@ -1229,31 +1206,44 @@ class BasePanelLearner(ABC):
 
         # blacklist checks
         if blacklist is not None:
-            if not isinstance(blacklist, dict):
-                raise TypeError("The blacklist argument must be a dictionary.")
-            for key, value in blacklist.items():
-                # check keys are strings
-                if not isinstance(key, str):
-                    raise TypeError(
-                        "The keys of the blacklist argument must be strings."
-                    )
-                # check values of tuples of length two
-                if not isinstance(value, tuple):
-                    raise TypeError(
-                        "The values of the blacklist argument must be tuples."
-                    )
-                if len(value) != 2:
-                    raise ValueError(
-                        "The values of the blacklist argument must be tuples of length "
-                        "two."
-                    )
-                # ensure each of the dates in the dictionary are timestamps
-                for date in value:
-                    if not isinstance(date, pd.Timestamp):
+            if not isinstance(blacklist, (dict, list)):
+                raise TypeError("The blacklist argument must be a dictionary or list.")
+
+            if isinstance(blacklist, list) and n_targets > 1 and len(blacklist) != n_targets:
+                raise ValueError(
+                    f"When blacklist is a list and n_targets > 1, blacklist must have "
+                    f"exactly n_targets ({n_targets}) elements."
+                )
+
+            blacklists = [blacklist] if isinstance(blacklist, dict) else blacklist
+
+            for i, blacklist in enumerate(blacklists):
+                if not isinstance(blacklist, dict):
+                    raise TypeError(f"blacklist[{i}] must be a dict.")
+
+                for key, value in blacklist.items():
+                    # check keys are strings
+                    if not isinstance(key, str):
                         raise TypeError(
-                            "The values of the blacklist argument must be tuples of "
-                            "pandas Timestamps."
+                            "The keys of the blacklist argument must be strings."
                         )
+                    # check values of tuples of length two
+                    if not isinstance(value, tuple):
+                        raise TypeError(
+                            "The values of the blacklist argument must be tuples."
+                        )
+                    if len(value) != 2:
+                        raise ValueError(
+                            "The values of the blacklist argument must be tuples of length "
+                            "two."
+                        )
+                    # ensure each of the dates in the dictionary are timestamps
+                    for date in value:
+                        if not isinstance(date, pd.Timestamp):
+                            raise TypeError(
+                                "The values of the blacklist argument must be tuples of "
+                                "pandas Timestamps."
+                            )
 
         # freq checks
         if not isinstance(freq, str):
@@ -1792,3 +1782,83 @@ class BasePanelLearner(ABC):
             df = getattr(self, attr)
             if value in df[column].unique():
                 setattr(self, attr, df[df[column] != value])
+
+
+def _resolve_blacklists(
+    blacklist: dict | list[dict] | None,
+    n_targets: int,
+) -> list[dict | None]:
+    if isinstance(blacklist, list):
+        return blacklist
+    return [blacklist] * n_targets
+
+
+def _create_long_format_df(
+    df: pd.DataFrame,
+    xcats: list[str],
+    cids: list[str] | None,
+    n_targets: int,
+    start: str | None,
+    end: str | None,
+    blacklist: dict | list[dict] | None,
+    freq: str,
+    lag: int,
+    xcat_aggs: list[str],
+) -> pd.DataFrame:
+    """
+    Helper method for computing long-format dataframe in BasePanelLearner __init__
+    """
+    shared_kwargs = dict(
+        cids=cids,
+        start=start,
+        end=end,
+        freq=freq,
+        lag=lag,
+        xcat_aggs=xcat_aggs,
+    )
+
+    if n_targets == 1:
+        return categories_df(df=df, xcats=xcats, blacklist=blacklist, **shared_kwargs)
+
+    features_xcats = xcats[:-n_targets]
+    targets_xcats = xcats[-n_targets:]
+
+    dfs = (
+        categories_df(
+            df=df,
+            xcats=features_xcats + [target],
+            **shared_kwargs,
+        )
+        for target in targets_xcats
+    )
+    df = pd.concat(dfs, axis=1)
+    df = df.loc[:, ~df.columns.duplicated(keep="first")]
+
+    if blacklist is None:
+        return df
+
+    # 1. rows where all targets are part of a blacklist should be removed
+    # 2. rows where some targets are blacklisted and some not should stay
+    # as is except blacklisted target should be set to nan
+    # todo: point 2. begs the question of how would we work with missing
+    # y data when multiple blacklists exist? can't be sure if nan is from blacklist
+    # or is just missing
+    target_blacklists = _resolve_blacklists(blacklist, n_targets)
+    target_in_bl = np.zeros((df.shape[0], n_targets), dtype=bool)
+    for i, bl in enumerate(target_blacklists):
+
+        in_blacklist = np.zeros(target_in_bl.shape[0], dtype=bool)
+        for cid, (start, end) in bl.items():
+            in_blacklist |= (
+                (df.index.get_level_values("cid") == cid) &
+                (df.index.get_level_values("real_date") <= end) &
+                (df.index.get_level_values("real_date") >= start)
+            )
+
+        df.loc[in_blacklist, targets_xcats[i]] = np.nan
+        target_in_bl[:, i] = in_blacklist
+
+    all_in_blacklist = target_in_bl.all(axis=1)
+    df = df[~all_in_blacklist].sort_index()
+
+    return df
