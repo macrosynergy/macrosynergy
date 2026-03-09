@@ -4,7 +4,7 @@ It also provides functionality to calculate a weighted aggregate PnL based on us
 for each PnL.
 """
 
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -22,13 +22,48 @@ class MultiPnL:
     Manages multiple `NaivePnL` instances, enabling combined PnL analysis and visualization.
     """
 
-    def __init__(self):
+    def __init__(
+        self,
+        df: Optional[pd.DataFrame] = None,
+        bms: Optional[Union[str, List[str]]] = None,
+    ):
+        """
+        Parameters
+        ----------
+        df : ~pandas.DataFrame, optional
+            Dataframe containing benchmark return series. Required if
+            ``bms`` is specified.
+        bms : str or List[str], optional
+            Benchmark ticker(s) in the format ``'cid_xcat'`` (e.g.
+            ``'USD_EQXR_NSA'``). Correlations with each benchmark are included as
+            rows in :meth:`evaluate_pnls`. Requires ``df`` to be provided.
+        """
         self.pnls_df = QuantamentalDataFrame(
             pd.DataFrame(columns=["real_date", "xcat", "value", "cid"])
         )
         self.single_return_pnls: Dict[str, NaivePnL] = {}
         self.composite_pnl_xcats = []
         self.xcat_to_ret = {}
+        self._bm_dict: Dict[str, pd.DataFrame] = {}
+
+        if (df is None) != (bms is None):
+            raise ValueError(
+                "Both `df` and `bms` must be provided together, or neither."
+            )
+        if df is not None and bms is not None:
+            bms = [bms] if isinstance(bms, str) else bms
+            for bm in bms:
+                cid, xcat = bm.split("_", maxsplit=1)
+                dfa = df[(df["cid"] == cid) & (df["xcat"] == xcat)]
+                if dfa.shape[0] == 0:
+                    raise ValueError(f"{bm} has no observations in the DataFrame.")
+                else:
+                    bm_series = dfa.pivot(
+                        index="real_date", columns="xcat", values="value"
+                    )
+                    bm_series.columns = [bm]
+                    self._bm_dict[bm] = bm_series
+        self.bm_bool = bool(self._bm_dict)
 
     def add_pnl(self, pnl: NaivePnL, pnl_xcats: List[str]):
         """
@@ -144,8 +179,12 @@ class MultiPnL:
         self,
         pnl_xcats: List[str] = None,
         title: str = None,
-        title_fontsize: int = 14,
+        title_fontsize: int = 20,
         xcat_labels: Union[List[str], dict] = None,
+        figsize: Tuple = (12, 7),
+        tick_fontsize: int = 12,
+        label_fontsize: int = 12,
+        legend_fontsize: int = None,
     ):
         """
         Creates a plot of PnLs from added NaivePnL objects and/or
@@ -158,6 +197,18 @@ class MultiPnL:
             'xcat', or 'xcat/return_xcat'.
         title : str
             Title of the plot.
+        title_fontsize : int
+            font size for the title. Default is 20.
+        xcat_labels : Union[List[str], dict]
+            custom labels to be used for the PnLs.
+        figsize : Tuple
+            tuple of plot width and height. Default is (12, 7).
+        tick_fontsize : int
+            font size for the tick labels. Default is 12.
+        label_fontsize : int
+            font size for the axis labels. Default is 12.
+        legend_fontsize : int
+            font size for the legend. Default is None (uses matplotlib default).
         """
 
         self._check_pnls_added()
@@ -181,11 +232,28 @@ class MultiPnL:
 
         pnl_df.loc[:, "cumulative pnl"] = pnl_df.groupby("xcat")["value"].cumsum()
 
-        sns.lineplot(data=pnl_df, x="real_date", y="cumulative pnl", hue=("xcat"))
+        sns.set_theme(
+            style="whitegrid", palette="colorblind", rc={"figure.figsize": figsize}
+        )
+
+        sns.lineplot(
+            data=pnl_df,
+            x="real_date",
+            y="cumulative pnl",
+            hue="xcat",
+            estimator=None,
+            lw=1,
+        )
+        plt.axhline(y=0, color="black", linestyle="--", lw=1)
         plt.title(title, fontsize=title_fontsize)
-        plt.xlabel(None)
-        plt.ylabel("% risk capital, no compounding")
-        plt.legend(title="PnL Category(s)")
+        plt.xlabel(None, fontsize=label_fontsize)
+        plt.ylabel("% risk capital, no compounding", fontsize=label_fontsize)
+        plt.legend(
+            title="PnL Category(s)",
+            title_fontsize=legend_fontsize,
+            fontsize=legend_fontsize,
+        )
+        plt.tick_params(axis="both", labelsize=tick_fontsize)
         plt.show()
         pnl_df.drop(columns="cumulative pnl", inplace=True)
 
@@ -207,7 +275,9 @@ class MultiPnL:
         .. note::
             The evaluation metrics are calculated in a manner similar to NaivePnL's `evaluate_pnls()`.
 
-            Benchmark correlation is not currently supported for combined PnLs.
+            Benchmark correlations are included when ``df`` and ``bms`` are passed to the
+            :class:`MultiPnL` constructor. They apply uniformly to all PnLs in the table,
+            including composite PnLs.
 
         Parameters
         ----------
@@ -229,8 +299,9 @@ class MultiPnL:
                 pnl_xcats[i] = self._infer_return_by_xcat(pnl_xcat)
         pnl_evals = []
         for pnl_xcat in pnl_xcats:
-            if pnl_xcat in self.composite_pnl_xcats:
-                eval_df = self._evaluate_composite_pnl(pnl_xcat)
+            if pnl_xcat in self.composite_pnl_xcats or self._bm_dict:
+                eval_df = self._evaluate_pnl_stats(pnl_xcat)
+                eval_df.columns = [pnl_xcat]
             else:
                 pnl = self.single_return_pnls[pnl_xcat]
                 eval_df = pnl.evaluate_pnls([pnl_xcat.split("/")[0]])
@@ -239,9 +310,12 @@ class MultiPnL:
 
         return pd.concat(pnl_evals, axis=1, ignore_index=False, sort=False)
 
-    def _evaluate_composite_pnl(self, pnl_xcat: str) -> pd.DataFrame:
+    def _evaluate_pnl_stats(self, pnl_xcat: str) -> pd.DataFrame:
         """
-        Evaluate the combined PnLs in a manner similar to NaivePnL's `evaluate_pnls()`.
+        Evaluate a PnL in a manner similar to NaivePnL's ``evaluate_pnls()``.
+
+        Works for both single-return and composite PnLs. Benchmark correlation rows
+        are included when ``self._bm_dict`` is populated.
         """
         stats = [
             "Return %",
@@ -252,9 +326,15 @@ class MultiPnL:
             "Max 6-Month Draw %",
             "Peak to Trough Draw %",
             "Top 5% Monthly PnL Share",
-            "Traded Months",
         ]
-        pnl_df = self.get_pnls([pnl_xcat])
+        if self._bm_dict:
+            for bm in self._bm_dict:
+                stats.append(f"{bm} correl")
+        stats.append("Traded Months")
+
+        pnl_df = self.pnls_df[self.pnls_df["xcat"] == pnl_xcat].copy()
+        if pnl_df["xcat"].dtype.name == "category":
+            pnl_df["xcat"] = pnl_df["xcat"].cat.remove_unused_categories()
         dfw = pnl_df.pivot(index="real_date", columns="xcat", values="value")
         df = pd.DataFrame(columns=dfw.columns, index=stats)
 
@@ -271,10 +351,10 @@ class MultiPnL:
         cum_pnl = dfw.cumsum()
         high_watermark = cum_pnl.cummax()
         drawdown = high_watermark - cum_pnl
-
         df.iloc[6, :] = -drawdown.max()
 
-        monthly_pnl = dfw.resample("M").sum()
+        mfreq = _map_to_business_day_frequency("M")
+        monthly_pnl = dfw.resample(mfreq).sum()
         total_pnl = monthly_pnl.sum(axis=0)
         top_5_percent_cutoff = int(np.ceil(len(monthly_pnl) * 0.05))
         top_months = pd.DataFrame(columns=monthly_pnl.columns)
@@ -285,7 +365,17 @@ class MultiPnL:
                 .reset_index(drop=True)
             )
         df.iloc[7, :] = top_months.sum() / total_pnl
-        df.iloc[8, :] = dfw.resample("M").sum().count()
+
+        if self._bm_dict:
+            bm_df = pd.concat(list(self._bm_dict.values()), axis=1)
+            for i, bm in enumerate(self._bm_dict.keys()):
+                index = dfw.index.intersection(bm_df.index)
+                correlation = dfw.loc[index].corrwith(
+                    bm_df.loc[index].iloc[:, i], axis=0, method="pearson", drop=True
+                )
+                df.iloc[8 + i, :] = correlation
+
+        df.iloc[8 + len(self._bm_dict), :] = dfw.resample(mfreq).sum().count()
         return df
 
     def get_pnls(self, pnl_xcats: List[str] = None) -> pd.DataFrame:
@@ -440,8 +530,6 @@ if __name__ == "__main__":
     black = {"AUD": ["2006-01-01", "2015-12-31"], "GBP": ["2022-01-01", "2100-01-01"]}
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
 
-    # Instantiate a new instance to test the long-only functionality.
-    # Benchmarks are used to calculate correlation against PnL series.
     pnl_eq = NaivePnL(
         dfd,
         ret="EQXR_NSA",
@@ -449,7 +537,6 @@ if __name__ == "__main__":
         cids=cids,
         start="2000-01-01",
         blacklist=black,
-        # bms=["EUR_EQXR_NSA", "USD_EQXR_NSA"],
     )
 
     pnl_eq.make_pnl(
@@ -474,7 +561,6 @@ if __name__ == "__main__":
         cids=cids,
         start="2000-01-01",
         blacklist=black,
-        bms=["EUR_EQXR_NSA", "USD_EQXR_NSA"],
     )
 
     pnl_fx.make_pnl(
@@ -492,21 +578,19 @@ if __name__ == "__main__":
 
     pnl_fx.make_long_pnl(vol_scale=10, label="LONG")
 
-    # pnl_fx.make_long_pnl(vol_scale=10, label="Long")
     print(pnl_eq.pnl_names)
 
-    mapnl = MultiPnL()
+    # Pass df and benchmark tickers so evaluate_pnls() includes correlation rows
+    # for all PnLs, including composite ones.
+    mapnl = MultiPnL(dfd, bms=["EUR_EQXR_NSA", "USD_EQXR_NSA"])
 
     mapnl.add_pnl(pnl_fx, ["PNL_FX", "LONG"])
     mapnl.add_pnl(pnl_eq, ["PNL_EQ", "LONG"])
 
     mapnl.combine_pnls(
-        # ["PNL_FX", "PNL_EQ"],
         ["PNL_EQ", "PNL_FX"],
-        # weights={"PNL_FX": 1, "LONG": 1},
         composite_pnl_xcat="EQ_FX_LONG",
     )
-    mapnl.evaluate_pnls(["EQ_FX_LONG"])
-    mapnl.plot_pnls(["PNL_FX", "PNL_EQ"], xcat_labels=["z", "FX"], title="PnLs")
-    # print(mapnl.get_pnls(["PNL_FX"]))
-    # print(mapnl.evaluate_pnls(["PNL_EQ"]))
+    print(mapnl.evaluate_pnls(["PNL_FX", "PNL_EQ", "EQ_FX_LONG"]))
+    mapnl.plot_pnls(["PNL_FX", "PNL_EQ"], xcat_labels=["EQ", "FX"], title="PnLs")
+    print(mapnl.evaluate_pnls())
