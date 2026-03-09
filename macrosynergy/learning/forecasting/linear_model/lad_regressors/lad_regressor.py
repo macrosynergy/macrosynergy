@@ -45,14 +45,13 @@ class LADRegressor(BaseEstimator, RegressorMixin):
 
         Notes
         -----
-        A dependent variable is modelled as a linear combination of the input features.
-        The weights associated with each feature (and the intercept) are determined by
-        finding the weights that minimise the average absolute model residuals.
+        LAD Regression is a linear regression model, where model parameters are 
+        learned by minimising the mean absolute error (L1 loss) between model predictions
+        and true target values. 
 
-        If `alpha` is positive, then shrinkage-based regularization is applied to the
-        non-intercept model coefficients. The type of shrinkage is determined by the
-        `shrinkage_type` parameter. If `shrinkage_type` is "l1", then L1 regularization
-        is applied. If `shrinkage_type` is "l2", then L2 regularization is applied.
+        Optional shrinkage of non-intercept parameters is supported, which can offer 
+        regularization benefits. Existing options are `l1` for Lasso-type shrinkage and
+        `l2` for Ridge-type shrinkage.
 
         Mathematically, the following optimization problem is solved:
 
@@ -150,6 +149,14 @@ class LADRegressor(BaseEstimator, RegressorMixin):
                 alpha=self.alpha,
                 shrinkage_type=self.shrinkage_type,
             ),
+            jac=partial(
+                self._jac,
+                X=X,
+                y=y,
+                sample_weight=sample_weight,
+                alpha=self.alpha,
+                shrinkage_type=self.shrinkage_type,
+            )
             x0=init_weights,
             method="SLSQP",
             bounds=bounds,
@@ -307,6 +314,68 @@ class LADRegressor(BaseEstimator, RegressorMixin):
                 )
 
         return np.mean(weighted_abs_residuals)
+    
+    def _jac(
+        self,
+        weights,
+        X,
+        y,
+        sample_weight=None,
+        alpha: float = 0,
+        shrinkage_type: str = "l1",
+    ):
+        """
+        Determine the Jacobian of the L1 loss with respect to 'weights'.
+
+        Parameters
+        ----------
+        weights : np.ndarray
+            LADRegressor model coefficients to be optimised.
+        X : np.ndarray
+            Input features.
+        y : np.ndarray
+            Targets associated with each sample in X.
+        sample_weight : np.ndarray, default=None
+            Sample weights to create a weighted LAD regression model.
+        alpha : float, default=0
+            Shrinkage hyperparameter.
+        shrinkage_type : str, default="l1"
+            Type of shrinkage regularization to perform.
+
+        Returns
+        -------
+        jac : np.ndarray
+            Jacobian of the L1 loss with respect to 'weights'.
+        """
+        if sample_weight is None:
+            sample_weight = np.ones(X.shape[0])
+
+        n = X.shape[0]
+
+        residuals = y - X @ weights
+        sign_residuals = np.sign(residuals)
+
+        # Gradient of LAD loss
+        grad = -(X.T @ (sample_weight * sign_residuals)) / n
+
+        if alpha > 0:
+            if shrinkage_type == "l1":
+                penalty_grad = np.sign(weights)
+
+                if self.fit_intercept:
+                    penalty_grad[0] = 0
+
+                grad += 2 * n * alpha * penalty_grad
+
+            elif shrinkage_type == "l2":
+                penalty_grad = 2 * weights
+
+                if self.fit_intercept:
+                    penalty_grad[0] = 0
+
+                grad += 2 * n * alpha * penalty_grad
+
+        return grad
 
     def _check_init_params(
         self, fit_intercept, positive, alpha, shrinkage_type, tol, maxiter
@@ -412,7 +481,7 @@ class LADRegressor(BaseEstimator, RegressorMixin):
             if y.ndim != 1:
                 raise ValueError(
                     "The dependent variable numpy array must be 1D. If the dependent "
-                    "variable is 2D, please either flatten the array or double check the "
+                    "variable is 2D, please either flatten the array or double check the " 
                     "contents of `y`."
                 )
             if not np.issubdtype(y.dtype, np.number):
