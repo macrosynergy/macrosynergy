@@ -125,25 +125,27 @@ The resulting dataframe is returned to the user in the chosen dataframe format
     # print the earliest file's details
     print(available_files.iloc[-1])
 
-**Example 7: Download all historical full snapshot files (vintages) for JPMaQS.**
+**Example 7: Load "notification" metadata (missing updates & revisions).**
 
-Please note:
-    - This is a **VERY LARGE** download, taking 1hr+ and around 1GB/snapshot.
-    - This method is **NOT** recommended for regular use.
-    - This method should **ONLY** be used for audit and archival purposes.
+JPMaQS publishes daily metadata notification JSON files that summarize:
+
+- Missing updates ("Missing Updates")
+- Additional info about missing updates ("Additional information on missing updates")
+- Changed historical values ("Changed historical values")
+
+The helpers below download the relevant metadata for the requested date (UTC, business-day
+window) if needed, and return the notifications as pandas DataFrames.
 
 .. code-block:: python
 
     from macrosynergy.download import DataQueryFileAPIClient
-    client = DataQueryFileAPIClient(out_dir="./jpmaqs_full_snapshots")
-    earliest_date = "20220101" # a date before the earliest available file
 
-    client.download_full_snapshot(
-        since_datetime=earliest_date,
-        include_delta=False,
-        include_metadata=False,
-    )
+    with DataQueryFileAPIClient(out_dir="./jpmaqs_data") as client:
+        missing_df = client.get_missing_data_notifications(date="2026-01-19")
+        revisions_df = client.get_revisions_notifications(date="2026-01-19")
 
+        print(missing_df.head())
+        print(revisions_df.head())
 """
 
 import os
@@ -189,6 +191,16 @@ DQ_FILE_API_DELAY_PARAM: float = 0.04  # =1/25 ; 25 transactions per second
 DQ_FILE_API_DELAY_MARGIN: float = 1.1  # 10% safety margin
 DQ_FILE_API_SEGMENT_SIZE_MB: float = 8.0  # 8 MB
 DQ_FILE_API_STREAM_CHUNK_SIZE: int = 8192  # 8 KB
+
+JPMAQS_DATASET_THEME_MAPPING = {
+    "Economic surprises": "JPMAQS_ECONOMIC_SURPRISES",
+    "Financial conditions": "JPMAQS_FINANCIAL_CONDITIONS",
+    "Generic returns": "JPMAQS_GENERIC_RETURNS",
+    "Macroeconomic balance sheets": "JPMAQS_MACROECONOMIC_BALANCE_SHEETS",
+    "Macroeconomic trends": "JPMAQS_MACROECONOMIC_TRENDS",
+    "Shocks and risk measures": "JPMAQS_SHOCKS_RISK_MEASURES",
+    "Stylized trading factors": "JPMAQS_STYLIZED_TRADING_FACTORS",
+}
 
 
 JPMAQS_EARLIEST_FILE_DATE = "20220101"
@@ -1032,8 +1044,8 @@ class DataQueryFileAPIClient:
         df = pd.read_parquet(file_path)
 
         if add_dataset_column:
-            df.loc[:, "Dataset"] = df["Theme"].apply(
-                lambda x: "JPMAQS_" + str(x).upper().replace(" ", "_")
+            df.loc[:, "Dataset"] = (
+                df["Theme"].map(JPMAQS_DATASET_THEME_MAPPING).fillna("Unknown")
             )
 
         if as_csv:
@@ -1127,6 +1139,184 @@ class DataQueryFileAPIClient:
 
         files_df = files_df[col_order].rename(columns={"filename": "file-name"})
         return files_df
+
+    def _load_metadata_jsons(
+        self,
+        date: Optional[Union[pd.Timestamp, str]] = None,
+        normalize_headers: bool = True,
+        skip_download: bool = False,
+    ) -> Dict[str, pd.DataFrame]:
+        """Load JPMaQS metadata notification JSONs for a date."""
+        date: pd.Timestamp = (
+            pd_to_datetime_compat(date) if date is not None else pd.Timestamp.utcnow()
+        ).normalize()
+        if date > pd.Timestamp.utcnow().normalize():
+            today_utc = pd.Timestamp.utcnow().normalize()
+            raise ValueError(
+                "Provided `date` is in the future (UTC). "
+                f"Requested: {date.date()}, today (UTC): {today_utc.date()}."
+            )
+        if not skip_download:
+            to_dt = date + pd.offsets.BDay(1) - pd.Timedelta(seconds=1)
+            self.download_full_snapshot(
+                since_datetime=date,
+                to_datetime=to_dt,
+                include_full_snapshots=False,
+                include_delta=False,
+                include_metadata=True,
+            )
+        df = self.list_downloaded_files()
+        df: pd.DataFrame = df[
+            (df["dataset"] == "JPMAQS_METADATA_NOTIFICATIONS")
+            & df["file-name"].str.lower().str.endswith(".json")
+        ]
+        date = date.normalize()
+        df = df[df["file-timestamp"].dt.normalize() == date]
+        if df.empty:
+            logger.warning(f"No notification files found for date: {date.date()}")
+            return {}
+        json_contentts: Dict[str, pd.DataFrame] = {}
+        err_str = 'Invalid notification file (missing "sub_title"): '
+        title_err_str = "Unexpected notification title in file: "
+        expected_titles = [
+            "Missing Updates",
+            "Changed historical values",
+            "Additional information on missing updates",
+        ]
+        canonical_title_map = {t.upper(): t for t in expected_titles}
+        for jp in df["path"].apply(str).tolist():
+            _json = {}
+            with open(jp, "r", encoding="utf-8") as f:
+                _json: Dict[str, dict] = json.load(f)
+            if _json.get("metadata", {}).get("sub_title", None) is None:
+                logger.warning(err_str + jp)
+                continue
+            j_title: str = _json["metadata"]["sub_title"]
+            if j_title.upper() not in map(str.upper, expected_titles):
+                logger.warning(title_err_str + jp)
+                continue
+            canonical_title = canonical_title_map[j_title.upper()]
+            json_contentts[canonical_title] = pd.json_normalize(
+                _json, record_path=["data"]
+            )
+
+        if normalize_headers:
+            for key in json_contentts:
+                new_cols = [
+                    _col.replace(" ", "_")
+                    .replace("-", "_")
+                    .replace("(%)", "pct")
+                    .lower()
+                    for _col in json_contentts[key].columns
+                ]
+                json_contentts[key].columns = new_cols
+
+        return json_contentts
+
+    def get_revisions_notifications(
+        self,
+        date: Optional[Union[pd.Timestamp, str]] = None,
+        normalize_headers: bool = True,
+    ) -> pd.DataFrame:
+        """
+        Return "Changed historical values" notifications for a given date.
+
+        This loads daily JPMaQS metadata notification JSON(s) for the requested date
+        and returns the table describing historical revisions. If no matching
+        notification file(s) are found, an empty DataFrame is returned.
+
+        Parameters
+        ----------
+        date : Optional[Union[pd.Timestamp, str]]
+            Target date (UTC). Strings can be "YYYY-MM-DD", "YYYYMMDD", or ISO 8601.
+            Defaults to today (UTC).
+        normalize_headers : bool
+            If True, normalizes column names to lowercase snake_case and converts
+            "(%)" to "pct". Defaults to True.
+
+        Returns
+        -------
+        pd.DataFrame
+            A DataFrame of revision notifications. Empty if none are found.
+        """
+        jsons = self._load_metadata_jsons(
+            date=date, normalize_headers=normalize_headers
+        )
+        if "Changed historical values" not in jsons:
+            logger.warning("No `Changed historical values` notifications found.")
+            return pd.DataFrame()
+        return jsons["Changed historical values"]
+
+    def get_missing_data_notifications(
+        self,
+        date: Optional[Union[pd.Timestamp, str]] = None,
+        normalize_headers: bool = True,
+    ) -> pd.DataFrame:
+        """
+        Return missing-update notifications (with optional additional information).
+
+        This loads daily JPMaQS metadata notification JSON(s) for the requested date.
+        It returns:
+
+        - "Missing Updates" rows
+        - left-joined with "Additional information on missing updates" when available
+
+        If only one of the two tables is available, that table is returned. If
+        neither is available, an empty DataFrame is returned.
+
+        Parameters
+        ----------
+        date : Optional[Union[pd.Timestamp, str]]
+            Target date (UTC). Strings can be "YYYY-MM-DD", "YYYYMMDD", or ISO 8601.
+            Defaults to today (UTC).
+        normalize_headers : bool
+            If True, normalizes column names to lowercase snake_case and converts
+            "(%)" to "pct". Defaults to True.
+
+        Returns
+        -------
+        pd.DataFrame
+            A DataFrame of missing-update notifications (optionally enriched).
+        """
+        jsons = self._load_metadata_jsons(
+            date=date, normalize_headers=normalize_headers
+        )
+        df1 = jsons.get("Missing Updates", pd.DataFrame())
+        df2 = jsons.get("Additional information on missing updates", pd.DataFrame())
+
+        if df1.empty and df2.empty:
+            logger.warning("No `Missing Updates` or related notifications found.")
+            return pd.DataFrame()
+        if df2.empty:
+            logger.warning(
+                "No `Additional information on missing updates` notifications found."
+            )
+            return df1
+        if df1.empty:
+            logger.warning("No `Missing Updates` notifications found.")
+            return df2
+
+        left_join_key = None
+        if "Ticker" in df1.columns and "ticker" in df2.columns:
+            df1 = df1.rename(columns={"Ticker": "ticker"})
+        elif "ticker" in df1.columns and "Ticker" in df2.columns:
+            df2 = df2.rename(columns={"Ticker": "ticker"})
+
+        for candidate in ("Ticker", "ticker"):
+            if candidate in df1.columns and candidate in df2.columns:
+                left_join_key = candidate
+                break
+        if left_join_key is None:
+            raise KeyError(
+                'Expected a common join key ("Ticker" or "ticker") in notification data.'
+            )
+
+        df1 = (
+            df1.merge(df2, how="left", on=left_join_key)
+            .sort_values(by=left_join_key, ascending=True)
+            .reset_index(drop=True)
+        )
+        return df1
 
     def download_full_snapshot(
         self,

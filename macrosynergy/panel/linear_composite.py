@@ -9,6 +9,8 @@ import warnings
 from packaging import version
 from macrosynergy.management.utils import reduce_df, is_valid_iso_date
 from macrosynergy.management.simulate import make_test_df
+from macrosynergy.management.utils.core import _map_to_business_day_frequency
+from macrosynergy.management.utils.df_utils import get_sops
 from macrosynergy.management.types import QuantamentalDataFrame
 
 listtypes: Tuple[Type, ...] = (list, np.ndarray, pd.Series, tuple)
@@ -34,6 +36,9 @@ def linear_composite(
     complete_cids: bool = False,
     new_xcat="NEW",
     new_cid="GLB",
+    weight_lag: int = 0,
+    rebal_freq: str = "D",
+    thresh: Optional[float] = None,
 ):
     """
     Weighted linear combinations of cross sections or categories
@@ -94,8 +99,23 @@ def linear_composite(
         Name of new composite category when aggregating over categories for a given
         cross-section. Default is "NEW".
     new_cid : str
-        Name of new composite cross-section when aggregating over cross-sections for a 
+        Name of new composite cross-section when aggregating over cross-sections for a
         given category. Default is "GLB".
+    weight_lag : int
+        Number of business days to lag the weight series. Only applicable when
+        `weights` is a category string. Default is 0 (no lag).
+        A lag of N means that weights from N business days ago are used for each
+        date. Not applicable to fixed weights (list).
+    rebal_freq : str
+        Rebalancing frequency for weights. Must be one of "D" (daily), "W" (weekly),
+        "M" (monthly), or "Q" (quarterly). Default is "D" (daily rebalancing).
+        When set to a coarser frequency, weights are only updated at the start of
+        each period and held constant between rebalancing dates.
+    thresh : float, optional
+        Winsorization threshold for contributing series. If set, caps positive values
+        at `thresh` and floors negative values at `-thresh` for all input series before
+        calculating the composite. This reduces the impact of outliers. Default is None
+        (no winsorization).
 
     Returns
     -------
@@ -118,6 +138,9 @@ def linear_composite(
         complete_cids,
         new_xcat,
         new_cid,
+        weight_lag,
+        rebal_freq,
+        thresh,
         _xcat_agg,
         mode,
     ) = _check_args(
@@ -134,6 +157,9 @@ def linear_composite(
         complete_cids=complete_cids,
         new_xcat=new_xcat,
         new_cid=new_cid,
+        weight_lag=weight_lag,
+        rebal_freq=rebal_freq,
+        thresh=thresh,
     )
 
     # update local variables
@@ -182,6 +208,7 @@ def linear_composite(
             normalize_weights=normalize_weights,
             complete_xcats=complete_xcats,
             new_xcat=new_xcat,
+            thresh=thresh,
         )
 
     else:  # mode == "cid_agg" -- single xcat
@@ -198,6 +225,9 @@ def linear_composite(
             normalize_weights=normalize_weights,
             complete_cids=complete_cids,
             new_cid=new_cid,
+            weight_lag=weight_lag,
+            rebal_freq=rebal_freq,
+            thresh=thresh,
         )
     
     return QuantamentalDataFrame(result_df, categorical=result_as_categorical)
@@ -294,6 +324,76 @@ def _linear_composite_basic(
     return out_df
 
 
+def _apply_weight_lag(
+    weights_df: pd.DataFrame,
+    weight_lag: int,
+) -> pd.DataFrame:
+    """
+    Apply weight lag by shifting values forward.
+
+    Parameters
+    ----------
+    weights_df : pd.DataFrame
+        DataFrame with weights indexed by date
+    weight_lag : int
+        Number of periods to lag the weights
+
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame with lagged weights
+    """
+    if weight_lag == 0:
+        return weights_df
+
+    # Shift values forward (older weights apply to later dates)
+    return weights_df.shift(weight_lag)
+
+
+def _apply_rebal_freq(
+    weights_df: pd.DataFrame,
+    rebal_freq: str,
+) -> pd.DataFrame:
+    """
+    Limit weight updates to rebalancing dates and forward-fill between periods.
+
+    Parameters
+    ----------
+    weights_df : pd.DataFrame
+        DataFrame with weights indexed by date
+    rebal_freq : str
+        Rebalancing frequency: "D", "W", "M", or "Q"
+
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame with weights only updated at rebalancing dates
+    """
+    if rebal_freq.upper() == "D":
+        return weights_df  # Daily rebalancing - no change
+
+    # Get start-of-period dates for rebalancing
+    all_dates = weights_df.index
+    rebal_dates_series = get_sops(dates=all_dates, freq=rebal_freq)
+    rebal_dates = pd.DatetimeIndex(rebal_dates_series)
+
+    # Find rebalancing dates that exist in weights
+    rebal_dates_in_weights = weights_df.index.intersection(rebal_dates)
+
+    if len(rebal_dates_in_weights) == 0:
+        raise ValueError(
+            f"No rebalancing dates found for frequency '{rebal_freq}'. "
+            "Consider using a coarser frequency or check date range."
+        )
+
+    # Keep only rebalancing dates, then reindex and forward-fill
+    weights_rebal = weights_df.loc[rebal_dates_in_weights].copy()
+    weights_rebal = weights_rebal.reindex(all_dates)
+    weights_rebal = weights_rebal.ffill()
+
+    return weights_rebal
+
+
 def linear_composite_cid_agg(
     df: QuantamentalDataFrame,
     xcat: str,
@@ -303,6 +403,9 @@ def linear_composite_cid_agg(
     normalize_weights: bool = True,
     complete_cids: bool = True,
     new_cid="GLB",
+    weight_lag: int = 0,
+    rebal_freq: str = "D",
+    thresh: Optional[float] = None,
 ):
     """Linear composite of various cids for a given category across all periods."""
     if isinstance(weights, str):
@@ -311,6 +414,10 @@ def linear_composite_cid_agg(
             level=1
         )
         weights_df = weights_df[cids].mul(signs, axis=1)
+
+        # Apply weight lag for dynamic weights
+        if weight_lag > 0:
+            weights_df = _apply_weight_lag(weights_df, weight_lag)
 
     else:
         weights_series: pd.Series = pd.Series(
@@ -326,12 +433,21 @@ def linear_composite_cid_agg(
         weights_df.index.names = ["real_date"]
         weights_df.columns.names = ["cid"]
 
+    # Apply rebalancing frequency (applies to both fixed and dynamic)
+    if rebal_freq.upper() != "D":
+        weights_df = _apply_rebal_freq(weights_df, rebal_freq)
+
     # create the data_df
     data_df: pd.DataFrame = (
         df[(df["xcat"] == xcat)]
         .set_index(["real_date", "cid"])["value"]
         .unstack(level=1)
     )
+
+    # Apply winsorization if thresh is specified
+    if thresh is not None:
+        data_df = data_df.clip(lower=-thresh, upper=thresh)
+
     # aligning the index of weights_df to the data one
     # so that we have the same set of dates and same set of CIDs -- thank you
     # @mikiinterfiore
@@ -379,6 +495,7 @@ def linear_composite_xcat_agg(
     normalize_weights: bool = True,
     complete_xcats: bool = True,
     new_xcat="NEW",
+    thresh: Optional[float] = None,
 ):
     """Linear composite of various xcats across all cids and periods"""
 
@@ -389,6 +506,11 @@ def linear_composite_xcat_agg(
 
     # Create wide dataframes for the data and weights
     data_df = df.set_index(["cid", "real_date", "xcat"])["value"].unstack(level=2)
+
+    # Apply winsorization if thresh is specified
+    if thresh is not None:
+        data_df = data_df.clip(lower=-thresh, upper=thresh)
+
     weights_df = pd.DataFrame(
         data=[weights_series.sort_index()],
         index=data_df.index,
@@ -539,6 +661,9 @@ def _check_args(
     complete_cids: bool = False,
     new_xcat="NEW",
     new_cid="GLB",
+    weight_lag: int = 0,
+    rebal_freq: str = "D",
+    thresh: Optional[float] = None,
 ):
     """
     Check the arguments of linear_composite()
@@ -698,6 +823,29 @@ def _check_args(
         if not isinstance(blacklist, dict):
             raise TypeError("`blacklist` must be a dictionary.")
 
+    # Validate weight_lag
+    if not isinstance(weight_lag, int):
+        raise TypeError("`weight_lag` must be an integer.")
+    if weight_lag < 0:
+        raise ValueError("`weight_lag` must be non-negative.")
+    if weight_lag > 0 and not isinstance(weights, str):
+        raise ValueError(
+            "`weight_lag` can only be applied when `weights` is a category string."
+        )
+
+    # Validate rebal_freq
+    if not isinstance(rebal_freq, str):
+        raise TypeError("`rebal_freq` must be a string.")
+
+    _map_to_business_day_frequency(rebal_freq, valid_freqs=["D", "W", "M", "Q"])
+
+    # Validate thresh
+    if thresh is not None:
+        if not isinstance(thresh, (int, float)):
+            raise TypeError("`thresh` must be a numeric value (int or float).")
+        if thresh <= 0:
+            raise ValueError("`thresh` must be positive.")
+
     return (
         df,
         xcats,
@@ -712,6 +860,9 @@ def _check_args(
         complete_cids,
         new_xcat,
         new_cid,
+        weight_lag,
+        rebal_freq,
+        thresh,
         _xcat_agg,
         mode,
     )
