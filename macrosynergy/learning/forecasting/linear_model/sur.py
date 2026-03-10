@@ -451,7 +451,15 @@ class SeeminglyUnrelatedRegression(BaseEstimator, RegressorMixin):
             lr.fit(X_asset, y_asset)
             resids.append(np.reshape(y_asset.to_numpy() - lr.predict(X_asset.to_numpy()), (-1, 1)))
         resids = pd.DataFrame(data = np.row_stack(resids), index = X.index, columns = ["residuals"])
-        cov = resids.unstack(0).cov()
+
+        if self.covariance_estimator == "ml":
+            cov = resids.unstack(0).cov()
+        elif self.covariance_estimator == "ewm":
+            pass 
+        else:
+            self.covariance_estimator.fit(resids)
+            cov = self.covariance_estimator.covariance_
+            
         invcov = pd.DataFrame(data = np.linalg.inv(cov), index = cov.index, columns = cov.index)
 
         # Get optimization metadata 
