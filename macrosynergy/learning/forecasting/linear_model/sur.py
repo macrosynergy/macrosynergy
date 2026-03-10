@@ -538,7 +538,7 @@ class SeeminglyUnrelatedRegression(BaseEstimator, RegressorMixin):
             idxs_t = self.idxs_per_date[date]
             cids_t = self.assets_per_date[date]
             invcov_t = self.invcov_per_date[date]
-            asset_idx = [self.assets.index(cid) for cid in cids_t]
+            asset_idx = [self.assets.index(cid) for cid in cids_t] # TODO: Precompute location of cids in assets list for efficiency
 
             X_t = X[idxs_t, :]
             y_t = y[idxs_t]
