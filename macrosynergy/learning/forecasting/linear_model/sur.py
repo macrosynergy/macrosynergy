@@ -1,3 +1,4 @@
+from matplotlib import dates
 import numpy as np
 import pandas as pd
 import numbers 
@@ -416,6 +417,183 @@ class LinearMultiTargetRegression(BaseEstimator, RegressorMixin):
                 raise ValueError("X must have the same number of features as during training.")
             if list(X.columns) != list(self.features_):
                 raise ValueError("X must have the same feature columns as during training.")
+            
+class SeeminglyUnrelatedRegression(BaseEstimator, RegressorMixin):
+    """
+    SUR model on a panel dataset, with support for asset specific feature selection and
+    multiple covariance estimation methods. 
+    """
+    def __init__(self, fit_intercept = True, positive = False, covariance_estimator = "ewm", span = 60, min_xs_samples = 36, predict_average = False):
+        super().__init__()
+
+        self.fit_intercept = fit_intercept
+        self.positive = positive
+        self.covariance_estimator = covariance_estimator
+        self.span = span
+        self.min_xs_samples = min_xs_samples
+        self.predict_average = predict_average
+
+    def fit(self, X, y, sample_weight=None):
+        """
+        1) Identify the set of assets we can take positions in (i.e. those with sufficient history in the target variable)
+        2) Set up an optimization problem: learn a weight matrix W of shape (n_features, n_assets) where W[i,j] is the weight on feature i for asset j. 
+           This will require packing/unpacking the weight matrix to only update trainable coefficients (i.e. those selected by feature selection) in the optimization step.
+           It will also require storing the indices of asset specific data (both rows and columns) for efficiency. 
+        """
+        # Use min_xs_samples to remove assets with insufficient history in the target variable.
+        samples_per_asset = X.groupby(level=0).size()
+        self.assets = samples_per_asset[samples_per_asset >= self.min_xs_samples].index.tolist()
+
+        X = X.loc[(self.assets, slice(None)), :].copy()
+        y = y.loc[(self.assets, slice(None))].copy()
+
+        # Get inverse covariance of residuals across groups
+        resids = []
+        lr = LinearRegression(fit_intercept = self.fit_intercept, positive=self.positive)
+        for asset in self.assets:
+            X_asset = X.xs(asset)
+            y_asset = y.xs(asset)
+            lr.fit(X_asset, y_asset)
+            resids.append(np.reshape(y_asset.to_numpy() - lr.predict(X_asset.to_numpy()), (-1, 1)))
+        resids = pd.DataFrame(data = np.row_stack(resids), index = X.index, columns = ["residuals"])
+        cov = resids.unstack(0).cov()
+        invcov = pd.DataFrame(data = np.linalg.inv(cov), index = cov.index, columns = cov.index)
+
+        # Get optimization metadata 
+        self.dates = sorted(X.index.get_level_values(1).unique())
+        self.assets_per_date = {
+            date: list(resids.loc[(slice(None), date), :].index.get_level_values(0))
+            for date in self.dates
+        }
+        self.idxs_per_date = {
+            date: np.where(X.index.get_level_values(1)==date)[0]
+            for date in self.dates
+        }
+        self.invcov_per_date = {
+            date: invcov.loc[(slice(None), cids_t),(slice(None), cids_t)].values
+            for date, cids_t in self.assets_per_date.items()
+        }
+
+        # Add intercept if fit_intercept
+        if self.fit_intercept:
+            X.insert(0, "intercept", 1)
+
+        # Further attributes
+        self.N = X.shape[0]
+        self.P = X.shape[1]
+        self.T = len(self.dates)
+        self.n_assets = len(self.assets)
+
+        # Scipy 
+        x0 = np.zeros(self.P * len(self.assets))
+
+        # Bounds
+        if self.positive:
+            if self.fit_intercept:
+                bounds = ([(None, None)] + [(0, None)] * (self.P - 1)) * len(self.assets)
+            else:
+                bounds = [(0, None)] * (self.P * len(self.assets))
+        else:
+            bounds = [(None, None)] * (self.P * len(self.assets))
+
+        # Optimization
+        res = minimize(
+            fun=lambda p: self._loss(p, X.values, y.values),
+            jac=lambda p: self._jac(p, X.values, y.values),
+            x0=x0,
+            method="L-BFGS-B",
+            bounds=bounds,
+        )
+
+        params = res.x
+
+        # Reshape into full matrix
+        W = res.x.reshape((self.P, self.n_assets))
+
+        # Extract intercepts and coefs
+        # Convert to asset specific intercepts and coefficients
+        if self.fit_intercept:
+            coefs_ = {
+                asset: W[1:, idx]
+                for idx, asset in enumerate(self.assets)
+            }
+            intercepts_ = {asset: W[0, idx] for idx, asset in enumerate(self.assets)}
+        else:
+            coefs_ = {
+                asset: W[:, idx]
+                for idx, asset in enumerate(self.assets)
+            }
+            intercepts_ = {asset: 0 for asset in self.assets}
+        
+        
+        self.intercepts_ = intercepts_
+        self.coefs_ = coefs_
+
+        return self
+
+    def _loss(self, params, X, y):
+        loss = 0.0
+        param_matrix = params.reshape((self.P, self.n_assets))
+        for date in self.dates:
+            idxs_t = self.idxs_per_date[date]
+            cids_t = self.assets_per_date[date]
+            invcov_t = self.invcov_per_date[date]
+            asset_idx = [self.assets.index(cid) for cid in cids_t]
+
+            X_t = X[idxs_t, :]
+            y_t = y[idxs_t]
+            W_t = param_matrix[:, asset_idx].T 
+
+            preds_t = np.sum(W_t * X_t, axis = 1)
+            resids_t = y_t - preds_t
+            loss += resids_t.T @ invcov_t @ resids_t
+        return loss / self.T
+    
+    def _jac(self, params, X, y):
+        grad_matrix = np.zeros((self.P, self.n_assets))
+        param_matrix = params.reshape((self.P, self.n_assets))
+        for date in self.dates:
+            idxs_t = self.idxs_per_date[date]
+            cids_t = self.assets_per_date[date]
+            invcov_t = self.invcov_per_date[date]
+            asset_idx = [self.assets.index(cid) for cid in cids_t]
+
+            X_t = X[idxs_t, :]
+            y_t = y[idxs_t]
+            W_t = param_matrix[:, asset_idx].T
+
+            preds_t = np.sum(W_t * X_t, axis = 1)
+            resids_t = y_t - preds_t
+            wresids_t = invcov_t @ resids_t
+            grad_matrix[:, asset_idx] += -2 * (X_t.T * wresids_t)
+        
+        grad_matrix /= self.T
+
+        return grad_matrix.flatten()
+
+    def predict(self, X):
+        assets = X.index.get_level_values(0).unique()
+        preds = []
+        for asset in assets:
+            if asset in self.assets:
+                X_asset = X.xs(asset)
+                coefs = self.coefs_[asset]
+                intercept = self.intercepts_[asset]
+                preds_asset = X_asset.values @ coefs + intercept
+                preds.append(preds_asset)
+            else:
+                # If asset was not in training set, predict average across assets for that date
+                if self.predict_average:
+                    X_asset = X.xs(asset)
+                    avg_coefs = np.mean(list(self.coefs_.values()), axis=0)
+                    avg_intercept = np.mean(list(self.intercepts_.values()))
+                    preds_asset = X_asset.values @ avg_coefs + avg_intercept
+                    preds.append(preds_asset)
+                else:
+                    # Otherwise, predict zeros
+                    preds.append(np.zeros(X.xs(asset).shape[0]))
+
+        return np.concatenate(preds)
 
 if __name__ == "__main__":
     from macrosynergy.learning import (
@@ -462,16 +640,23 @@ if __name__ == "__main__":
         cids=cids,
         blacklist=black,
         drop_nas=True,
-        n_targets=2,
+        n_targets=1,
     )
     X = so.X.copy(deep=True)
     y = so.y.copy(deep=True)
 
-    model = LinearMultiTargetRegression(
-        seemingly_unrelated=True,
-        fit_intercept=False,
-        feature_selection=LarsSelector(n_factors=2),
-    )
-    model.fit(X, y)
-
+    model = SeeminglyUnrelatedRegression(
+        fit_intercept = True,
+        positive = False,
+        covariance_estimator="ml",
+        min_xs_samples=12,
+    ).fit(X, y)
     print(model.predict(X))
+    # model = LinearMultiTargetRegression(
+    #     seemingly_unrelated=True,
+    #     fit_intercept=False,
+    #     feature_selection=LarsSelector(n_factors=2),
+    # )
+    # model.fit(X, y)
+
+    # print(model.predict(X))
