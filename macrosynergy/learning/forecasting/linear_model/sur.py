@@ -423,23 +423,18 @@ class SeeminglyUnrelatedRegression(BaseEstimator, RegressorMixin):
     SUR model on a panel dataset, with support for asset specific feature selection and
     multiple covariance estimation methods. 
     """
-    def __init__(self, fit_intercept = True, positive = False, covariance_estimator = "ewm", span = 60, min_xs_samples = 36, predict_average = False):
+    def __init__(self, fit_intercept = True, positive = False, cluster = None, covariance_estimator = "ewm", span = 60, min_xs_samples = 36, predict_average = False):
         super().__init__()
 
         self.fit_intercept = fit_intercept
         self.positive = positive
+        self.cluster = cluster
         self.covariance_estimator = covariance_estimator
         self.span = span
         self.min_xs_samples = min_xs_samples
         self.predict_average = predict_average
 
     def fit(self, X, y, sample_weight=None):
-        """
-        1) Identify the set of assets we can take positions in (i.e. those with sufficient history in the target variable)
-        2) Set up an optimization problem: learn a weight matrix W of shape (n_features, n_assets) where W[i,j] is the weight on feature i for asset j. 
-           This will require packing/unpacking the weight matrix to only update trainable coefficients (i.e. those selected by feature selection) in the optimization step.
-           It will also require storing the indices of asset specific data (both rows and columns) for efficiency. 
-        """
         # Use min_xs_samples to remove assets with insufficient history in the target variable.
         samples_per_asset = X.groupby(level=0).size()
         self.assets = samples_per_asset[samples_per_asset >= self.min_xs_samples].index.tolist()
