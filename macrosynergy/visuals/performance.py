@@ -66,11 +66,11 @@ def view_performance(
         Benchmark ticker (format: "CID_XCAT") for correlation calculation. If None,
         benchmark correlation is not shown.
     metrics : List[str], optional
-        List of metrics to display. Available options: "Return %", "St. Dev. %",
-        "Sharpe Ratio", "Sortino Ratio", and "{bms} correl" (if bms provided).
-        If None, all available metrics are shown. Default is None.
+        List of metrics to display. Available options: "Annualized return, %",
+        "Annualized SD, %", "Sharpe ratio", "Sortino ratio", and "{bms} correl"
+        (if bms provided). If None, all available metrics are shown. Default is None.
     sort_by : str, optional
-        Metric name to sort the items by (e.g., "Sharpe Ratio", "Return %").
+        Metric name to sort the items by (e.g., "Sharpe ratio", "Annualized return, %").
         Items will be sorted in descending order by this metric. If None, defaults
         to sorting by the first displayed metric. Default is None.
     title : str, optional
@@ -106,10 +106,10 @@ def view_performance(
     Notes
     -----
     Performance metrics calculated:
-    - Return %: Annualized return (mean * 261)
-    - St. Dev. %: Annualized standard deviation (std * sqrt(261))
-    - Sharpe Ratio: Annualized return / annualized standard deviation
-    - Sortino Ratio: Annualized return / downside deviation
+    - Annualized return, %: Annualized return (mean * 261)
+    - Annualized SD, %: Annualized standard deviation (std * sqrt(261))
+    - Sharpe ratio: Annualized return / annualized standard deviation
+    - Sortino ratio: Annualized return / downside deviation
     - Benchmark correlation: Correlation with benchmark return series (if bms provided)
     """
 
@@ -331,10 +331,10 @@ def _calculate_performance_metrics(
 
     # Initialize metrics list
     metrics = [
-        "Return %",
-        "St. Dev. %",
-        "Sharpe Ratio",
-        "Sortino Ratio",
+        "Annualized return, %",
+        "Annualized SD, %",
+        "Sharpe ratio",
+        "Sortino ratio",
     ]
 
     # Add benchmark correlation if provided
@@ -345,21 +345,21 @@ def _calculate_performance_metrics(
     results = pd.DataFrame(index=metrics, columns=dfw.columns)
 
     # Calculate annualized return (261 trading days per year)
-    results.loc["Return %", :] = dfw.mean(axis=0) * 261
+    results.loc["Annualized return, %", :] = dfw.mean(axis=0) * 261
 
     # Calculate annualized standard deviation
-    results.loc["St. Dev. %", :] = dfw.std(axis=0) * np.sqrt(261)
+    results.loc["Annualized SD, %", :] = dfw.std(axis=0) * np.sqrt(261)
 
     # Calculate Sharpe ratio
-    results.loc["Sharpe Ratio", :] = (
-        results.loc["Return %", :] / results.loc["St. Dev. %", :]
+    results.loc["Sharpe ratio", :] = (
+        results.loc["Annualized return, %", :] / results.loc["Annualized SD, %", :]
     )
 
     # Calculate Sortino ratio (using downside deviation)
     dsd = dfw.apply(
         lambda x: np.sqrt(np.sum(x[x < 0] ** 2) / len(x))
     ) * np.sqrt(261)
-    results.loc["Sortino Ratio", :] = results.loc["Return %", :] / dsd
+    results.loc["Sortino ratio", :] = results.loc["Annualized return, %", :] / dsd
 
     # Calculate benchmark correlation if provided
     if bms is not None:
@@ -548,11 +548,11 @@ if __name__ == "__main__":
         metrics=["USD_EQXR_NSA correl"]
     )
 
-    # Test 5: Sort by Sharpe Ratio
-    print("\nTest 5: Sort by Sharpe Ratio")
+    # Test 5: Sort by Sharpe ratio
+    print("\nTest 5: Sort by Sharpe ratio")
     view_performance(
         dfd,
         xcats=["FXXR_NSA"],
         cids=["AUD", "CAD", "GBP", "USD"],
-        sort_by="Sharpe Ratio"
+        sort_by="Sharpe ratio"
     )

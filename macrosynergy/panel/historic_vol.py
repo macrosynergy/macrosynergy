@@ -137,10 +137,10 @@ def historic_vol(
         target_df: pd.DataFrame = dfw.loc[dfw.index.isin(target_dates)]
 
         if weights is None:
-            out = np.sqrt(252) * target_df.agg(roll_func, remove_zeros=remove_zeros)
+            out = np.sqrt(261) * target_df.agg(roll_func, remove_zeros=remove_zeros)
         else:
             if len(weights) == len(target_df):
-                out = np.sqrt(252) * target_df.agg(
+                out = np.sqrt(261) * target_df.agg(
                     roll_func, w=weights, remove_zeros=remove_zeros
                 )
             else:
