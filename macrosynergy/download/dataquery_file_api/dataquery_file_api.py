@@ -1154,6 +1154,7 @@ class DataQueryFileAPIClient(RateLimitedRequester):
                         timeout=timeout,
                     )
                 ] = filename
+                time.sleep(DQ_FILE_API_DELAY_PARAM)
 
             for future in tqdm(
                 cf.as_completed(futures),
@@ -2398,7 +2399,9 @@ class DataQueryFileAPIClient(RateLimitedRequester):
 
         selector = self.file_selector
         if selector.api_files_df.empty:
-            selector.refresh(api_files_df=self.list_available_files_for_all_file_groups())
+            selector.refresh(
+                api_files_df=self.list_available_files_for_all_file_groups()
+            )
         oldest_ts = selector.oldest_api_file_timestamp()
         if oldest_ts is not None:
             to_cutoff = _normalize_file_timestamp_cutoff(to_datetime_str)
