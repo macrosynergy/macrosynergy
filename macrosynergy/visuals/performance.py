@@ -344,11 +344,11 @@ def _calculate_performance_metrics(
     # Create results dataframe
     results = pd.DataFrame(index=metrics, columns=dfw.columns)
 
-    # Calculate annualized return (261 trading days per year)
-    results.loc["Annualized return, %", :] = dfw.mean(axis=0) * 261
+    # Calculate annualized return (252 trading days per year)
+    results.loc["Annualized return, %", :] = dfw.mean(axis=0) * 252
 
     # Calculate annualized standard deviation
-    results.loc["Annualized SD, %", :] = dfw.std(axis=0) * np.sqrt(261)
+    results.loc["Annualized SD, %", :] = dfw.std(axis=0) * np.sqrt(252)
 
     # Calculate Sharpe ratio
     results.loc["Sharpe ratio", :] = (
@@ -358,7 +358,7 @@ def _calculate_performance_metrics(
     # Calculate Sortino ratio (using downside deviation)
     dsd = dfw.apply(
         lambda x: np.sqrt(np.sum(x[x < 0] ** 2) / len(x))
-    ) * np.sqrt(261)
+    ) * np.sqrt(252)
     results.loc["Sortino ratio", :] = results.loc["Annualized return, %", :] / dsd
 
     # Calculate benchmark correlation if provided
