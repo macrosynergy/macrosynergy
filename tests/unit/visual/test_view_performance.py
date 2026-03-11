@@ -52,7 +52,7 @@ class TestViewPerformance(unittest.TestCase):
             return_metrics=True,
         )
 
-        self.assertEqual(result.index.tolist(), ["Return %", "St. Dev. %", "Sharpe Ratio", "Sortino Ratio"])
+        self.assertEqual(result.index.tolist(), ["Annualized return, %", "Annualized SD, %", "Sharpe ratio", "Sortino ratio"])
         self.assertEqual(set(result.columns.tolist()), {"AUD", "CAD", "GBP"})
 
     def test_return_metrics_compare_xcats_with_aggregation(self):
@@ -64,7 +64,7 @@ class TestViewPerformance(unittest.TestCase):
         )
 
         self.assertEqual(set(result.columns.tolist()), {"FXXR_NSA", "EQXR_NSA"})
-        self.assertTrue((result.loc["St. Dev. %"] > 0).all())
+        self.assertTrue((result.loc["Annualized SD, %"] > 0).all())
 
     def test_return_metrics_with_tickers_and_benchmark(self):
         result = msv.view_performance(
