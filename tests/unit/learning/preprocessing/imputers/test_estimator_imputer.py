@@ -1,7 +1,8 @@
 import numpy as np
 import pandas as pd
 import pytest
-from sklearn.base import clone
+from packaging.version import Version
+import sklearn
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.exceptions import NotFittedError
 from sklearn.impute import SimpleImputer
@@ -11,11 +12,16 @@ from sklearn.preprocessing import StandardScaler
 
 from macrosynergy.learning.preprocessing.imputers.imputers import EstimatorImputer
 
+pytestmark = pytest.mark.skipif(
+    Version(sklearn.__version__) < Version("1.4"),
+    reason="Need a version of sklearn that allows NaNs in input data",
+)
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 CIDS = ("AUD", "CAD", "GBP", "EUR")
-DATES = pd.date_range("2020-01-01", periods=12, freq="ME")
+DATES = pd.date_range("2020-01-01", periods=12, freq="M")
 
 
 def make_panel(
@@ -291,9 +297,7 @@ class TestConfiguration:
     def test_pipeline_as_estimator(self):
         df = make_panel(cols=("feature_a", "feature_b", "feature_c"))
         df = inject_nan(df, "feature_a", frac=0.3)
-        pipe = Pipeline(
-            [("scaler", StandardScaler()), ("lr", LinearRegression())]
-        )
+        pipe = Pipeline([("scaler", StandardScaler()), ("lr", LinearRegression())])
         imp = EstimatorImputer(estimator=pipe).fit(df)
         out = imp.transform(df)
         assert not out.isna().any().any()
@@ -334,9 +338,7 @@ class TestErrorHandling:
         df = make_panel(cols=("feature_a", "feature_b", "feature_c"))
         df = inject_nan(df, "feature_a", frac=0.3)
         df = inject_nan(df, "feature_b", frac=0.2)
-        pipe = Pipeline(
-            [("imp", SimpleImputer()), ("lr", LinearRegression())]
-        )
+        pipe = Pipeline([("imp", SimpleImputer()), ("lr", LinearRegression())])
         imp = EstimatorImputer(estimator=pipe).fit(df)
         out = imp.transform(df)
         assert not out.isna().any().any()
@@ -374,7 +376,7 @@ class TestEdgeCases:
         imp = EstimatorImputer(estimator=RandomForestRegressor(random_state=0)).fit(
             panel_with_nans
         )
-        new_dates = pd.date_range("2021-01-01", periods=6, freq="ME")
+        new_dates = pd.date_range("2021-01-01", periods=6, freq="M")
         new_panel = make_panel(cids=CIDS, dates=new_dates, random_state=99)
         out = imp.transform(new_panel)
         assert not out.isna().any().any()

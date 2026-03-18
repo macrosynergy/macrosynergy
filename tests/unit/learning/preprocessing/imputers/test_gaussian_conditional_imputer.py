@@ -14,7 +14,7 @@ from macrosynergy.learning.preprocessing.imputers.imputers import (
 # Helpers
 # ---------------------------------------------------------------------------
 CIDS = ("AUD", "CAD", "GBP", "EUR")
-DATES = pd.date_range("2020-01-01", periods=12, freq="ME")
+DATES = pd.date_range("2020-01-01", periods=12, freq="M")  # M is the same as ME
 
 
 def make_panel(

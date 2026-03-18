@@ -87,7 +87,7 @@ def test_peer_mean_imputation_basic(data):
     peer_map = {"CAD": ["USD", "GBP"]}
 
     imputer = CrossSectionalImputer(peer_map=peer_map, fallback="none")
-    out = imputer.fit_transform(data)
+    out = imputer.fit_transform(data).sort_index()
 
     result_feature_A = out.loc[("CAD", "2020-01-01"), "feature_A"]
     expected_feature_A = pytest.approx(3.0)
@@ -95,8 +95,8 @@ def test_peer_mean_imputation_basic(data):
     result_feature_B = out.loc[("CAD", "2020-01-01"), "feature_B"]
     expected_feature_B = pytest.approx(2.0)
 
-    assert result_feature_A == expected_feature_A
-    assert result_feature_B == expected_feature_B
+    assert result_feature_A.item() == expected_feature_A
+    assert result_feature_B.item() == expected_feature_B
     assert out.columns.tolist() == ["feature_A", "feature_B"]
 
 
@@ -109,7 +109,7 @@ def test_peer_map_filters_missing_peers(data):
     imputer = CrossSectionalImputer(
         peer_map={"CAD": ["USD", "XXX", "GBP"]}, fallback="none"
     )
-    out = imputer.fit_transform(data)
+    out = imputer.fit_transform(data).sort_index()
 
     result_feature_A = out.loc[("CAD", "2020-01-01"), "feature_A"]
     expected_feature_A = pytest.approx(3.0)
@@ -117,8 +117,8 @@ def test_peer_map_filters_missing_peers(data):
     result_feature_B = out.loc[("CAD", "2020-01-01"), "feature_B"]
     expected_feature_B = pytest.approx(2.0)
 
-    assert result_feature_A == expected_feature_A
-    assert result_feature_B == expected_feature_B
+    assert result_feature_A.item() == expected_feature_A
+    assert result_feature_B.item() == expected_feature_B
     assert out.columns.tolist() == ["feature_A", "feature_B"]
 
 
@@ -141,9 +141,9 @@ def test_default_peers_all_when_not_in_map(data):
         default_peers="all",
         fallback="none",
     )
-    out = imputer.fit_transform(data)
+    out = imputer.fit_transform(data).sort_index()
 
-    result = out.loc[("EUR", "2020-01-01"), "feature_A"]
+    result = out.loc[("EUR", "2020-01-01"), "feature_A"].item()
     expected = pytest.approx((1.0 + 2.0 + 4.0) / 3.0)
 
     assert result == expected
@@ -161,9 +161,9 @@ def test_default_peers_none_leaves_missing_when_no_fallback(data):
         default_peers="none",
         fallback="none",
     )
-    out = imputer.fit_transform(data)
+    out = imputer.fit_transform(data).sort_index()
 
-    result = out.loc[("EUR", "2020-01-01"), "feature_A"]
+    result = out.loc[("EUR", "2020-01-01"), "feature_A"].item()
 
     assert np.isnan(result)
 
@@ -187,9 +187,9 @@ def test_fallback_fill_uses_all_cids_mean_when_peers_unavailable(data):
     imputer = CrossSectionalImputer(
         peer_map={"CAD": ["USD", "GBP"]}, fallback="global_mean"
     )
-    out = imputer.fit_transform(data)
+    out = imputer.fit_transform(data).sort_index()
 
-    result = out.loc[("CAD", "2020-01-02"), "feature_A"]
+    result = out.loc[("CAD", "2020-01-02"), "feature_A"].item()
     expected = pytest.approx(data["feature_A"].mean())
 
     assert result == expected
