@@ -11,7 +11,7 @@ from macrosynergy.learning.preprocessing.imputers.imputers import (
 
 @pytest.fixture
 def data() -> pd.DataFrame:
-    date_range = pd.date_range("2023-01-01", "2025-01-01", freq="ME")
+    date_range = pd.date_range("2023-01-01", "2025-01-01", freq="M")
     cids = ["CAD", "USD", "GBP", "AUS"]
     index = pd.MultiIndex.from_product(
         iterables=[cids, date_range], names=[CIDS_INDEX_NAME, DATE_INDEX_NAME]
