@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Any, Protocol, Union, runtime_checkable, List, Set, Dict
+from typing import Any, Union, List, Set, Dict
 
 import numpy as np
 import pandas as pd
@@ -7,12 +7,6 @@ from sklearn.base import BaseEstimator, TransformerMixin, clone
 from sklearn.covariance import LedoitWolf
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.utils.validation import check_is_fitted
-
-
-@runtime_checkable
-class Predictor(Protocol):
-    def fit(self, X: Any, y: Any) -> Any: ...
-    def predict(self, X: Any) -> Any: ...
 
 
 DATE_INDEX_NAME = "real_date"
@@ -385,7 +379,7 @@ class EstimatorImputer(BaseImputer):
     # ------------------------------------------------------------------
     def _fit_fill_values(self, X: pd.DataFrame, y=None) -> "EstimatorImputer":
         self.predictor_means_ = X.mean(axis=0, skipna=True)
-        self.models_: Dict[str, Predictor] = {}
+        self.models_: Dict[str, Any] = {}
 
         base_estimator = (
             self.estimator if self.estimator is not None else RandomForestRegressor()
