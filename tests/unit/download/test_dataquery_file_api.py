@@ -2,7 +2,9 @@ import os
 import json
 import datetime
 import unittest
+import warnings
 import pandas as pd
+import requests
 from unittest.mock import patch, MagicMock
 import functools
 import logging
@@ -24,6 +26,10 @@ from macrosynergy.download.dataquery_file_api.dataquery_file_api import (
     InvalidResponseError,
     DQ_FILE_API_SCOPE,
     JPMAQS_DATASET_THEME_MAPPING,
+    _resolve_base_url,
+    _base_url_cache,
+    DQ_FILE_API_BASE_URL,
+    DQ_FILE_API_FALLBACK_BASE_URL,
 )
 
 
@@ -2368,6 +2374,154 @@ class TestDataQueryFileAPIClientNotificationLoading(unittest.TestCase):
             mock_logger.warning.assert_called_with(
                 "No `Missing Updates` or related notifications found."
             )
+
+
+class TestResolveBaseUrl(unittest.TestCase):
+    """Tests for the module-level _resolve_base_url URL-fallback logic."""
+
+    PRIMARY = "https://primary.example.com/api/v2"
+    FALLBACK = "https://fallback.example.com/api/v2"
+
+    def setUp(self):
+        _base_url_cache.clear()
+
+    def tearDown(self):
+        _base_url_cache.clear()
+
+    def _assert_no_user_warnings(self, callable_fn):
+        """Call *callable_fn* and assert it emits no UserWarning."""
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            result = callable_fn()
+        user_warnings = [w for w in caught if issubclass(w.category, UserWarning)]
+        self.assertEqual(user_warnings, [], f"Unexpected UserWarnings: {user_warnings}")
+        return result
+
+    @patch("requests.head")
+    def test_primary_reachable_returns_primary(self, mock_head):
+        """When the primary URL is reachable, return it with no warning."""
+        mock_head.return_value = MagicMock(status_code=200)
+
+        result = self._assert_no_user_warnings(
+            lambda: _resolve_base_url(self.PRIMARY, self.FALLBACK)
+        )
+
+        self.assertEqual(result, self.PRIMARY)
+        mock_head.assert_called_once()
+        self.assertEqual(_base_url_cache[self.PRIMARY], self.PRIMARY)
+
+    @patch("requests.head")
+    def test_primary_unreachable_fallback_works(self, mock_head):
+        """When primary is unreachable but fallback responds, return fallback + warn."""
+
+        def _side_effect(url, **kwargs):
+            if url == self.PRIMARY:
+                raise requests.exceptions.ConnectionError("unreachable")
+            return MagicMock(status_code=200)
+
+        mock_head.side_effect = _side_effect
+
+        with self.assertWarns(UserWarning) as cm:
+            result = _resolve_base_url(self.PRIMARY, self.FALLBACK)
+
+        self.assertEqual(result, self.FALLBACK)
+        self.assertIn("not reachable", str(cm.warning))
+        self.assertIn(self.PRIMARY, str(cm.warning))
+        self.assertIn(self.FALLBACK, str(cm.warning))
+        self.assertEqual(_base_url_cache[self.PRIMARY], self.FALLBACK)
+
+    @patch("requests.head")
+    def test_primary_timeout_falls_back(self, mock_head):
+        """A timeout on the primary URL should trigger the fallback path."""
+
+        def _side_effect(url, **kwargs):
+            if url == self.PRIMARY:
+                raise requests.exceptions.Timeout("timed out")
+            return MagicMock(status_code=200)
+
+        mock_head.side_effect = _side_effect
+
+        with self.assertWarns(UserWarning):
+            result = _resolve_base_url(self.PRIMARY, self.FALLBACK)
+
+        self.assertEqual(result, self.FALLBACK)
+
+    @patch("requests.head")
+    def test_both_unreachable_returns_primary(self, mock_head):
+        """When both URLs fail, return primary (let normal error handling surface it)."""
+        mock_head.side_effect = requests.exceptions.ConnectionError("unreachable")
+
+        result = self._assert_no_user_warnings(
+            lambda: _resolve_base_url(self.PRIMARY, self.FALLBACK)
+        )
+
+        self.assertEqual(result, self.PRIMARY)
+        self.assertEqual(mock_head.call_count, 2)
+        self.assertEqual(_base_url_cache[self.PRIMARY], self.PRIMARY)
+
+    @patch("requests.head")
+    def test_cache_prevents_second_probe(self, mock_head):
+        """After the first probe, subsequent calls use the cache (no network)."""
+        mock_head.return_value = MagicMock(status_code=200)
+
+        result1 = self._assert_no_user_warnings(
+            lambda: _resolve_base_url(self.PRIMARY, self.FALLBACK)
+        )
+        self.assertEqual(mock_head.call_count, 1)
+
+        result2 = _resolve_base_url(self.PRIMARY, self.FALLBACK)
+        self.assertEqual(result1, result2)
+        self.assertEqual(mock_head.call_count, 1)  # no additional probe
+
+    @patch("requests.head")
+    def test_cache_persists_across_client_instances(self, mock_head):
+        """The cache is module-level: creating a new client re-uses the cached URL."""
+
+        def _side_effect(url, **kwargs):
+            if url == DQ_FILE_API_BASE_URL:
+                raise requests.exceptions.ConnectionError("unreachable")
+            return MagicMock(status_code=200)
+
+        mock_head.side_effect = _side_effect
+
+        with patch.dict(os.environ, {"DQ_CLIENT_ID": "x", "DQ_CLIENT_SECRET": "y"}):
+            with self.assertWarns(UserWarning):
+                client1 = DataQueryFileAPIClient()
+
+            probe_count = mock_head.call_count  # 2 calls (primary fail + fallback ok)
+
+            client2 = DataQueryFileAPIClient()
+            self.assertEqual(mock_head.call_count, probe_count)  # no new probes
+
+            self.assertEqual(client1.base_url, DQ_FILE_API_FALLBACK_BASE_URL)
+            self.assertEqual(client2.base_url, DQ_FILE_API_FALLBACK_BASE_URL)
+
+    @patch("requests.head")
+    def test_http_error_counts_as_reachable(self, mock_head):
+        """Any HTTP response (even 401/403) means the server is reachable."""
+        mock_head.return_value = MagicMock(status_code=401)
+
+        result = self._assert_no_user_warnings(
+            lambda: _resolve_base_url(self.PRIMARY, self.FALLBACK)
+        )
+
+        self.assertEqual(result, self.PRIMARY)
+        mock_head.assert_called_once()
+
+    @patch("requests.head")
+    def test_passes_verify_and_proxies(self, mock_head):
+        """Ensure verify/proxies kwargs are forwarded to requests.head."""
+        mock_head.return_value = MagicMock(status_code=200)
+        proxies = {"https": "http://proxy:8080"}
+
+        result = _resolve_base_url(
+            self.PRIMARY, self.FALLBACK, verify=False, proxies=proxies
+        )
+
+        self.assertEqual(result, self.PRIMARY)
+        mock_head.assert_called_once_with(
+            self.PRIMARY, timeout=10.0, verify=False, proxies=proxies
+        )
 
 
 if __name__ == "__main__":
