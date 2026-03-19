@@ -1388,7 +1388,7 @@ class BasePanelLearner(ABC):
                         names=["cid", "real_date"],
                     )
                 )
-                y = pd.Series(np.random.randint(0, 2, 20), index=X.index)
+                y = pd.DataFrame(np.random.randint(0, 2, 20), index=X.index)
 
                 # Inject NaNs
                 X_na, y_na = X.copy(), y.copy()
