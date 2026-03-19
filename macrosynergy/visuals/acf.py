@@ -297,13 +297,10 @@ def _plot_acf(
 
         if freq != "D":
             bfreq = _map_to_business_day_frequency(freq)
-            df_resampled = fp.df[["real_date", "cid", "xcat", "value"]].copy()
-            df_resampled["cid"] = df_resampled["cid"].astype(str)
-            df_resampled["xcat"] = df_resampled["xcat"].astype(str)
-            df_resampled["real_date"] = pd.to_datetime(df_resampled["real_date"])
-            df_resampled = df_resampled.reset_index(drop=True)
             fp.df = (
-                df_resampled.groupby(["cid", "xcat"])
+                fp.df[["real_date", "cid", "xcat", "value"]]
+                .reset_index(drop=True)
+                .groupby(["cid", "xcat"], observed=True)
                 .resample(bfreq, on="real_date")
                 .agg({"value": agg})
                 .reset_index()
@@ -312,7 +309,7 @@ def _plot_acf(
         if remove_zero_predictor:
             fp.df = fp.df.loc[fp.df["value"] != 0]
 
-        kwargs["ncols"] = ncol
+        kwargs["ncols"] = min(ncol, len(fp.cids))
 
         fp.cids = sorted(fp.cids)
 
