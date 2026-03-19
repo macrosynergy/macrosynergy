@@ -1,5 +1,7 @@
-
 DQ_FILE_API_BASE_URL: str = (
+    "https://api-dataquery.jpmchase.com/research/dataquery-authe/api/v2"
+)
+DQ_FILE_API_FALLBACK_BASE_URL: str = (
     "https://api-strm-gw01.jpmchase.com/research/dataquery-authe/api/v2"
 )
 DQ_FILE_API_SCOPE: str = "JPMC:URI:RS-06785-DataQueryExternalApi-PROD"
