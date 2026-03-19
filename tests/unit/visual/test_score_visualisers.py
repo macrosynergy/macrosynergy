@@ -101,6 +101,43 @@ class TestScoreVisualisers(unittest.TestCase):
         sv.view_cid_evolution(cid="AUD", xcats=["XR"], freq="Q")
         self.assertTrue(mock_plt_show.called)
 
+    def test_view_score_evolution_cid_labels(self):
+        sv = ScoreVisualisers(
+            df=self.df, cids=["AUD", "CAD", "GBP"], xcats=["XR", "CRY"]
+        )
+        cid_labels = {"AUD": "Australia", "CAD": "Canada", "GBP": "UK"}
+        result = sv.view_score_evolution(xcat="XR", freq="Q", cid_labels=cid_labels, return_as_df=True)
+        self.assertIn("Australia", result.index)
+        self.assertIn("Canada", result.index)
+        self.assertNotIn("AUD", result.index)
+
+    def test_view_score_evolution_cid_labels_from_constructor(self):
+        cid_labels = {"AUD": "Australia", "CAD": "Canada", "GBP": "UK"}
+        sv = ScoreVisualisers(
+            df=self.df, cids=["AUD", "CAD", "GBP"], xcats=["XR", "CRY"],
+            cid_labels=cid_labels,
+        )
+        result = sv.view_score_evolution(xcat="XR", freq="Q", return_as_df=True)
+        self.assertIn("Australia", result.index)
+        self.assertNotIn("AUD", result.index)
+
+    def test_precomputed_composite_is_used(self):
+        # Build a df that includes a pre-computed "Composite" xcat with sentinel values
+        composite_df = self.df[self.df["xcat"] == "XR"].copy()
+        composite_df["xcat"] = "Composite"
+        composite_df["value"] = 999.0
+        df_with_comp = pd.concat([self.df, composite_df], ignore_index=True)
+
+        sv = ScoreVisualisers(
+            df=df_with_comp,
+            cids=["AUD", "CAD", "GBP"],
+            xcats=["XR", "CRY"],
+            no_zn_scores=True,
+        )
+        result = sv.view_score_evolution(xcat="Composite", freq="Q", return_as_df=True)
+        # All values should be 999, confirming the pre-computed composite was used
+        self.assertTrue((result.values == 999.0).all())
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -565,7 +565,6 @@ class KFoldPanelSplit(BasePanelSplit, ABC):
 
         # Store necessary quantities
         Xy = pd.concat([X, y], axis=1)
-        Xy.dropna(inplace=True)
         dates = Xy.index.get_level_values(1)
         unique_dates = dates.unique().sort_values()
 

@@ -10,6 +10,8 @@ import numpy as np
 import pandas as pd
 import scipy.stats as stats
 from parameterized import parameterized
+from packaging.version import Version
+import sklearn
 from sklearn.decomposition import PCA
 from sklearn.linear_model import (Lasso, LinearRegression, LogisticRegression,
                                   Ridge)
@@ -26,9 +28,11 @@ from macrosynergy.learning import (ExpandingIncrementPanelSplit,
                                    RandomEffects, RollingKFoldPanelSplit,
                                    SignalOptimizer,
                                    regression_balanced_accuracy)
+from macrosynergy.learning.preprocessing.imputers.imputers import CrossSectionalImputer
 from macrosynergy.management.simulate import make_qdf
 from macrosynergy.management.utils.df_utils import categories_df
 
+recent_sklearn = Version(sklearn.__version__) > Version("1.5")
 
 class TestAll(unittest.TestCase):
     @classmethod
@@ -601,7 +605,7 @@ class TestAll(unittest.TestCase):
             )
 
         # Models when NAs aren't dropped cannot admit models that don't support NAs
-        with self.assertRaises(ValueError):
+        with self.assertRaises(RuntimeError):
             self.so_no_na.calculate_predictions(
                 name="test",
                 models={"Lasso": Lasso()},
@@ -2246,8 +2250,9 @@ class TestAll(unittest.TestCase):
             self.assertTrue(len(ftr_data) == 1 + 3)  # 3 ftrs + 2 extra columns
             self.assertIsInstance(ftr_data[0], datetime.date)
             for i in range(1, len(ftr_data)):
-                if ftr_data[i] != np.nan:
-                    self.assertIsInstance(ftr_data[i], np.float32)
+                # since self.pipelines renames features, there shouldn't be any
+                # feature importances associated with original features
+                assert np.isnan(ftr_data[i])
 
             intercept_data = split_result["intercepts"]
             self.assertIsInstance(intercept_data, list)
@@ -2265,7 +2270,9 @@ class TestAll(unittest.TestCase):
             )  # 3 ftrs + 2 extra columns
             self.assertIsInstance(ftr_selection_data[0], datetime.date)
             for i in range(1, len(ftr_selection_data)):
-                self.assertTrue(ftr_selection_data[i] in [0, 1])
+                # since self.pipelines renames features, none of the originals
+                # features should be selected. They should all be set to 0
+                assert ftr_selection_data[i] == 0
 
             ftr_correlation = split_result["ftr_corr"]
             self.assertIsInstance(ftr_correlation, list)
@@ -2597,6 +2604,74 @@ class TestAll(unittest.TestCase):
         self.assertTrue(selected_ftrs.name.unique()[0] == "test")
         self.assertTrue(selected_ftrs.isna().sum().sum() == 0)
 
+        # Test that get_selected_features is empty when feature names differ
+        # from original features
+        so = SignalOptimizer(
+            df=self.df,
+            xcats=self.xcats,
+            cids=self.cids,
+            drop_nas="y",
+        )
+
+        so.calculate_predictions(
+            name="RF",
+            models={
+                "RF": Pipeline([
+                    ("imputer", KNNImputer(n_neighbors=12, weights="distance")),
+                    ("pca", PCA(n_components=2)),
+                    ("RF", RandomForestRegressor(n_estimators=10, max_depth=1))
+                ])
+            },
+            n_jobs_outer=1,
+            min_cids=1,
+            min_periods=12
+        )
+
+        selected_ftrs = so.get_selected_features(name="RF")
+
+        self.assertIsInstance(selected_ftrs, pd.DataFrame)
+        self.assertEqual(selected_ftrs.shape[1], 5)
+        self.assertEqual(selected_ftrs.columns[0], "real_date")
+        self.assertEqual(selected_ftrs.columns[1], "name")
+        for i in range(2, 5):
+            self.assertEqual(selected_ftrs.columns[i], self.X.columns[i - 2])
+        self.assertTrue(selected_ftrs[selected_ftrs.columns[2:]].eq(0).all().all())
+
+        # Test that get_selected_features works when not all features available due
+        # to an Imputer dropping columns
+        so = SignalOptimizer(
+            df=self.df,
+            xcats=self.xcats,
+            cids=self.cids,
+            drop_nas="y",
+        )
+
+        so.calculate_predictions(
+            name="RF",
+            models={
+                "RF": Pipeline([
+                    ("imputer", CrossSectionalImputer(nan_threshold=0.01)),
+                    ("RF", RandomForestRegressor(n_estimators=10, max_depth=1))
+                ])
+            },
+            n_jobs_outer=1,
+            min_cids=1,
+            min_periods=12
+        )
+
+        selected_ftrs = so.get_selected_features(name="RF")
+
+        self.assertIsInstance(selected_ftrs, pd.DataFrame)
+        self.assertEqual(selected_ftrs.shape[1], 5)
+        self.assertEqual(selected_ftrs.columns[0], "real_date")
+        self.assertEqual(selected_ftrs.columns[1], "name")
+        for i in range(2, 5):
+            self.assertEqual(selected_ftrs.columns[i], self.X.columns[i - 2])
+        assert selected_ftrs["XR"].eq(1).all()
+        assert selected_ftrs["CPI"].unique().tolist() == [0, 1]
+
+
+
     def test_types_get_feature_importances(self):
         so = self.so_with_calculated_preds
         so2 = self.so_no_na
@@ -2650,8 +2725,9 @@ class TestAll(unittest.TestCase):
         self.assertTrue(feature_importances2.name.unique()[0] == "RF")
         self.assertTrue(feature_importances3.name.unique()[0] == "RIDGE")
         self.assertTrue(feature_importances.isna().sum().sum() == 0)
-        self.assertTrue(feature_importances2.isna().sum().sum() == 0)
-        self.assertTrue(feature_importances3.isna().sum().sum() == 0)
+        if recent_sklearn:
+            self.assertTrue(feature_importances2.isna().sum().sum() == 0)
+            self.assertTrue(feature_importances3.isna().sum().sum() == 0)
 
         # Test that running get_feature_importances without a name works
         try:
@@ -2673,8 +2749,9 @@ class TestAll(unittest.TestCase):
             self.assertEqual(feature_importances2.columns[i], self.X.columns[i - 2])
         self.assertTrue(feature_importances.name.unique()[0] == "test")
         self.assertTrue(feature_importances2.name.unique()[0] == "RF")
-        self.assertTrue(feature_importances.isna().sum().sum() == 0)
-        self.assertTrue(feature_importances2.isna().sum().sum() == 0)
+        if recent_sklearn:
+            self.assertTrue(feature_importances.isna().sum().sum() == 0)
+            self.assertTrue(feature_importances2.isna().sum().sum() == 0)
 
     def test_types_get_intercepts(self):
         so = self.so_with_calculated_preds
@@ -2913,60 +2990,69 @@ class TestAll(unittest.TestCase):
         # title
         with self.assertRaises(TypeError):
             so.feature_importance_timeplot(name="test", title=1)
-        with self.assertRaises(TypeError):
-            so2.feature_importance_timeplot(name="RF", title=1)
-        with self.assertRaises(TypeError):
-            so2.feature_importance_timeplot(name="RIDGE", title=1)
+        if recent_sklearn:
+            with self.assertRaises(TypeError):
+                so2.feature_importance_timeplot(name="RF", title=1)
+            with self.assertRaises(TypeError):
+                so2.feature_importance_timeplot(name="RIDGE", title=1)
         # figsize
         with self.assertRaises(TypeError):
             so.feature_importance_timeplot(name="test", figsize="figsize")
-        with self.assertRaises(TypeError):
-            so2.feature_importance_timeplot(name="RF", figsize="figsize")
-        with self.assertRaises(TypeError):
-            so2.feature_importance_timeplot(name="RIDGE", figsize="figsize")
+        if recent_sklearn:
+            with self.assertRaises(TypeError):
+                so2.feature_importance_timeplot(name="RF", figsize="figsize")
+            with self.assertRaises(TypeError):
+                so2.feature_importance_timeplot(name="RIDGE", figsize="figsize")
         with self.assertRaises(ValueError):
             so.feature_importance_timeplot(name="test", figsize=(0, 1, 2))
-        with self.assertRaises(ValueError):
-            so2.feature_importance_timeplot(name="RF", figsize=(0, 1, 2))
-        with self.assertRaises(ValueError):
-            so2.feature_importance_timeplot(name="RIDGE", figsize=(0, 1, 2))
+        if recent_sklearn:
+            with self.assertRaises(ValueError):
+                so2.feature_importance_timeplot(name="RF", figsize=(0, 1, 2))
+            with self.assertRaises(ValueError):
+                so2.feature_importance_timeplot(name="RIDGE", figsize=(0, 1, 2))
         with self.assertRaises(TypeError):
             so.feature_importance_timeplot(name="test", figsize=(10, "hello"))
-        with self.assertRaises(TypeError):
-            so2.feature_importance_timeplot(name="RF", figsize=(10, "hello"))
-        with self.assertRaises(TypeError):
-            so2.feature_importance_timeplot(name="RIDGE", figsize=(10, "hello"))
+        if recent_sklearn:
+            with self.assertRaises(TypeError):
+                so2.feature_importance_timeplot(name="RF", figsize=(10, "hello"))
+            with self.assertRaises(TypeError):
+                so2.feature_importance_timeplot(name="RIDGE", figsize=(10, "hello"))
         with self.assertRaises(TypeError):
             so.feature_importance_timeplot(name="test", figsize=("hello", 6))
-        with self.assertRaises(TypeError):
-            so2.feature_importance_timeplot(name="RF", figsize=("hello", 6))
-        with self.assertRaises(TypeError):
-            so2.feature_importance_timeplot(name="RIDGE", figsize=("hello", 6))
+        if recent_sklearn:
+            with self.assertRaises(TypeError):
+                so2.feature_importance_timeplot(name="RF", figsize=("hello", 6))
+            with self.assertRaises(TypeError):
+                so2.feature_importance_timeplot(name="RIDGE", figsize=("hello", 6))
         with self.assertRaises(TypeError):
             so.feature_importance_timeplot(name="test", figsize=("hello", "hello"))
-        with self.assertRaises(TypeError):
-            so2.feature_importance_timeplot(name="RF", figsize=("hello", "hello"))
-        with self.assertRaises(TypeError):
-            so2.feature_importance_timeplot(name="RIDGE", figsize=("hello", "hello"))
+        if recent_sklearn:
+            with self.assertRaises(TypeError):
+                so2.feature_importance_timeplot(name="RF", figsize=("hello", "hello"))
+            with self.assertRaises(TypeError):
+                so2.feature_importance_timeplot(name="RIDGE", figsize=("hello", "hello"))
         # ftrs_renamed
         with self.assertRaises(TypeError):
             so.feature_importance_timeplot(name="test", ftrs_renamed=1)
-        with self.assertRaises(TypeError):
-            so2.feature_importance_timeplot(name="RF", ftrs_renamed=1)
-        with self.assertRaises(TypeError):
-            so2.feature_importance_timeplot(name="RIDGE", ftrs_renamed=1)
+        if recent_sklearn:
+            with self.assertRaises(TypeError):
+                so2.feature_importance_timeplot(name="RF", ftrs_renamed=1)
+            with self.assertRaises(TypeError):
+                so2.feature_importance_timeplot(name="RIDGE", ftrs_renamed=1)
         with self.assertRaises(TypeError):
             so.feature_importance_timeplot(name="test", ftrs_renamed={1: "ftr1"})
-        with self.assertRaises(TypeError):
-            so2.feature_importance_timeplot(name="RF", ftrs_renamed={1: "ftr1"})
-        with self.assertRaises(TypeError):
-            so2.feature_importance_timeplot(name="RIDGE", ftrs_renamed={1: "ftr1"})
+        if recent_sklearn:
+            with self.assertRaises(TypeError):
+                so2.feature_importance_timeplot(name="RF", ftrs_renamed={1: "ftr1"})
+            with self.assertRaises(TypeError):
+                so2.feature_importance_timeplot(name="RIDGE", ftrs_renamed={1: "ftr1"})
         with self.assertRaises(TypeError):
             so.feature_importance_timeplot(name="test", ftrs_renamed={"ftr1": 1})
-        with self.assertRaises(TypeError):
-            so2.feature_importance_timeplot(name="RF", ftrs_renamed={"ftr1": 1})
-        with self.assertRaises(TypeError):
-            so2.feature_importance_timeplot(name="RIDGE", ftrs_renamed={"ftr1": 1})
+        if recent_sklearn:
+            with self.assertRaises(TypeError):
+                so2.feature_importance_timeplot(name="RF", ftrs_renamed={"ftr1": 1})
+            with self.assertRaises(TypeError):
+                so2.feature_importance_timeplot(name="RIDGE", ftrs_renamed={"ftr1": 1})
         with self.assertRaises(ValueError):
             so.feature_importance_timeplot(name="test", ftrs_renamed={"ftr1": "ftr2"})
         with self.assertRaises(ValueError):
@@ -2976,10 +3062,11 @@ class TestAll(unittest.TestCase):
         # ftrs
         with self.assertRaises(TypeError):
             so.feature_importance_timeplot(name="test", ftrs=1)
-        with self.assertRaises(TypeError):
-            so2.feature_importance_timeplot(name="RF", ftrs=1)
-        with self.assertRaises(TypeError):
-            so2.feature_importance_timeplot(name="RIDGE", ftrs=1)
+        if recent_sklearn:
+            with self.assertRaises(TypeError):
+                so2.feature_importance_timeplot(name="RF", ftrs=1)
+            with self.assertRaises(TypeError):
+                so2.feature_importance_timeplot(name="RIDGE", ftrs=1)
         with self.assertRaises(ValueError):
             so.feature_importance_timeplot(name="test", ftrs=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11])
         with self.assertRaises(ValueError):
@@ -2988,10 +3075,11 @@ class TestAll(unittest.TestCase):
             so2.feature_importance_timeplot(name="RIDGE", ftrs=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11])
         with self.assertRaises(TypeError):
             so.feature_importance_timeplot(name="test", ftrs=[1])
-        with self.assertRaises(TypeError):
-            so2.feature_importance_timeplot(name="RF", ftrs=[1])
-        with self.assertRaises(TypeError):
-            so2.feature_importance_timeplot(name="RIDGE", ftrs=[1])
+        if recent_sklearn:
+            with self.assertRaises(TypeError):
+                so2.feature_importance_timeplot(name="RF", ftrs=[1])
+            with self.assertRaises(TypeError):
+                so2.feature_importance_timeplot(name="RIDGE", ftrs=[1])
         with self.assertRaises(ValueError):
             so.feature_importance_timeplot(name="test", ftrs=["invalid"])
         with self.assertRaises(ValueError):
@@ -3005,8 +3093,9 @@ class TestAll(unittest.TestCase):
         # Test that running feature_importance_timeplot on pipeline "test" works
         try:
             so.feature_importance_timeplot(name="test")
-            so2.feature_importance_timeplot(name="RF")
-            so2.feature_importance_timeplot(name="RIDGE")
+            if recent_sklearn:
+                so2.feature_importance_timeplot(name="RF")
+                so2.feature_importance_timeplot(name="RIDGE")
         except Exception as e:
             self.fail(f"feature_importance_timeplot raised an exception: {e}")
         # Check that the legend is correct
@@ -3018,8 +3107,9 @@ class TestAll(unittest.TestCase):
         ftr_dict = {"CPI": "inflation"}
         try:
             so.feature_importance_timeplot(name="test", ftrs_renamed=ftr_dict)
-            so2.feature_importance_timeplot(name="RF", ftrs_renamed=ftr_dict)
-            so2.feature_importance_timeplot(name="RIDGE", ftrs_renamed=ftr_dict)
+            if recent_sklearn:
+                so2.feature_importance_timeplot(name="RF", ftrs_renamed=ftr_dict)
+                so2.feature_importance_timeplot(name="RIDGE", ftrs_renamed=ftr_dict)
         except Exception as e:
             self.fail(f"feature_importance_timeplot raised an exception: {e}")
         ax = plt.gca()
@@ -3032,8 +3122,9 @@ class TestAll(unittest.TestCase):
         ftr_dict = {"CPI": "inflation", "GROWTH": "growth"}
         try:
             so.feature_importance_timeplot(name="test", ftrs_renamed=ftr_dict)
-            so2.feature_importance_timeplot(name="RF", ftrs_renamed=ftr_dict)
-            so2.feature_importance_timeplot(name="RIDGE", ftrs_renamed=ftr_dict)
+            if recent_sklearn:
+                so2.feature_importance_timeplot(name="RF", ftrs_renamed=ftr_dict)
+                so2.feature_importance_timeplot(name="RIDGE", ftrs_renamed=ftr_dict)
         except Exception as e:
             self.fail(f"feature_importance_timeplot raised an exception: {e}")
         ax = plt.gca()
@@ -3046,8 +3137,9 @@ class TestAll(unittest.TestCase):
         ftr_dict = {ftr: f"ftr{i}" for i, ftr in enumerate(self.X.columns)}
         try:
             so.feature_importance_timeplot(name="test", ftrs_renamed=ftr_dict)
-            so2.feature_importance_timeplot(name="RF", ftrs_renamed=ftr_dict)
-            so2.feature_importance_timeplot(name="RIDGE", ftrs_renamed=ftr_dict)
+            if recent_sklearn:
+                so2.feature_importance_timeplot(name="RF", ftrs_renamed=ftr_dict)
+                so2.feature_importance_timeplot(name="RIDGE", ftrs_renamed=ftr_dict)
         except Exception as e:
             self.fail(f"feature_importance_timeplot raised an exception: {e}")
         ax = plt.gca()
@@ -3058,12 +3150,14 @@ class TestAll(unittest.TestCase):
         )
         # Finally, test that the title works
         title = ax.get_title()
-        self.assertTrue(title == "Feature importances for pipeline: RIDGE")
+        if recent_sklearn:
+            self.assertTrue(title == "Feature importances for pipeline: RIDGE")
         # Try changing the title
         try:
             so.feature_importance_timeplot(name="test", title="hello")
-            so2.feature_importance_timeplot(name="RF", title="hello")
-            so2.feature_importance_timeplot(name="RIDGE", title="hello")
+            if recent_sklearn:
+                so2.feature_importance_timeplot(name="RF", title="hello")
+                so2.feature_importance_timeplot(name="RIDGE", title="hello")
         except Exception as e:
             self.fail(f"feature_importance_timeplot raised an exception: {e}")
         ax = plt.gca()
@@ -3134,17 +3228,19 @@ class TestAll(unittest.TestCase):
         # title
         with self.assertRaises(TypeError):
             so.coefs_stackedbarplot(name="test", title=1)
-        with self.assertRaises(TypeError):
-            so2.coefs_stackedbarplot(name="RF", title=1)
-        with self.assertRaises(TypeError):
-            so2.coefs_stackedbarplot(name="RIDGE", title=1)
+        if recent_sklearn:
+            with self.assertRaises(TypeError):
+                so2.coefs_stackedbarplot(name="RF", title=1)
+            with self.assertRaises(TypeError):
+                so2.coefs_stackedbarplot(name="RIDGE", title=1)
         # figsize
         with self.assertRaises(TypeError):
             so.coefs_stackedbarplot(name="test", figsize="figsize")
-        with self.assertRaises(TypeError):
-            so2.coefs_stackedbarplot(name="RF", figsize="figsize")
-        with self.assertRaises(TypeError):
-            so2.coefs_stackedbarplot(name="RIDGE", figsize="figsize")
+        if recent_sklearn:
+            with self.assertRaises(TypeError):
+                so2.coefs_stackedbarplot(name="RF", figsize="figsize")
+            with self.assertRaises(TypeError):
+                so2.coefs_stackedbarplot(name="RIDGE", figsize="figsize")
         with self.assertRaises(ValueError):
             so.coefs_stackedbarplot(name="test", figsize=(0, 1, 2))
         with self.assertRaises(ValueError):
@@ -3153,41 +3249,47 @@ class TestAll(unittest.TestCase):
             so2.coefs_stackedbarplot(name="RIDGE", figsize=(0, 1, 2))
         with self.assertRaises(TypeError):
             so.coefs_stackedbarplot(name="test", figsize=(10, "hello"))
-        with self.assertRaises(TypeError):
-            so2.coefs_stackedbarplot(name="RF", figsize=(10, "hello"))
-        with self.assertRaises(TypeError):
-            so2.coefs_stackedbarplot(name="RIDGE", figsize=(10, "hello"))
+        if recent_sklearn:
+            with self.assertRaises(TypeError):
+                so2.coefs_stackedbarplot(name="RF", figsize=(10, "hello"))
+            with self.assertRaises(TypeError):
+                so2.coefs_stackedbarplot(name="RIDGE", figsize=(10, "hello"))
         with self.assertRaises(TypeError):
             so.coefs_stackedbarplot(name="test", figsize=("hello", 6))
-        with self.assertRaises(TypeError):
-            so2.coefs_stackedbarplot(name="RF", figsize=("hello", 6))
-        with self.assertRaises(TypeError):
-            so2.coefs_stackedbarplot(name="RIDGE", figsize=("hello", 6))
+        if recent_sklearn:
+            with self.assertRaises(TypeError):
+                so2.coefs_stackedbarplot(name="RF", figsize=("hello", 6))
+            with self.assertRaises(TypeError):
+                so2.coefs_stackedbarplot(name="RIDGE", figsize=("hello", 6))
         with self.assertRaises(TypeError):
             so.coefs_stackedbarplot(name="test", figsize=("hello", "hello"))
-        with self.assertRaises(TypeError):
-            so2.coefs_stackedbarplot(name="RF", figsize=("hello", "hello"))
-        with self.assertRaises(TypeError):
-            so2.coefs_stackedbarplot(name="RIDGE", figsize=("hello", "hello"))
+        if recent_sklearn:
+            with self.assertRaises(TypeError):
+                so2.coefs_stackedbarplot(name="RF", figsize=("hello", "hello"))
+            with self.assertRaises(TypeError):
+                so2.coefs_stackedbarplot(name="RIDGE", figsize=("hello", "hello"))
         # ftrs_renamed
         with self.assertRaises(TypeError):
             so.coefs_stackedbarplot(name="test", ftrs_renamed=1)
-        with self.assertRaises(TypeError):
-            so2.coefs_stackedbarplot(name="RF", ftrs_renamed=1)
-        with self.assertRaises(TypeError):
-            so2.coefs_stackedbarplot(name="RIDGE", ftrs_renamed=1)
+        if recent_sklearn:
+            with self.assertRaises(TypeError):
+                so2.coefs_stackedbarplot(name="RF", ftrs_renamed=1)
+            with self.assertRaises(TypeError):
+                so2.coefs_stackedbarplot(name="RIDGE", ftrs_renamed=1)
         with self.assertRaises(TypeError):
             so.coefs_stackedbarplot(name="test", ftrs_renamed={1: "ftr1"})
-        with self.assertRaises(TypeError):
-            so2.coefs_stackedbarplot(name="RF", ftrs_renamed={1: "ftr1"})
-        with self.assertRaises(TypeError):
-            so2.coefs_stackedbarplot(name="RIDGE", ftrs_renamed={1: "ftr1"})
+        if recent_sklearn:
+            with self.assertRaises(TypeError):
+                so2.coefs_stackedbarplot(name="RF", ftrs_renamed={1: "ftr1"})
+            with self.assertRaises(TypeError):
+                so2.coefs_stackedbarplot(name="RIDGE", ftrs_renamed={1: "ftr1"})
         with self.assertRaises(TypeError):
             so.coefs_stackedbarplot(name="test", ftrs_renamed={"ftr1": 1})
-        with self.assertRaises(TypeError):
-            so2.coefs_stackedbarplot(name="RF", ftrs_renamed={"ftr1": 1})
-        with self.assertRaises(TypeError):
-            so2.coefs_stackedbarplot(name="RIDGE", ftrs_renamed={"ftr1": 1})
+        if recent_sklearn:
+            with self.assertRaises(TypeError):
+                so2.coefs_stackedbarplot(name="RF", ftrs_renamed={"ftr1": 1})
+            with self.assertRaises(TypeError):
+                so2.coefs_stackedbarplot(name="RIDGE", ftrs_renamed={"ftr1": 1})
         with self.assertRaises(ValueError):
             so.coefs_stackedbarplot(name="test", ftrs_renamed={"ftr1": "ftr2"})
         with self.assertRaises(ValueError):
@@ -3197,10 +3299,11 @@ class TestAll(unittest.TestCase):
         # ftrs
         with self.assertRaises(TypeError):
             so.coefs_stackedbarplot(name="test", ftrs=1)
-        with self.assertRaises(TypeError):
-            so2.coefs_stackedbarplot(name="RF", ftrs=1)
-        with self.assertRaises(TypeError):
-            so2.coefs_stackedbarplot(name="RIDGE", ftrs=1)
+        if recent_sklearn:
+            with self.assertRaises(TypeError):
+                so2.coefs_stackedbarplot(name="RF", ftrs=1)
+            with self.assertRaises(TypeError):
+                so2.coefs_stackedbarplot(name="RIDGE", ftrs=1)
         with self.assertRaises(ValueError):
             so.coefs_stackedbarplot(
                 name="test", ftrs=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
@@ -3215,10 +3318,11 @@ class TestAll(unittest.TestCase):
             )
         with self.assertRaises(TypeError):
             so.coefs_stackedbarplot(name="test", ftrs=[1])
-        with self.assertRaises(TypeError):
-            so2.coefs_stackedbarplot(name="RF", ftrs=[1])
-        with self.assertRaises(TypeError):
-            so2.coefs_stackedbarplot(name="RIDGE", ftrs=[1])
+        if recent_sklearn:
+            with self.assertRaises(TypeError):
+                so2.coefs_stackedbarplot(name="RF", ftrs=[1])
+            with self.assertRaises(TypeError):
+                so2.coefs_stackedbarplot(name="RIDGE", ftrs=[1])
         with self.assertRaises(ValueError):
             so.coefs_stackedbarplot(name="test", ftrs=["invalid"])
         with self.assertRaises(ValueError):
@@ -3228,10 +3332,11 @@ class TestAll(unittest.TestCase):
         # cap
         with self.assertRaises(TypeError):
             so.coefs_stackedbarplot(name="test", cap="invalid")
-        with self.assertRaises(TypeError):
-            so2.coefs_stackedbarplot(name="RF", cap="invalid")
-        with self.assertRaises(TypeError):
-            so2.coefs_stackedbarplot(name="RIDGE", cap="invalid")
+        if recent_sklearn:
+            with self.assertRaises(TypeError):
+                so2.coefs_stackedbarplot(name="RF", cap="invalid")
+            with self.assertRaises(TypeError):
+                so2.coefs_stackedbarplot(name="RIDGE", cap="invalid")
         with self.assertRaises(ValueError):
             so.coefs_stackedbarplot(name="test", cap=-1)
         with self.assertRaises(ValueError):
@@ -3251,19 +3356,22 @@ class TestAll(unittest.TestCase):
         # Test that running coefs_stackedbarplot on pipeline "test" works
         try:
             so.coefs_stackedbarplot(name="test")
-            so2.coefs_stackedbarplot(name="RF")
-            so2.coefs_stackedbarplot(name="RIDGE")
+            if recent_sklearn:
+                so2.coefs_stackedbarplot(name="RF")
+                so2.coefs_stackedbarplot(name="RIDGE")
         except Exception as e:
             self.fail(f"coefs_stackedbarplot raised an exception: {e}")
         # Check that the title is correct
         ax = plt.gca()
         title = ax.get_title()
-        self.assertTrue(title == "Stacked bar plot of model coefficients: RIDGE")
+        if recent_sklearn:
+            self.assertTrue(title == "Stacked bar plot of model coefficients: RIDGE")
         # Change the title
         try:
             so.coefs_stackedbarplot(name="test", title="hello")
-            so2.coefs_stackedbarplot(name="RF", title="hello")
-            so2.coefs_stackedbarplot(name="RIDGE", title="hello")
+            if recent_sklearn:
+                so2.coefs_stackedbarplot(name="RF", title="hello")
+                so2.coefs_stackedbarplot(name="RIDGE", title="hello")
         except Exception as e:
             self.fail(f"coefs_stackedbarplot raised an exception: {e}")
         ax = plt.gca()
@@ -3273,8 +3381,9 @@ class TestAll(unittest.TestCase):
         ftr_dict = {"CPI": "inflation"}
         try:
             so.coefs_stackedbarplot(name="test", ftrs_renamed=ftr_dict)
-            so2.coefs_stackedbarplot(name="RF", ftrs_renamed=ftr_dict)
-            so2.coefs_stackedbarplot(name="RIDGE", ftrs_renamed=ftr_dict)
+            if recent_sklearn:
+                so2.coefs_stackedbarplot(name="RF", ftrs_renamed=ftr_dict)
+                so2.coefs_stackedbarplot(name="RIDGE", ftrs_renamed=ftr_dict)
         except Exception as e:
             self.fail(f"coefs_stackedbarplot raised an exception: {e}")
         ax = plt.gca()
@@ -3297,21 +3406,22 @@ class TestAll(unittest.TestCase):
         correct_labels = sorted(list(set(correct_labels)))
         self.assertTrue(np.all(labels == correct_labels))
         # Check that the legend is correct for the RF pipeline with NAs
-        ftrcoef_df = so2.get_feature_importances(name="RF")
-        ftrcoef_df["year"] = ftrcoef_df["real_date"].dt.year
-        ftrcoef_df = ftrcoef_df.drop(columns=["real_date", "name"])
-        ftrcoef_df = ftrcoef_df.rename(columns=ftr_dict)
-        avg_coefs = ftrcoef_df.groupby("year").mean()
-        pos_coefs = avg_coefs.clip(lower=0)
-        neg_coefs = avg_coefs.clip(upper=0)
-        correct_labels = [
-            col for col in list(pos_coefs.sum().index[pos_coefs.sum() > 0])
-        ]
-        correct_labels += [
-            col for col in list(neg_coefs.sum().index[neg_coefs.sum() < 0])
-        ]
-        correct_labels = sorted(list(set(correct_labels)))
-        self.assertTrue(np.all(labels == correct_labels))
+        if recent_sklearn:
+            ftrcoef_df = so2.get_feature_importances(name="RF")
+            ftrcoef_df["year"] = ftrcoef_df["real_date"].dt.year
+            ftrcoef_df = ftrcoef_df.drop(columns=["real_date", "name"])
+            ftrcoef_df = ftrcoef_df.rename(columns=ftr_dict)
+            avg_coefs = ftrcoef_df.groupby("year").mean()
+            pos_coefs = avg_coefs.clip(lower=0)
+            neg_coefs = avg_coefs.clip(upper=0)
+            correct_labels = [
+                col for col in list(pos_coefs.sum().index[pos_coefs.sum() > 0])
+            ]
+            correct_labels += [
+                col for col in list(neg_coefs.sum().index[neg_coefs.sum() < 0])
+            ]
+            correct_labels = sorted(list(set(correct_labels)))
+            self.assertTrue(np.all(labels == correct_labels))
         # Check that the legend is correct for the RIDGE pipeline with NAs
         ftrcoef_df = so.get_feature_importances(name="test")
         ftrcoef_df["year"] = ftrcoef_df["real_date"].dt.year
