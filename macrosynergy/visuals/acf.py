@@ -9,6 +9,7 @@ import pandas as pd
 from statsmodels.graphics.tsaplots import plot_acf as plot_acf_sm
 from statsmodels.graphics.tsaplots import plot_pacf as plot_pacf_sm
 
+from macrosynergy.management.utils.core import _map_to_business_day_frequency
 from macrosynergy.visuals import FacetPlot
 
 
@@ -295,10 +296,15 @@ def _plot_acf(
     ) as fp:
 
         if freq != "D":
-            fp.df["real_date"] = pd.to_datetime(fp.df["real_date"])
+            bfreq = _map_to_business_day_frequency(freq)
+            df_resampled = fp.df[["real_date", "cid", "xcat", "value"]].copy()
+            df_resampled["cid"] = df_resampled["cid"].astype(str)
+            df_resampled["xcat"] = df_resampled["xcat"].astype(str)
+            df_resampled["real_date"] = pd.to_datetime(df_resampled["real_date"])
+            df_resampled = df_resampled.reset_index(drop=True)
             fp.df = (
-                fp.df.groupby(["cid", "xcat"], observed=True)
-                .resample(freq, on="real_date")
+                df_resampled.groupby(["cid", "xcat"])
+                .resample(bfreq, on="real_date")
                 .agg({"value": agg})
                 .reset_index()
             )
@@ -514,9 +520,10 @@ if __name__ == "__main__":
         cids=sel_cids,
         xcat="FXXR",
         # title="ACF Facet Plot",
-        remove_zero_predictor=True,
+        remove_zero_predictor=False,
         lags=[5, 6, 7],
         share_y=True,
+        freq="M",
     )
 
     plot_pacf(
