@@ -141,6 +141,8 @@ def plot_pacf(
     xcat: str,
     lags: int = 30,
     alpha=0.05,
+    freq: str = "D",
+    agg: str = "sum",
     remove_zero_predictor: bool = False,
     method="ywm",
     start: Optional[str] = None,
@@ -148,6 +150,7 @@ def plot_pacf(
     blacklist: Optional[Dict[str, List[str]]] = None,
     figsize: Tuple[float, float] = (16, 9),
     title: Optional[str] = None,
+    ncol: int = 3,
     share_x: bool = True,
     share_y: bool = True,
     zero: bool = False,
@@ -171,6 +174,12 @@ def plot_pacf(
         If a sequence is provided, the lags are plotted as given.
     alpha : float, default=0.05
         Significance level for the confidence intervals.
+    freq : str, default='D'
+        Frequency to aggregate the data to before computing PACF. Accepts pandas
+        frequency aliases such as 'D' (daily), 'W' (weekly), 'M' (monthly), etc.
+    agg : str, default='sum'
+        Aggregation function to use when resampling to a lower frequency.
+        Common values: 'sum', 'mean', 'last'.
     remove_zero_predictor : bool, default=False
         Remove zeros from the input series.
     method : str, default='ywm'
@@ -189,6 +198,8 @@ def plot_pacf(
         Figure size for the plot.
     title : Optional[str], default=None
         Title for the plot.
+    ncol : int, default=3
+        Number of columns in the facet grid.
     share_x : bool, default=True
         Share x-axis across all subplots.
     share_y : bool, default=True
@@ -233,6 +244,8 @@ def plot_pacf(
         df=df,
         cids=cids,
         xcat=xcat,
+        freq=freq,
+        agg=agg,
         plot_func=plot_func,
         plot_func_kwargs=plot_func_kwargs,
         remove_zero_predictor=remove_zero_predictor,
@@ -241,6 +254,7 @@ def plot_pacf(
         blacklist=blacklist,
         figsize=figsize,
         title=title,
+        ncol=ncol,
         share_x=share_x,
         share_y=share_y,
         return_fig=return_fig,
