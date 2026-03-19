@@ -18,12 +18,15 @@ def plot_acf(
     xcat: str,
     lags: Union[int, Sequence] = 30,
     alpha: float = 0.05,
+    freq: str = "D",
+    agg: str = "sum",
     remove_zero_predictor: bool = False,
     start: Optional[str] = None,
     end: Optional[str] = None,
     blacklist: Optional[Dict[str, List[str]]] = None,
     figsize: Tuple[float, float] = (16, 9),
     title: Optional[str] = None,
+    ncol: int = 3,
     share_x: bool = True,
     share_y: bool = True,
     zero: bool = False,
@@ -47,6 +50,12 @@ def plot_acf(
         If a sequence is provided, the lags are plotted as given.
     alpha : float, default=0.05
         Significance level for the confidence intervals.
+    freq : str, default='D'
+        Frequency to aggregate the data to before computing ACF. Accepts pandas
+        frequency aliases such as 'D' (daily), 'W' (weekly), 'M' (monthly), etc.
+    agg : str, default='sum'
+        Aggregation function to use when resampling to a lower frequency.
+        Common values: 'sum', 'mean', 'last'.
     remove_zero_predictor : bool, default=False
         Remove zeros from the input series.
     blacklist : dict
@@ -63,6 +72,8 @@ def plot_acf(
         Figure size for the plot.
     title : Optional[str], default=None
         Title for the plot.
+    ncol : int, default=3
+        Number of columns in the facet grid.
     share_x : bool, default=True
         Share x-axis across all subplots.
     share_y : bool, default=True
@@ -106,6 +117,8 @@ def plot_acf(
         df=df,
         cids=cids,
         xcat=xcat,
+        freq=freq,
+        agg=agg,
         plot_func=plot_func,
         plot_func_kwargs=plot_func_kwargs,
         remove_zero_predictor=remove_zero_predictor,
@@ -114,6 +127,7 @@ def plot_acf(
         blacklist=blacklist,
         figsize=figsize,
         title=title,
+        ncol=ncol,
         share_x=share_x,
         share_y=share_y,
         return_fig=return_fig,
@@ -240,12 +254,15 @@ def _plot_acf(
     xcat: str,
     plot_func: Callable,
     plot_func_kwargs: Dict,
+    freq: str = "D",
+    agg: str = "sum",
     remove_zero_predictor: bool = False,
     start: Optional[str] = None,
     end: Optional[str] = None,
     blacklist: Optional[Dict[str, List[str]]] = None,
     figsize: Tuple[float, float] = (16, 9),
     title: Optional[str] = None,
+    ncol: int = 3,
     share_x: bool = True,
     share_y: bool = True,
     return_fig: bool = False,
@@ -263,11 +280,19 @@ def _plot_acf(
         metrics=["value"],
     ) as fp:
 
+        if freq != "D":
+            fp.df["real_date"] = pd.to_datetime(fp.df["real_date"])
+            fp.df = (
+                fp.df.groupby(["cid", "xcat"], observed=True)
+                .resample(freq, on="real_date")
+                .agg({"value": agg})
+                .reset_index()
+            )
+
         if remove_zero_predictor:
             fp.df = fp.df.loc[fp.df["value"] != 0]
 
-        if len(fp.cids) <= 3:
-            kwargs["ncols"] = len(fp.cids)
+        kwargs["ncols"] = ncol
 
         fp.cids = sorted(fp.cids)
 
@@ -280,6 +305,7 @@ def _plot_acf(
             title=title,
             cid_grid=True,
             interpolate=True,
+            legend=False,
             return_figure=return_fig,
             **kwargs,
         )
