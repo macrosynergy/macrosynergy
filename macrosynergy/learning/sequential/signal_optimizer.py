@@ -208,6 +208,7 @@ class SignalOptimizer(BasePanelLearner):
         normalize_fold_results=False,
         cv_summary="mean",
         include_train_folds=False,
+        model_averaging=False,
         min_cids=4,
         min_periods=12 * 3,
         test_size=1,
@@ -263,6 +264,12 @@ class SignalOptimizer(BasePanelLearner):
             a function of both training data and test data. It is recommended to set 
             `cv_summary` appropriately. Default is False. If no hyperparameter tuning is
             required, this parameter can be disregarded.
+        model_averaging : bool, optional
+            Whether or not to perform model averaging rather than a hard selection of an
+            optimal model at each point in time. If True, the forecasts of each model are
+            averaged together, weighted by a normalized cross-validation score. Default is
+            False. If no hyperparameter tuning is required, this parameter can be
+            disregarded.
         min_cids : int, optional
             Minimum number of cross-sections required for the initial training set.
             Default is 4.
@@ -335,6 +342,7 @@ class SignalOptimizer(BasePanelLearner):
             normalize_fold_results=normalize_fold_results,
             cv_summary=cv_summary,
             include_train_folds=include_train_folds,
+            model_averaging=model_averaging,
             split_functions=split_functions,
             store_additional_data=store_additional_data,
             n_iter=n_iter,
@@ -1832,7 +1840,7 @@ if __name__ == "__main__":
         #n_iter=6,
         cv_summary="mean-std-ge",
         include_train_folds=True,
-        n_jobs_outer=-1,
+        n_jobs_outer=1,
         n_jobs_inner=1,
         normalize_fold_results=True,
         split_functions={
