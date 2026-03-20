@@ -35,6 +35,9 @@ class ScoreVisualisers:
     xcat_labels : Dict[str, str], optional
         A dictionary mapping category tickers (keys) to their labels (values). Default is
         None.
+    cid_labels : Dict[str, str], optional
+        A dictionary mapping cross-section identifiers (keys) to their labels (values).
+        Default is None.
     xcat_comp : str
         The name of the composite category. Default is 'Composite'.
     weights : List[float]
@@ -98,6 +101,7 @@ class ScoreVisualisers:
         df: pd.DataFrame,
         xcats: List[str] = None,
         cids: List[str] = None,
+        cid_labels: Dict[str, str] = None,
         xcat_labels: Dict[str, str] = None,
         xcat_comp: str = "Composite",
         weights: List[float] = None,
@@ -146,17 +150,30 @@ class ScoreVisualisers:
                 self.xcats.remove(xcat)
                 warnings.warn(f"{xcat} not in the DataFrame")
 
-        composite_df = linear_composite(
-            self.df,
-            xcats=self.xcats,
-            cids=self.cids,
-            weights=self.weights,
-            normalize_weights=normalize_weights,
-            signs=signs,
-            blacklist=blacklist,
-            complete_xcats=complete_xcats,
-            new_xcat=self.xcat_comp,
-        )
+        original_xcats = list(df["xcat"].unique())
+        if self.xcat_comp in original_xcats or xcat_comp in original_xcats:
+            source_name = self.xcat_comp if self.xcat_comp in original_xcats else xcat_comp
+            if source_name == "Composite":
+                warnings.warn(
+                    f"'{source_name}' found in df — using pre-computed composite instead of "
+                    "recalculating it."
+                )
+            composite_df = df[df["xcat"] == source_name].copy()
+            composite_df = composite_df[composite_df["cid"].isin(self.cids)]
+            if source_name != self.xcat_comp:
+                composite_df["xcat"] = self.xcat_comp
+        else:
+            composite_df = linear_composite(
+                self.df,
+                xcats=self.xcats,
+                cids=self.cids,
+                weights=self.weights,
+                normalize_weights=normalize_weights,
+                signs=signs,
+                blacklist=blacklist,
+                complete_xcats=complete_xcats,
+                new_xcat=self.xcat_comp,
+            )
 
         if rescore_composite:
             composite_df = make_zn_scores(
@@ -176,6 +193,7 @@ class ScoreVisualisers:
 
         self.df = update_df(self.df, composite_df)
         self.xcats = [self.xcat_comp] + self.xcats
+        self.cid_labels = cid_labels
         self.xcat_labels = xcat_labels
 
     def _validate_params(self, cids, xcats, xcat_comp):
@@ -463,6 +481,7 @@ class ScoreVisualisers:
         title_fontsize: int = 20,
         xticks: dict = None,
         figsize: tuple = (20, 10),
+        cid_labels: Optional[Dict[str, str]] = None,
         cmap: str = None,
         cmap_range: Tuple[float, float] = None,
         round_decimals: int = 2,
@@ -504,6 +523,8 @@ class ScoreVisualisers:
             A dictionary of arguments to label the x axis.
         figsize : tuple
             The size of the figure.
+        cid_labels : dict
+            A dictionary mapping cross-section identifiers to their labels.
         round_decimals : int
             The number of decimals to round the scores to.
         cmap : str
@@ -515,6 +536,7 @@ class ScoreVisualisers:
         """
 
         cids = cids or self.cids
+        cid_labels = cid_labels or self.cid_labels
         xcat = xcat if xcat.endswith(self.postfix) else xcat + self.postfix
 
         freq = "2AS" if freq == "BA" else _map_to_business_day_frequency(freq)
@@ -571,6 +593,11 @@ class ScoreVisualisers:
 
         dfw_resampled = dfw_resampled.transpose()
         dfw_resampled = dfw_resampled.reindex(cids)
+
+        if cid_labels:
+            dfw_resampled.index = [
+                cid_labels.get(cid, cid) for cid in dfw_resampled.index
+            ]
 
         # Drop columns and rows with all NaNs
         dfw_resampled = dfw_resampled.dropna(axis=1, how="all")
