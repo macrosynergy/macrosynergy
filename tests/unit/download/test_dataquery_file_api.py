@@ -153,6 +153,71 @@ class TestRateLimiting(unittest.TestCase):
         mock_sleep.assert_called_once()
         self.assertAlmostEqual(mock_sleep.call_args[0][0], 0.75, places=2)
 
+    def test_rate_limiter_concurrent_threads_respect_spacing_without_serialization(
+        self,
+    ):
+        """Concurrent threads should fire in strict succession of the delay
+        without holding the lock during sleep."""
+        import threading
+        import time as _time
+
+        delay = 0.10  # 100ms — short enough for a fast test
+        n_threads = 4
+        requester = RateLimitedRequester(api_delay=delay)
+
+        completion_times = []
+        results_lock = threading.Lock()
+
+        def worker():
+            requester._wait_for_api_call()
+            with results_lock:
+                completion_times.append(_time.monotonic())
+
+        # First call to initialise _last_api_call
+        requester._wait_for_api_call()
+
+        threads = [threading.Thread(target=worker) for _ in range(n_threads)]
+        start = _time.monotonic()
+        for t in threads:
+            t.start()
+
+        # The lock should NOT be held during sleep — verify we can acquire it
+        # quickly while the worker threads are sleeping.
+        _time.sleep(0.02)  # small delay for threads to enter _wait_for_api_call
+        lock_acquired = requester._rate_limit_lock.acquire(timeout=0.05)
+        if lock_acquired:
+            requester._rate_limit_lock.release()
+
+        for t in threads:
+            t.join(timeout=5)
+        elapsed = _time.monotonic() - start
+
+        completion_times.sort()
+
+        # Rate limit respected: consecutive completions spaced by >= delay
+        for i in range(1, len(completion_times)):
+            gap = completion_times[i] - completion_times[i - 1]
+            self.assertGreaterEqual(
+                gap,
+                delay * 0.7,
+                f"Gap {i}: {gap:.4f}s < expected ~{delay}s — rate limit violated",
+            )
+
+        # No excessive serialisation: total time should be bounded
+        expected_total = (n_threads - 1) * delay
+        self.assertLessEqual(
+            elapsed,
+            expected_total * 4.0,
+            f"Total {elapsed:.3f}s >> expected ~{expected_total:.3f}s",
+        )
+
+        # Lock was not held during sleep
+        self.assertTrue(
+            lock_acquired,
+            "Could not acquire the rate-limiter lock while threads were sleeping "
+            "— lock is being held during sleep (unnecessary serialisation)",
+        )
+
 
 class TestDataQueryFileAPIClient(unittest.TestCase):
     def setUp(self):

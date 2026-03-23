@@ -35,11 +35,16 @@ class RateLimitedRequester:
     def _wait_for_api_call(self, api_delay: Optional[float] = None) -> bool:
         """
         Blocks until the required delay since the last API call has passed.
+
+        The lock is held only to read/update ``_last_api_call``; the actual
+        sleep happens **outside** the lock so concurrent threads can schedule
+        their slots without being serialised behind a sleeping thread.
         """
         delay = self._api_delay if api_delay is None else api_delay
         if delay <= 0:
             return True
 
+        sleep_for = 0.0
         with self._rate_limit_lock:
             now = datetime.datetime.now()
             if self._last_api_call is None:
@@ -49,13 +54,16 @@ class RateLimitedRequester:
             diff = (now - self._last_api_call).total_seconds()
             sleep_for = delay - diff
             if sleep_for > 0:
-                if sleep_for > 1:
-                    logger.info(
-                        f"Sleeping for {sleep_for:.2f} seconds for API rate limit."
-                    )
-                time.sleep(sleep_for)
+                # Reserve the next slot so concurrent threads schedule after us.
+                self._last_api_call += datetime.timedelta(seconds=delay)
+            else:
+                self._last_api_call = now
 
-            self._last_api_call = datetime.datetime.now()
+        if sleep_for > 0:
+            if sleep_for > 1:
+                logger.info(f"Sleeping for {sleep_for:.2f} seconds for API rate limit.")
+            time.sleep(sleep_for)
+
         return True
 
 
