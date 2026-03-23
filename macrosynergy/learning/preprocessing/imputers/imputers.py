@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Any, Union, List, Set, Dict
+from typing import Any, Dict, List, Set, Union
 
 import numpy as np
 import pandas as pd
@@ -7,7 +7,6 @@ from sklearn.base import BaseEstimator, TransformerMixin, clone
 from sklearn.covariance import LedoitWolf
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.utils.validation import check_is_fitted
-
 
 DATE_INDEX_NAME = "real_date"
 CIDS_INDEX_NAME = "cid"
@@ -336,6 +335,15 @@ class EstimatorImputer(BaseImputer):
     nan_threshold : float, default=1.0
         If the proportion of NaNs in a column exceeds this threshold, the
         column is dropped entirely.
+    complete_rows_only : bool, default=True
+        If True, each per-feature model is trained only on rows where all
+        predictor columns are also non-NaN. This allows any sklearn estimator
+        to be used, not just those that handle NaN natively.
+    predictor_fill_value : str, float, int, or None, default="mean"
+        How to handle NaN predictor values at transform time. "mean" fills
+        with per-column means from fit time, a numeric scalar fills with that
+        constant, "skip" skips prediction for rows with NaN predictors
+        (leaving them for the fallback to handle), and None applies no fill.
 
     Attributes
     ----------
@@ -360,19 +368,33 @@ class EstimatorImputer(BaseImputer):
         fill missing predictor values before prediction).
     """
 
+    _VALID_FILL_VALUES = {"mean", "skip"}
+
     def __init__(
         self,
         estimator: Union[BaseEstimator, None] = None,
         fallback: bool = True,
         missing_values=np.nan,
         nan_threshold: float = 1.0,
+        complete_rows_only: bool = True,
+        predictor_fill_value: Union[str, float, int, None] = "mean",
     ):
         super().__init__(
             missing_values=missing_values,
             nan_threshold=nan_threshold,
         )
+        if (
+            isinstance(predictor_fill_value, str)
+            and predictor_fill_value not in self._VALID_FILL_VALUES
+        ):
+            raise ValueError(
+                f"predictor_fill_value must be None, 'mean', or a numeric scalar, "
+                f"got '{predictor_fill_value}'"
+            )
         self.estimator = estimator
         self.fallback = fallback
+        self.complete_rows_only = complete_rows_only
+        self.predictor_fill_value = predictor_fill_value
 
     # ------------------------------------------------------------------
     # BaseImputer hooks
@@ -393,15 +415,20 @@ class EstimatorImputer(BaseImputer):
             if observed_mask.all():
                 continue
 
-            if observed_mask.sum() < 2:
-                continue
-
             predictor_cols = [c for c in features if c != target_col]
             if not predictor_cols:
                 continue
 
             X_train = X.loc[observed_mask, predictor_cols]
             y_train = target.loc[observed_mask]
+
+            if self.complete_rows_only:
+                complete_mask = X_train.notna().all(axis=1)
+                X_train = X_train.loc[complete_mask]
+                y_train = y_train.loc[complete_mask]
+
+            if len(y_train) < 2:
+                continue
 
             model = clone(base_estimator)
             try:
@@ -424,9 +451,28 @@ class EstimatorImputer(BaseImputer):
                 continue
 
             predictor_cols = [c for c in features if c != target_col]
-            X_pred = X_filled.loc[missing_mask, predictor_cols]
+            X_pred_raw = X_filled.loc[missing_mask, predictor_cols]
+
+            if self.predictor_fill_value == "skip":
+                predict_mask = X_pred_raw.notna().all(axis=1)
+                if not predict_mask.any():
+                    continue
+                X_pred = X_pred_raw.loc[predict_mask]
+                rows_to_fill = missing_mask & predict_mask.reindex(
+                    missing_mask.index, fill_value=False
+                )
+            elif self.predictor_fill_value == "mean":
+                X_pred = X_pred_raw.fillna(self.predictor_means_)
+                rows_to_fill = missing_mask
+            elif self.predictor_fill_value is None:
+                X_pred = X_pred_raw
+                rows_to_fill = missing_mask
+            else:
+                X_pred = X_pred_raw.fillna(self.predictor_fill_value)
+                rows_to_fill = missing_mask
+
             try:
-                X_filled.loc[missing_mask, target_col] = model.predict(X_pred)
+                X_filled.loc[rows_to_fill, target_col] = model.predict(X_pred)
             except Exception as exc:
                 raise ValueError(
                     f"Estimator failed to predict for target feature '{target_col}': {exc}"
