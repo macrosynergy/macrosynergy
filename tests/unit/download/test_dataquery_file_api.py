@@ -161,7 +161,7 @@ class TestRateLimiting(unittest.TestCase):
         import threading
         import time as _time
 
-        delay = 0.10  # 100ms — short enough for a fast test
+        delay = 0.10  # 100ms - short enough for a fast test
         n_threads = 4
         requester = RateLimitedRequester(api_delay=delay)
 
@@ -181,7 +181,7 @@ class TestRateLimiting(unittest.TestCase):
         for t in threads:
             t.start()
 
-        # The lock should NOT be held during sleep — verify we can acquire it
+        # The lock should NOT be held during sleep - verify we can acquire it
         # quickly while the worker threads are sleeping.
         _time.sleep(0.02)  # small delay for threads to enter _wait_for_api_call
         lock_acquired = requester._rate_limit_lock.acquire(timeout=0.05)
@@ -200,7 +200,7 @@ class TestRateLimiting(unittest.TestCase):
             self.assertGreaterEqual(
                 gap,
                 delay * 0.7,
-                f"Gap {i}: {gap:.4f}s < expected ~{delay}s — rate limit violated",
+                f"Gap {i}: {gap:.4f}s < expected ~{delay}s - rate limit violated",
             )
 
         # No excessive serialisation: total time should be bounded
@@ -215,7 +215,7 @@ class TestRateLimiting(unittest.TestCase):
         self.assertTrue(
             lock_acquired,
             "Could not acquire the rate-limiter lock while threads were sleeping "
-            "— lock is being held during sleep (unnecessary serialisation)",
+            "- lock is being held during sleep (unnecessary serialisation)",
         )
 
 
@@ -2641,7 +2641,7 @@ class TestResolveBaseUrl(unittest.TestCase):
 
     @patch("requests.head")
     def test_both_fail_with_different_exceptions(self, mock_head):
-        """Primary=ConnectionError, Fallback=Timeout — both fail, returns primary."""
+        """Primary=ConnectionError, Fallback=Timeout - both fail, returns primary."""
         call_count = 0
 
         def _side_effect(url, **kwargs):
