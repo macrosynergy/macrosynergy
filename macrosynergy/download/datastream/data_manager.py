@@ -69,7 +69,7 @@ DEFAULT_STATIC_FIELDS: Dict[str, str] = {
     "RIC": "Reuters Instrument Code",
     "DSCD": "Datastream code",
     "NAME": "Company / instrument name",
-    "EXCH": "Exchange code",
+    # "EXCH": "Exchange code",
     "EXNAME": "Exchange name",
     "MNEM": "Datastream mnemonic / quote ID",
     "TYPE": "Instrument type",
@@ -286,9 +286,9 @@ class DatastreamDataManager:
                 chunk_df = ds.get_data(
                     tickers=ticker_arg,
                     fields=f_chunk,
-                    start="-0D",
-                    end="0D",
-                    kind=0,
+                    # start="-0D",
+                    # end="0D",
+                    kind=0
                 )
                 if chunk_df is not None and not chunk_df.empty:
                     row_frames.append(chunk_df)
