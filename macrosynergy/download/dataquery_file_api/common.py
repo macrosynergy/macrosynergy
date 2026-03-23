@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import calendar
 import datetime
-import functools
 from typing import List, Optional, Union, Any, Sequence
 import pandas as pd
 import polars as pl
@@ -262,11 +261,12 @@ def _previous_business_day(d: datetime.date) -> datetime.date:
     return d
 
 
-@functools.lru_cache(maxsize=1)
 def _large_delta_file_datetimes(as_str: bool = True) -> List[str]:
     sd = pd_to_datetime_compat(JPMAQS_EARLIEST_FILE_DATE).date()
     if isinstance(sd, datetime.datetime):
         sd = sd.date()
+    # Local time is intentional here - the server uses the same local-date
+    # logic for filename matching, so UTC is not needed and would add complexity.
     ed = datetime.date.today()
 
     listA = _month_ends_between(sd, ed)
