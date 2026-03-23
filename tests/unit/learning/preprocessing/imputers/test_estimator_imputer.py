@@ -323,7 +323,7 @@ class TestErrorHandling:
         df = make_panel(cols=("feature_a", "feature_b", "feature_c"))
         df = inject_nan(df, "feature_a", frac=0.3)
         df = inject_nan(df, "feature_b", frac=0.2)
-        imp = EstimatorImputer(estimator=LinearRegression())
+        imp = EstimatorImputer(estimator=LinearRegression(), complete_rows_only=False)
         with pytest.raises(ValueError, match="feature_a|feature_b"):
             imp.fit(df)
 
@@ -346,7 +346,11 @@ class TestErrorHandling:
     def test_transform_raises_when_estimator_cannot_handle_nan_predictors(self):
         df = make_panel(cols=("feature_a", "feature_b", "feature_c"))
         df_fit = inject_nan(df, "feature_a", frac=0.3)
-        imp = EstimatorImputer(estimator=LinearRegression()).fit(df_fit)
+        imp = EstimatorImputer(
+            estimator=LinearRegression(),
+            complete_rows_only=True,
+            predictor_fill_value=None,
+        ).fit(df_fit)
 
         df_transform = inject_nan(df, "feature_a", frac=0.3)
         df_transform = inject_nan(df_transform, "feature_b", frac=0.2)
@@ -389,3 +393,198 @@ class TestEdgeCases:
         imp = EstimatorImputer(estimator=RandomForestRegressor(random_state=0))
         imp.fit(df)
         assert "sparse" not in imp.models_
+
+
+# ---------------------------------------------------------------------------
+# complete_rows_only & predictor_fill_value
+# ---------------------------------------------------------------------------
+class TestCompleteRowsOnlyAndPredictorFill:
+    """Tests for the complete_rows_only and predictor_fill_value parameters."""
+
+    def test_invalid_predictor_fill_value_raises(self):
+        with pytest.raises(ValueError, match="predictor_fill_value"):
+            EstimatorImputer(predictor_fill_value="invalid")
+
+    def test_complete_rows_only_fits_linear_regression_with_nan_predictors(self):
+        """Key test: LinearRegression cannot handle NaN, but complete_rows_only
+        filters them out at training time so fit succeeds."""
+        df = make_panel(cols=("feature_a", "feature_b", "feature_c"))
+        df = inject_nan(df, "feature_a", frac=0.3)
+        df = inject_nan(df, "feature_b", frac=0.2)
+        imp = EstimatorImputer(estimator=LinearRegression(), complete_rows_only=True)
+        imp.fit(df)
+        assert "feature_a" in imp.models_
+        assert "feature_b" in imp.models_
+
+    def test_complete_rows_only_skips_feature_when_too_few_complete_rows(self):
+        """If filtering to complete predictor rows leaves < 2 rows, skip that feature."""
+        df = make_panel(cols=("target", "predictor"))
+        df["predictor"] = np.nan
+        df.loc[df.index[0], "predictor"] = 1.0
+        df = inject_nan(df, "target", frac=0.3)
+        imp = EstimatorImputer(
+            estimator=LinearRegression(), complete_rows_only=True
+        ).fit(df)
+        assert "target" not in imp.models_
+
+    def test_complete_rows_only_false_raises_for_linear_regression(self):
+        """Legacy behavior: complete_rows_only=False passes NaN predictors
+        through to the estimator, which raises for LinearRegression."""
+        df = make_panel(cols=("feature_a", "feature_b", "feature_c"))
+        df = inject_nan(df, "feature_a", frac=0.3)
+        df = inject_nan(df, "feature_b", frac=0.2)
+        imp = EstimatorImputer(estimator=LinearRegression(), complete_rows_only=False)
+        with pytest.raises(ValueError):
+            imp.fit(df)
+
+    def test_predictor_fill_mean_enables_transform_with_nan_predictors(self):
+        """With complete_rows_only=True and predictor_fill_value='mean',
+        LinearRegression can both fit and transform data with NaN predictors."""
+        df = make_panel(cols=("feature_a", "feature_b", "feature_c"))
+        df = inject_nan(df, "feature_a", frac=0.3)
+        df = inject_nan(df, "feature_b", frac=0.2)
+        imp = EstimatorImputer(
+            estimator=LinearRegression(),
+            complete_rows_only=True,
+            predictor_fill_value="mean",
+        ).fit(df)
+        out = imp.transform(df)
+
+        assert df.shape == out.shape
+        assert not out.isna().any().any()
+
+    def test_predictor_fill_scalar_fills_with_constant(self):
+        """predictor_fill_value=0 fills NaN predictors with zero."""
+        df = make_panel(cols=("feature_a", "feature_b", "feature_c"))
+        df = inject_nan(df, "feature_a", frac=0.3)
+        df = inject_nan(df, "feature_b", frac=0.2)
+        imp = EstimatorImputer(
+            estimator=LinearRegression(),
+            complete_rows_only=True,
+            predictor_fill_value=0,
+        ).fit(df)
+        out = imp.transform(df)
+
+        assert df.shape == out.shape
+        assert not out.isna().any().any()
+
+    def test_predictor_fill_none_raises_for_linear_regression(self):
+        """predictor_fill_value=None preserves legacy transform behavior:
+        NaN predictors are passed through, causing LinearRegression to fail."""
+        df = make_panel(cols=("feature_a", "feature_b", "feature_c"))
+        df_fit = inject_nan(df, "feature_a", frac=0.3)
+        imp = EstimatorImputer(
+            estimator=LinearRegression(),
+            complete_rows_only=True,
+            predictor_fill_value=None,
+        ).fit(df_fit)
+        df_transform = inject_nan(df, "feature_a", frac=0.3)
+        df_transform = inject_nan(df_transform, "feature_b", frac=0.2)
+
+        with pytest.raises(ValueError, match="feature_a"):
+            imp.transform(df_transform)
+
+    def test_observed_values_unchanged_with_new_defaults(self):
+        df = make_panel(cols=("feature_a", "feature_b", "feature_c"))
+        df = inject_nan(df, "feature_a", frac=0.3)
+        df = inject_nan(df, "feature_b", frac=0.2)
+        imp = EstimatorImputer(estimator=LinearRegression()).fit(df)
+        out = imp.transform(df)
+        observed_mask = df[imp.kept_features_].notna()
+
+        pd.testing.assert_frame_equal(
+            out[observed_mask],
+            df[imp.kept_features_][observed_mask],
+        )
+
+    def test_fit_transform_equivalent_with_new_defaults(self):
+        df = make_panel(cols=("feature_a", "feature_b", "feature_c"))
+        df = inject_nan(df, "feature_a", frac=0.3)
+        df = inject_nan(df, "feature_b", frac=0.2)
+        out1 = EstimatorImputer(estimator=LinearRegression()).fit_transform(df)
+        imp2 = EstimatorImputer(estimator=LinearRegression()).fit(df)
+        out2 = imp2.transform(df)
+        pd.testing.assert_frame_equal(out1, out2)
+
+    def test_pipeline_estimator_with_complete_rows_only(self):
+        df = make_panel(cols=("feature_a", "feature_b", "feature_c"))
+        df = inject_nan(df, "feature_a", frac=0.3)
+        df = inject_nan(df, "feature_b", frac=0.2)
+        pipe = Pipeline([("scaler", StandardScaler()), ("lr", LinearRegression())])
+        imp = EstimatorImputer(estimator=pipe, complete_rows_only=True).fit(df)
+        out = imp.transform(df)
+
+        assert out.shape == df.shape
+        assert not out.isna().any().any()
+
+    def test_no_nans_in_output_with_fallback_and_new_defaults(self):
+        df = make_panel(cols=("feature_a", "feature_b", "feature_c"))
+        df = inject_nan(df, "feature_a", frac=0.3)
+        df = inject_nan(df, "feature_b", frac=0.2)
+        imp = EstimatorImputer(estimator=LinearRegression(), fallback=True).fit(df)
+        out = imp.transform(df)
+
+        assert out.shape == df.shape
+        assert not out.isna().any().any()
+
+    def test_skip_only_predicts_for_rows_with_complete_predictors(self):
+        """When predictor_fill_value='skip', rows where predictors have NaN
+        are skipped (not predicted). With fallback=False those cells stay NaN,
+        while rows with complete predictors get model-based imputation."""
+        df = make_panel(cols=("feature_a", "feature_b", "feature_c"))
+        df = inject_nan(df, "feature_a", frac=0.3)
+        df = inject_nan(df, "feature_b", frac=0.2)
+        imp = EstimatorImputer(
+            estimator=LinearRegression(),
+            complete_rows_only=True,
+            predictor_fill_value="skip",
+            fallback=False,
+        ).fit(df)
+        out = imp.transform(df)
+
+        for col in ("feature_a", "feature_b"):
+            originally_missing = df[col].isna()
+            if not originally_missing.any():
+                continue
+            predictor_cols = [c for c in df.columns if c != col]
+            predictors_complete = df.loc[originally_missing, predictor_cols].notna().all(axis=1)
+            predicted_rows = out.loc[originally_missing & predictors_complete, col]
+            assert not predicted_rows.isna().any(), (
+                f"{col}: rows with complete predictors should be imputed"
+            )
+            skipped_rows = out.loc[originally_missing & ~predictors_complete, col]
+            assert skipped_rows.isna().all(), (
+                f"{col}: rows with NaN predictors should remain NaN"
+            )
+
+    def test_skip_with_fallback_fills_skipped_rows(self):
+        """When predictor_fill_value='skip' and fallback=True, skipped rows
+        get filled by the fallback (column means)."""
+        df = make_panel(cols=("feature_a", "feature_b", "feature_c"))
+        df = inject_nan(df, "feature_a", frac=0.3)
+        df = inject_nan(df, "feature_b", frac=0.2)
+        imp = EstimatorImputer(
+            estimator=LinearRegression(),
+            complete_rows_only=True,
+            predictor_fill_value="skip",
+            fallback=True,
+        ).fit(df)
+        out = imp.transform(df)
+        assert not out.isna().any().any()
+
+    def test_skip_does_not_raise_for_linear_regression(self):
+        """predictor_fill_value='skip' avoids passing NaN predictors to
+        the estimator, so LinearRegression works without error."""
+        df = make_panel(cols=("feature_a", "feature_b", "feature_c"))
+        df = inject_nan(df, "feature_a", frac=0.3)
+        df = inject_nan(df, "feature_b", frac=0.2)
+        imp = EstimatorImputer(
+            estimator=LinearRegression(),
+            complete_rows_only=True,
+            predictor_fill_value="skip",
+            fallback=False,
+        ).fit(df)
+        out = imp.transform(df)
+
+        assert all(out.isna().sum(axis=1) < df.shape[1])
+        assert out.shape == df.shape
