@@ -2881,6 +2881,22 @@ class TestAll(unittest.TestCase):
         except Exception as e:
             self.fail(f"feature_selection_heatmap raised an exception: {e}")
 
+    def test_valid_available_cids_heatmap(self):
+        so = self.so_no_na
+
+        # test when start_date is None
+        try:
+            so.available_cid_heatmap()
+        except Exception as e:
+            self.fail(f"available_cid_heatmap raised an exception: {e}")
+
+        # test when start_date is supplied
+        try:
+            so.available_cid_heatmap(start_date="2020-01-07")
+        except Exception as e:
+            self.fail(f"available_cid_heatmap raised an exception: {e}")
+
+
     def test_types_correlations_heatmap(self):
 
         so = SignalOptimizer(
