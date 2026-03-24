@@ -1233,7 +1233,9 @@ class DataQueryFileAPIClient(RateLimitedRequester):
                         timeout=timeout,
                     )
                 ] = filename
-                time.sleep(DQ_FILE_API_DELAY_PARAM)
+                # Small stagger to avoid submitting all futures at once;
+                # actual rate-limiting is handled by _wait_for_api_call().
+                time.sleep(0.01)
 
             for future in tqdm(
                 cf.as_completed(futures),
