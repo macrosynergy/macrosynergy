@@ -1411,8 +1411,7 @@ class DataQueryFileAPIClient(RateLimitedRequester):
         )
 
         if case_sensitive:
-            catalog_set = set(catalog_tickers)
-            valid = {t for t in catalog_tickers if t in catalog_set and t in tickers}
+            valid = set(catalog_tickers) & set(tickers)
             return sorted(valid)
 
         # case-insensitive - build canonical ticker name lookup
