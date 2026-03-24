@@ -242,9 +242,6 @@ class DataQueryFileAPIOauth(JPMorganOAuth):
         )
 
 
-_base_url_cache: Dict[str, str] = {}
-
-
 def _resolve_base_url(
     primary: str,
     fallback: str,
@@ -256,13 +253,9 @@ def _resolve_base_url(
     Probe which DataQuery File API base URL is reachable.
 
     Tries *primary* first; on connection failure, falls back to *fallback*.
-    The result is cached globally (keyed on *primary*) so the probe runs at
-    most once per process, even across multiple ``DataQueryFileAPIClient``
-    instances.
+    Each ``DataQueryFileAPIClient`` instance calls this during construction,
+    so the probe runs once per instance.
     """
-    if primary in _base_url_cache:
-        return _base_url_cache[primary]
-
     for url, is_fallback in [(primary, False), (fallback, True)]:
         try:
             requests.head(url, timeout=timeout, verify=verify, proxies=proxies)
@@ -291,11 +284,9 @@ def _resolve_base_url(
                 primary,
             )
 
-        _base_url_cache[primary] = url
         return url
 
     # Both unreachable - return primary and let normal error handling surface it
-    _base_url_cache[primary] = primary
     return primary
 
 
