@@ -1074,9 +1074,10 @@ class DataQueryFileAPIClient(RateLimitedRequester):
     def delete_corrupt_files(
         self,
         files: Optional[List[str]] = None,
+        delete: bool = True,
     ) -> List[str]:
         """
-        Deletes corrupt files from the provided list based on file integrity checks.
+        Check downloaded files for corruption and optionally delete them.
 
         Parameters
         ----------
@@ -1084,11 +1085,15 @@ class DataQueryFileAPIClient(RateLimitedRequester):
             A list of file names (as in `list_downloaded_files()["file-name"]`) to check
             for corruption. If None, scans all downloaded files in the client's output
             directory.
+        delete : bool
+            If True, corrupt files are deleted from disk. If False, corrupt files
+            are only logged as warnings (no files are removed). Default is True.
 
         Returns
         -------
         List[str]
-            A list of file paths that were identified as corrupt and deleted.
+            A list of file paths that were identified as corrupt (and deleted if
+            ``delete=True``).
         """
         avail_files = self.list_downloaded_files()
         if avail_files.empty:
@@ -1103,7 +1108,10 @@ class DataQueryFileAPIClient(RateLimitedRequester):
         extensions = sorted(set(Path(f).suffix.rsplit(".", 1)[-1] for f in files))
 
         return _delete_corrupt_files(
-            files=files, extensions=extensions, root_dir=Path(self.out_dir)
+            files=files,
+            extensions=extensions,
+            root_dir=Path(self.out_dir),
+            delete=delete,
         )
 
     def cleanup_old_files(
@@ -1177,6 +1185,7 @@ class DataQueryFileAPIClient(RateLimitedRequester):
         chunk_size: Optional[int] = None,
         timeout: Optional[float] = DQ_FILE_API_TIMEOUT,
         show_progress: bool = True,
+        delete_corrupt_files: bool = False,
     ) -> None:
         """
         Downloads a list of files concurrently with progress indication.
@@ -1197,6 +1206,10 @@ class DataQueryFileAPIClient(RateLimitedRequester):
             The timeout for each download request in seconds.
         show_progress : bool
             If True, displays a progress bar for the downloads.
+        delete_corrupt_files : bool
+            If True, corrupt files are deleted after download and retried. If False
+            (default), corrupt files are only logged as warnings. Users can run
+            ``delete_corrupt_files()`` separately after verifying the logs.
         """
         Path(self.out_dir).mkdir(parents=True, exist_ok=True)
         start_time = time.time()
@@ -1237,9 +1250,13 @@ class DataQueryFileAPIClient(RateLimitedRequester):
                 except Exception as e:
                     logger.error(f"Failed to download {fname}: {e}")
                     failed_files.append(fname)
-        found_corrupt_files = self.delete_corrupt_files(files=filenames)
-        corrupt_filenames = [Path(p).name for p in found_corrupt_files]
-        failed_files = sorted(set(failed_files + corrupt_filenames))
+        found_corrupt_files = self.delete_corrupt_files(
+            files=filenames,
+            delete=delete_corrupt_files,
+        )
+        if delete_corrupt_files:
+            corrupt_filenames = [Path(p).name for p in found_corrupt_files]
+            failed_files = sorted(set(failed_files + corrupt_filenames))
         if not failed_files:
             total_time = time.time() - start_time
             logger.info(
@@ -1264,6 +1281,7 @@ class DataQueryFileAPIClient(RateLimitedRequester):
             chunk_size=chunk_size,
             timeout=timeout,
             show_progress=show_progress,
+            delete_corrupt_files=delete_corrupt_files,
         )
 
     def download_catalog_file(
@@ -1642,6 +1660,7 @@ class DataQueryFileAPIClient(RateLimitedRequester):
         include_metadata: bool = True,
         file_group_ids: Optional[List[str]] = None,
         show_progress: bool = True,
+        delete_corrupt_files: bool = False,
         _selection_since_datetime: Optional[str] = None,
         _selection_to_datetime: Optional[str] = None,
         _selection_min_last_updated: Optional[Union[str, pd.Timestamp]] = None,
@@ -1791,6 +1810,7 @@ class DataQueryFileAPIClient(RateLimitedRequester):
             chunk_size=chunk_size,
             timeout=timeout,
             show_progress=show_progress,
+            delete_corrupt_files=delete_corrupt_files,
         )
 
         self._refresh_file_selector()
@@ -2115,6 +2135,7 @@ class DataQueryFileAPIClient(RateLimitedRequester):
         to_datetime: Optional[str] = None,
         skip_download: bool = False,
         cleanup_old_files_n_days: Optional[int] = None,
+        delete_corrupt_files: bool = False,
     ) -> Union[pd.DataFrame, pl.DataFrame, pl.LazyFrame]:
         """
         Download JPMaQS files into the local cache and load the requested timeseries.
@@ -2350,6 +2371,7 @@ class DataQueryFileAPIClient(RateLimitedRequester):
                 include_full_snapshots=True,
                 include_delta=include_delta_files,
                 include_metadata=include_metadata_files,
+                delete_corrupt_files=delete_corrupt_files,
                 _selection_min_last_updated=min_last_updated,
                 _selection_max_last_updated=max_last_updated,
             )
@@ -2587,9 +2609,17 @@ def _delete_corrupt_files(
     extensions: List[str] = ["parquet", "json"],
     root_dir: Path = None,
     allow_empty: bool = False,
+    delete: bool = True,
 ) -> List[Path]:
-    """Deletes corrupt files based on their extensions."""
-    removed_files = []
+    """Check files for corruption and optionally delete them.
+
+    Parameters
+    ----------
+    delete : bool
+        If True, corrupt files are deleted from disk. If False, corrupt files
+        are only logged as warnings (no files are removed).
+    """
+    corrupt_files = []
     for file_path in map(Path, files):
         if not file_path.exists():
             continue
@@ -2613,11 +2643,14 @@ def _delete_corrupt_files(
         except KeyboardInterrupt:
             raise
         except Exception:
-            logger.warning(f"Deleting corrupt file: {file_path}")
-            file_path.unlink()
-            removed_files.append(file_path)
+            if delete:
+                logger.warning(f"Deleting corrupt file: {file_path}")
+                file_path.unlink()
+            else:
+                logger.warning(f"Corrupt file detected (not deleted): {file_path}")
+            corrupt_files.append(file_path)
 
-    if root_dir is not None and root_dir.exists() and root_dir.is_dir():
+    if delete and root_dir is not None and root_dir.exists() and root_dir.is_dir():
         for dirpath, _, _ in os.walk(root_dir, topdown=False):
             dir_path = Path(dirpath)
             if not any(dir_path.iterdir()):
@@ -2627,7 +2660,7 @@ def _delete_corrupt_files(
                 except Exception:
                     logger.warning(f"Failed to remove directory: {dir_path}")
 
-    return sorted(map(str, removed_files))
+    return sorted(map(str, corrupt_files))
 
 
 if __name__ == "__main__":

@@ -1024,6 +1024,7 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
                     filenames=["f1.parquet", "f2.parquet"],
                     max_retries=1,
                     show_progress=False,
+                    delete_corrupt_files=True,
                 )
             # Second call should retry just the basename, not the full path.
             if PD_2_0_OR_LATER:
@@ -1199,6 +1200,7 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
             chunk_size=None,
             timeout=300.0,
             show_progress=False,
+            delete_corrupt_files=False,
         )
 
         mock_download_multi.reset_mock()
@@ -1214,6 +1216,7 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
             chunk_size=None,
             timeout=300.0,
             show_progress=False,
+            delete_corrupt_files=False,
         )
 
     @patch.object(DataQueryFileAPIClient, "download_multiple_files")
