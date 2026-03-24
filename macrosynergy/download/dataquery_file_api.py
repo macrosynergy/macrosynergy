@@ -154,6 +154,7 @@ import polars as pl
 
 import functools
 import time
+import warnings
 from pathlib import Path
 from enum import Enum
 
@@ -182,6 +183,9 @@ from macrosynergy.download.exceptions import DownloadError, InvalidResponseError
 from macrosynergy.download.jpm_oauth import JPMorganOAuth
 
 DQ_FILE_API_BASE_URL: str = (
+    "https://api-dataquery.jpmchase.com/research/dataquery-authe/api/v2"
+)
+DQ_FILE_API_FALLBACK_BASE_URL: str = (
     "https://api-strm-gw01.jpmchase.com/research/dataquery-authe/api/v2"
 )
 DQ_FILE_API_SCOPE: str = "JPMC:URI:RS-06785-DataQueryExternalApi-PROD"
@@ -238,6 +242,63 @@ class DataQueryFileAPIOauth(JPMorganOAuth):
         )
 
 
+_base_url_cache: Dict[str, str] = {}
+
+
+def _resolve_base_url(
+    primary: str,
+    fallback: str,
+    timeout: float = 10.0,
+    verify: bool = True,
+    proxies: Optional[Dict[str, str]] = None,
+) -> str:
+    """
+    Probe which DataQuery File API base URL is reachable.
+
+    Tries *primary* first; on connection failure, falls back to *fallback*.
+    The result is cached globally (keyed on *primary*) so the probe runs at
+    most once per process, even across multiple ``DataQueryFileAPIClient``
+    instances.
+    """
+    if primary in _base_url_cache:
+        return _base_url_cache[primary]
+
+    for url, is_fallback in [(primary, False), (fallback, True)]:
+        try:
+            requests.head(url, timeout=timeout, verify=verify, proxies=proxies)
+        except requests.exceptions.RequestException:
+            if not is_fallback:
+                logger.debug(
+                    "Primary DataQuery File API URL not reachable (%s), "
+                    "trying fallback...",
+                    primary,
+                )
+            continue
+
+        if is_fallback:
+            warnings.warn(
+                f"The primary DataQuery File API URL is not reachable: "
+                f"{primary}\n"
+                f"Falling back to: {url}\n"
+                f"Please whitelist/allow the primary URL in your "
+                f"network/firewall configuration.",
+                UserWarning,
+                stacklevel=2,
+            )
+            logger.warning(
+                "DataQuery File API URL fallback active: using %s instead of %s.",
+                url,
+                primary,
+            )
+
+        _base_url_cache[primary] = url
+        return url
+
+    # Both unreachable - return primary and let normal error handling surface it
+    _base_url_cache[primary] = primary
+    return primary
+
+
 class DataQueryFileAPIClient:
     """
     A client for accessing JPMaQS product files via the JPMorgan DataQuery File API.
@@ -292,7 +353,12 @@ class DataQueryFileAPIClient:
         self.client_secret = client_secret
         self.out_dir = out_dir or "./jpmaqs-download"
 
-        self.base_url = base_url.rstrip("/")
+        self.base_url = _resolve_base_url(
+            primary=base_url,
+            fallback=DQ_FILE_API_FALLBACK_BASE_URL,
+            verify=verify_ssl,
+            proxies=proxies,
+        ).rstrip("/")
         self.scope = scope
         self.proxies = proxies
         self.verify_ssl = verify_ssl
