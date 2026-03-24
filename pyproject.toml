@@ -25,7 +25,6 @@ dependencies = [
   "pyarrow>=11.0.0",
   "scipy<=1.15.3",
   "polars>=1.0.0",
-  "torch>=1.11.0",
 ]
 classifiers = [
   "Development Status :: 4 - Beta",
@@ -73,6 +72,7 @@ notebook = [
   "jupyter>=1.0.0",
   "ipykernel>=6.4.1",
 ]
+torch = ["torch>=1.11.0"]
 format = ["black>=22.1.0"]
 
 docs = [
@@ -91,6 +91,7 @@ docs = [
 ]
 
 all = [
+  "torch>=1.11.0",
   "openpyxl>=3.0.10",
   "notebook>=6.0.0",
   "ipywidgets>=7.6.5",
