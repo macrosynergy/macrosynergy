@@ -35,16 +35,29 @@ from .factor_models import (
     PLSTransformer,
 )
 
-from .torch import (
-    MultiLayerPerceptron,
-    TimeSeriesSampler,
-    MultiOutputSharpe,
-    MultiOutputMCR,
-)
+def __getattr__(name):
+    _torch_names = {
+        "MultiLayerPerceptron",
+        "TimeSeriesSampler",
+        "MultiOutputSharpe",
+        "MultiOutputMCR",
+    }
+    _nn_names = {
+        "MLPRegressor",
+    }
+    if name in _torch_names:
+        from .torch import (
+            MultiLayerPerceptron,
+            TimeSeriesSampler,
+            MultiOutputSharpe,
+            MultiOutputMCR,
+        )
+        return locals()[name]
+    if name in _nn_names:
+        from .nn import MLPRegressor
+        return MLPRegressor
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
-from .nn import (
-    MLPRegressor,
-)
 __all__ = [
     "LADRegressor",
     "KNNClassifier",
