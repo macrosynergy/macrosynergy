@@ -19,7 +19,6 @@ from macrosynergy.download.dataquery_file_api import (
     InvalidResponseError,
     DQ_FILE_API_SCOPE,
     _resolve_base_url,
-    _base_url_cache,
     DQ_FILE_API_BASE_URL,
     DQ_FILE_API_FALLBACK_BASE_URL,
 )
@@ -1078,12 +1077,6 @@ class TestResolveBaseUrl(unittest.TestCase):
     PRIMARY = "https://primary.example.com/api/v2"
     FALLBACK = "https://fallback.example.com/api/v2"
 
-    def setUp(self):
-        _base_url_cache.clear()
-
-    def tearDown(self):
-        _base_url_cache.clear()
-
     def _assert_no_user_warnings(self, callable_fn):
         """Call *callable_fn* and assert it emits no UserWarning."""
         with warnings.catch_warnings(record=True) as caught:
@@ -1104,7 +1097,6 @@ class TestResolveBaseUrl(unittest.TestCase):
 
         self.assertEqual(result, self.PRIMARY)
         mock_head.assert_called_once()
-        self.assertEqual(_base_url_cache[self.PRIMARY], self.PRIMARY)
 
     @patch("requests.head")
     def test_primary_unreachable_fallback_works(self, mock_head):
@@ -1124,7 +1116,6 @@ class TestResolveBaseUrl(unittest.TestCase):
         self.assertIn("not reachable", str(cm.warning))
         self.assertIn(self.PRIMARY, str(cm.warning))
         self.assertIn(self.FALLBACK, str(cm.warning))
-        self.assertEqual(_base_url_cache[self.PRIMARY], self.FALLBACK)
 
     @patch("requests.head")
     def test_primary_timeout_falls_back(self, mock_head):
@@ -1153,25 +1144,10 @@ class TestResolveBaseUrl(unittest.TestCase):
 
         self.assertEqual(result, self.PRIMARY)
         self.assertEqual(mock_head.call_count, 2)
-        self.assertEqual(_base_url_cache[self.PRIMARY], self.PRIMARY)
 
     @patch("requests.head")
-    def test_cache_prevents_second_probe(self, mock_head):
-        """After the first probe, subsequent calls use the cache (no network)."""
-        mock_head.return_value = MagicMock(status_code=200)
-
-        result1 = self._assert_no_user_warnings(
-            lambda: _resolve_base_url(self.PRIMARY, self.FALLBACK)
-        )
-        self.assertEqual(mock_head.call_count, 1)
-
-        result2 = _resolve_base_url(self.PRIMARY, self.FALLBACK)
-        self.assertEqual(result1, result2)
-        self.assertEqual(mock_head.call_count, 1)  # no additional probe
-
-    @patch("requests.head")
-    def test_cache_persists_across_client_instances(self, mock_head):
-        """The cache is module-level: creating a new client re-uses the cached URL."""
+    def test_each_client_instance_probes_independently(self, mock_head):
+        """Each new DataQueryFileAPIClient instance probes the URL fresh."""
 
         def _side_effect(url, **kwargs):
             if url == DQ_FILE_API_BASE_URL:
@@ -1184,10 +1160,15 @@ class TestResolveBaseUrl(unittest.TestCase):
             with self.assertWarns(UserWarning):
                 client1 = DataQueryFileAPIClient()
 
-            probe_count = mock_head.call_count  # 2 calls (primary fail + fallback ok)
+            probe_count_after_first = (
+                mock_head.call_count
+            )  # 2 (primary fail + fallback ok)
 
-            client2 = DataQueryFileAPIClient()
-            self.assertEqual(mock_head.call_count, probe_count)  # no new probes
+            with self.assertWarns(UserWarning):
+                client2 = DataQueryFileAPIClient()
+
+            # Second instance must probe again (no global cache)
+            self.assertEqual(mock_head.call_count, probe_count_after_first * 2)
 
             self.assertEqual(client1.base_url, DQ_FILE_API_FALLBACK_BASE_URL)
             self.assertEqual(client2.base_url, DQ_FILE_API_FALLBACK_BASE_URL)
@@ -1218,43 +1199,6 @@ class TestResolveBaseUrl(unittest.TestCase):
         mock_head.assert_called_once_with(
             self.PRIMARY, timeout=10.0, verify=False, proxies=proxies
         )
-
-    @patch("requests.head")
-    def test_cached_fallback_returns_silently(self, mock_head):
-        """After fallback is cached, subsequent calls return it without re-warning."""
-
-        def _side_effect(url, **kwargs):
-            if url == self.PRIMARY:
-                raise requests.exceptions.ConnectionError("unreachable")
-            return MagicMock(status_code=200)
-
-        mock_head.side_effect = _side_effect
-
-        # First call: warns and caches fallback
-        with self.assertWarns(UserWarning):
-            _resolve_base_url(self.PRIMARY, self.FALLBACK)
-
-        # Second call: must return fallback silently, no new network call
-        result = self._assert_no_user_warnings(
-            lambda: _resolve_base_url(self.PRIMARY, self.FALLBACK)
-        )
-        self.assertEqual(result, self.FALLBACK)
-        self.assertEqual(mock_head.call_count, 2)  # no additional probes
-
-    @patch("requests.head")
-    def test_different_primaries_are_independent(self, mock_head):
-        """Two different primary URLs each probe independently."""
-        other_primary = "https://other.example.com/api/v2"
-        mock_head.return_value = MagicMock(status_code=200)
-
-        r1 = _resolve_base_url(self.PRIMARY, self.FALLBACK)
-        r2 = _resolve_base_url(other_primary, self.FALLBACK)
-
-        self.assertEqual(r1, self.PRIMARY)
-        self.assertEqual(r2, other_primary)
-        self.assertEqual(mock_head.call_count, 2)
-        self.assertIn(self.PRIMARY, _base_url_cache)
-        self.assertIn(other_primary, _base_url_cache)
 
     @patch("requests.head")
     def test_ssl_error_triggers_fallback(self, mock_head):
@@ -1371,16 +1315,6 @@ class TestResolveBaseUrl(unittest.TestCase):
 
         self.assertEqual(result, self.PRIMARY)
         mock_head.assert_called_once()
-
-    @patch("requests.head")
-    def test_prepopulated_cache_is_respected(self, mock_head):
-        """If the cache is pre-populated, no network call is made."""
-        _base_url_cache[self.PRIMARY] = self.FALLBACK
-
-        result = _resolve_base_url(self.PRIMARY, self.FALLBACK)
-
-        self.assertEqual(result, self.FALLBACK)
-        mock_head.assert_not_called()
 
 
 if __name__ == "__main__":
