@@ -5,6 +5,7 @@ machine learning.
 
 import numbers
 import warnings
+from typing import Union, Tuple
 
 import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
@@ -960,6 +961,43 @@ class SignalOptimizer(BasePanelLearner):
         plt.xticks(fontsize=tick_fontsize)  # X-axis tick font size
         plt.yticks(fontsize=tick_fontsize)
         plt.show()
+
+    def available_cid_heatmap(
+        self,
+        title: str = "Number of Available CIDs Heatmap",
+        figsize: Tuple[int, int] = (12, 8),
+        start_date: Union[str, pd.Timestamp] = None,
+        tick_fontsize: int = None,
+    ) -> None:
+        """
+        Visualise the number of cids with data for each xcat at each date
+
+        Parameters
+        ----------
+        title : str
+            Title of the heatmap. Default is "Number of Available CIDs Heatmap""
+        figsize : tuple of floats or ints, optional
+            Tuple of floats or ints denoting the figure size. Default is (12, 8).
+        start_date : str or pd.Timestamp, optional
+            Show data from this date onwards
+        tick_fontsize: int, optional
+            Font size of the ticks on the heatmap. Default is None.
+        """
+        data = (
+            self.X[self.X.index.get_level_values("real_date") >= start_date]
+            if start_date else self.X
+        )
+
+        cid_count = data.groupby(level="real_date").count()
+        cid_count.index = cid_count.index.date
+
+        plt.figure(figsize=figsize)
+        sns.heatmap(cid_count.T, cmap="rocket_r")
+        plt.title(title)
+        plt.xticks(fontsize=tick_fontsize)
+        plt.yticks(fontsize=tick_fontsize)
+        plt.show()
+
 
     def _checks_feature_selection_heatmap(
         self,
