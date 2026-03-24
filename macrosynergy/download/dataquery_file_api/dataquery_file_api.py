@@ -1729,7 +1729,6 @@ class DataQueryFileAPIClient(RateLimitedRequester):
         # consistent vintage decisions from the full history.
         selector = self.file_selector
         api_files_df = self.list_available_files_for_all_file_groups()
-        selector.refresh(api_files_df=api_files_df)
 
         downloaded_files_df = self.list_downloaded_files(
             include_last_modified_columns=False
