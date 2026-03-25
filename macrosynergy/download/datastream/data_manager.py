@@ -34,7 +34,6 @@ Typical usage::
 """
 
 import logging
-import io
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple, Union
 
@@ -46,14 +45,11 @@ from .connection import DatastreamConnection
 # Module-level logger (matches project convention in dataquery.py)
 # ---------------------------------------------------------------------------
 logger: logging.Logger = logging.getLogger(__name__)
-_debug_handler = logging.StreamHandler(io.StringIO())
-_debug_handler.setLevel(logging.NOTSET)
-_debug_handler.setFormatter(
-    logging.Formatter(
-        "%(asctime)s - %(levelname)s - %(module)s - %(funcName)s :: %(message)s"
-    )
-)
-logger.addHandler(_debug_handler)
+
+# ---------------------------------------------------------------------------
+# DatastreamPy ``kind`` parameter: 0 = return a raw tabular DataFrame.
+# ---------------------------------------------------------------------------
+DSWS_KIND_TABULAR: int = 0
 
 # ---------------------------------------------------------------------------
 # API limits
@@ -144,10 +140,6 @@ class DatastreamDataManager:
                 "or supply both 'username' and 'password'."
             )
 
-    # ------------------------------------------------------------------
-    # Public data-retrieval methods
-    # ------------------------------------------------------------------
-
     def get_constituents(
         self,
         index_code: str,
@@ -189,7 +181,7 @@ class DatastreamDataManager:
                 tickers=list_code,
                 fields=["MNEM"],
                 start=start_date,
-                kind=0,
+                kind=DSWS_KIND_TABULAR,
             )
         except Exception as exc:
             logger.error("API call failed for constituents of '%s': %s", list_code, exc)
@@ -286,9 +278,7 @@ class DatastreamDataManager:
                 chunk_df = ds.get_data(
                     tickers=ticker_arg,
                     fields=f_chunk,
-                    # start="-0D",
-                    # end="0D",
-                    kind=0
+                    kind=DSWS_KIND_TABULAR,
                 )
                 if chunk_df is not None and not chunk_df.empty:
                     row_frames.append(chunk_df)
@@ -458,16 +448,19 @@ class DatastreamDataManager:
             )
             return df
 
-        # Add currency column if absent (snapshot without currency info).
-        if "currency" not in df.columns:
+        # Track whether currency was originally present before normalising.
+        has_currency = "currency" in df.columns
+        if not has_currency:
             df["currency"] = pd.NA
 
         # Drop rows that represent API-level errors (Value starts with $$ER).
         df["value"] = df["value"].astype(str)
         df = df[~df["value"].str.startswith("$$ER:")]
 
-        # Drop rows where currency is NaN — these are invalid / error records.
-        df = df.dropna(subset=["currency"])
+        # Drop rows where currency is NaN only when the API actually provided
+        # currency data — otherwise every row would be dropped.
+        if has_currency:
+            df = df.dropna(subset=["currency"])
 
         # Pivot from long to wide format.
         try:
