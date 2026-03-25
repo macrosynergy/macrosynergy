@@ -722,6 +722,8 @@ class DataQueryFileAPIClient(RateLimitedRequester):
             "start-date": start_date,
             "end-date": end_date,
         }
+        # Extra 1-second throttle: the listing endpoint has a stricter rate limit
+        # than the download endpoints. _get() adds its own standard delay on top.
         self._wait_for_api_call(1)
         payload = self._get(endpoint, params)
         df = pd.json_normalize(payload, record_path=["available-files"])
