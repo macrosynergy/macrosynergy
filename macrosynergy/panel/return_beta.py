@@ -61,8 +61,8 @@ def hedge_calculator(
     unhedged_return: pd.Series,
     benchmark_return: pd.Series,
     rdates: List[pd.Timestamp],
-    cross_section: str,
     meth: str = "ols",
+    half_life: int = 21 * 12,
     min_obs: int = 24,
     max_obs: int = 1000,
 ) -> pd.DataFrame:
@@ -81,11 +81,14 @@ def hedge_calculator(
         the return series of the asset being used to hedge against the main asset.
     rdates : List[~pandas.Timestamp]
         the dates controlling the frequency of re-estimation.
-    cross_section : str
-        cross-section responsible for the "benchmark_return" series.
     meth : str
-        method to estimate hedge ratio. At present the only method is OLS regression
-        ('ols').
+        method to estimate the hedge ratio. Valid options are ``'ols'`` for ordinary
+        least squares regression and ``'twls'`` for time-weighted least squares.
+        When ``'twls'`` is specified, recent observations are assigned higher weight,
+        with the ``half_life`` parameter controlling the rate of decay.
+    half_life: int
+        half-life of the exponential decay function used to calculate the time weights
+        when meth='twls'.
     min_obs : int
         a hedge ratio will only be computed if the number of days has surpassed the
         integer held by the parameter.
@@ -135,18 +138,27 @@ def hedge_calculator(
     df_hrat = pd.DataFrame(data=data_column, index=rdates, columns=["value"])
 
     for d in rdates:
-        if d > min_obs_date:
-            curr_start_date: pd.Timestamp = rdates[max(0, rdates.index(d) - max_obs)]
-            # Inclusive of the re-estimation date.
-            yvar = unhedged_return.loc[curr_start_date:d]
-            xvar = benchmark_return.loc[curr_start_date:d]
-            # Condition currently redundant but will become relevant.
-            if meth == "ols":
-                xvar = sm.add_constant(xvar)
-                results: RegressionResults = sm.OLS(yvar, xvar).fit()
-                results_params: pd.Series = results.params
+        if d <= min_obs_date: continue
 
-            df_hrat.loc[d] = results_params.loc[benchmark_return.name]
+        curr_start_date: pd.Timestamp = rdates[max(0, rdates.index(d) - max_obs)]
+        # Inclusive of the re-estimation date.
+        yvar = unhedged_return.loc[curr_start_date:d].values
+        xvar = benchmark_return.loc[curr_start_date:d].values.reshape(-1, 1)
+
+        if meth == "ols":
+            weights = np.ones_like(yvar)
+        elif meth == "twls":
+            weights = np.power(2, -np.arange(yvar.shape[0]) / half_life)[::-1]
+        else:
+            raise ValueError("meth must be either ols or twls")
+
+        betas = weighted_least_squares(
+            X=np.column_stack((np.ones(xvar.shape[0]), xvar)),
+            y=yvar,
+            weights=weights,
+        )
+
+        df_hrat.loc[d] = betas[1]
 
     # Any dates prior to the minimum observation which would be classified by NaN values
     # remove from the DataFrame.
@@ -394,7 +406,6 @@ def return_beta(
             unhedged_return=dfw[c],
             benchmark_return=br,
             rdates=dates_re,
-            cross_section=c,
             meth=meth,
             min_obs=min_obs,
             max_obs=max_obs,
@@ -441,6 +452,35 @@ def beta_display(df_hedge: pd.DataFrame, subplots: bool = False, hr_name: str = 
     dfw_ratios.plot(subplots=subplots, title="Hedging Ratios.", legend=True)
     plt.xlabel("real_date, years")
     plt.show()
+
+
+def weighted_least_squares(X, y, weights):
+    """
+    Find the coefficient vector ``beta`` that minimizes the weighted
+    sum of squared residuals:
+
+    Parameters
+    ----------
+    X : ndarray of shape (n, p)
+        Design matrix, where ``n`` is the number of observations and
+        ``p`` is the number of predictors (including any intercept column).
+    y : ndarray of shape (n,)
+        Response vector.
+    weights : ndarray of shape (n,)
+        Non-negative weight for each observation. A higher weight gives
+        that observation more influence on the fitted coefficients.
+
+    Returns
+    -------
+    beta : ndarray of shape (p,)
+        Estimated coefficient vector.
+    """
+    W = np.sqrt(weights)          # square-root weights
+    X_w = X * W[:, np.newaxis]    # scale each row of X
+    y_w = y * W                   # scale y the same way
+
+    beta, _, _, _ = np.linalg.lstsq(X_w, y_w, rcond=None)
+    return beta
 
 
 if __name__ == "__main__":
