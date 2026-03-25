@@ -24,7 +24,7 @@ try:
 except ImportError as _exc:  # pragma: no cover
     raise ImportError(
         "DatastreamPy is required for Datastream integration. "
-        "Install it with: pip install DatastreamPy"
+        "Install it with: pip install macrosynergy[datastream]"
     ) from _exc
 
 logger: logging.Logger = logging.getLogger(__name__)
@@ -96,10 +96,6 @@ class DatastreamConnection:
         self._password: str = password
         self.ds: Optional[dsweb.DataClient] = None
         self._is_connected: bool = False
-
-    # ------------------------------------------------------------------
-    # Public interface
-    # ------------------------------------------------------------------
 
     def connect(self) -> "dsweb.DataClient":
         """Open a new DSWS session.
@@ -204,10 +200,6 @@ class DatastreamConnection:
             logger.error("Connection test failed with exception: %s", exc)
             return False
 
-    # ------------------------------------------------------------------
-    # Context-manager support
-    # ------------------------------------------------------------------
-
     def __enter__(self) -> "DatastreamConnection":
         """Connect on entering the ``with`` block.
 
@@ -234,10 +226,6 @@ class DatastreamConnection:
         """
         self.disconnect()
         return False
-
-    # ------------------------------------------------------------------
-    # Dunder helpers
-    # ------------------------------------------------------------------
 
     def __repr__(self) -> str:
         status = "connected" if self.is_connected() else "disconnected"
