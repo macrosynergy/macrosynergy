@@ -2205,6 +2205,114 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
             )
 
 
+class TestValidateAndResolveTickers(unittest.TestCase):
+    """Tests for DataQueryFileAPIClient._validate_and_resolve_tickers."""
+
+    def setUp(self):
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp_dir.cleanup)
+        self.test_dir = self.temp_dir.name
+
+    @patch.object(DataQueryFileAPIClient, "filter_to_valid_tickers")
+    @patch.object(DataQueryFileAPIClient, "get_datasets_for_indicators")
+    def test_returns_valid_tickers_and_resolved_datasets(
+        self, mock_get_datasets, mock_filter
+    ):
+        client = DataQueryFileAPIClient(
+            client_id="id", client_secret="secret", out_dir=self.test_dir
+        )
+        mock_filter.return_value = ["USD_GROWTH", "EUR_GROWTH"]
+        mock_get_datasets.return_value = ["JPMAQS_GENERIC_RETURNS"]
+
+        tickers, datasets = client._validate_and_resolve_tickers(
+            tickers=["USD_GROWTH", "EUR_GROWTH", "BAD_TICK"],
+            catalog_file="catalog.parquet",
+            include_delta_files=True,
+        )
+
+        self.assertEqual(tickers, ["USD_GROWTH", "EUR_GROWTH"])
+        self.assertEqual(
+            datasets,
+            ["JPMAQS_GENERIC_RETURNS", "JPMAQS_GENERIC_RETURNS_DELTA"],
+        )
+
+    @patch.object(DataQueryFileAPIClient, "filter_to_valid_tickers")
+    @patch.object(DataQueryFileAPIClient, "get_datasets_for_indicators")
+    def test_no_delta_suffix_when_include_delta_files_false(
+        self, mock_get_datasets, mock_filter
+    ):
+        client = DataQueryFileAPIClient(
+            client_id="id", client_secret="secret", out_dir=self.test_dir
+        )
+        mock_filter.return_value = ["USD_GROWTH"]
+        mock_get_datasets.return_value = ["JPMAQS_GENERIC_RETURNS"]
+
+        _, datasets = client._validate_and_resolve_tickers(
+            tickers=["USD_GROWTH"],
+            catalog_file="catalog.parquet",
+            include_delta_files=False,
+        )
+
+        self.assertEqual(datasets, ["JPMAQS_GENERIC_RETURNS"])
+
+    @patch.object(DataQueryFileAPIClient, "filter_to_valid_tickers")
+    def test_passes_through_caller_supplied_datasets(self, mock_filter):
+        client = DataQueryFileAPIClient(
+            client_id="id", client_secret="secret", out_dir=self.test_dir
+        )
+        mock_filter.return_value = ["USD_GROWTH"]
+        pre_resolved = ["DS_A", "DS_A_DELTA"]
+
+        _, datasets = client._validate_and_resolve_tickers(
+            tickers=["USD_GROWTH"],
+            catalog_file="catalog.parquet",
+            datasets=pre_resolved,
+        )
+
+        self.assertEqual(datasets, pre_resolved)
+
+    def test_raises_when_no_tickers_specified(self):
+        client = DataQueryFileAPIClient(
+            client_id="id", client_secret="secret", out_dir=self.test_dir
+        )
+        with self.assertRaises(ValueError):
+            client._validate_and_resolve_tickers(catalog_file="catalog.parquet")
+
+    @patch.object(DataQueryFileAPIClient, "filter_to_valid_tickers")
+    def test_raises_when_no_valid_tickers(self, mock_filter):
+        client = DataQueryFileAPIClient(
+            client_id="id", client_secret="secret", out_dir=self.test_dir
+        )
+        mock_filter.return_value = []
+
+        with self.assertRaisesRegex(ValueError, "No valid tickers found"):
+            client._validate_and_resolve_tickers(
+                tickers=["BAD1"], catalog_file="catalog.parquet"
+            )
+
+    @patch("macrosynergy.download.dataquery_file_api.dataquery_file_api.logger")
+    @patch.object(DataQueryFileAPIClient, "filter_to_valid_tickers")
+    @patch.object(DataQueryFileAPIClient, "get_datasets_for_indicators")
+    def test_logs_warning_for_missing_tickers(
+        self, mock_get_datasets, mock_filter, mock_logger
+    ):
+        client = DataQueryFileAPIClient(
+            client_id="id", client_secret="secret", out_dir=self.test_dir
+        )
+        mock_filter.return_value = ["USD_GROWTH"]
+        mock_get_datasets.return_value = []
+
+        client._validate_and_resolve_tickers(
+            tickers=["USD_GROWTH", "BAD_TICK"],
+            catalog_file="catalog.parquet",
+        )
+
+        mock_logger.warning.assert_called_once()
+        warn_msg = mock_logger.warning.call_args[0][0]
+        self.assertIn("1 tickers requested do not exist", warn_msg)
+        self.assertIn("BAD_TICK", warn_msg)
+
+
 class TestDataQueryFileAPIClientNotificationLoading(unittest.TestCase):
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()

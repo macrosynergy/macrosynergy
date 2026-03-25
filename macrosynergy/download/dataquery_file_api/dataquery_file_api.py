@@ -1085,7 +1085,7 @@ class DataQueryFileAPIClient(RateLimitedRequester):
         -------
         List[str]
             A list of file paths that were identified as corrupt (and deleted if
-            ``delete=True``).
+            `delete=True`).
         """
         avail_files = self.list_downloaded_files()
         if avail_files.empty:
@@ -1201,7 +1201,7 @@ class DataQueryFileAPIClient(RateLimitedRequester):
         delete_corrupt_files : bool
             If True, corrupt files are deleted after download and retried. If False
             (default), corrupt files are only logged as warnings. Users can run
-            ``delete_corrupt_files()`` separately after verifying the logs.
+            `delete_corrupt_files()` separately after verifying the logs.
         """
         Path(self.out_dir).mkdir(parents=True, exist_ok=True)
         start_time = time.time()
@@ -1843,6 +1843,64 @@ class DataQueryFileAPIClient(RateLimitedRequester):
             delete_corrupt_files=delete_corrupt_files,
         )
 
+    def _validate_and_resolve_tickers(
+        self,
+        tickers: Optional[List[str]] = None,
+        cids: Optional[List[str]] = None,
+        xcats: Optional[List[str]] = None,
+        catalog_file: Optional[str] = None,
+        include_delta_files: bool = True,
+        datasets: Optional[List[str]] = None,
+    ) -> tuple:
+        """
+        Construct, validate, and resolve tickers against the catalog.
+
+        Returns
+        -------
+        (valid_tickers, resolved_datasets)
+            `valid_tickers` is the subset of the requested tickers that exist in the
+            catalog.  `resolved_datasets` is either the caller-supplied `datasets` (when
+            not None) or the datasets inferred from the catalog, with `_DELTA` suffixes
+            appended when `include_delta_files` is True.
+        """
+        rqstd_tickers = _construct_all_tickers_list(
+            tickers=tickers, cids=cids, xcats=xcats
+        )
+        if not bool(rqstd_tickers):
+            raise ValueError(
+                "At least one ticker must be specified via `tickers`, or `cids` & `xcats`."
+            )
+
+        valid_tickers = self.filter_to_valid_tickers(
+            tickers=rqstd_tickers, catalog_file=catalog_file
+        )
+        if not valid_tickers:
+            raise ValueError(
+                "No valid tickers found with the provided `tickers`, `cids`, and `xcats`."
+            )
+
+        valid_norm = {t.lower() for t in valid_tickers}
+        missing = sorted({t for t in rqstd_tickers if t.lower() not in valid_norm})
+        if missing:
+            lmiss = min(5, len(missing))
+            nmore = f"{len(missing) - lmiss} more" if len(missing) > lmiss else ""
+            miss_str = "[" + ", ".join(missing[:lmiss]) + "..." + nmore + "]"
+            miss_str = (
+                f"{len(missing)} tickers requested do not exist in the catalog, "
+                f"these are: {miss_str}"
+            )
+            logger.warning(miss_str)
+
+        resolved_datasets = datasets
+        if resolved_datasets is None:
+            resolved_datasets = self.get_datasets_for_indicators(
+                tickers=valid_tickers, catalog_file=catalog_file
+            )
+            if resolved_datasets and include_delta_files:
+                resolved_datasets += [f"{ds}_DELTA" for ds in resolved_datasets]
+
+        return valid_tickers, resolved_datasets
+
     def load_data(
         self,
         tickers: Optional[List[str]] = None,
@@ -1966,39 +2024,12 @@ class DataQueryFileAPIClient(RateLimitedRequester):
         """
         catalog_file = catalog_file or self.download_catalog_file()
 
-        rqstd_tickers = _construct_all_tickers_list(
-            tickers=tickers, cids=cids, xcats=xcats
+        rqstd_tickers, datasets_to_download = self._validate_and_resolve_tickers(
+            tickers=tickers, cids=cids, xcats=xcats,
+            catalog_file=catalog_file,
+            include_delta_files=include_delta_files,
+            datasets=datasets,
         )
-        if not bool(rqstd_tickers):
-            raise ValueError(
-                "At least one ticker must be specified via `tickers`, or `cids` & `xcats`."
-            )
-
-        valid_tickers = self.filter_to_valid_tickers(
-            tickers=rqstd_tickers, catalog_file=catalog_file
-        )
-        valid_norm = {t.lower() for t in valid_tickers}
-        missing = sorted({t for t in rqstd_tickers if t.lower() not in valid_norm})
-        if not valid_tickers:
-            raise ValueError(
-                "No valid tickers found with the provided `tickers`, `cids`, and `xcats`."
-            )
-        if missing:
-            lmiss = min(5, len(missing))
-            nmore = f"{len(missing) - lmiss} more" if len(missing) > lmiss else ""
-            miss_str = "[" + ", ".join(missing[:lmiss]) + "..." + nmore + "]"
-            miss_str = f"{len(missing)} tickers requested do not exist in the catalog, these are: {miss_str}"
-            logger.warning(miss_str)
-
-        rqstd_tickers = valid_tickers
-
-        datasets_to_download = datasets
-        if datasets_to_download is None:
-            datasets_to_download = self.get_datasets_for_indicators(
-                tickers=rqstd_tickers, catalog_file=catalog_file
-            )
-            if datasets_to_download and include_delta_files:
-                datasets_to_download += [f"{ds}_DELTA" for ds in datasets_to_download]
 
         if to_datetime is not None:
             if isinstance(to_datetime, str):
@@ -2284,38 +2315,10 @@ class DataQueryFileAPIClient(RateLimitedRequester):
                     )
                     return _empty_for_type(dataframe_type)
 
-        rqstd_tickers = _construct_all_tickers_list(
-            tickers=tickers, cids=cids, xcats=xcats
-        )
-        if not bool(rqstd_tickers):
-            raise ValueError(
-                "At least one ticker must be specified via `tickers`, or `cids` & `xcats`."
-            )
-
-        valid_tickers = self.filter_to_valid_tickers(
-            tickers=rqstd_tickers, catalog_file=catalog_file
-        )
-        if not valid_tickers:
-            raise ValueError(
-                "No valid tickers found with the provided `tickers`, `cids`, and `xcats`."
-            )
-
-        valid_norm = {t.lower() for t in valid_tickers}
-        missing = sorted({t for t in rqstd_tickers if t.lower() not in valid_norm})
-        if missing:
-            lmiss = min(5, len(missing))
-            nmore = f"{len(missing) - lmiss} more" if len(missing) > lmiss else ""
-            miss_str = "[" + ", ".join(missing[:lmiss]) + "..." + nmore + "]"
-            miss_str = (
-                f"{len(missing)} tickers requested do not exist in the catalog, "
-                f"these are: {miss_str}"
-            )
-            logger.warning(miss_str)
-
-        rqstd_tickers = valid_tickers
-
-        datasets_to_download = self.get_datasets_for_indicators(
-            tickers=rqstd_tickers, catalog_file=catalog_file
+        rqstd_tickers, datasets_to_download = self._validate_and_resolve_tickers(
+            tickers=tickers, cids=cids, xcats=xcats,
+            catalog_file=catalog_file,
+            include_delta_files=include_delta_files,
         )
         if "UnknownTheme" in datasets_to_download:
             logger.warning(
@@ -2326,8 +2329,6 @@ class DataQueryFileAPIClient(RateLimitedRequester):
             datasets_to_download = [
                 d for d in datasets_to_download if d != "UnknownTheme"
             ]
-        if datasets_to_download and include_delta_files:
-            datasets_to_download += [f"{ds}_DELTA" for ds in datasets_to_download]
         if not skip_download:
             download_since_datetime = since_datetime
             if download_since_datetime is None:
