@@ -16,8 +16,10 @@ Typical usage::
 """
 
 import logging
-import io
 from typing import Optional
+
+# DatastreamPy ``kind`` parameter: 0 = return a raw tabular DataFrame.
+DSWS_KIND_TABULAR: int = 0
 
 try:
     import DatastreamPy as dsweb
@@ -28,14 +30,6 @@ except ImportError as _exc:  # pragma: no cover
     ) from _exc
 
 logger: logging.Logger = logging.getLogger(__name__)
-_debug_handler = logging.StreamHandler(io.StringIO())
-_debug_handler.setLevel(logging.NOTSET)
-_debug_handler.setFormatter(
-    logging.Formatter(
-        "%(asctime)s - %(levelname)s - %(module)s - %(funcName)s :: %(message)s"
-    )
-)
-logger.addHandler(_debug_handler)
 
 # Ticker used only for connection testing — a liquid, always-available instrument.
 _TEST_TICKER: str = "U:IBM"
@@ -187,7 +181,7 @@ class DatastreamConnection:
             result = ds.get_data(
                 tickers=_TEST_TICKER,
                 fields=_TEST_FIELD,
-                kind=0,
+                kind=DSWS_KIND_TABULAR,
             )
             if result is not None and not result.empty:
                 logger.info("Connection test passed.")
