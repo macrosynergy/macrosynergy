@@ -201,9 +201,10 @@ class CrossSectionalImputer(BaseImputer):
         Behaviour for cids not present in peer_map:
           - "all": use all other cids as peers
           - "none": do not impute for that cid (unless fallback kicks in)
-    fallback : {"none", "global_mean"}
-        If "global_mean", any values still missing after peer-based imputation
-        are filled with the global mean per feature computed at fit time.
+    fallback : {"none", "zero", "mean"}
+        If "mean", any values still missing after peer-based imputation
+        are filled with the global mean per feature computed at fit time. If
+        "zero" values are filled with 0.
     missing_values : scalar
         Value to treat as missing (converted to np.nan internally).
 
@@ -227,7 +228,7 @@ class CrossSectionalImputer(BaseImputer):
         self,
         peer_map: Union[dict, None] = None,
         default_peers: str = "all",
-        fallback: str = "global_mean",
+        fallback: str = "mean",
         missing_values=np.nan,
         nan_threshold=1.0,
     ):
@@ -239,8 +240,8 @@ class CrossSectionalImputer(BaseImputer):
         if default_peers not in {"all", "none"}:
             raise ValueError("default_peers must be one of {'all', 'none'}")
 
-        if fallback not in {"global_mean", "none"}:
-            raise ValueError("fallback must be one of {'global_mean', 'none'}")
+        if fallback not in {"mean", "none", "zero"}:
+            raise ValueError("fallback must be one of {'mean', 'none', 'zero'}")
 
         self.peer_map = peer_map
         self.default_peers = default_peers
@@ -303,9 +304,11 @@ class CrossSectionalImputer(BaseImputer):
             # write back
             X_filled.loc[target_mask] = filled_target
 
-        # fallback: fill any remaining NaNs with the global mean per feature
-        if self.fallback == "global_mean":
+        # handle values still missing
+        if self.fallback == "mean":
             X_filled = X_filled.fillna(self.global_means_)
+        elif self.fallback == "zero":
+            X_filled = X_filled.fillna(0)
 
         return X_filled
 
@@ -326,10 +329,11 @@ class EstimatorImputer(BaseImputer):
         Any sklearn-compatible estimator (e.g. RandomForestRegressor,
         LinearRegression, Pipeline). If None, defaults to
         RandomForestRegressor().
-    fallback : bool, default=True
-        If True, any values still missing after model-based imputation (e.g.
-        because a feature had too few observed rows to train a model) are
-        filled with the global column mean computed at fit time.
+    fallback : str, default="none"
+        Strategy for handling values still missing after model-based imputation.
+        - "mean": fill with column means
+        - "zero": fill with zeros
+        - "none": leave remaining NaNs in place
     missing_values : scalar, default=np.nan
         Value to treat as missing (converted to np.nan internally).
     nan_threshold : float, default=1.0
@@ -369,11 +373,12 @@ class EstimatorImputer(BaseImputer):
     """
 
     _VALID_FILL_VALUES = {"mean", "skip"}
+    _VALID_FALLBACKS = {"mean", "zero", "none"}
 
     def __init__(
         self,
         estimator: Union[BaseEstimator, None] = None,
-        fallback: bool = True,
+        fallback: str = "mean",
         missing_values=np.nan,
         nan_threshold: float = 1.0,
         complete_rows_only: bool = True,
@@ -391,6 +396,12 @@ class EstimatorImputer(BaseImputer):
                 f"predictor_fill_value must be None, 'mean', or a numeric scalar, "
                 f"got '{predictor_fill_value}'"
             )
+
+        if fallback not in self._VALID_FALLBACKS:
+            raise ValueError(
+                f"fallback must be one of {self._VALID_FALLBACKS}, got '{fallback}'"
+            )
+
         self.estimator = estimator
         self.fallback = fallback
         self.complete_rows_only = complete_rows_only
@@ -478,8 +489,10 @@ class EstimatorImputer(BaseImputer):
                     f"Estimator failed to predict for target feature '{target_col}': {exc}"
                 ) from exc
 
-        if self.fallback:
+        if self.fallback == "mean":
             X_filled = X_filled.fillna(self.predictor_means_)
+        elif self.fallback == "zero":
+            X_filled = X_filled.fillna(0)
 
         return X_filled
 
@@ -498,9 +511,10 @@ class GaussianConditionalImputer(BaseImputer):
 
     Parameters
     ----------
-    fallback : {"global", "mean", "none"}, default="global"
+    fallback : {"mean", "zero", "none"}, default="mean"
         Strategy for any values still missing after conditional imputation:
         - "mean": fill with column means
+        - "zero": fill with zeros
         - "none": leave remaining NaNs in place
     missing_values : scalar, default=np.nan
         Value to treat as missing (converted to np.nan internally).
@@ -509,7 +523,7 @@ class GaussianConditionalImputer(BaseImputer):
         column is dropped entirely.
     """
 
-    _VALID_FALLBACKS = {"mean", "none"}
+    _VALID_FALLBACKS = {"mean", "zero", "none"}
 
     def __init__(
         self,
@@ -567,6 +581,8 @@ class GaussianConditionalImputer(BaseImputer):
                 self.global_mean_, index=X.columns, dtype=np.float64
             )
             X_filled = X_filled.fillna(fallback_means)
+        elif self.fallback == "zero":
+            X_filled = X_filled.fillna(0)
 
         return X_filled
 
