@@ -41,23 +41,12 @@ class FileSelector:
             else pd.DataFrame()
         )
 
-        if self.file_name_col not in self.api_files_df.columns:
-            if "filename" in self.api_files_df.columns:
-                self.api_files_df[self.file_name_col] = self.api_files_df["filename"]
-            elif not self.api_files_df.empty:
-                raise ValueError(f"Missing `{self.file_name_col}` in api_files_df.")
-            else:
-                self.api_files_df[self.file_name_col] = pd.Series(dtype="object")
-
-        if self.file_name_col not in self.local_files_df.columns:
-            if "filename" in self.local_files_df.columns:
-                self.local_files_df[self.file_name_col] = self.local_files_df[
-                    "filename"
-                ]
-            elif not self.local_files_df.empty:
-                raise ValueError(f"Missing `{self.file_name_col}` in local_files_df.")
-            else:
-                self.local_files_df[self.file_name_col] = pd.Series(dtype="object")
+        self.api_files_df = self._normalize_file_name_col(
+            self.api_files_df, "api_files_df"
+        )
+        self.local_files_df = self._normalize_file_name_col(
+            self.local_files_df, "local_files_df"
+        )
 
         self.tickers = (
             [t.strip() for t in tickers if isinstance(t, str) and t.strip()]
@@ -77,6 +66,19 @@ class FileSelector:
         )
         # Backwards compatible alias (internal / not user-facing).
         self.merged_df = self.files_df
+
+    def _normalize_file_name_col(
+        self, df: pd.DataFrame, label: str
+    ) -> pd.DataFrame:
+        """Ensure *df* has a ``self.file_name_col`` column, falling back to ``filename``."""
+        if self.file_name_col not in df.columns:
+            if "filename" in df.columns:
+                df[self.file_name_col] = df["filename"]
+            elif not df.empty:
+                raise ValueError(f"Missing `{self.file_name_col}` in {label}.")
+            else:
+                df[self.file_name_col] = pd.Series(dtype="object")
+        return df
 
     def refresh(
         self,
@@ -104,16 +106,12 @@ class FileSelector:
                 else pd.DataFrame()
             )
 
-        for attr in ("api_files_df", "local_files_df"):
-            df = getattr(self, attr)
-            if self.file_name_col not in df.columns:
-                if "filename" in df.columns:
-                    df[self.file_name_col] = df["filename"]
-                elif df.empty:
-                    df[self.file_name_col] = pd.Series(dtype="object")
-                else:
-                    raise ValueError(f"Missing `{self.file_name_col}` in {attr}.")
-            setattr(self, attr, df)
+        self.api_files_df = self._normalize_file_name_col(
+            self.api_files_df, "api_files_df"
+        )
+        self.local_files_df = self._normalize_file_name_col(
+            self.local_files_df, "local_files_df"
+        )
 
         # Prefer enriching local inventory with API `last-modified` without forcing an
         # upstream API call in `list_downloaded_files()`.
