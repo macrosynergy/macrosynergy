@@ -1822,8 +1822,7 @@ class DataQueryFileAPIClient(RateLimitedRequester):
         include_metadata: bool = True,
         file_group_ids: Optional[List[str]] = None,
         show_progress: bool = True,
-        *args,
-        **kwargs,
+        delete_corrupt_files: bool = False,
     ):
         """
         A convenience function to allow downloading only delta files within a given window.
@@ -1841,8 +1840,7 @@ class DataQueryFileAPIClient(RateLimitedRequester):
             include_metadata=include_metadata,
             file_group_ids=file_group_ids,
             show_progress=show_progress,
-            *args,
-            **kwargs,
+            delete_corrupt_files=delete_corrupt_files,
         )
 
     def load_data(
