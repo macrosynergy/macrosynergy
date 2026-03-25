@@ -254,9 +254,10 @@ class TestTransformBehaviour:
         df["sparse"] = np.nan
         df.loc[df.index[0], "sparse"] = 1.0
         imp = EstimatorImputer(
-            estimator=RandomForestRegressor(random_state=0), fallback=True
+            estimator=RandomForestRegressor(random_state=0), fallback="zero"
         ).fit(df)
         out = imp.transform(df)
+        assert out["sparse"].median() == 0
         assert not out["sparse"].isna().any()
 
     def test_fallback_disabled_leaves_nans(self):
@@ -264,7 +265,7 @@ class TestTransformBehaviour:
         df["sparse"] = np.nan
         df.loc[df.index[0], "sparse"] = 1.0
         imp = EstimatorImputer(
-            estimator=RandomForestRegressor(random_state=0), fallback=False
+            estimator=RandomForestRegressor(random_state=0), fallback="none"
         ).fit(df)
         out = imp.transform(df)
         assert out["sparse"].isna().any()
@@ -521,7 +522,8 @@ class TestCompleteRowsOnlyAndPredictorFill:
         df = make_panel(cols=("feature_a", "feature_b", "feature_c"))
         df = inject_nan(df, "feature_a", frac=0.3)
         df = inject_nan(df, "feature_b", frac=0.2)
-        imp = EstimatorImputer(estimator=LinearRegression(), fallback=True).fit(df)
+
+        imp = EstimatorImputer(estimator=LinearRegression(), fallback="mean").fit(df)
         out = imp.transform(df)
 
         assert out.shape == df.shape
@@ -529,7 +531,7 @@ class TestCompleteRowsOnlyAndPredictorFill:
 
     def test_skip_only_predicts_for_rows_with_complete_predictors(self):
         """When predictor_fill_value='skip', rows where predictors have NaN
-        are skipped (not predicted). With fallback=False those cells stay NaN,
+        are skipped (not predicted). With fallback=none those cells stay NaN,
         while rows with complete predictors get model-based imputation."""
         df = make_panel(cols=("feature_a", "feature_b", "feature_c"))
         df = inject_nan(df, "feature_a", frac=0.3)
@@ -538,7 +540,7 @@ class TestCompleteRowsOnlyAndPredictorFill:
             estimator=LinearRegression(),
             complete_rows_only=True,
             predictor_fill_value="skip",
-            fallback=False,
+            fallback="none",
         ).fit(df)
         out = imp.transform(df)
 
@@ -567,7 +569,7 @@ class TestCompleteRowsOnlyAndPredictorFill:
             estimator=LinearRegression(),
             complete_rows_only=True,
             predictor_fill_value="skip",
-            fallback=True,
+            fallback="mean",
         ).fit(df)
         out = imp.transform(df)
         assert not out.isna().any().any()
@@ -582,7 +584,7 @@ class TestCompleteRowsOnlyAndPredictorFill:
             estimator=LinearRegression(),
             complete_rows_only=True,
             predictor_fill_value="skip",
-            fallback=False,
+            fallback="none",
         ).fit(df)
         out = imp.transform(df)
 

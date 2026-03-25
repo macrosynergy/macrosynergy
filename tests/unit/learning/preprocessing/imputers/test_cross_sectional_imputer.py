@@ -168,12 +168,12 @@ def test_default_peers_none_leaves_missing_when_no_fallback(data):
     assert np.isnan(result)
 
 
-def test_fallback_fill_uses_all_cids_mean_when_peers_unavailable(data):
+def test_fallback_fill_uses_mean_when_peers_unavailable(data):
     """
     For feature_A on 2020-01-02:
       USD and GBP are missing, CAD is missing, EUR=8.
     If CAD peers are USD/GBP, peer mean is unavailable -> fallback should use
-    global mean.
+    column mean.
     """
     # Ensure CAD is missing on that date
     data.loc[("CAD", "2020-01-02"), "feature_A"] = np.nan
@@ -185,7 +185,7 @@ def test_fallback_fill_uses_all_cids_mean_when_peers_unavailable(data):
     # EUR is already set to 8 in fixture
 
     imputer = CrossSectionalImputer(
-        peer_map={"CAD": ["USD", "GBP"]}, fallback="global_mean"
+        peer_map={"CAD": ["USD", "GBP"]}, fallback="mean"
     )
     out = imputer.fit_transform(data).sort_index()
 

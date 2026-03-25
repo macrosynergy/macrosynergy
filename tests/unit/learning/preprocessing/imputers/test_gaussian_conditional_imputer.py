@@ -329,6 +329,17 @@ class TestFallbackBehaviour:
         out = imp.transform(df)
         assert out.iloc[0].isna().all()
 
+    def test_zero_fallback(self):
+        """An all-NaN row with fallback='none' should remain NaN."""
+        df = make_panel(
+            cids=("AUD",), dates=pd.date_range("2020-01-01", periods=50, freq="D")
+        )
+        df.iloc[0] = np.nan
+        imp = GaussianConditionalImputer(fallback="zero").fit(df)
+        out = imp.transform(df)
+        assert (out.iloc[0] == 0).all()
+
+
 
 # ---------------------------------------------------------------------------
 # Edge cases
