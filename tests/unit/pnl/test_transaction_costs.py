@@ -25,6 +25,7 @@ from macrosynergy.pnl.transaction_costs import (
     _plot_costs_func,
     SparseCosts,
     TransactionCosts,
+    TransactionCostsDictAdapter,
 )
 
 from macrosynergy.management.utils import qdf_to_ticker_df
@@ -454,6 +455,93 @@ class TestTransactionCosts(unittest.TestCase):
             _plot_costs_func(tco=tc, **good_args)
         matplotlib.pyplot.close("all")
         matplotlib.use(curr_backend)
+
+
+class TestTransactionCostsDictAdapter(unittest.TestCase):
+    def test_adapter_costs(self):
+        cost_dict = {
+            "USD_FX": {
+                "median_cost": 0.2,
+                "median_size": 35,
+                "pct90_cost": 0.4,
+                "pct90_size": 90,
+            },
+            "EUR_FX": {
+                "median_cost": 0.1,
+                "median_size": 30,
+                "pct90_cost": 0.2,
+                "pct90_size": 80,
+            },
+        }
+        adapter = TransactionCostsDictAdapter(
+            cost_dict=cost_dict,
+            fids=["USD_FX", "EUR_FX"],
+        )
+        trade_size = 50
+        expected = extrapolate_cost(
+            trade_size=trade_size,
+            median_size=cost_dict["USD_FX"]["median_size"],
+            median_cost=cost_dict["USD_FX"]["median_cost"],
+            pct90_size=cost_dict["USD_FX"]["pct90_size"],
+            pct90_cost=cost_dict["USD_FX"]["pct90_cost"],
+        )
+        self.assertAlmostEqual(
+            adapter.bidoffer("USD_FX", trade_size, "2020-01-01"), expected
+        )
+        self.assertAlmostEqual(
+            adapter.rollcost("USD_FX", trade_size, "2020-01-01"), expected
+        )
+
+    def test_adapter_missing_fid(self):
+        cost_dict = {
+            "USD_FX": {
+                "median_cost": 0.2,
+                "median_size": 35,
+                "pct90_cost": 0.4,
+                "pct90_size": 90,
+            }
+        }
+        with self.assertRaises(ValueError):
+            TransactionCostsDictAdapter(cost_dict=cost_dict, fids=["USD_FX", "EUR_FX"])
+
+    def test_adapter_matches_constant_series(self):
+        np.random.seed(1)
+        fids = ["USD_FX", "EUR_FX"]
+        dates = pd.bdate_range(start="2022-01-03", end="2022-01-14")
+        cost_template = {
+            "median_cost": 0.2,
+            "median_size": 35,
+            "pct90_cost": 0.4,
+            "pct90_size": 90,
+        }
+        df_const = pd.DataFrame(index=dates)
+        for fid in fids:
+            df_const[f"{fid}BIDOFFER_MEDIAN"] = cost_template["median_cost"]
+            df_const[f"{fid}BIDOFFER_90PCTL"] = cost_template["pct90_cost"]
+            df_const[f"{fid}ROLLCOST_MEDIAN"] = cost_template["median_cost"]
+            df_const[f"{fid}ROLLCOST_90PCTL"] = cost_template["pct90_cost"]
+            df_const[f"{fid}SIZE_MEDIAN"] = cost_template["median_size"]
+            df_const[f"{fid}SIZE_90PCTL"] = cost_template["pct90_size"]
+        df_const.index.name = "real_date"
+
+        qdf = QuantamentalDataFrame.from_wide(df_const)
+        tc_obj = TransactionCosts(df=qdf, fids=fids)
+        cost_dict = {fid: dict(cost_template) for fid in fids}
+        tc_dict = TransactionCostsDictAdapter(cost_dict=cost_dict, fids=fids)
+
+        trade_sizes = [5, 35, 50, 120]
+        test_dates = [dates[0], dates[len(dates) // 2], dates[-1]]
+        for fid in fids:
+            for trade_size in trade_sizes:
+                for dt in test_dates:
+                    self.assertAlmostEqual(
+                        tc_obj.bidoffer(fid, trade_size, dt),
+                        tc_dict.bidoffer(fid, trade_size, dt),
+                    )
+                    self.assertAlmostEqual(
+                        tc_obj.rollcost(fid, trade_size, dt),
+                        tc_dict.rollcost(fid, trade_size, dt),
+                    )
 
 
 if __name__ == "__main__":
