@@ -282,6 +282,7 @@ class InformationStateChanges(object):
         postfix: str = None,
         metrics: List[str] = ["eop", "grading"],
         thresh: Union[Tuple[float, float], float] = None,
+        ffill_value_column: Union[Number, str] = 0,
     ) -> pd.DataFrame:
         """
         Convert the InformationStateChanges object to a QuantamentalDataFrame.
@@ -300,6 +301,10 @@ class InformationStateChanges(object):
             If a single float is provided, it is used for both lower and upper bounds,
             as `(-thresh, thresh)`. If a tuple is provided, it is used as
             `(thresh[0], thresh[1])`.
+        ffill_value_column : Union[Number, str]
+            The value to use for forward filling missing values in the DataFrame.
+            Default is 0.
+
         Returns
         -------
         pd.DataFrame
@@ -318,6 +323,7 @@ class InformationStateChanges(object):
             postfix=postfix,
             metrics=metrics,
             thresh=thresh,
+            ffill_value_column=ffill_value_column,
         )
 
         return QuantamentalDataFrame(
@@ -1245,6 +1251,7 @@ def sparse_to_dense(
     postfix: str = None,
     metrics: List[str] = ["eop", "grading"],
     thresh: Union[Tuple[float, float], float] = None,
+    ffill_value_column: Union[Number, str] = 0,
 ) -> pd.DataFrame:
     """
     Convert a dictionary of DataFrames with changes in the information state to a dense
@@ -1271,6 +1278,10 @@ def sparse_to_dense(
         If a single float is provided, it is used for both lower and upper bounds,
         as `(-thresh, thresh)`. If a tuple is provided, it is used as
         `(thresh[0], thresh[1])`.
+    ffill_value_column: Union[Number, str]
+        The value to use for forward filling missing values for the selected
+        `value_column`. Default is 0.
+
     Returns
     -------
     pd.DataFrame
@@ -1285,7 +1296,9 @@ def sparse_to_dense(
         freq="B",
     )
 
-    tdf = _get_metric_df_from_isc(isc=isc, metric=value_column, date_range=dtrange)
+    tdf = _get_metric_df_from_isc(
+        isc=isc, metric=value_column, date_range=dtrange, fill=ffill_value_column
+    )
     tdf = _remove_insignificant_values(tdf, threshold=1e-12)
 
     wins_lower, wins_upper = None, None
