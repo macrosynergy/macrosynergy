@@ -995,8 +995,7 @@ def categories_df(
     Returns
     -------
     pd.DataFrame
-        custom DataFrame with category columns. All rows that contain NaNs will be
-        excluded.  N.B.: The number of explanatory categories that can be included is not
+        custom DataFrame with category columns. N.B.: The number of explanatory categories that can be included is not
         restricted and will be appended column-wise to the returned DataFrame. The order of
         the DataFrame's columns will reflect the order of the categories list.
     """
