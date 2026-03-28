@@ -4,8 +4,7 @@ from typing import List, Dict
 
 import numpy as np
 import pandas as pd
-import statsmodels.api as sm
-from statsmodels.regression.linear_model import RegressionResults
+from parameterized import parameterized
 
 from tests.simulate import make_qdf
 
@@ -14,6 +13,7 @@ from macrosynergy.panel.return_beta import (
     hedge_calculator,
     adjusted_returns,
     return_beta,
+    weighted_least_squares,
 )
 from macrosynergy.management.utils import reduce_df, _map_to_business_day_frequency
 
@@ -142,7 +142,8 @@ class TestAll(unittest.TestCase):
         target_end = "2020-03-20"
         self.assertTrue(end_date == target_end)
 
-    def test_hedge_calculator(self):
+    @parameterized.expand(["ols", "twls"])
+    def test_hedge_calculator(self, method):
         """
         Method designed to calculate the hedge ratios used across the panel: each cross-
         section in the panel will have a different sensitivity parameter relative to the
@@ -160,7 +161,7 @@ class TestAll(unittest.TestCase):
 
         # Analysis completed using a single cross-section from the panel.
         cross_section: str = "KRW"
-        xr: pd.Series = (self.dfp_w[cross_section]).astype(dtype=np.float16)
+        xr: pd.Series = (self.dfp_w[cross_section]).astype(dtype=np.float32)
         # Adjusts for the effect of pivoting.
         xr = xr.dropna(axis=0, how="all")
 
@@ -195,8 +196,7 @@ class TestAll(unittest.TestCase):
             unhedged_return=xr,
             benchmark_return=br,
             rdates=dates_re,
-            cross_section=cross_section,
-            meth="ols",
+            meth=method,
             min_obs=min_observation,
             max_obs=MAX_OBS,
         )
@@ -239,16 +239,29 @@ class TestAll(unittest.TestCase):
 
         min_obs_date = xr.index[min_observation]
         for d in dates_re:
-            if d > min_obs_date:
-                curr_start_date: pd.Timestamp = dates_re[
-                    max(0, dates_re.index(d) - MAX_OBS)
-                ]
-                yvar = xr.loc[curr_start_date:d]
-                xvar = sm.add_constant(br.loc[curr_start_date:d])
-                mod: sm.OLS = sm.OLS(yvar, xvar)
-                results: RegressionResults = mod.fit()
-                results_params: pd.Series = results.params
-                df_hrat.loc[d] = results_params.loc[br.name]
+            if d <= min_obs_date: continue
+
+            curr_start_date: pd.Timestamp = dates_re[
+                max(0, dates_re.index(d) - MAX_OBS)
+            ]
+            # Inclusive of the re-estimation date.
+            yvar = xr.loc[curr_start_date:d].values
+            xvar = br.loc[curr_start_date:d].values.reshape(-1, 1)
+
+            if method == "ols":
+                weights = np.ones_like(yvar)
+            elif method == "twls":
+                weights = np.power(2, -np.arange(yvar.shape[0]) / 252)[::-1]
+            else:
+                raise ValueError("meth must be either ols or twls")
+
+            betas = weighted_least_squares(
+                X=np.column_stack((np.ones(xvar.shape[0]), xvar)),
+                y=yvar,
+                weights=weights,
+            )
+
+            df_hrat.loc[d] = betas[1]
 
         df_hrat = df_hrat.dropna(axis=0, how="all")
         df_hrat.index.name = "real_date"
@@ -264,7 +277,7 @@ class TestAll(unittest.TestCase):
         check_date: str = "2013-04-01"
         test_value = float(df_hr[df_hr["real_date"] == check_date]["value"].iloc[0])
         result = float(df_hrat[df_hrat["real_date"] == last_test_date]["value"].iloc[0])
-        self.assertTrue(result == test_value)
+        self.assertTrue(abs(result - test_value) < 1e-9)
 
     def test_adjusted_returns(self):
         """
@@ -451,6 +464,59 @@ class TestAll(unittest.TestCase):
         self.assertTrue(pd.Timestamp(test_date).dayofweek == 0)
         test_value = test_row["value"]
         self.assertTrue(test_value != df_hedge_INR_val)
+
+
+class TestWeightedLeastSquares:
+    """Tests for the weighted_least_squares function."""
+
+    def test_uniform_weights_match_ols(self):
+        """With equal weights, WLS should match ordinary least squares."""
+        beta_true = np.array([3.0, -2.0])
+
+        X = np.column_stack([np.ones(50), np.random.randn(50)])
+        y = X @ beta_true + 0.01 * np.random.randn(50)
+
+        beta_wls = weighted_least_squares(X, y, np.ones(50))
+        beta_ols, _, _, _ = np.linalg.lstsq(X, y, rcond=None)
+
+        np.testing.assert_allclose(beta_wls, beta_ols, atol=1e-10)
+
+    def test_recovers_exact_coefficients_no_noise(self):
+        """With no noise the solver should recover the true coefficients exactly."""
+        beta_true = np.array([5.0, -3.0])
+
+        X = np.column_stack([np.ones(20), np.linspace(0, 1, 20)])
+        y = X @ beta_true
+        weights = np.random.uniform(0.5, 2.0, size=20)
+
+        beta_wls = weighted_least_squares(X, y, weights)
+        np.testing.assert_allclose(beta_wls, beta_true, atol=1e-10)
+
+    def test_scaling_weights_does_not_change_result(self):
+        """Multiplying all weights by a constant shouldn't change beta."""
+
+        X = np.column_stack([np.ones(30), np.random.randn(30)])
+        y = np.random.randn(30)
+        weights = np.random.uniform(0.1, 5.0, size=30)
+
+        beta1 = weighted_least_squares(X, y, weights)
+        beta2 = weighted_least_squares(X, y, weights * 42.0)
+
+        np.testing.assert_allclose(beta1, beta2, atol=1e-10)
+
+    def test_known_solution(self):
+        """
+        Hand-verifiable 3-observation, 2-predictor (intercept + slope) case.
+        """
+        X = np.array([[1.0, 0.0],
+                      [1.0, 1.0],
+                      [1.0, 2.0]])
+        y = np.array([1.0, 3.0, 2.0])
+        weights = np.array([1.0, 2.0, 1.0])
+
+        beta = weighted_least_squares(X, y, weights)
+        beta_expected = [1.75, 0.5]
+        np.testing.assert_allclose(beta, beta_expected, atol=1e-10)
 
 
 if __name__ == "__main__":
