@@ -531,7 +531,7 @@ class SignalOptimizer(BasePanelLearner):
             else:
                 preds = optimal_model.predict(X_test)
         else:
-            preds = np.zeros(X_test.shape[0])
+            preds = np.zeros(y_test.shape)
 
         prediction_data = [adjusted_test_index, preds]
 
