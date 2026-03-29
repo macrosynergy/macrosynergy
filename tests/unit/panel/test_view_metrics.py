@@ -167,6 +167,20 @@ class TestAll(unittest.TestCase):
         matplotlib.use(mpl_backend)
         patch.stopall()
 
+    def test_footnote_forwarded(self):
+        with patch("macrosynergy.panel.view_metrics.msv.view_metrics") as mock_view_metrics:
+            view_metrics(
+                df=self.df,
+                xcat="XR",
+                footnote="Source: test",
+                footnote_fontsize=11,
+            )
+
+        self.assertEqual(
+            mock_view_metrics.call_args.kwargs["footnote"], "Source: test"
+        )
+        self.assertEqual(mock_view_metrics.call_args.kwargs["footnote_fontsize"], 11)
+
 
 if __name__ == "__main__":
     unittest.main()

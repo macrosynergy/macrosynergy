@@ -41,6 +41,18 @@ class TestAll(unittest.TestCase):
             legend_bbox_to_anchor=(0.5, -0.15),
         )
 
+    def test_footnote_forwarded(self):
+        with patch("macrosynergy.panel.view_ranges.msv.view_ranges") as mock_view_ranges:
+            view_ranges(
+                self.df,
+                xcats=["XR", "CRY"],
+                footnote="Source: test",
+                footnote_fontsize=11,
+            )
+
+        self.assertEqual(mock_view_ranges.call_args.kwargs["footnote"], "Source: test")
+        self.assertEqual(mock_view_ranges.call_args.kwargs["footnote_fontsize"], 11)
+
 
 if __name__ == "__main__":
     unittest.main()

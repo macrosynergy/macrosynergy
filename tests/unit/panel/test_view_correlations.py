@@ -1,9 +1,11 @@
 import unittest
 import pandas as pd
 from pandas.testing import assert_frame_equal
+from unittest.mock import patch
 from tests.simulate import make_qdf
 from macrosynergy.panel.view_correlations import correl_matrix
 from macrosynergy.visuals.correlation import (
+    view_correlation,
     _parse_labels,
     lag_series,
     _transform_df_for_cross_sectional_corr,
@@ -344,6 +346,38 @@ class TestAll(unittest.TestCase):
 
         xcat_labels = _parse_labels(keys=xcats, labels=None, label_type="xcat")
         self.assertEqual(xcat_labels, {"XR": "XR", "CRY": "CRY"})
+
+    def test_correl_matrix_footnote_forwarded(self):
+        with patch(
+            "macrosynergy.panel.view_correlations.msv.view_correlation"
+        ) as mock_view_correlation:
+            correl_matrix(
+                self.dfd,
+                xcats=["XR"],
+                cids=self.cids,
+                footnote="Source: test",
+                footnote_fontsize=11,
+            )
+
+        self.assertEqual(
+            mock_view_correlation.call_args.kwargs["footnote"], "Source: test"
+        )
+        self.assertEqual(
+            mock_view_correlation.call_args.kwargs["footnote_fontsize"], 11
+        )
+
+    def test_view_correlation_adds_footnote(self):
+        ax = view_correlation(
+            self.dfd,
+            xcats=["XR"],
+            cids=self.cids,
+            show=False,
+            footnote="Source: test",
+            footnote_fontsize=11,
+        )
+
+        texts = [text.get_text() for text in ax.figure.texts]
+        self.assertIn("Source: test", texts)
 
 
 if __name__ == "__main__":
