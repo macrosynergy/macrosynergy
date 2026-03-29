@@ -54,6 +54,8 @@ def timelines(
     legend_fontsize: int = 12,
     blacklist: Dict = None,
     ax_hline: Union[float, Dict] = None,
+    footnote: Optional[str] = None,
+    footnote_fontsize: int = 9,
     return_fig: bool = False,
 ):
     """
@@ -128,6 +130,10 @@ def timelines(
         font size of legend. Default is 12.
     blacklist : dict
         cross-sections with date ranges that should be excluded from the dataframe.
+    footnote : str
+        Optional text shown at the bottom-left of the figure canvas.
+    footnote_fontsize : int
+        Font size of the footnote. Default is 9.
     """
 
     if not isinstance(df, pd.DataFrame):
@@ -293,6 +299,8 @@ def timelines(
                 legend_fontsize=legend_fontsize,
                 interpolate=cumsum,
                 ax_hline=ax_hline,
+                footnote=footnote,
+                footnote_fontsize=footnote_fontsize,
                 return_figure=return_fig,
             )
 
@@ -320,6 +328,8 @@ def timelines(
                 legend_fontsize=legend_fontsize,
                 legend_labels=xcat_labels or None,
                 ax_hline=ax_hline,
+                footnote=footnote,
+                footnote_fontsize=footnote_fontsize,
                 return_figure=return_fig,
             )
 
@@ -364,6 +374,8 @@ def timelines(
                 legend_fontsize=legend_fontsize,
                 interpolate=cumsum,
                 ax_hline=ax_hline,
+                footnote=footnote,
+                footnote_fontsize=footnote_fontsize,
                 return_figure=return_fig,
             )
 
