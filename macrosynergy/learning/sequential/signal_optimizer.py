@@ -4,13 +4,14 @@ machine learning.
 """
 
 import numbers
+import warnings
+from typing import Union, Tuple
 
 import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
-from sklearn.feature_selection import SelectorMixin
 from sklearn.pipeline import Pipeline
 
 from macrosynergy.learning import ExpandingIncrementPanelSplit
@@ -212,6 +213,7 @@ class SignalOptimizer(BasePanelLearner):
         include_train_folds=False,
         min_cids=4,
         min_periods=12 * 3,
+        min_xcats=1,
         test_size=1,
         max_periods=None,
         split_functions=None,
@@ -271,6 +273,8 @@ class SignalOptimizer(BasePanelLearner):
         min_periods : int, optional
             Minimum number of periods required for the initial training set, in units of
             the frequency `freq` specified in the constructor. Default is 36.
+        min_xcats : int, optional
+            Minimum number of xcats required for the initial training set. Default is 1.
         test_size : int, optional
             Number of periods to pass before retraining a selected model. Default is 1.
         max_periods : int, optional
@@ -323,6 +327,7 @@ class SignalOptimizer(BasePanelLearner):
             min_cids=min_cids,
             min_periods=min_periods,
             max_periods=max_periods,
+            min_xcats=min_xcats,
         )
 
         results = self.run(
@@ -530,15 +535,26 @@ class SignalOptimizer(BasePanelLearner):
 
         prediction_data = [adjusted_test_index, preds]
 
-        feature_names = np.array(X_train.columns)
         if isinstance(optimal_model, Pipeline):
             final_estimator = optimal_model[-1]
-            for _, transformer in reversed(optimal_model.steps):
-                if isinstance(transformer, SelectorMixin):
-                    feature_names = transformer.get_feature_names_out()
-                    break
+            feature_names_getter = getattr(
+                optimal_model[-2], "get_feature_names_out", None
+            )
+
+            if feature_names_getter is not None:
+                feature_names = feature_names_getter()
+            else:
+                feature_names = []
+                warnings.warn(
+                    "Unable to infer feature names. This is likely because one or"
+                    "more steps in the Pipeline are missing the `get_feature_names_out` method."
+                    "This may make it impossible to produce feature selection and feature "
+                    "importance plots later on",
+                    UserWarning,
+                )
         else:
             final_estimator = optimal_model
+            feature_names = np.array(X_train.columns)
 
         coefs = np.full(X_train.shape[1], np.nan)
 
@@ -579,14 +595,9 @@ class SignalOptimizer(BasePanelLearner):
             intercepts = np.nan
 
         # Get feature selection information
-        if len(feature_names) == X_train.shape[1]:
-            # Then all features were selected
-            ftr_selection_data = [timestamp] + [1 for _ in feature_names]
-        else:
-            # Then some features were excluded
-            ftr_selection_data = [timestamp] + [
-                1 if name in feature_names else 0 for name in np.array(X_train.columns)
-            ]
+        ftr_selection_data = [timestamp] + [
+            1 if name in feature_names else 0 for name in X_train.columns
+        ]
 
         ftr_corr_data = self._get_ftr_corr_data(
             pipeline_name, optimal_model, X_train, timestamp
@@ -950,6 +961,43 @@ class SignalOptimizer(BasePanelLearner):
         plt.xticks(fontsize=tick_fontsize)  # X-axis tick font size
         plt.yticks(fontsize=tick_fontsize)
         plt.show()
+
+    def available_cid_heatmap(
+        self,
+        title: str = "Number of Available CIDs Heatmap",
+        figsize: Tuple[int, int] = (12, 8),
+        start_date: Union[str, pd.Timestamp] = None,
+        tick_fontsize: int = None,
+    ) -> None:
+        """
+        Visualise the number of cids with data for each xcat at each date
+
+        Parameters
+        ----------
+        title : str
+            Title of the heatmap. Default is "Number of Available CIDs Heatmap""
+        figsize : tuple of floats or ints, optional
+            Tuple of floats or ints denoting the figure size. Default is (12, 8).
+        start_date : str or pd.Timestamp, optional
+            Show data from this date onwards
+        tick_fontsize: int, optional
+            Font size of the ticks on the heatmap. Default is None.
+        """
+        data = (
+            self.X[self.X.index.get_level_values("real_date") >= start_date]
+            if start_date else self.X
+        )
+
+        cid_count = data.groupby(level="real_date").count()
+        cid_count.index = cid_count.index.date
+
+        plt.figure(figsize=figsize)
+        sns.heatmap(cid_count.T, cmap="rocket_r")
+        plt.title(title)
+        plt.xticks(fontsize=tick_fontsize)
+        plt.yticks(fontsize=tick_fontsize)
+        plt.show()
+
 
     def _checks_feature_selection_heatmap(
         self,

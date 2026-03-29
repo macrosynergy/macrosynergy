@@ -889,6 +889,167 @@ class TestAll(unittest.TestCase):
             self.assertTrue(len(w) == 1)
             self.assertTrue(err_str in str(w[0].message))
 
+    def test_weight_lag_dynamic_weights(self):
+        """Test weight_lag parameter with dynamic (category) weights"""
+        cids = ["AUD", "CAD", "GBP"]
+        xcats = ["XR", "INFL"]
+
+        df = make_test_df(cids=cids, xcats=xcats, start="2020-01-01", end="2020-02-29")
+
+        # Test with weight_lag=0 (should be same as no lag)
+        result_no_lag = linear_composite(
+            df=df, xcats="XR", cids=cids, weights="INFL", weight_lag=0
+        )
+        result_default = linear_composite(
+            df=df, xcats="XR", cids=cids, weights="INFL"
+        )
+        self.assertTrue(np.allclose(result_no_lag["value"], result_default["value"], equal_nan=True))
+
+        # Test with weight_lag=5
+        result_lag5 = linear_composite(
+            df=df, xcats="XR", cids=cids, weights="INFL", weight_lag=5
+        )
+        # First 5 values should be NaN due to lag
+        self.assertTrue(result_lag5["value"].iloc[:5].isna().all())
+        # Later values should not all be NaN
+        self.assertFalse(result_lag5["value"].iloc[10:].isna().all())
+
+    def test_weight_lag_validation(self):
+        """Test weight_lag validation"""
+        cids = ["AUD", "CAD"]
+        xcats = ["XR", "INFL"]
+
+        df = make_test_df(cids=cids, xcats=xcats, start="2020-01-01", end="2020-01-31")
+
+        # Should error with negative weight_lag
+        with self.assertRaises(ValueError):
+            linear_composite(df=df, xcats="XR", weights="INFL", weight_lag=-1)
+
+        # Should error with non-integer weight_lag
+        with self.assertRaises(TypeError):
+            linear_composite(df=df, xcats="XR", weights="INFL", weight_lag=1.5)
+
+        # Should error when using weight_lag with fixed weights
+        with self.assertRaises(ValueError):
+            linear_composite(df=df, xcats="XR", weights=[1, 2], weight_lag=5)
+
+    def test_rebal_freq_weekly(self):
+        """Test rebalancing frequency with weekly rebalancing"""
+        cids = ["AUD", "CAD", "GBP"]
+        xcats = ["XR", "INFL"]
+
+        df = make_test_df(cids=cids, xcats=xcats, start="2020-01-01", end="2020-03-31")
+
+        # Daily rebalancing (default)
+        result_daily = linear_composite(
+            df=df, xcats="XR", cids=cids, weights="INFL", rebal_freq="D"
+        )
+
+        # Weekly rebalancing
+        result_weekly = linear_composite(
+            df=df, xcats="XR", cids=cids, weights="INFL", rebal_freq="W"
+        )
+
+        # Both should have values
+        self.assertTrue(len(result_daily) > 0)
+        self.assertTrue(len(result_weekly) > 0)
+        self.assertFalse(result_weekly["value"].isna().all())
+
+    def test_rebal_freq_monthly(self):
+        """Test rebalancing frequency with monthly rebalancing"""
+        cids = ["AUD", "CAD"]
+        xcats = ["XR", "INFL"]
+
+        df = make_test_df(cids=cids, xcats=xcats, start="2020-01-01", end="2020-06-30")
+
+        # Monthly rebalancing
+        result_monthly = linear_composite(
+            df=df, xcats="XR", cids=cids, weights="INFL", rebal_freq="M"
+        )
+
+        # Should have values for all dates
+        self.assertFalse(result_monthly["value"].isna().all())
+        # Should have result
+        self.assertTrue(len(result_monthly) > 0)
+
+    def test_rebal_freq_quarterly(self):
+        """Test rebalancing frequency with quarterly rebalancing"""
+        cids = ["AUD", "GBP"]
+        xcats = ["XR", "INFL"]
+
+        df = make_test_df(cids=cids, xcats=xcats, start="2020-01-01", end="2021-12-31")
+
+        # Quarterly rebalancing
+        result_quarterly = linear_composite(
+            df=df, xcats="XR", cids=cids, weights="INFL", rebal_freq="Q"
+        )
+
+        # Should have values
+        self.assertTrue(len(result_quarterly) > 0)
+        self.assertFalse(result_quarterly["value"].isna().all())
+
+    def test_rebal_freq_validation(self):
+        """Test rebal_freq validation"""
+        cids = ["AUD", "CAD"]
+        xcats = ["XR", "INFL"]
+
+        df = make_test_df(cids=cids, xcats=xcats, start="2020-01-01", end="2020-01-31")
+
+        # Should error with invalid rebal_freq
+        with self.assertRaises(ValueError):
+            linear_composite(df=df, xcats="XR", weights="INFL", rebal_freq="X")
+
+        # Should error with non-string rebal_freq
+        with self.assertRaises(TypeError):
+            linear_composite(df=df, xcats="XR", weights="INFL", rebal_freq=123)
+
+    def test_rebal_freq_with_fixed_weights(self):
+        """Test that rebal_freq works with fixed weights"""
+        cids = ["AUD", "CAD", "GBP"]
+        xcats = ["XR"]
+
+        df = make_test_df(cids=cids, xcats=xcats, start="2020-01-01", end="2020-06-30")
+
+        # Fixed weights with monthly rebalancing should work
+        result = linear_composite(
+            df=df, xcats="XR", cids=cids, weights=[1, 2, 3], rebal_freq="M"
+        )
+
+        self.assertTrue(len(result) > 0)
+        self.assertFalse(result["value"].isna().all())
+
+    def test_combined_weight_lag_and_rebal_freq(self):
+        """Test using both weight_lag and rebal_freq together"""
+        cids = ["AUD", "CAD", "GBP"]
+        xcats = ["XR", "INFL"]
+
+        df = make_test_df(cids=cids, xcats=xcats, start="2020-01-01", end="2020-12-31")
+
+        # Apply both lag and rebalancing
+        result = linear_composite(
+            df=df, xcats="XR", cids=cids, weights="INFL",
+            weight_lag=5, rebal_freq="M"
+        )
+
+        # Should have NaN values at start due to lag
+        self.assertTrue(result["value"].iloc[:5].isna().any())
+        # Should have valid values later
+        self.assertFalse(result["value"].iloc[20:].isna().all())
+
+    def test_weight_lag_edge_cases(self):
+        """Test edge cases for weight_lag"""
+        cids = ["AUD", "CAD"]
+        xcats = ["XR", "INFL"]
+
+        df = make_test_df(cids=cids, xcats=xcats, start="2020-01-01", end="2020-01-31")
+
+        # Large lag (larger than data range)
+        result_large_lag = linear_composite(
+            df=df, xcats="XR", cids=cids, weights="INFL", weight_lag=100
+        )
+        # All values should be NaN with lag larger than data
+        self.assertTrue(result_large_lag["value"].isna().all())
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,3 +1,12 @@
+from .imputers import (
+    BaseImputer,
+    ConstantImputer,
+    CrossSectionalImputer,
+    GaussianConditionalImputer,
+    EstimatorImputer,
+)
+from .imputers.imputers import GaussianConditionalImputer
+
 from .panel_selectors import (
     BasePanelSelector,
     LarsSelector,
@@ -31,4 +40,10 @@ __all__ = [
     # transformers
     "PanelPCA",
     "ZnScoreAverager",
+    # imputers
+    "BaseImputer",
+    "ConstantImputer",
+    "CrossSectionalImputer",
+    "EstimatorImputer",
+    "GaussianConditionalImputer",
 ]

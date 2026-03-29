@@ -18,6 +18,11 @@ from .preprocessing import (
     BasePanelSelector,
     PanelPCA,
     KendallSignificanceSelector,
+    BaseImputer,
+    ConstantImputer,
+    CrossSectionalImputer,
+    EstimatorImputer,
+    GaussianConditionalImputer,
 )
 from .model_evaluation import (
     neg_mean_abs_corr,
@@ -59,14 +64,24 @@ from .forecasting import (
     PLSTransformer,
     LinearMultiTargetRegression,
     TimeWeightedWrapper,
-    MultiLayerPerceptron,
-    TimeSeriesSampler,
-    MultiOutputSharpe,
-    MultiOutputMCR,
-    MLPRegressor,
 )
 
 from .random_effects import RandomEffects
+
+
+def __getattr__(name):
+    _torch_names = {
+        "MultiLayerPerceptron",
+        "TimeSeriesSampler",
+        "MultiOutputSharpe",
+        "MultiOutputMCR",
+        "MLPRegressor",
+    }
+    if name in _torch_names:
+        from .forecasting import __getattr__ as _fget
+        return _fget(name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 __all__ = [
     # splitters
@@ -91,6 +106,12 @@ __all__ = [
     "ZnScoreAverager",
     "PanelPCA",
     "PLSTransformer",
+    # imputers
+    "BaseImputer",
+    "ConstantImputer",
+    "CrossSectionalImputer",
+    "EstimatorImputer",
+    "GaussianConditionalImputer",
     # metrics
     "neg_mean_abs_corr",
     "panel_significance_probability",
