@@ -1258,7 +1258,7 @@ class DataQueryFileAPIClient(RateLimitedRequester):
             logger.info(
                 f"Successfully downloaded {len(filenames)} files in {total_time:.2f} seconds."
             )
-            return  # All downloads scuccessful
+            return  # All downloads successful
 
         log_msg = f"Failed to download {len(failed_files)} files"
         if max_retries > 0:
@@ -1500,7 +1500,7 @@ class DataQueryFileAPIClient(RateLimitedRequester):
         if df.empty:
             logger.warning(f"No notification files found for date: {date.date()}")
             return {}
-        json_contentts: Dict[str, pd.DataFrame] = {}
+        json_contents: Dict[str, pd.DataFrame] = {}
         err_str = 'Invalid notification file (missing "sub_title"): '
         title_err_str = "Unexpected notification title in file: "
         expected_titles = [
@@ -1521,22 +1521,22 @@ class DataQueryFileAPIClient(RateLimitedRequester):
                 logger.warning(title_err_str + jp)
                 continue
             canonical_title = canonical_title_map[j_title.upper()]
-            json_contentts[canonical_title] = pd.json_normalize(
+            json_contents[canonical_title] = pd.json_normalize(
                 _json, record_path=["data"]
             )
 
         if normalize_headers:
-            for key in json_contentts:
+            for key in json_contents:
                 new_cols = [
                     _col.replace(" ", "_")
                     .replace("-", "_")
                     .replace("(%)", "pct")
                     .lower()
-                    for _col in json_contentts[key].columns
+                    for _col in json_contents[key].columns
                 ]
-                json_contentts[key].columns = new_cols
+                json_contents[key].columns = new_cols
 
-        return json_contentts
+        return json_contents
 
     def get_revisions_notifications(
         self,
