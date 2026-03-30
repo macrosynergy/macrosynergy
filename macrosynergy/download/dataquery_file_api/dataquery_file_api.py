@@ -1135,6 +1135,11 @@ class DataQueryFileAPIClient(RateLimitedRequester):
             )
             days_to_keep = abs(days_to_keep)
         if days_to_keep == 0:
+            logger.warning(
+                "`days_to_keep=0` does not delete any files. "
+                "Set `days_to_keep` to a positive integer to retain only "
+                "the most recent N days of files per file group."
+            )
             return []
         found_files = self.list_downloaded_files()
         if found_files.empty:
