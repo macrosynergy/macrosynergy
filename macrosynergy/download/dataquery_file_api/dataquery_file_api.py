@@ -1472,7 +1472,7 @@ class DataQueryFileAPIClient(RateLimitedRequester):
         skip_download: bool = False,
     ) -> Dict[str, pd.DataFrame]:
         """Load JPMaQS metadata notification JSONs for a date."""
-        date: pd.Timestamp = (
+        date = (
             pd_to_datetime_compat(date) if date is not None else pd.Timestamp.utcnow()
         ).normalize()
         if date > pd.Timestamp.utcnow().normalize():
@@ -2027,7 +2027,9 @@ class DataQueryFileAPIClient(RateLimitedRequester):
         catalog_file = catalog_file or self.download_catalog_file()
 
         rqstd_tickers, datasets_to_download = self._validate_and_resolve_tickers(
-            tickers=tickers, cids=cids, xcats=xcats,
+            tickers=tickers,
+            cids=cids,
+            xcats=xcats,
             catalog_file=catalog_file,
             include_delta_files=include_delta_files,
             datasets=datasets,
@@ -2318,7 +2320,9 @@ class DataQueryFileAPIClient(RateLimitedRequester):
                     return _empty_for_type(dataframe_type)
 
         rqstd_tickers, datasets_to_download = self._validate_and_resolve_tickers(
-            tickers=tickers, cids=cids, xcats=xcats,
+            tickers=tickers,
+            cids=cids,
+            xcats=xcats,
             catalog_file=catalog_file,
             include_delta_files=include_delta_files,
         )
