@@ -2426,7 +2426,6 @@ class DataQueryFileAPIClient(RateLimitedRequester):
         overwrite: bool = False,
         skip_download: bool = False,
         cleanup_old_files_n_days: Optional[int] = None,
-        *args,
         **kwargs,
     ) -> Union[pd.DataFrame, pl.DataFrame, pl.LazyFrame]:
         """
@@ -2448,10 +2447,6 @@ class DataQueryFileAPIClient(RateLimitedRequester):
             (e.g. "2023-12-31T15:30:00Z" or "20231231153000"). Date-only strings are
             interpreted as end-of-day.
         """
-        if args:
-            raise TypeError(
-                "download_as_of() only accepts keyword arguments (unexpected positional arguments)."
-            )
         if as_of_datetime is None:
             raise ValueError("`as_of_datetime` must be provided.")
 
