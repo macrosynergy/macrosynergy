@@ -23,6 +23,7 @@ from .preprocessing import (
     CrossSectionalImputer,
     EstimatorImputer,
     GaussianConditionalImputer,
+    FactorAvailabilitySelector,
 )
 from .model_evaluation import (
     neg_mean_abs_corr,
@@ -99,6 +100,7 @@ __all__ = [
     "LarsSelector",
     "MapSelector",
     "KendallSignificanceSelector",
+    "FactorAvailabilitySelector",
     # transformers
     "BasePanelScaler",
     "PanelMinMaxScaler",
