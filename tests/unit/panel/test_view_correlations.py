@@ -360,10 +360,10 @@ class TestAll(unittest.TestCase):
             )
 
         self.assertEqual(
-            mock_view_correlation.call_args.kwargs["footnote"], "Source: test"
+            mock_view_correlation.call_args[1]["footnote"], "Source: test"
         )
         self.assertEqual(
-            mock_view_correlation.call_args.kwargs["footnote_fontsize"], 11
+            mock_view_correlation.call_args[1]["footnote_fontsize"], 11
         )
 
     def test_view_correlation_adds_footnote(self):

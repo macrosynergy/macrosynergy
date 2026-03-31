@@ -42,7 +42,9 @@ class TestAll(unittest.TestCase):
         )
 
     def test_footnote_forwarded(self):
-        with patch("macrosynergy.panel.view_ranges.msv.view_ranges") as mock_view_ranges:
+        import sys
+        vr_mod = sys.modules["macrosynergy.panel.view_ranges"]
+        with patch.object(vr_mod.msv, "view_ranges") as mock_view_ranges:
             view_ranges(
                 self.df,
                 xcats=["XR", "CRY"],
@@ -50,8 +52,8 @@ class TestAll(unittest.TestCase):
                 footnote_fontsize=11,
             )
 
-        self.assertEqual(mock_view_ranges.call_args.kwargs["footnote"], "Source: test")
-        self.assertEqual(mock_view_ranges.call_args.kwargs["footnote_fontsize"], 11)
+        self.assertEqual(mock_view_ranges.call_args[1]["footnote"], "Source: test")
+        self.assertEqual(mock_view_ranges.call_args[1]["footnote_fontsize"], 11)
 
 
 if __name__ == "__main__":
