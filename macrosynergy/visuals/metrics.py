@@ -119,7 +119,8 @@ def view_metrics(
         rotate_xticks=90,
         footnote=footnote,
         footnote_fontsize=footnote_fontsize,
-        return_fig=return_fig,
+        show=not return_fig,
+        return_figure=return_fig,
     )
 
     if return_fig:
