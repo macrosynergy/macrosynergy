@@ -44,10 +44,12 @@ class SignalOptimizer(BasePanelLearner):
     end : str
         End date for considered data in subsequent analysis in ISO 8601 format.
         Default is None i.e. the latest date in the dataframe.
-    blacklist : list
+    blacklist : dict or list[dict],
         Blacklisting dictionary specifying date ranges for which cross-sectional
         information should be excluded. The keys are cross-sections and the values
-        are tuples of start and end dates in ISO 8601 format. Default is None.
+        are tuples of start and end dates in ISO 8601 format. A list of dictionaries
+        can be passed as well, where the ith blacklisting dictionary corresponds to
+        the ith target. Default is None.
     freq : str
         Frequency of the analysis. Default is "M" for monthly.
     lag : int
@@ -380,19 +382,24 @@ class SignalOptimizer(BasePanelLearner):
         forecasts_df = forecasts_df.groupby(level=0).ffill().dropna()
 
         if self.blacklist is not None:
-            for cross_section, periods in self.blacklist.items():
-                cross_section_key = cross_section.split("_")[0]
-                if cross_section_key in self.unique_xs_levels:
-                    forecasts_df.loc[
-                        (cross_section_key, slice(periods[0], periods[1])), :
-                    ] = np.nan
+            bl_list = (
+                self.blacklist
+                if isinstance(self.blacklist, list) else [self.blacklist]
+            )
+
+            for col, bl in zip(forecasts_df.columns, bl_list):
+                for cid, (start, end) in bl.items():
+                    cid = cid.split("_")[0]
+                    if cid in self.unique_xs_levels:
+                        forecasts_df.loc[(cid, slice(start, end)), col] = np.nan
 
         forecasts_df.columns = forecasts_df.columns.astype("category")
         forecasts_df_long = pd.melt(
             frame=forecasts_df.reset_index(),
             id_vars=["real_date", "cid"],
             var_name="xcat",
-        )
+        ).dropna() # drop blacklist violations
+
         self.preds = concat_categorical(
             df1=self.preds,
             df2=forecasts_df_long,
