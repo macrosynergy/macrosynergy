@@ -14,6 +14,7 @@ import seaborn as sns
 from macrosynergy.management.simulate import make_qdf
 from macrosynergy.management.utils import update_df, _map_to_business_day_frequency
 from macrosynergy.pnl import NaivePnL
+from macrosynergy.pnl.sharpe_stability_ratio import sharpe_stability_ratio
 from macrosynergy.management.types import QuantamentalDataFrame
 
 
@@ -330,6 +331,7 @@ class MultiPnL:
         if self._bm_dict:
             for bm in self._bm_dict:
                 stats.append(f"{bm} correl")
+        stats.append("Sharpe Stability Ratio")
         stats.append("Traded Months")
 
         pnl_df = self.pnls_df[self.pnls_df["xcat"] == pnl_xcat].copy()
@@ -373,9 +375,17 @@ class MultiPnL:
                 correlation = dfw.loc[index].corrwith(
                     bm_df.loc[index].iloc[:, i], axis=0, method="pearson", drop=True
                 )
-                df.iloc[8 + i, :] = correlation
+                df.loc[f"{bm} correl", :] = correlation
 
-        df.iloc[8 + len(self._bm_dict), :] = dfw.resample(mfreq).sum().count()
+        for col in dfw.columns:
+            df.loc["Sharpe Stability Ratio", col] = sharpe_stability_ratio(
+                dfw[col].dropna(),
+                window=252,
+                benchmark_sr=0.0,
+                annualization_factor=261,
+            )
+
+        df.loc["Traded Months", :] = dfw.resample(mfreq).sum().count()
         return df
 
     def get_pnls(self, pnl_xcats: List[str] = None) -> pd.DataFrame:

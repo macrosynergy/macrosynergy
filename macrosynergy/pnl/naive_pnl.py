@@ -23,6 +23,7 @@ from macrosynergy.management.utils import (
 )
 from macrosynergy.management.types import QuantamentalDataFrame
 from macrosynergy.panel.make_zn_scores import make_zn_scores
+from macrosynergy.pnl.sharpe_stability_ratio import sharpe_stability_ratio
 from macrosynergy.signal import SignalReturnRelations
 
 
@@ -1413,6 +1414,8 @@ class NaivePnL:
             for bm in benchmark_tickers:
                 stats.insert(len(stats) - 1, f"{bm} correl")
 
+        stats.insert(len(stats) - 1, "Sharpe Stability Ratio")
+
         dfw = dfx.pivot(index="real_date", columns=groups, values="value")
         df = pd.DataFrame(columns=dfw.columns, index=stats)
 
@@ -1453,10 +1456,17 @@ class NaivePnL:
                 correlation = dfw.loc[index].corrwith(
                     bm_df.loc[index].iloc[:, i], axis=0, method="pearson", drop=True
                 )
-                df.iloc[8 + i, :] = correlation
+                df.loc[f"{bm} correl", :] = correlation
 
-        mfreq = _map_to_business_day_frequency("M")
-        df.iloc[8 + len(benchmark_tickers), :] = dfw.resample(mfreq).sum().count()
+        for col in dfw.columns:
+            df.loc["Sharpe Stability Ratio", col] = sharpe_stability_ratio(
+                dfw[col].dropna(),
+                window=252,
+                benchmark_sr=0.0,
+                annualization_factor=252,
+            )
+
+        df.loc["Traded Months", :] = dfw.resample(mfreq).sum().count()
 
         if label_dict is not None:
             if not isinstance(label_dict, dict):
