@@ -301,6 +301,7 @@ def timelines(
                 ax_hline=ax_hline,
                 footnote=footnote,
                 footnote_fontsize=footnote_fontsize,
+                show=not return_fig,
                 return_figure=return_fig,
             )
 
@@ -330,6 +331,7 @@ def timelines(
                 ax_hline=ax_hline,
                 footnote=footnote,
                 footnote_fontsize=footnote_fontsize,
+                show=not return_fig,
                 return_figure=return_fig,
             )
 
@@ -376,6 +378,7 @@ def timelines(
                 ax_hline=ax_hline,
                 footnote=footnote,
                 footnote_fontsize=footnote_fontsize,
+                show=not return_fig,
                 return_figure=return_fig,
             )
 

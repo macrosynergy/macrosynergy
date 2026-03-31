@@ -130,7 +130,7 @@ def view_timelines(
         Font size of the footnote. Default is 9.
     """
 
-    msv.timelines(
+    return msv.timelines(
         df=df,
         xcats=xcats,
         cids=cids,
