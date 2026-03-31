@@ -161,6 +161,17 @@ class TestAll(unittest.TestCase):
         except Exception as e:
             self.fail(f"view_metrics raised {e} unexpectedly")
 
+    def test_view_metrics_adds_footnote(self):
+        fig = msv.view_metrics(
+            **self.valid_args,
+            footnote="Source: test",
+            footnote_fontsize=11,
+            return_fig=True,
+        )
+
+        texts = [text.get_text() for text in fig.texts]
+        self.assertIn("Source: test", texts)
+
 
 if __name__ == "__main__":
     unittest.main()

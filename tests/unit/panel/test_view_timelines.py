@@ -350,6 +350,32 @@ class TestAll(unittest.TestCase):
             title="Test",
         )
 
+    def test_view_timelines_adds_footnote(self):
+        fig = view_timelines(
+            self.dfd,
+            xcats=[self.xcats[0]],
+            cids=self.cids[:2],
+            single_chart=True,
+            footnote="Source: test",
+            footnote_fontsize=11,
+            return_fig=True,
+        )
+
+        texts = [text.get_text() for text in fig.texts]
+        self.assertIn("Source: test", texts)
+
+    def test_view_timelines_has_no_default_footnote(self):
+        fig = view_timelines(
+            self.dfd,
+            xcats=[self.xcats[0]],
+            cids=self.cids[:2],
+            single_chart=True,
+            return_fig=True,
+        )
+
+        texts = [text.get_text() for text in fig.texts]
+        self.assertFalse(any(texts))
+
 
 if __name__ == "__main__":
     unittest.main()
