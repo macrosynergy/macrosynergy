@@ -68,6 +68,17 @@ class TestExpandingIncrement(unittest.TestCase):
 
         self.y_nan.loc[np.random.rand(len(self.y_nan)) < 0.15] = np.nan
 
+        # Create X and y dataframes with NaNs
+        self.X_nan, self.y_nan = self.X.copy(), self.y.copy()
+
+        num_nans_per_cid = {"AUD": 7, "CAD": 5, "GBP": 2, "USD": 1}
+        nan_xcats = ["RIR", "GROWTH"]
+        for cid, num_nans in num_nans_per_cid.items():
+            idx = self.X_nan.loc[[cid], :,].head(num_nans).index
+            self.X_nan.loc[idx, nan_xcats] = np.nan
+
+        self.y_nan.loc[np.random.rand(len(self.y_nan)) < 0.15] = np.nan
+
     @classmethod
     def tearDownClass(self) -> None:
         patch.stopall()

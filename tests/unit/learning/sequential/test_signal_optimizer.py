@@ -2896,6 +2896,38 @@ class TestAll(unittest.TestCase):
         except Exception as e:
             self.fail(f"available_cid_heatmap raised an exception: {e}")
 
+        # test when subset of features is used
+        try:
+            so.available_cid_heatmap(
+                xcats=["XR", "CPI"],
+                xcat_labels={"XR": "XR_RENAMED"},
+            )
+        except Exception as e:
+            self.fail(f"available_cid_heatmap raised an exception: {e}")
+
+    def test_types_available_cids_heatmap(self):
+        so = self.so_no_na
+
+        with self.assertRaises(TypeError):
+            so.available_cid_heatmap(title=2)
+
+        with self.assertRaises(TypeError):
+            so.available_cid_heatmap(figsize=[1, 2])
+
+        with self.assertRaises(TypeError):
+            so.available_cid_heatmap(xcat="not a list")
+
+        with self.assertRaises(TypeError):
+            so.available_cid_heatmap(xcat_labels=[])
+
+        with self.assertRaises(TypeError):
+            so.available_cid_heatmap(start_date=23)
+
+        with self.assertRaises(TypeError):
+            so.available_cid_heatmap(tick_fontsize="not valid")
+
+        with self.assertRaises(TypeError):
+            so.available_cid_heatmap(title_fontsize="not valid")
 
     def test_types_correlations_heatmap(self):
 

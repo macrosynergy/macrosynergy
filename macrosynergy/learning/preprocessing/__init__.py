@@ -13,6 +13,7 @@ from .panel_selectors import (
     LassoSelector,
     MapSelector,
     KendallSignificanceSelector,
+    FactorAvailabilitySelector,
 )
 
 from .scalers import (
@@ -33,6 +34,7 @@ __all__ = [
     "LassoSelector",
     "MapSelector",
     "KendallSignificanceSelector",
+    "FactorAvailabilitySelector",
     # scalers
     "BasePanelScaler",
     "PanelMinMaxScaler",
