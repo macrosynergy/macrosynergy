@@ -5,7 +5,6 @@ machine learning.
 
 import numbers
 import warnings
-from types import NoneType
 from typing import Union, Tuple, List, Dict
 
 import matplotlib.colors as mcolors
@@ -1114,19 +1113,19 @@ class SignalOptimizer(BasePanelLearner):
         if len(figsize) != 2:
             raise ValueError("The figsize argument must be a tuple of length 2.")
 
-        if not isinstance(xcats, (list, NoneType)):
+        if xcats is not None and not isinstance(xcats, list):
             raise TypeError("The xcats argument must be a list.")
 
-        if not isinstance(xcats_labels, (dict, NoneType)):
+        if xcats_labels is not None and not isinstance(xcats_labels, dict):
             raise TypeError("The xcats_labels argument must be a dictionary.")
 
-        if not isinstance(start_date, (str, pd.Timestamp, NoneType)):
+        if start_date is not None and not isinstance(start_date, (str, pd.Timestamp)):
             raise TypeError("The start_date argument must be a pd.Timestamp or str.")
 
-        if not isinstance(tick_fontsize, (NoneType, int)):
+        if tick_fontsize is not None and not isinstance(tick_fontsize, int):
             raise TypeError("The tick_fontsize argument must be an integer.")
 
-        if not isinstance(title_fontsize, (NoneType, int)):
+        if title_fontsize is not None and not isinstance(title_fontsize, int):
             raise TypeError("The title_fontsize argument must be an integer.")
 
 
