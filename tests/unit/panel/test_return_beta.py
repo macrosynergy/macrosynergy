@@ -4,7 +4,9 @@ from typing import List, Dict
 
 import numpy as np
 import pandas as pd
+import pytest
 from parameterized import parameterized
+from sklearn.linear_model import LinearRegression
 
 from tests.simulate import make_qdf
 
@@ -16,6 +18,7 @@ from macrosynergy.panel.return_beta import (
     weighted_least_squares,
 )
 from macrosynergy.management.utils import reduce_df, _map_to_business_day_frequency
+from macrosynergy.learning import TimeWeightedLinearRegression
 
 
 class TestAll(unittest.TestCase):
@@ -175,16 +178,18 @@ class TestAll(unittest.TestCase):
         # re-estimation date series. Confirms the re-estimation frequency has been
         # correctly applied.
         # The frequency tested on will be monthly: business month end frequency.
+        min_observation: int = 50
+        MAX_OBS: int = 100
+
         start_date: pd.Timestamp
         end_date: pd.Timestamp
         start_date, end_date = date_alignment(unhedged_return=xr, benchmark_return=br)
         freq = _map_to_business_day_frequency("m")
-        dates_re: List[pd.Timestamp] = list(
-            pd.date_range(start=start_date, end=end_date, freq=freq)
-        )
-
-        min_observation: int = 50
-        MAX_OBS: int = 100
+        dates_re: List[pd.Timestamp] = pd.date_range(
+            start=start_date + pd.offsets.BDay(min_observation),
+            end=end_date,
+            freq=freq,
+        ).tolist()
 
         # Produce daily business day date series to determine the date that corresponds
         # to the specified minimum observation.
@@ -237,23 +242,15 @@ class TestAll(unittest.TestCase):
         data_column[:] = np.nan
         df_hrat = pd.DataFrame(data=data_column, index=dates_re, columns=["value"])
 
-        min_obs_date = xr.index[min_observation]
         for d in dates_re:
-            if d <= min_obs_date: continue
-
-            curr_start_date: pd.Timestamp = dates_re[
-                max(0, dates_re.index(d) - MAX_OBS)
-            ]
             # Inclusive of the re-estimation date.
-            yvar = xr.loc[curr_start_date:d].values
-            xvar = br.loc[curr_start_date:d].values.reshape(-1, 1)
+            yvar = xr.loc[:d].values[-MAX_OBS:]
+            xvar = br.loc[:d].values[-MAX_OBS:].reshape(-1, 1)
 
             if method == "ols":
                 weights = np.ones_like(yvar)
             elif method == "twls":
                 weights = np.power(2, -np.arange(yvar.shape[0]) / 252)[::-1]
-            else:
-                raise ValueError("meth must be either ols or twls")
 
             betas = weighted_least_squares(
                 X=np.column_stack((np.ones(xvar.shape[0]), xvar)),
@@ -466,6 +463,100 @@ class TestAll(unittest.TestCase):
         self.assertTrue(test_value != df_hedge_INR_val)
 
 
+class TestHedgeRatio:
+    """Tests for the hege_ratio function"""
+    @staticmethod
+    def make_series():
+        index = pd.date_range("2020-01-01",  periods=500, freq="D", name="real_date")
+        data = np.random.randn(500)
+        return pd.Series(data, index=index)
+
+    def test_invalid_inputs(self):
+        # Method must be ols or twls
+        ur = self.make_series()
+        br = self.make_series()
+        rdates = [pd.Timestamp("2020-06-01"), pd.Timestamp("2021-01-01")]
+        with pytest.raises(ValueError, match="meth must be"):
+            hedge_calculator(ur, br, rdates, meth="ridge")
+
+        # min_obs must be positive
+        ur = self.make_series()
+        br = self.make_series()
+        rdates = [pd.Timestamp("2020-06-01"), pd.Timestamp("2021-01-01")]
+        with pytest.raises(ValueError, match="min_obs must be"):
+            hedge_calculator(ur, br, rdates, min_obs=0)
+
+        # max_obs cannot be less than min_obs
+        ur = self.make_series()
+        br = self.make_series()
+        with pytest.raises(ValueError, match="max_obs"):
+            hedge_calculator(ur, br, rdates, min_obs=20, max_obs=10)
+
+        # rdate passed that doesn't satisfy min_obs
+        ur = self.make_series()
+        br = self.make_series()
+        rdates = [pd.Timestamp("2020-02-01"), pd.Timestamp("2021-01-01")]
+        with pytest.raises(ValueError, match="Re-estimation dates"):
+            hedge_calculator(ur, br, rdates, min_obs=40)
+
+    @pytest.mark.parametrize("method", ["ols", "twls"])
+    def test_valid_runs(self, method):
+        ur = self.make_series()
+        br = self.make_series()
+        rdates = [pd.Timestamp("2020-06-01"), pd.Timestamp("2021-01-01"), pd.Timestamp("2021-06-01")]
+        result = hedge_calculator(ur, br, rdates, meth=method)
+        assert not result.empty
+
+    @pytest.mark.parametrize("method", ["ols", "twls"])
+    def test_perfect_correlation_ratio_near_one(self, method):
+        ur = self.make_series()
+        br = ur.copy()
+        rdates = [pd.Timestamp("2020-06-01"), pd.Timestamp("2021-01-01"), pd.Timestamp("2021-06-01")]
+        result = hedge_calculator(ur, br, rdates, meth=method)
+
+        assert np.allclose(result["value"].values[1:], 1.0, atol=1e-6)
+
+    @pytest.mark.parametrize("method", ["ols", "twls"])
+    def test_scaled_perfect_correlation(self, method):
+        br = self.make_series()
+        ur = 2 * br
+        rdates = [pd.Timestamp("2020-06-01"), pd.Timestamp("2021-01-01"), pd.Timestamp("2021-06-01")]
+        result = hedge_calculator(ur, br, rdates, meth=method)
+
+        assert np.allclose(result["value"].values[1:], 2, atol=1e-4)
+
+    def test_hedge_ratio_is_shifted_by_one(self):
+        """
+        The hedge ratio calculated at rdate T should appear on the row T+1
+        """
+        ur = self.make_series()
+        br = self.make_series()
+        # Single re-estimation date
+        rdate = ur.index[30]
+        result = hedge_calculator(ur, br, [rdate], meth="ols", min_obs=24)
+
+        assert np.isnan(result["value"][0].item())
+
+    def test_misaligned_series(self):
+        """Series with different lengths should be aligned on intersection."""
+        dates_long = pd.bdate_range("2020-01-01", periods=120, name="real_date")
+        dates_short = pd.bdate_range("2020-03-01", periods=80, name="real_date")
+        ur = pd.Series(np.random.randn(120), index=dates_long)
+        br = pd.Series(np.random.randn(80), index=dates_short)
+
+        common_dates = dates_long.intersection(dates_short)
+        br[common_dates] = ur[common_dates]
+
+        rdates = [pd.Timestamp("2020-04-01"), pd.Timestamp("2020-05-01")]
+
+        result = hedge_calculator(ur, br, rdates, min_obs=15)
+
+        assert not result.empty
+        assert result["real_date"].min() == pd.Timestamp("2020-04-01")
+        assert result["real_date"].max() == dates_long.max()
+        assert np.allclose(result["value"].values[1:], 1.0, atol=1e-6)
+
+
 class TestWeightedLeastSquares:
     """Tests for the weighted_least_squares function."""
 
@@ -517,6 +608,51 @@ class TestWeightedLeastSquares:
         beta = weighted_least_squares(X, y, weights)
         beta_expected = [1.75, 0.5]
         np.testing.assert_allclose(beta, beta_expected, atol=1e-10)
+
+    def test_ols_against_sklearn(self):
+        beta_true = np.array([1.0, 2.0, 3.0, -2.0, 4.0])
+        n_samples = 100
+        X = np.random.randn(n_samples, 4)
+        X = np.column_stack((np.ones(n_samples), X))
+        y = X @ beta_true + 0.01 * np.random.randn(n_samples)
+
+
+        result = weighted_least_squares(X, y, np.ones(100))
+        expected = LinearRegression(fit_intercept=False).fit(X, y).coef_
+
+        assert np.allclose(result, expected, atol=1e-5)
+
+    def test_wls_against_sklearn(self):
+        beta_true = np.array([1.0, 2.0, 3.0, -2.0, 4.0])
+        n_samples = 100
+        X = np.random.randn(n_samples, 4)
+        X = np.column_stack((np.ones(n_samples), X))
+        y = X @ beta_true + 0.01 * np.random.randn(n_samples)
+
+        weights = np.random.uniform(0.5, 2.0, size=n_samples)
+
+        result = weighted_least_squares(X, y, weights)
+        expected = LinearRegression(fit_intercept=False).fit(X, y, weights).coef_
+
+        assert np.allclose(result, expected, atol=1e-5)
+
+    def test_against_msl_twls(self):
+        # create data
+        index = pd.MultiIndex.from_product([["CAD"], pd.date_range("2020-01-01", periods=100)])
+        x_data = np.column_stack((np.ones(100), np.random.randn(100, 4)))
+        X = pd.DataFrame(index=index, data=x_data)
+        y = pd.Series(np.random.randn(100), index=index)
+
+        # fit twls model (fit_intercept = False because we have a 1s col in X)
+        twls_model = TimeWeightedLinearRegression(fit_intercept=False).fit(X, y)
+        twls_coefs = twls_model.coef_
+
+        # fit pure numpy implementation using same weights
+        twls_model_weights = twls_model._calculate_time_weights(y)
+        result = weighted_least_squares(X.values, y.values, twls_model_weights)
+
+        assert np.allclose(result, twls_coefs, atol=1e-5)
+
 
 
 if __name__ == "__main__":
