@@ -7,7 +7,7 @@ import pandas as pd
 from typing import List, Dict, Tuple, Optional, Union
 import matplotlib.pyplot as plt
 from macrosynergy.management.utils import is_valid_iso_date
-from macrosynergy.visuals.plotter import Plotter
+from macrosynergy.visuals.plotter import Plotter, add_figure_footnote
 from numbers import Number
 from macrosynergy.management.simulate import make_test_df
 
@@ -87,6 +87,8 @@ class LinePlot(Plotter):
         title_fontsize: int = 16,
         title_xadjust: Number = 0.5,
         title_yadjust: Number = 1.05,
+        footnote: Optional[str] = None,
+        footnote_fontsize: int = 9,
         # legend args
         legend: bool = True,
         legend_labels: Optional[List[str]] = None,
@@ -143,6 +145,10 @@ class LinePlot(Plotter):
             The x-adjustment of the title. Default is 0.5.
         title_yadjust : Number
             The y-adjustment of the title. Default is 1.05.
+        footnote : Optional[str]
+            Optional text shown at the bottom-left of the figure canvas.
+        footnote_fontsize : int
+            The fontsize of the footnote. Default is 9.
         legend : bool
             Whether to show a legend on the plot. Default is True.
         legend_labels : Optional[List[str]]
@@ -289,6 +295,7 @@ class LinePlot(Plotter):
             )
 
         plt.tight_layout()
+        add_figure_footnote(fig, footnote=footnote, fontsize=footnote_fontsize)
         title: str = title if title else f"LinePlot: Viewing `{metric}`"
 
         if save_to_file:

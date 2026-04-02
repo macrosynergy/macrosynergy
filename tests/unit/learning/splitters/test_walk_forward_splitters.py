@@ -1,11 +1,8 @@
-from typing import List
 import unittest
 import itertools
 import pandas as pd
 import numpy as np
-from sklearn.linear_model import LinearRegression
-from sklearn.neighbors import KNeighborsRegressor
-from sklearn.model_selection import cross_val_score
+import pytest
 import matplotlib
 import matplotlib.pyplot as plt
 from unittest.mock import patch
@@ -59,6 +56,28 @@ class TestExpandingIncrement(unittest.TestCase):
 
         self.y = df["XR"]
         self.y = self.y.groupby(level=0).resample("M", level="real_date").last()
+
+        # Create X and y dataframes with NaNs
+        self.X_nan, self.y_nan = self.X.copy(), self.y.copy()
+
+        num_nans_per_cid = {"AUD": 7, "CAD": 5, "GBP": 2, "USD": 1}
+        nan_xcats = ["RIR", "GROWTH"]
+        for cid, num_nans in num_nans_per_cid.items():
+            idx = self.X_nan.loc[[cid], :,].head(num_nans).index
+            self.X_nan.loc[idx, nan_xcats] = np.nan
+
+        self.y_nan.loc[np.random.rand(len(self.y_nan)) < 0.15] = np.nan
+
+        # Create X and y dataframes with NaNs
+        self.X_nan, self.y_nan = self.X.copy(), self.y.copy()
+
+        num_nans_per_cid = {"AUD": 7, "CAD": 5, "GBP": 2, "USD": 1}
+        nan_xcats = ["RIR", "GROWTH"]
+        for cid, num_nans in num_nans_per_cid.items():
+            idx = self.X_nan.loc[[cid], :,].head(num_nans).index
+            self.X_nan.loc[idx, nan_xcats] = np.nan
+
+        self.y_nan.loc[np.random.rand(len(self.y_nan)) < 0.15] = np.nan
 
     @classmethod
     def tearDownClass(self) -> None:
@@ -158,14 +177,18 @@ class TestExpandingIncrement(unittest.TestCase):
         with self.assertRaises(ValueError):
             next(splitter.split(X=self.X, y=self.y.reset_index(drop=True)))
 
-    @parameterized.expand(itertools.product([1, 2, 3], [1, 2]))
-    def test_valid_split(self, window_size, min_cids):
-        # Test functionality on simple dataframe
+    @parameterized.expand(itertools.product([1, 2, 3], [1, 2], [1, 2, 3]))
+    def test_valid_split_no_nans(self, window_size, min_cids, min_xcats):
+        """
+        Test splits when no NaNs in the data. min_xcats should not have any
+        impact in this case
+        """
         splitter = ExpandingIncrementPanelSplit(
             train_intervals = window_size,
             test_size = window_size,
             min_cids = min_cids,
             min_periods = 2,
+            min_xcats=min_xcats, # should not have an impact because no nans in the data
         )
         splits = list(splitter.split(self.X, self.y))
         
@@ -203,7 +226,190 @@ class TestExpandingIncrement(unittest.TestCase):
             else:
                 self.assertLessEqual(n_unique_test_dates, window_size)
                 self.assertGreater(n_unique_test_dates, 0)
-        
+
+    @parameterized.expand(itertools.product([1, 2, 3], [1, 2, 3, 4]))
+    def test_valid_split_with_nans_and_min_xcat_is_one(self, window_size, min_cids):
+        """
+        This tests the scenario when min_xcats=1 and NaNs exist.
+
+        CAD has 1 feature available from 2019-04-30
+        AUD has 1 feature available from 2019-01-31
+        GBP has 1 feature available from 2019-06-30
+        USD has 1 feature available from 2019-04-30
+
+        so,
+
+        On 2019-01-31 we have 1 cid with at least 1 feature available
+        On 2019-04-30 we have 4 cid with at least 1 feature available
+
+        so,
+
+        If min_cids=1, the first train set should contain data for [min_date, 2019-01-31 + (min_periods - 1)]
+        If min_cids=2, the first train set should contain data for [min_date, 2019-04-30 + (min_periods - 1)]
+        If min_cids=3, the first train set should contain data for [min_date, 2019-04-30 + (min_periods - 1)]
+        If min_cids=4, the first train set should contain data for [min_date, 2019-04-30 + (min_periods - 1)]
+        """
+        splitter = ExpandingIncrementPanelSplit(
+            train_intervals=window_size,
+            test_size=window_size,
+            min_cids=min_cids,
+            min_periods=2,
+            min_xcats=1,
+        )
+
+        splits = list(splitter.split(self.X_nan, self.y_nan))
+
+        X_train_split1 = self.X_nan.iloc[splits[0][0], :]
+        X_test_split1 = self.X_nan.iloc[splits[0][1], :]
+
+        n_train_samples = len(X_train_split1)
+        n_unique_train_dates = len(X_train_split1.index.get_level_values(1).unique())
+        n_unique_test_dates = len(X_test_split1.index.get_level_values(1).unique())
+
+        first_train_date = X_train_split1.index.get_level_values(1).min()
+        first_test_date = X_test_split1.index.get_level_values(1).min()
+        last_train_date = X_train_split1.index.get_level_values(1).max()
+
+        assert first_train_date == pd.Timestamp("2019-01-31")
+        assert n_unique_test_dates == window_size
+
+        if min_cids==1:
+            assert n_train_samples == 2
+            assert n_unique_train_dates == 2
+            assert last_train_date == pd.Timestamp("2019-02-28")
+            assert first_test_date == pd.Timestamp("2019-03-31")
+        elif min_cids==2:
+            assert n_train_samples == 11
+            assert n_unique_train_dates == 5
+            assert last_train_date == pd.Timestamp("2019-05-31")
+            assert first_test_date == pd.Timestamp("2019-06-30")
+        elif min_cids==3:
+            assert n_train_samples == 11
+            assert n_unique_train_dates == 5
+            assert last_train_date == pd.Timestamp("2019-05-31")
+            assert first_test_date == pd.Timestamp("2019-06-30")
+        elif min_cids==4:
+            assert n_train_samples == 11
+            assert n_unique_train_dates == 5
+            assert last_train_date == pd.Timestamp("2019-05-31")
+            assert first_test_date == pd.Timestamp("2019-06-30")
+        else:
+            pass
+
+        # Track the number of unique dates in each set
+        current_n_unique_dates = n_unique_train_dates
+        for split_idx in range(1, len(splits)):
+            X_train_split = self.X_nan.iloc[splits[split_idx][0], :]
+            X_test_split = self.X_nan.iloc[splits[split_idx][1], :]
+            n_unique_dates = len(X_train_split.index.get_level_values(1).unique())
+            n_unique_test_dates = len(X_test_split.index.get_level_values(1).unique())
+            self.assertEqual(n_unique_dates, current_n_unique_dates + window_size)
+            current_n_unique_dates = n_unique_dates
+            if split_idx != len(splits) - 1:
+                self.assertEqual(n_unique_test_dates, window_size)
+            else:
+                self.assertLessEqual(n_unique_test_dates, window_size)
+                self.assertGreater(n_unique_test_dates, 0)
+
+    @parameterized.expand(itertools.product([1, 2, 3], [1, 2, 3, 4]))
+    def test_valid_split_with_nans_and_largest_min_xcat(self, window_size, min_cids):
+        """
+        This tests the scenario when NaNs exist and min_xcats = number of features.
+
+        CAD has all features available from 2019-09-30
+        AUD has all features available from 2019-08-31
+        GBP has all features available from 2019-06-30
+        USD has all features available from 2019-05-31
+
+        so,
+
+        On 2019-05-31 we have 1 cid with all features available
+        On 2019-06-30 we have 2 cids with all features available
+        On 2019-08-31 we have 3 cids with all features available
+        On 2019-09-30 we have all 4 cids with all features available
+
+        so,
+
+        If min_cids=1, the first train set should contain data for [min_date, 2019-05-31 + (min_periods - 1)]
+        If min_cids=2, the first train set should contain data for [min_date, 2019-06-30 + (min_periods - 1)]
+        If min_cids=3, the first train set should contain data for [min_date, 2019-08-31 + (min_periods - 1)]
+        If min_cids=4, the first train set should contain data for [min_date, 2019-09-30 + (min_periods - 1)]
+        """
+        splitter = ExpandingIncrementPanelSplit(
+            train_intervals=window_size,
+            test_size=window_size,
+            min_cids=min_cids,
+            min_periods=2,
+            min_xcats=len(self.X_nan.columns),
+        )
+
+        splits = list(splitter.split(self.X_nan, self.y_nan))
+
+        X_train_split1 = self.X_nan.iloc[splits[0][0], :]
+        X_test_split1 = self.X_nan.iloc[splits[0][1], :]
+
+        n_train_samples = len(X_train_split1)
+        n_unique_train_dates = len(X_train_split1.index.get_level_values(1).unique())
+        n_unique_test_dates = len(X_test_split1.index.get_level_values(1).unique())
+
+        first_train_date = X_train_split1.index.get_level_values(1).min()
+        first_test_date = X_test_split1.index.get_level_values(1).min()
+        last_train_date = X_train_split1.index.get_level_values(1).max()
+
+        assert first_train_date == pd.Timestamp("2019-01-31")
+        assert n_unique_test_dates == window_size
+
+        if min_cids==1:
+            assert n_train_samples == 15
+            assert n_unique_train_dates == 6
+            assert last_train_date == pd.Timestamp("2019-06-30")
+            assert first_test_date == pd.Timestamp("2019-07-31")
+        elif min_cids==2:
+            assert n_train_samples == 19
+            assert n_unique_train_dates == 7
+            assert last_train_date == pd.Timestamp("2019-07-31")
+            assert first_test_date == pd.Timestamp("2019-08-31")
+        elif min_cids==3:
+            assert n_train_samples == 27
+            assert n_unique_train_dates == 9
+            assert last_train_date == pd.Timestamp("2019-09-30")
+            assert first_test_date == pd.Timestamp("2019-10-31")
+        elif min_cids==4:
+            assert n_train_samples == 31
+            assert n_unique_train_dates == 10
+            assert last_train_date == pd.Timestamp("2019-10-31")
+            assert first_test_date == pd.Timestamp("2019-11-30")
+        else:
+            pass
+
+        # Track the number of unique dates in each set
+        current_n_unique_dates = n_unique_train_dates
+        for split_idx in range(1, len(splits)):
+            X_train_split = self.X_nan.iloc[splits[split_idx][0], :]
+            X_test_split = self.X_nan.iloc[splits[split_idx][1], :]
+            n_unique_dates = len(X_train_split.index.get_level_values(1).unique())
+            n_unique_test_dates = len(X_test_split.index.get_level_values(1).unique())
+            self.assertEqual(n_unique_dates, current_n_unique_dates + window_size)
+            current_n_unique_dates = n_unique_dates
+            if split_idx != len(splits) - 1:
+                self.assertEqual(n_unique_test_dates, window_size)
+            else:
+                self.assertLessEqual(n_unique_test_dates, window_size)
+                self.assertGreater(n_unique_test_dates, 0)
+
+    def test_too_large_min_xcats(self):
+        """This tests when min_xcats > len(features)"""
+        splitter = ExpandingIncrementPanelSplit(
+            train_intervals=1,
+            test_size=1,
+            min_cids=2,
+            min_periods=2,
+            min_xcats=1000,
+        )
+
+        with pytest.raises(ValueError):
+            list(splitter.split(self.X_nan, self.y_nan))
+
     @parameterized.expand(itertools.product([1, 2, 3], [1, 2]))
     def test_types_visualise_splits(self, window_size, min_cids):
         splitter = ExpandingIncrementPanelSplit(
@@ -233,7 +439,7 @@ class TestExpandingIncrement(unittest.TestCase):
         try:
             splitter.visualise_splits(X=self.X, y=self.y)
         except Exception as e:
-            self.fail(f"Unexpected exception: {e}")    
+            self.fail(f"Unexpected exception: {e}")
 
 class TestExpandingFrequency(unittest.TestCase):
     @classmethod
