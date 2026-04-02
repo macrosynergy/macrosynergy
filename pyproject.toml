@@ -72,6 +72,7 @@ notebook = [
   "jupyter>=1.0.0",
   "ipykernel>=6.4.1",
 ]
+datastream = ["DatastreamPy"]
 torch = ["torch>=1.11.0"]
 format = ["black>=22.1.0"]
 
@@ -91,6 +92,7 @@ docs = [
 ]
 
 all = [
+  "DatastreamPy",
   "torch>=1.11.0",
   "openpyxl>=3.0.10",
   "notebook>=6.0.0",
