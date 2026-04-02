@@ -15,12 +15,14 @@ from matplotlib import pyplot as plt
 from macrosynergy.management.simulate import make_qdf
 from macrosynergy.management.utils import _map_to_business_day_frequency, reduce_df
 from macrosynergy.management.types import QuantamentalDataFrame
+from macrosynergy.visuals.plotter import add_figure_footnote
 
 
 def view_correlation(
     df: pd.DataFrame,
     xcats: Union[str, List[str]] = None,
     cids: List[str] = None,
+    tickers: Optional[List[str]] = None,
     xcats_secondary: Optional[Union[str, List[str]]] = None,
     cids_secondary: Optional[List[str]] = None,
     start: str = None,
@@ -40,8 +42,11 @@ def view_correlation(
     xcat_secondary_labels: Optional[Union[List[str], Dict[str, str]]] = None,
     cid_labels: Optional[Union[List[str], Dict[str, str]]] = None,
     cid_secondary_labels: Optional[Union[List[str], Dict[str, str]]] = None,
+    ticker_labels: Optional[Union[List[str], Dict[str, str]]] = None,
     cbar_shrink: Union[float, int] = 0.5,
     cbar_fontsize: int = 12,
+    footnote: Optional[str] = None,
+    footnote_fontsize: int = 9,
     **kwargs: Any,
 ):
     """
@@ -60,6 +65,10 @@ def view_correlation(
         be mirrored in the correlation matrix.
     cids : List[str]
         cross sections to be correlated. Default is all in the DataFrame.
+    tickers : List[str], optional
+        specific tickers to correlate (format: "CID_XCAT", e.g. "USD_FXXR_NSA").
+        If provided, correlations will be calculated between the full ticker combinations.
+        Cannot be used together with xcats/cids or xcats_secondary/cids_secondary.
     xcats_secondary : List[str]
         an optional second set of extended categories. If xcats_secondary is provided,
         correlations will be calculated between the categories in xcats and xcats_secondary.
@@ -113,10 +122,17 @@ def view_correlation(
         order as cids, a dictionary should map from each cid to its label.
     cid_secondary_labels : Optional[Union[List[str], Dict[str, str]]]
         optional list or dictionary of labels for cids_secondary.
+    ticker_labels : Optional[Union[List[str], Dict[str, str]]]
+        optional list or dictionary of labels for tickers. A list should be in the same
+        order as tickers, a dictionary should map from each ticker to its label.
     cbar_shrink : Union[float, int]
         shrinkage factor of the color bar. Default is 0.5.
     cbar_fontsize : int
         font size of the color bar. Default is 12.
+    footnote : str
+        Optional text shown at the bottom-left of the figure canvas.
+    footnote_fontsize : int
+        Font size of the footnote. Default is 9.
     **kwargs : Dict
         Arbitrary keyword arguments that are passed to seaborn.heatmap.
 
@@ -134,7 +150,25 @@ def view_correlation(
     if freq is not None:
         freq = _map_to_business_day_frequency(freq=freq, valid_freqs=["W", "M", "Q"])
 
-    xcats = xcats if isinstance(xcats, list) else [xcats]
+    # Validate tickers parameter
+    if tickers is not None:
+        if xcats is not None or cids is not None:
+            raise ValueError(
+                "Cannot specify both 'tickers' and 'xcats'/'cids'. "
+                "Use either tickers for full ticker correlation or xcats/cids for "
+                "cross-category/cross-sectional correlation."
+            )
+        if xcats_secondary is not None or cids_secondary is not None:
+            raise ValueError(
+                "Cannot specify 'tickers' together with 'xcats_secondary' or "
+                "'cids_secondary'."
+            )
+        if len(tickers) < 2:
+            raise ValueError(
+                "At least 2 tickers are required for correlation analysis. "
+            )
+
+    xcats = xcats if isinstance(xcats, list) else [xcats] if xcats is not None else None
 
     if max_color is not None:
         assert isinstance(max_color, float), "Parameter max_color must be type <float>."
@@ -156,11 +190,67 @@ def view_correlation(
         "specified categories: {xcats}. Please check the data."
     )
 
-    xcat_labels = _parse_labels(xcats, xcat_labels, label_type="xcats")
-    cid_labels = _parse_labels(cids, cid_labels, label_type="cids")
+    # Handle tickers mode
+    if tickers is not None:
+        # Parse tickers and extract data for each
+        ticker_dfs = []
+        for ticker in tickers:
+            parts = ticker.split("_", 1)
+            if len(parts) != 2:
+                raise ValueError(
+                    f"Ticker '{ticker}' must be in format 'CID_XCAT' (e.g., 'USD_FXXR_NSA')."
+                )
+            cid, xcat = parts
+
+            df_ticker = reduce_df(
+                df.copy(), xcats=[xcat], cids=[cid], start=start, end=end, out_all=False
+            )
+            if df_ticker.empty:
+                raise ValueError(
+                    f"Ticker '{ticker}' not found in DataFrame or has no data in the "
+                    f"specified date range."
+                )
+            df_ticker["ticker"] = ticker
+            ticker_dfs.append(df_ticker)
+
+        # Combine all ticker data
+        df_combined = pd.concat(ticker_dfs, ignore_index=True)
+
+        s_date = df_combined["real_date"].min().strftime("%Y-%m-%d")
+        e_date = df_combined["real_date"].max().strftime("%Y-%m-%d")
+
+        # Pivot to wide format with tickers as columns
+        df_w = df_combined.pivot(index="real_date", columns="ticker", values=val)
+
+        # Ensure ticker order matches input
+        df_w = df_w[tickers]
+
+        # Down-sample if frequency is specified
+        if freq is not None:
+            df_w = df_w.resample(freq).mean()
+
+        # Apply labels if provided
+        ticker_labels_dict = _parse_labels(tickers, ticker_labels, label_type="tickers")
+        df_w = df_w.rename(columns=ticker_labels_dict)
+
+        # Calculate correlation matrix
+        corr = df_w.corr(method="pearson")
+
+        # Apply clustering if requested
+        if cluster:
+            corr = _cluster_correlations(corr=corr, is_symmetric=True)
+
+        # Mask for upper triangle
+        mask = np.triu(np.ones_like(corr, dtype=bool))
+
+        # Set default title
+        if title is None:
+            title = f"Ticker correlation from {s_date} to {e_date}"
 
     # If more than one set of xcats or cids have been supplied.
-    if xcats_secondary or cids_secondary:
+    elif xcats_secondary or cids_secondary:
+        xcat_labels = _parse_labels(xcats, xcat_labels, label_type="xcats")
+        cid_labels = _parse_labels(cids, cid_labels, label_type="cids")
         if xcats_secondary:
             xcat_secondary_labels = _parse_labels(
                 xcats_secondary, xcat_secondary_labels, label_type="xcats_secondary"
@@ -257,6 +347,9 @@ def view_correlation(
 
     # If there is only one set of xcats and cids.
     else:
+        xcat_labels = _parse_labels(xcats, xcat_labels, label_type="xcats")
+        cid_labels = _parse_labels(cids, cid_labels, label_type="cids")
+
         df, xcats, cids = reduce_df(df, xcats, cids, start, end, out_all=True)
         if df.empty:
             raise ValueError(missing_data_msg.format(xcats=xcats))
@@ -327,6 +420,7 @@ def view_correlation(
     ax.tick_params(axis="y", labelsize=fontsize)
 
     plt.tight_layout()
+    add_figure_footnote(fig, footnote=footnote, fontsize=footnote_fontsize)
     if show:
         plt.show()
         return
@@ -701,6 +795,27 @@ if __name__ == "__main__":
         # xcats_secondary=["CRY", "XR"],
         cids=cids[:4],
         cids_secondary=cids[:1],
+        start=start,
+        end=end,
+        val="value",
+        freq=None,
+        cluster=True,
+        title="Correlation Matrix",
+        size=(14, 8),
+        max_color=None,
+        lags=None,
+        lags_secondary=None,
+        annot=True,
+        fmt=".2f",
+    )
+    
+    view_correlation(
+        df=dfd,
+        tickers=["AUD_XR", "CAD_XR"],
+        ticker_labels={
+            "AUD_XR": "AUD Excess Returns",
+            "CAD_XR": "CAD Excess Returns",
+        },
         start=start,
         end=end,
         val="value",

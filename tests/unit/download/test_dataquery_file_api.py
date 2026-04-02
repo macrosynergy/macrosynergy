@@ -1,6 +1,10 @@
 import os
 import unittest
+import warnings
+from pathlib import Path
+import json
 import pandas as pd
+import requests
 from unittest.mock import patch, MagicMock
 import functools
 import logging
@@ -10,9 +14,13 @@ from macrosynergy.download.dataquery_file_api import (
     validate_dq_timestamp,
     get_client_id_secret,
     DataQueryFileAPIClient,
+    JPMAQS_DATASET_THEME_MAPPING,
     DownloadError,
     InvalidResponseError,
     DQ_FILE_API_SCOPE,
+    _resolve_base_url,
+    DQ_FILE_API_BASE_URL,
+    DQ_FILE_API_FALLBACK_BASE_URL,
 )
 
 
@@ -292,6 +300,7 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
             {
                 "file-datetime": pd.to_datetime(["20230101T120000"], utc=True),
                 "last-modified": pd.to_datetime(["20230101T120000"], utc=True),
+                "file-name": ["FG1_20230101.parquet"],
             }
         )
         df = client.list_available_files_for_all_file_groups()
@@ -656,7 +665,8 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
         # reset mocks
         mock_download.reset_mock()
         mock_read_parquet.reset_mock()
-        mock_df = pd.DataFrame({"Theme": ["Test Theme"]})
+        theme, expected_dataset = next(iter(JPMAQS_DATASET_THEME_MAPPING.items()))
+        mock_df = pd.DataFrame({"Theme": [theme, "Some unknown theme"]})
         mock_df.to_parquet = MagicMock()
         mock_df.to_csv = MagicMock()
         mock_read_parquet.return_value = mock_df
@@ -666,7 +676,8 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
         # add_dataset_column without as_csv
         client.download_catalog_file(add_dataset_column=True)
         mock_read_parquet.assert_called_once_with(fake_path_str)
-        self.assertEqual(mock_df["Dataset"].iloc[0], "JPMAQS_TEST_THEME")
+        self.assertEqual(mock_df["Dataset"].iloc[0], expected_dataset)
+        self.assertEqual(mock_df["Dataset"].iloc[1], "Unknown")
         mock_df.to_parquet.assert_called_once_with(fake_path_str, index=False)
         mock_df.to_csv.assert_not_called()
 
@@ -822,6 +833,488 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
             client.download_full_snapshot(
                 since_datetime="20230101", file_group_ids="not-a-list"
             )
+
+
+class TestDataQueryFileAPIClientNotificationLoading(unittest.TestCase):
+    def setUp(self):
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp_dir.cleanup)
+        self.test_dir = self.temp_dir.name
+
+    def _write_notification_json(self, path: Path, sub_title: str, data: list):
+        payload = {
+            "metadata": {
+                "title": "JPMaQS Notifications",
+                "sub_title": sub_title,
+                "schema": "mock",
+                "datetime": "2026-01-19T06:05:01Z",
+                "notification_type": "mock",
+                "message_type": "mock",
+            },
+            "data": data,
+            "disclaimer": "mock",
+            "tags": ["mock"],
+        }
+        path.write_text(json.dumps(payload), encoding="utf-8")
+
+    @patch.object(DataQueryFileAPIClient, "list_downloaded_files")
+    @patch.object(DataQueryFileAPIClient, "download_full_snapshot")
+    def test_load_metadata_jsons_filters_normalizes_and_canonicalizes_titles(
+        self, mock_download_full_snapshot, mock_list_downloaded_files
+    ):
+        client = DataQueryFileAPIClient(
+            client_id="id", client_secret="secret", out_dir=self.test_dir
+        )
+        out_dir = Path(client.out_dir)
+        out_dir.mkdir(parents=True, exist_ok=True)
+
+        p_missing = out_dir / "JPMAQS_METADATA_NOTIFICATIONS_20260119T060501.json"
+        p_changed = out_dir / "JPMAQS_METADATA_NOTIFICATIONS_20260119T060502.json"
+        p_addl = out_dir / "JPMAQS_METADATA_NOTIFICATIONS_20260119T072451.json"
+
+        self._write_notification_json(
+            p_missing,
+            sub_title="missing updates",
+            data=[{"Ticker": "IEP_HPI_SA_P1M1ML12", "Last update": "2020-07-30"}],
+        )
+        self._write_notification_json(
+            p_changed,
+            sub_title="Changed historical values",
+            data=[
+                {
+                    "Ticker": "AED_INFLRISK_NSA",
+                    "Observations affected": 3576,
+                    "Observations affected (%)": "92.38",
+                    "Mean absolute value change": "0.01",
+                    "Dates of changes": "2012-01-31/2026-01-15",
+                }
+            ],
+        )
+        self._write_notification_json(
+            p_addl,
+            sub_title="Additional information on missing updates",
+            data=[
+                {
+                    "Ticker": "IDR_DU10YXR_NSA",
+                    "Additional Information": "Some info",
+                }
+            ],
+        )
+
+        date = pd.Timestamp("2026-01-19T00:00:00Z")
+        mock_list_downloaded_files.return_value = pd.DataFrame(
+            [
+                {
+                    "file-name": p_missing.name,
+                    "dataset": "JPMAQS_METADATA_NOTIFICATIONS",
+                    "file-timestamp": date + pd.Timedelta(hours=6),
+                    "path": str(p_missing),
+                },
+                {
+                    "file-name": p_changed.name,
+                    "dataset": "JPMAQS_METADATA_NOTIFICATIONS",
+                    "file-timestamp": date + pd.Timedelta(hours=6, minutes=1),
+                    "path": str(p_changed),
+                },
+                {
+                    "file-name": p_addl.name,
+                    "dataset": "JPMAQS_METADATA_NOTIFICATIONS",
+                    "file-timestamp": date + pd.Timedelta(hours=7, minutes=24),
+                    "path": str(p_addl),
+                },
+                {
+                    "file-name": "OTHER_20260119T000000.json",
+                    "dataset": "OTHER",
+                    "file-timestamp": date,
+                    "path": str(out_dir / "OTHER_20260119T000000.json"),
+                },
+            ]
+        )
+
+        result = client._load_metadata_jsons(
+            date="2026-01-19",
+            normalize_headers=True,
+            skip_download=True,
+        )
+
+        self.assertIn("Missing Updates", result)
+        self.assertIn("Changed historical values", result)
+        self.assertIn("Additional information on missing updates", result)
+
+        changed = result["Changed historical values"]
+        self.assertEqual(
+            sorted(changed.columns.tolist()),
+            sorted(
+                [
+                    "ticker",
+                    "observations_affected",
+                    "observations_affected_pct",
+                    "mean_absolute_value_change",
+                    "dates_of_changes",
+                ]
+            ),
+        )
+
+        missing = result["Missing Updates"]
+        self.assertEqual(missing.columns.tolist(), ["ticker", "last_update"])
+
+        addl = result["Additional information on missing updates"]
+        self.assertEqual(addl.columns.tolist(), ["ticker", "additional_information"])
+
+        mock_download_full_snapshot.assert_not_called()
+
+    @patch("macrosynergy.download.dataquery_file_api.logger")
+    @patch("pandas.Timestamp.utcnow")
+    @patch.object(DataQueryFileAPIClient, "list_downloaded_files")
+    @patch.object(DataQueryFileAPIClient, "download_full_snapshot")
+    def test_load_metadata_jsons_future_date_warns_and_downloads(
+        self,
+        mock_download_full_snapshot,
+        mock_list_downloaded_files,
+        mock_now,
+        mock_logger,
+    ):
+        client = DataQueryFileAPIClient(
+            client_id="id", client_secret="secret", out_dir=self.test_dir
+        )
+        mock_now.return_value = pd.Timestamp("2026-01-19T12:00:00Z")
+        mock_list_downloaded_files.return_value = pd.DataFrame(
+            {
+                "file-name": pd.Series([], dtype="object"),
+                "dataset": pd.Series([], dtype="object"),
+                "file-timestamp": pd.Series([], dtype="datetime64[ns, UTC]"),
+                "path": pd.Series([], dtype="object"),
+            }
+        )
+
+        with self.assertRaisesRegex(ValueError, "future"):
+            client._load_metadata_jsons(date="2026-01-25")
+        mock_logger.warning.assert_not_called()
+        mock_download_full_snapshot.assert_not_called()
+        mock_list_downloaded_files.assert_not_called()
+
+    @patch("macrosynergy.download.dataquery_file_api.logger")
+    def test_get_revisions_notifications(self, mock_logger):
+        client = DataQueryFileAPIClient(
+            client_id="id", client_secret="secret", out_dir=self.test_dir
+        )
+        df = pd.DataFrame({"ticker": ["X"], "observations_affected": [1]})
+        with patch.object(
+            DataQueryFileAPIClient, "_load_metadata_jsons", return_value={}
+        ):
+            out = client.get_revisions_notifications()
+            self.assertTrue(out.empty)
+            mock_logger.warning.assert_called_with(
+                "No `Changed historical values` notifications found."
+            )
+
+        with patch.object(
+            DataQueryFileAPIClient,
+            "_load_metadata_jsons",
+            return_value={"Changed historical values": df},
+        ):
+            out = client.get_revisions_notifications()
+            pd.testing.assert_frame_equal(out, df)
+
+    @patch("macrosynergy.download.dataquery_file_api.logger")
+    def test_get_missing_data_notifications_merge_and_fallbacks(self, mock_logger):
+        client = DataQueryFileAPIClient(
+            client_id="id", client_secret="secret", out_dir=self.test_dir
+        )
+        df1 = pd.DataFrame({"ticker": ["A", "B"], "last_update": ["2020-01-01", None]})
+        df2 = pd.DataFrame({"ticker": ["A"], "additional_information": ["info"]})
+
+        with patch.object(
+            DataQueryFileAPIClient,
+            "_load_metadata_jsons",
+            return_value={
+                "Missing Updates": df1,
+                "Additional information on missing updates": df2,
+            },
+        ):
+            out = client.get_missing_data_notifications()
+            self.assertEqual(out["ticker"].tolist(), ["A", "B"])
+            self.assertIn("additional_information", out.columns)
+
+        mock_logger.reset_mock()
+        with patch.object(
+            DataQueryFileAPIClient,
+            "_load_metadata_jsons",
+            return_value={"Missing Updates": df1},
+        ):
+            out = client.get_missing_data_notifications()
+            pd.testing.assert_frame_equal(out, df1)
+            mock_logger.warning.assert_called_with(
+                "No `Additional information on missing updates` notifications found."
+            )
+
+        mock_logger.reset_mock()
+        with patch.object(
+            DataQueryFileAPIClient,
+            "_load_metadata_jsons",
+            return_value={"Additional information on missing updates": df2},
+        ):
+            out = client.get_missing_data_notifications()
+            pd.testing.assert_frame_equal(out, df2)
+            mock_logger.warning.assert_called_with(
+                "No `Missing Updates` notifications found."
+            )
+
+        mock_logger.reset_mock()
+        with patch.object(
+            DataQueryFileAPIClient, "_load_metadata_jsons", return_value={}
+        ):
+            out = client.get_missing_data_notifications()
+            self.assertTrue(out.empty)
+            mock_logger.warning.assert_called_with(
+                "No `Missing Updates` or related notifications found."
+            )
+
+
+class TestResolveBaseUrl(unittest.TestCase):
+    """Tests for the module-level _resolve_base_url URL-fallback logic."""
+
+    PRIMARY = "https://primary.example.com/api/v2"
+    FALLBACK = "https://fallback.example.com/api/v2"
+
+    def _assert_no_user_warnings(self, callable_fn):
+        """Call *callable_fn* and assert it emits no UserWarning."""
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            result = callable_fn()
+        user_warnings = [w for w in caught if issubclass(w.category, UserWarning)]
+        self.assertEqual(user_warnings, [], f"Unexpected UserWarnings: {user_warnings}")
+        return result
+
+    @patch("requests.head")
+    def test_primary_reachable_returns_primary(self, mock_head):
+        """When the primary URL is reachable, return it with no warning."""
+        mock_head.return_value = MagicMock(status_code=200)
+
+        result = self._assert_no_user_warnings(
+            lambda: _resolve_base_url(self.PRIMARY, self.FALLBACK)
+        )
+
+        self.assertEqual(result, self.PRIMARY)
+        mock_head.assert_called_once()
+
+    @patch("requests.head")
+    def test_primary_unreachable_fallback_works(self, mock_head):
+        """When primary is unreachable but fallback responds, return fallback + warn."""
+
+        def _side_effect(url, **kwargs):
+            if url == self.PRIMARY:
+                raise requests.exceptions.ConnectionError("unreachable")
+            return MagicMock(status_code=200)
+
+        mock_head.side_effect = _side_effect
+
+        with self.assertWarns(UserWarning) as cm:
+            result = _resolve_base_url(self.PRIMARY, self.FALLBACK)
+
+        self.assertEqual(result, self.FALLBACK)
+        self.assertIn("not reachable", str(cm.warning))
+        self.assertIn(self.PRIMARY, str(cm.warning))
+        self.assertIn(self.FALLBACK, str(cm.warning))
+
+    @patch("requests.head")
+    def test_primary_timeout_falls_back(self, mock_head):
+        """A timeout on the primary URL should trigger the fallback path."""
+
+        def _side_effect(url, **kwargs):
+            if url == self.PRIMARY:
+                raise requests.exceptions.Timeout("timed out")
+            return MagicMock(status_code=200)
+
+        mock_head.side_effect = _side_effect
+
+        with self.assertWarns(UserWarning):
+            result = _resolve_base_url(self.PRIMARY, self.FALLBACK)
+
+        self.assertEqual(result, self.FALLBACK)
+
+    @patch("requests.head")
+    def test_both_unreachable_returns_primary(self, mock_head):
+        """When both URLs fail, return primary (let normal error handling surface it)."""
+        mock_head.side_effect = requests.exceptions.ConnectionError("unreachable")
+
+        result = self._assert_no_user_warnings(
+            lambda: _resolve_base_url(self.PRIMARY, self.FALLBACK)
+        )
+
+        self.assertEqual(result, self.PRIMARY)
+        self.assertEqual(mock_head.call_count, 2)
+
+    @patch("requests.head")
+    def test_each_client_instance_probes_independently(self, mock_head):
+        """Each new DataQueryFileAPIClient instance probes the URL fresh."""
+
+        def _side_effect(url, **kwargs):
+            if url == DQ_FILE_API_BASE_URL:
+                raise requests.exceptions.ConnectionError("unreachable")
+            return MagicMock(status_code=200)
+
+        mock_head.side_effect = _side_effect
+
+        with patch.dict(os.environ, {"DQ_CLIENT_ID": "x", "DQ_CLIENT_SECRET": "y"}):
+            with self.assertWarns(UserWarning):
+                client1 = DataQueryFileAPIClient()
+
+            probe_count_after_first = (
+                mock_head.call_count
+            )  # 2 (primary fail + fallback ok)
+
+            with self.assertWarns(UserWarning):
+                client2 = DataQueryFileAPIClient()
+
+            # Second instance must probe again (no global cache)
+            self.assertEqual(mock_head.call_count, probe_count_after_first * 2)
+
+            self.assertEqual(client1.base_url, DQ_FILE_API_FALLBACK_BASE_URL)
+            self.assertEqual(client2.base_url, DQ_FILE_API_FALLBACK_BASE_URL)
+
+    @patch("requests.head")
+    def test_http_error_counts_as_reachable(self, mock_head):
+        """Any HTTP response (even 401/403) means the server is reachable."""
+        mock_head.return_value = MagicMock(status_code=401)
+
+        result = self._assert_no_user_warnings(
+            lambda: _resolve_base_url(self.PRIMARY, self.FALLBACK)
+        )
+
+        self.assertEqual(result, self.PRIMARY)
+        mock_head.assert_called_once()
+
+    @patch("requests.head")
+    def test_passes_verify_and_proxies(self, mock_head):
+        """Ensure verify/proxies kwargs are forwarded to requests.head."""
+        mock_head.return_value = MagicMock(status_code=200)
+        proxies = {"https": "http://proxy:8080"}
+
+        result = _resolve_base_url(
+            self.PRIMARY, self.FALLBACK, verify=False, proxies=proxies
+        )
+
+        self.assertEqual(result, self.PRIMARY)
+        mock_head.assert_called_once_with(
+            self.PRIMARY, timeout=10.0, verify=False, proxies=proxies
+        )
+
+    @patch("requests.head")
+    def test_ssl_error_triggers_fallback(self, mock_head):
+        """SSLError (a RequestException subclass) on primary triggers fallback."""
+
+        def _side_effect(url, **kwargs):
+            if url == self.PRIMARY:
+                raise requests.exceptions.SSLError("cert verify failed")
+            return MagicMock(status_code=200)
+
+        mock_head.side_effect = _side_effect
+
+        with self.assertWarns(UserWarning):
+            result = _resolve_base_url(self.PRIMARY, self.FALLBACK)
+
+        self.assertEqual(result, self.FALLBACK)
+
+    @patch("requests.head")
+    def test_both_fail_with_different_exceptions(self, mock_head):
+        """Primary=ConnectionError, Fallback=Timeout - both fail, returns primary."""
+        call_count = 0
+
+        def _side_effect(url, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                raise requests.exceptions.ConnectionError("unreachable")
+            raise requests.exceptions.Timeout("timed out")
+
+        mock_head.side_effect = _side_effect
+
+        result = self._assert_no_user_warnings(
+            lambda: _resolve_base_url(self.PRIMARY, self.FALLBACK)
+        )
+
+        self.assertEqual(result, self.PRIMARY)
+        self.assertEqual(mock_head.call_count, 2)
+
+    @patch("requests.head")
+    def test_custom_timeout_is_forwarded(self, mock_head):
+        """Custom timeout value is passed through to requests.head."""
+        mock_head.return_value = MagicMock(status_code=200)
+
+        _resolve_base_url(self.PRIMARY, self.FALLBACK, timeout=3.0)
+
+        mock_head.assert_called_once_with(
+            self.PRIMARY, timeout=3.0, verify=True, proxies=None
+        )
+
+    @patch("requests.head")
+    def test_warning_includes_whitelist_guidance(self, mock_head):
+        """The fallback warning must include whitelisting guidance."""
+
+        def _side_effect(url, **kwargs):
+            if url == self.PRIMARY:
+                raise requests.exceptions.ConnectionError("unreachable")
+            return MagicMock(status_code=200)
+
+        mock_head.side_effect = _side_effect
+
+        with self.assertWarns(UserWarning) as cm:
+            _resolve_base_url(self.PRIMARY, self.FALLBACK)
+
+        self.assertIn("whitelist", str(cm.warning).lower())
+
+    @patch("macrosynergy.download.dataquery_file_api.logger")
+    @patch("requests.head")
+    def test_logs_debug_on_primary_failure(self, mock_head, mock_logger):
+        """A debug message is logged when the primary URL fails."""
+
+        def _side_effect(url, **kwargs):
+            if url == self.PRIMARY:
+                raise requests.exceptions.ConnectionError("unreachable")
+            return MagicMock(status_code=200)
+
+        mock_head.side_effect = _side_effect
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            _resolve_base_url(self.PRIMARY, self.FALLBACK)
+
+        mock_logger.debug.assert_called_once()
+        debug_msg = mock_logger.debug.call_args[0][0]
+        self.assertIn("not reachable", debug_msg.lower())
+
+    @patch("macrosynergy.download.dataquery_file_api.logger")
+    @patch("requests.head")
+    def test_logs_warning_on_fallback_activation(self, mock_head, mock_logger):
+        """A warning-level log is emitted when fallback is activated."""
+
+        def _side_effect(url, **kwargs):
+            if url == self.PRIMARY:
+                raise requests.exceptions.ConnectionError("unreachable")
+            return MagicMock(status_code=200)
+
+        mock_head.side_effect = _side_effect
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            _resolve_base_url(self.PRIMARY, self.FALLBACK)
+
+        mock_logger.warning.assert_called_once()
+        log_msg = mock_logger.warning.call_args[0][0]
+        self.assertIn("fallback", log_msg.lower())
+
+    @patch("requests.head")
+    def test_http_500_counts_as_reachable(self, mock_head):
+        """HTTP 500 is a server error but means the host is reachable."""
+        mock_head.return_value = MagicMock(status_code=500)
+
+        result = self._assert_no_user_warnings(
+            lambda: _resolve_base_url(self.PRIMARY, self.FALLBACK)
+        )
+
+        self.assertEqual(result, self.PRIMARY)
+        mock_head.assert_called_once()
 
 
 if __name__ == "__main__":

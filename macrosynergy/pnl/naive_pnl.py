@@ -1456,7 +1456,9 @@ class NaivePnL:
                 df.iloc[8 + i, :] = correlation
 
         mfreq = _map_to_business_day_frequency("M")
-        df.iloc[8 + len(benchmark_tickers), :] = dfw.resample(mfreq).sum().count()
+        df.iloc[8 + len(benchmark_tickers), :] = (
+            dfw.notna().resample(mfreq).sum().ne(0).sum()
+        )
 
         if label_dict is not None:
             if not isinstance(label_dict, dict):

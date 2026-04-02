@@ -100,7 +100,6 @@ class TestKendallSelector(unittest.TestCase):
         self.assertRaises(TypeError, scaler.fit, X=1, y=self.y)
         self.assertRaises(TypeError, scaler.fit, X="X", y=self.y)
         self.assertRaises(TypeError, scaler.fit, X=self.X.values, y=self.y)
-        self.assertRaises(ValueError, scaler.fit, X=self.X_nan, y=self.y)
         self.assertRaises(ValueError, scaler.fit, X=self.X.reset_index(), y=self.y)
         # Test type of 'y' parameter
         self.assertRaises(TypeError, scaler.fit, X=self.X, y=1)

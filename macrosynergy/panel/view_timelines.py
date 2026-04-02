@@ -23,6 +23,7 @@ def view_timelines(
     ncol: int = 3,
     legend_ncol: int = 1,
     same_y: bool = True,
+    y_centre_to_zero: bool = False,
     all_xticks: bool = False,
     xcat_grid: bool = False,
     xcat_labels: Union[Optional[List[str]], Dict] = None,
@@ -41,6 +42,8 @@ def view_timelines(
     legend_fontsize: int = 12,
     blacklist: Dict = None,
     ax_hline: Optional[Dict] = 0.0,
+    footnote: Optional[str] = None,
+    footnote_fontsize: int = 9,
     return_fig: bool = False,
 ):
     """
@@ -73,6 +76,8 @@ def view_timelines(
         number of columns in legend. Default is 1.
     same_y : bool
         if True (default) all plots in facet grid share same y axis.
+    y_centre_to_zero : bool
+        if True, adjusts y-axis limits to be symmetric around zero. Default is False.
     all_xticks : bool
         if True x-axis tick labels are added to all plots in grid. Default is False, i.e
         only the lowest row displays the labels.
@@ -117,11 +122,15 @@ def view_timelines(
     ax_hline : Union[float, Dict]
         if float, this value is used for all cross-sections to draw a horizontal line.
         horizontal line to be drawn at this value. Default is 0.0. This can be a dict
-        with keys as cross-sections and values as the value of the horizontal line. 
+        with keys as cross-sections and values as the value of the horizontal line.
         If none is provided, no horizontal line is drawn.
+    footnote : str
+        Optional text shown at the bottom-left of the figure canvas.
+    footnote_fontsize : int
+        Font size of the footnote. Default is 9.
     """
 
-    msv.timelines(
+    return msv.timelines(
         df=df,
         xcats=xcats,
         cids=cids,
@@ -132,6 +141,7 @@ def view_timelines(
         end=end,
         ncol=ncol,
         same_y=same_y,
+        y_centre_to_zero=y_centre_to_zero,
         all_xticks=all_xticks,
         xcat_grid=xcat_grid,
         xcat_labels=xcat_labels,
@@ -152,6 +162,8 @@ def view_timelines(
         title_xadj=title_xadj,
         blacklist=blacklist,
         ax_hline=ax_hline,
+        footnote=footnote,
+        footnote_fontsize=footnote_fontsize,
         return_fig=return_fig,
     )
 
@@ -202,7 +214,9 @@ if __name__ == "__main__":
         size=(10, 5),
         title="AUD Return and Carry",
         aspect=3,
-        ax_hline=0
+        ax_hline=0,
+        footnote="JPMaQS data",
+        footnote_fontsize=10,
     )
 
     view_timelines(
@@ -214,6 +228,8 @@ if __name__ == "__main__":
         xcat_labels=["Return", "Carry", "Inflation"],
         title="AUD Return, Carry & Inflation",
         aspect=3,
+        footnote="JPMaQS data",
+        footnote_fontsize=10,
     )
 
     view_timelines(dfd, xcats=["CRY"], cids=cids, ncol=4, title="Carry", cs_mean=True)

@@ -15,7 +15,7 @@ from matplotlib.gridspec import GridSpec
 from statsmodels.graphics.tsaplots import plot_acf
 
 from macrosynergy.management.types import QuantamentalDataFrame
-from macrosynergy.visuals.plotter import Plotter
+from macrosynergy.visuals.plotter import Plotter, add_figure_footnote
 
 
 def _get_square_grid(
@@ -190,6 +190,7 @@ class FacetPlot(Plotter):
         compare_series: Optional[str] = None,
         share_y: bool = False,
         share_x: bool = False,
+        y_centre_to_zero: bool = False,
         interpolate: bool = False,
         # xcats_mean: bool = False,
         # title arguments
@@ -198,6 +199,8 @@ class FacetPlot(Plotter):
         title_fontsize: int = 22,
         title_xadjust: Optional[Number] = None,
         title_yadjust: Optional[Number] = None,
+        footnote: Optional[str] = None,
+        footnote_fontsize: int = 9,
         # subplot axis arguments
         ax_grid: bool = False,
         ax_hline: Optional[Number] = 0.0,
@@ -273,6 +276,9 @@ class FacetPlot(Plotter):
             whether to share the y-axis across all plots. Default is `True`.
         share_x : bool
             whether to share the x-axis across all plots. Default is `True`.
+        y_centre_to_zero : bool
+            whether to set the y-limits of all plots to be symmetric around zero. Only
+            applicable when `share_y` is `True`. Default is `False`.
         interpolate : bool
             if `True`, gaps in the time series will be interpolated. Default is `False`.
         figsize : Tuple[Number, Number]
@@ -286,6 +292,10 @@ class FacetPlot(Plotter):
             the x-adjustment of the title. Default is `None`.
         title_yadjust : float
             the y-adjustment of the title. Default is `None`.
+        footnote : Optional[str]
+            Optional text shown at the bottom-left of the figure canvas.
+        footnote_fontsize : int
+            Font size of the footnote. Default is `9`.
         ax_grid : bool
             whether to show the grid on the axes, applied to all plots. Default is
             `True`.
@@ -683,7 +693,8 @@ class FacetPlot(Plotter):
             ymins, ymaxs = zip(*(ax.get_ylim() for ax in ax_list))
             global_min, global_max = min(ymins), max(ymaxs)
             abs_max = max(abs(global_min), abs(global_max))
-            global_min, global_max = -abs_max, abs_max
+            if y_centre_to_zero:
+                global_min, global_max = -abs_max, abs_max
             for ax in ax_list:
                 ax.set_ylim(global_min, global_max)
 
@@ -725,6 +736,7 @@ class FacetPlot(Plotter):
                 re_adj[2] -= leg_width / fig_width
 
         outer_gs.tight_layout(fig, rect=re_adj)
+        add_figure_footnote(fig, footnote=footnote, fontsize=footnote_fontsize)
 
         if save_to_file is not None:
             fig.savefig(save_to_file, dpi=dpi)

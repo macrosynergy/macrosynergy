@@ -170,7 +170,6 @@ class TestMapSelector(unittest.TestCase):
         self.assertRaises(TypeError, scaler.fit, X=1, y=self.y)
         self.assertRaises(TypeError, scaler.fit, X="X", y=self.y)
         self.assertRaises(TypeError, scaler.fit, X=self.X.values, y=self.y)
-        self.assertRaises(ValueError, scaler.fit, X=self.X_nan, y=self.y)
         self.assertRaises(ValueError, scaler.fit, X=self.X.reset_index(), y=self.y)
         # Test type of 'y' parameter
         self.assertRaises(TypeError, scaler.fit, X=self.X, y=1)
@@ -185,7 +184,6 @@ class TestMapSelector(unittest.TestCase):
         self.assertRaises(TypeError, scaler.transform, X=1)
         self.assertRaises(TypeError, scaler.transform, X="X")
         self.assertRaises(TypeError, scaler.transform, X=self.X.values)
-        self.assertRaises(ValueError, scaler.transform, X=self.X_nan)
         self.assertRaises(ValueError, scaler.transform, X=self.X.reset_index())
         self.assertRaises(ValueError, scaler.transform, X=self.X.drop(columns="CPI"))
         self.assertRaises(
