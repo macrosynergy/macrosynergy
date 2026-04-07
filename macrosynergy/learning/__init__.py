@@ -18,6 +18,12 @@ from .preprocessing import (
     BasePanelSelector,
     PanelPCA,
     KendallSignificanceSelector,
+    BaseImputer,
+    ConstantImputer,
+    CrossSectionalImputer,
+    EstimatorImputer,
+    GaussianConditionalImputer,
+    FactorAvailabilitySelector,
 )
 from .model_evaluation import (
     neg_mean_abs_corr,
@@ -94,6 +100,7 @@ __all__ = [
     "LarsSelector",
     "MapSelector",
     "KendallSignificanceSelector",
+    "FactorAvailabilitySelector",
     # transformers
     "BasePanelScaler",
     "PanelMinMaxScaler",
@@ -101,6 +108,12 @@ __all__ = [
     "ZnScoreAverager",
     "PanelPCA",
     "PLSTransformer",
+    # imputers
+    "BaseImputer",
+    "ConstantImputer",
+    "CrossSectionalImputer",
+    "EstimatorImputer",
+    "GaussianConditionalImputer",
     # metrics
     "neg_mean_abs_corr",
     "panel_significance_probability",
