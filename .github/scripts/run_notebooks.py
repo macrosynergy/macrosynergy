@@ -24,10 +24,13 @@ def get_notebooks(bucket_name):
 
     notebooks = [obj.key for obj in bucket.objects.all() if obj.key.endswith(".ipynb")]
 
-    notebooks.remove("Regression-based_macro_trading_signals.ipynb") # Requires 64 GB of memory currently which is too expensive
+    blacklisted_notebooks = [
+        "Regression-based_macro_trading_signals.ipynb",
+        "Macro_trading_signals_with_regression-based_machine_learning.ipynb",
+    ]
+    notebooks = [nb for nb in notebooks if nb not in blacklisted_notebooks]
 
     return notebooks
-
 
 def run_task(
     ecr_image,
