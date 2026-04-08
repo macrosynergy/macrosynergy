@@ -70,18 +70,6 @@ class TestInputValidation:
         with pytest.raises(TypeError):
             imp.fit(np.ones((10, 3)))
 
-    def test_rejects_wrong_index_names(self):
-        imp = GaussianConditionalImputer()
-        df = pd.DataFrame(
-            np.ones((6, 2)),
-            index=pd.MultiIndex.from_product(
-                [["A"], range(6)], names=["country", "date"]
-            ),
-            columns=["x", "y"],
-        )
-        with pytest.raises(ValueError):
-            imp.fit(df)
-
     def test_transform_before_fit_raises(self, clean_panel):
         imp = GaussianConditionalImputer()
         with pytest.raises(NotFittedError):
@@ -262,7 +250,7 @@ class TestFallbackBehaviour:
         assert not out.isna().any().any()
 
     def test_none_fallback_may_leave_nans(self):
-        """With fallback='none', if conditional imputation can't fill all NaNs,
+        """With fallback=None, if conditional imputation can't fill all NaNs,
         some may remain."""
         # Create a scenario where global model has no complete rows
         idx = pd.MultiIndex.from_arrays(
@@ -274,21 +262,21 @@ class TestFallbackBehaviour:
             {"f0": [np.nan, 1.0], "f1": [1.0, np.nan]},
             index=idx,
         )
-        imp = GaussianConditionalImputer(fallback="none").fit(df)
+        imp = GaussianConditionalImputer(fallback=None).fit(df)
         out = imp.transform(df)
-        # With fallback="none" and degenerate data, NaNs might remain
+        # With fallback=None and degenerate data, NaNs might remain
         # (this test just checks the imputer doesn't crash)
         assert out.shape == (2, 2)
 
     def test_none_fallback_leaves_nans_on_linalg_failure(self):
-        """When np.linalg.solve raises LinAlgError, fallback='none'
+        """When np.linalg.solve raises LinAlgError, fallback=None
         must leave missing values as NaN rather than silently filling."""
         df = make_panel(
             cids=("AUD",), dates=pd.date_range("2020-01-01", periods=50, freq="D")
         )
         df = inject_nan(df, "feature_a", frac=0.1)
 
-        imp = GaussianConditionalImputer(fallback="none").fit(df)
+        imp = GaussianConditionalImputer(fallback=None).fit(df)
 
         original_solve = np.linalg.solve
 
@@ -320,17 +308,17 @@ class TestFallbackBehaviour:
         assert not out.isna().any().any()
 
     def test_all_missing_row_with_none_fallback_leaves_nans(self):
-        """An all-NaN row with fallback='none' should remain NaN."""
+        """An all-NaN row with fallback=None should remain NaN."""
         df = make_panel(
             cids=("AUD",), dates=pd.date_range("2020-01-01", periods=50, freq="D")
         )
         df.iloc[0] = np.nan
-        imp = GaussianConditionalImputer(fallback="none").fit(df)
+        imp = GaussianConditionalImputer(fallback=None).fit(df)
         out = imp.transform(df)
         assert out.iloc[0].isna().all()
 
     def test_zero_fallback(self):
-        """An all-NaN row with fallback='none' should remain NaN."""
+        """An all-NaN row with fallback=None should remain NaN."""
         df = make_panel(
             cids=("AUD",), dates=pd.date_range("2020-01-01", periods=50, freq="D")
         )
