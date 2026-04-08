@@ -16,6 +16,7 @@ from sklearn.base import ClassifierMixin, RegressorMixin
 from sklearn.model_selection import BaseCrossValidator, GridSearchCV, RandomizedSearchCV
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
+from sklearn.ensemble import VotingRegressor, VotingClassifier
 from tqdm.auto import tqdm
 
 from macrosynergy.compat import JOBLIB_RETURN_AS
@@ -255,6 +256,7 @@ class BasePanelLearner(ABC):
         normalize_fold_results=False,
         cv_summary="mean",
         include_train_folds=False,
+        model_averaging=False,
         n_iter=100,
         split_functions=None,
         store_additional_data=None,
@@ -294,6 +296,12 @@ class BasePanelLearner(ABC):
             Whether to calculate cross-validation statistics on the training folds in 
             additional to the test folds. If no hyperparameter tuning
             is required, this parameter can be disregarded.
+        model_averaging : bool, optional
+            Whether or not to perform model averaging rather than a hard selection of an
+            optimal model at each point in time. If True, the forecasts of each model are
+            averaged together, weighted by a normalized cross-validation score. Default is
+            False. If no hyperparameter tuning is required, this parameter can be
+            disregarded.
         n_iter : int
             Number of iterations for random or bayesian hyperparameter optimization.
             If no hyperparameter tuning is required, this parameter can be disregarded.
@@ -328,6 +336,7 @@ class BasePanelLearner(ABC):
             normalize_fold_results=normalize_fold_results,
             cv_summary=cv_summary,
             include_train_folds=include_train_folds,
+            model_averaging=model_averaging,
             n_iter=n_iter,
             split_functions=split_functions,
             store_additional_data=store_additional_data,
@@ -357,6 +366,7 @@ class BasePanelLearner(ABC):
                     scorers=scorers,
                     cv_summary=cv_summary,
                     include_train_folds=include_train_folds,
+                    model_averaging=model_averaging,
                     search_type=search_type,
                     store_additional_data=store_additional_data,
                     normalize_fold_results=normalize_fold_results,
@@ -385,6 +395,7 @@ class BasePanelLearner(ABC):
         scorers,
         cv_summary,
         include_train_folds,
+        model_averaging,
         search_type,
         normalize_fold_results,
         store_additional_data,
@@ -421,6 +432,10 @@ class BasePanelLearner(ABC):
             Whether to calculate cross-validation statistics on the training folds in 
             additional to the test folds.
             If no hyperparameter tuning is required, this parameter can be disregarded.
+        model_averaging : bool, optional
+            Whether or not to perform model averaging rather than a hard selection of an
+            optimal model at each point in time. If True, the forecasts of each model are
+            averaged together, weighted by a normalized cross-validation score.
         search_type : str, optional
             Search type for hyperparameter optimization. Default is "grid".
             Options are "grid", "prior" and "bayes".
@@ -506,6 +521,7 @@ class BasePanelLearner(ABC):
                 search_type=search_type,
                 store_additional_data=store_additional_data,
                 normalize_fold_results=normalize_fold_results,
+                model_averaging=model_averaging,
                 n_iter=n_iter,
                 cv_summary=cv_summary,
                 include_train_folds=include_train_folds,
@@ -554,6 +570,7 @@ class BasePanelLearner(ABC):
         search_type,
         store_additional_data,
         normalize_fold_results,
+        model_averaging,
         n_iter,
         cv_summary,
         include_train_folds,
@@ -583,6 +600,10 @@ class BasePanelLearner(ABC):
             retraining date.
         normalize_fold_results : bool
             Whether to normalize the scores across folds before combining them.
+        model_averaging : bool
+            Whether or not to perform model averaging rather than a hard selection of an
+            optimal model at each point in time. If True, the forecasts of each model are
+            averaged together, weighted by a normalized cross-validation score.
         n_iter : int
             Number of iterations for random or bayesian hyperparameter optimization.
         cv_summary : str or callable
@@ -605,14 +626,13 @@ class BasePanelLearner(ABC):
         optim_score = np.float32("-inf")
         optim_params = {}
         optim_additional_data = {}
+        model_cv_summaries = []
 
         cv_splits = []
 
         for splitter in inner_splitters.values():
             cv_splits.extend(list(splitter.split(X=X_train, y=y_train)))
-        # TODO: instead of picking one model, the best hyperparameters could be selected
-        # for each model and then "final" prediction would be the average of the individual
-        # predictions. This would be a simple ensemble method.
+
         for model_name, model in models.items():
             # For each model, find the optimal hyperparameters
             if search_type == "grid":
@@ -621,12 +641,7 @@ class BasePanelLearner(ABC):
                     param_grid=hyperparameters[model_name],
                     scoring=scorers,
                     n_jobs=n_jobs_inner,
-                    refit=partial(
-                        self._model_selection,
-                        cv_summary=cv_summary,
-                        scorers=scorers,
-                        normalize_fold_results=normalize_fold_results,
-                    ),
+                    refit = False,
                     cv=cv_splits,
                     return_train_score = include_train_folds,
                 )
@@ -637,12 +652,7 @@ class BasePanelLearner(ABC):
                     n_iter=n_iter,
                     scoring=scorers,
                     n_jobs=n_jobs_inner,
-                    refit=partial(
-                        self._model_selection,
-                        cv_summary=cv_summary,
-                        scorers=scorers,
-                        normalize_fold_results=normalize_fold_results,
-                    ),
+                    refit = False,
                     cv=cv_splits,
                     return_train_score = include_train_folds,
                 )
@@ -656,36 +666,44 @@ class BasePanelLearner(ABC):
                 )
                 continue
 
-            score = self._model_selection(
-                search_object.cv_results_,
-                cv_summary,
-                scorers,
-                normalize_fold_results,
-                return_index=False,
+            model_cv_summaries.append(
+                pd.DataFrame(search_object.cv_results_).assign(model=model_name)
             )
-            if score > optim_score:
-                optim_name = model_name
-                optim_model = search_object.best_estimator_
-                optim_score = score
-                optim_params = search_object.best_params_
-                if store_additional_data is not None:
-                    for attr in store_additional_data:
-                        optim_additional_data[attr] = getattr(
-                            optim_model, attr, None
-                        )
+
+        optim_name, optim_score, optim_params = self._model_selection(
+            model_cv_summaries,
+            cv_summary,
+            scorers,
+            normalize_fold_results,
+            return_index=False,
+        )
+
+        # Refit the optimal model on the entire training set
+        if not model_averaging:
+            optim_model = models[optim_name].set_params(**optim_params).fit(X_train, y_train)
+        else:
+            optim_model = VotingRegressor(
+                    
+            ) 
+        # Store additional data if specified
+        if store_additional_data is not None:
+            for attr in store_additional_data:
+                optim_additional_data[attr] = getattr(
+                    optim_model, attr, None
+                )
 
         return optim_name, optim_model, optim_score, optim_params, optim_additional_data
 
     def _model_selection(
-        self, cv_results, cv_summary, scorers, normalize_fold_results, return_index=True
+        self, model_cv_summaries, cv_summary, scorers, normalize_fold_results, return_index=True
     ):
         """
         Select the optimal hyperparameters based on a `scikit-learn` cv_results dataframe.
 
         Parameters
         ----------
-        cv_results : dict
-            Cross-validation results dictionary.
+        model_cv_summaries : list of dict
+            List of cross-validation results dictionaries for each model.
         cv_summary : str or callable
             Summary function to condense cross-validation scores in each fold to a single
             value, against which different hyperparameter choices can be compared.
@@ -702,7 +720,7 @@ class BasePanelLearner(ABC):
         int or float
             Either the index of the best estimator or the maximal score itself.
         """
-        cv_results = pd.DataFrame(cv_results)
+        cv_results = pd.concat(model_cv_summaries, axis=0, ignore_index=True)
         metric_columns = [
             col
             for col in cv_results.columns
@@ -774,13 +792,12 @@ class BasePanelLearner(ABC):
         # Now average the summary scores for each scorer
         cv_results["final_score"] = cv_results[summary_cols].mean(axis=1)
 
-        # Return index of best estimator
-        # TODO: handle case where multiple hyperparameter choices have the same score
-        # We currently return the first one
-        if return_index:
-            return cv_results["final_score"].idxmax()
-        else:
-            return cv_results["final_score"].max()
+        optim_idx = cv_results["final_score"].idxmax()
+        optim_name = cv_results.loc[optim_idx, "model"]
+        optim_params = cv_results.loc[optim_idx, "params"]
+        optim_score = cv_results.loc[optim_idx, "final_score"]
+        
+        return optim_name, optim_params, optim_score
 
     def _get_split_results(
         self,
@@ -1309,6 +1326,7 @@ class BasePanelLearner(ABC):
         search_type,
         cv_summary,
         include_train_folds,
+        model_averaging,
         n_iter,
         split_functions,
         store_additional_data,
@@ -1343,6 +1361,10 @@ class BasePanelLearner(ABC):
             Whether to calculate cross-validation statistics on the training folds in 
             additional to the test folds. If True, the cross-validation estimator will be
             a function of both training data and test data.
+        model_averaging : bool
+            Whether to average the predictions of the different models instead of selecting
+            the single best one. If True, the optimal hyperparameters for each model will be
+            selected and the final prediction will be the average of the individual predictions.
         n_iter : int
             Number of iterations for random or bayesian hyperparameter optimization.
         split_functions : dict
@@ -1550,6 +1572,11 @@ class BasePanelLearner(ABC):
                     raise ValueError(
                         "include_train_folds must be True if cv_summary is 'mean-std-ge'."
                     )
+                
+        # model_averaging
+        if not_none_condition:
+            if not isinstance(model_averaging, bool):
+                raise TypeError("model_averaging must be a boolean.")
 
         # n_iter
         if not_none_condition:
