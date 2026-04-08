@@ -286,7 +286,7 @@ def notional_positions(
         means 10%). This is the main parameter for volatility-targeted positioning. That
         method estimates the annualized standard deviation of the signal-based portfolio for
         a 1 USD per signal portfolio based on past variances and covariances of the contract
-        returns. The estimation is managed by the function 
+        returns. The estimation is managed by the function
         :func:`macrosynergy.pnl.historic_portfolio_vol`. Default is None, i.e. the
         volatility-targeting is not applied.
     rebal_freq : str
@@ -301,7 +301,7 @@ def notional_positions(
     lback_meth : str
         the method to use for the lookback period of the volatility-targeting method.
         Default is 'ma' for moving average. Alternative is "xma", for exponential moving
-        average. Again this is passed through to the function 
+        average. Again this is passed through to the function
         :func:`macrosynergy.pnl.historic_portfolio_vol`.
     est_freqs : str or list of str
         the frequencies to use for the estimation of the variance-covariance matrix.
@@ -501,8 +501,8 @@ if __name__ == "__main__":
     cscales = [1.0, 0.5, 0.1]
     csigns = [1, -1, 1]
 
-    hbasket = ["USD_EQ", "EUR_EQ"]
-    hscales = [0.7, 0.3]
+    basket_contracts = ["USD_EQ", "EUR_EQ"]
+    basket_weights = [0.7, 0.3]
 
     df_cs: pd.DataFrame = contract_signals(
         df=df,
@@ -511,9 +511,9 @@ if __name__ == "__main__":
         ctypes=ctypes,
         cscales=cscales,
         csigns=csigns,
-        hbasket=hbasket,
-        hscales=hscales,
-        hratios="HR",
+        basket_contracts=basket_contracts,
+        basket_weights=basket_weights,
+        hedge_xcat="HR",
     )
 
     fids: List[str] = [f"{cid}_{ctype}" for cid in cids for ctype in ctypes]

@@ -35,6 +35,7 @@ def timelines(
     square_grid: bool = False,
     legend_ncol: int = 1,
     same_y: bool = True,
+    y_centre_to_zero: bool = False,
     all_xticks: bool = False,  # ~(same_x) basically
     xcat_grid: bool = False,
     xcat_labels: Union[Optional[List[str]], Dict] = None,
@@ -53,6 +54,8 @@ def timelines(
     legend_fontsize: int = 12,
     blacklist: Dict = None,
     ax_hline: Union[float, Dict] = None,
+    footnote: Optional[str] = None,
+    footnote_fontsize: int = 9,
     return_fig: bool = False,
 ):
     """
@@ -84,6 +87,8 @@ def timelines(
         number of columns in legend. Default is 1.
     same_y : bool
         if True (default) all plots in facet grid share same y axis.
+    y_centre_to_zero : bool
+        if True, adjusts y-axis limits to be symmetric around zero. Default is False.
     all_xticks : bool
         if True x-axis tick labels are added to all plots in grid. Default is False, i.e
         only the lowest row displays the labels.
@@ -125,6 +130,10 @@ def timelines(
         font size of legend. Default is 12.
     blacklist : dict
         cross-sections with date ranges that should be excluded from the dataframe.
+    footnote : str
+        Optional text shown at the bottom-left of the figure canvas.
+    footnote_fontsize : int
+        Font size of the footnote. Default is 9.
     """
 
     if not isinstance(df, pd.DataFrame):
@@ -229,7 +238,6 @@ def timelines(
             if not all([x in xcat_labels for x in xcats]):
                 raise ValueError("Keys in `xcat_labels` must be a subset of `xcats`.")
             xcat_labels = [xcat_labels[x] for x in xcats if x in xcat_labels]
-        
 
     if cid_labels:
         if isinstance(cid_labels, list):
@@ -244,7 +252,7 @@ def timelines(
     if cs_mean:
         if xcat_labels is None:
             xcat_labels = [xcats[0]]
-            
+
         if len(xcat_labels) == 1:
             xcat_labels.append("Cross-Sectional Mean")
 
@@ -275,6 +283,7 @@ def timelines(
             fig = fp.lineplot(
                 share_y=same_y,
                 share_x=not all_xticks,
+                y_centre_to_zero=y_centre_to_zero,
                 figsize=size,
                 xcat_grid=True,
                 facet_titles=xcat_labels or None,
@@ -290,6 +299,9 @@ def timelines(
                 legend_fontsize=legend_fontsize,
                 interpolate=cumsum,
                 ax_hline=ax_hline,
+                footnote=footnote,
+                footnote_fontsize=footnote_fontsize,
+                show=not return_fig,
                 return_figure=return_fig,
             )
 
@@ -317,6 +329,9 @@ def timelines(
                 legend_fontsize=legend_fontsize,
                 legend_labels=xcat_labels or None,
                 ax_hline=ax_hline,
+                footnote=footnote,
+                footnote_fontsize=footnote_fontsize,
+                show=not return_fig,
                 return_figure=return_fig,
             )
 
@@ -361,6 +376,9 @@ def timelines(
                 legend_fontsize=legend_fontsize,
                 interpolate=cumsum,
                 ax_hline=ax_hline,
+                footnote=footnote,
+                footnote_fontsize=footnote_fontsize,
+                show=not return_fig,
                 return_figure=return_fig,
             )
 

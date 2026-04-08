@@ -22,6 +22,8 @@ def view_metrics(
     metric: str = "eop_lag",
     title: Optional[str] = None,
     figsize: Optional[Tuple[float]] = (14, None),
+    footnote: Optional[str] = None,
+    footnote_fontsize: int = 9,
 ) -> None:
     """
     A function to visualise the `eop_lag`, `mop_lag` or `grading` metrics for a given
@@ -54,6 +56,10 @@ def view_metrics(
     figsize : Tuple[float]
         Tuple (w, h) of width and height of graph. Default is None, meaning it is set in
         accordance with df.
+    footnote : str
+        Optional text shown at the bottom-left of the figure canvas.
+    footnote_fontsize : int
+        Font size of the footnote. Default is 9.
 
     Raises
     ------
@@ -79,6 +85,8 @@ def view_metrics(
         metric=metric,
         title=title,
         figsize=figsize,
+        footnote=footnote,
+        footnote_fontsize=footnote_fontsize,
     )
 
 
@@ -104,6 +112,7 @@ if __name__ == "__main__":
     view_metrics(
         df=dfx,
         xcat="FX",
+        footnote="JPMaQS data"
     )
     view_metrics(
         df=dfx,

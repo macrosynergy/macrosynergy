@@ -4,13 +4,14 @@ machine learning.
 """
 
 import numbers
+import warnings
+from typing import Union, Tuple, List, Dict
 
 import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
-from sklearn.feature_selection import SelectorMixin
 from sklearn.pipeline import Pipeline
 
 from macrosynergy.learning import ExpandingIncrementPanelSplit
@@ -58,9 +59,11 @@ class SignalOptimizer(BasePanelLearner):
     generate_labels : callable
         Function to transform the response variable into either alternative regression
         targets or classification labels. Default is None.
-    drop_nas : bool
-        Whether to drop rows with NaN values in the dataframe. Default is True.
-        If False, only the rows with NaN values in the dependent variable are dropped.
+    drop_nas : bool, str
+        Strategy for dealing with NaNs in the data. Valid arguments are True, False,
+        "X", or "y". If True, then all NaNs are removed from the data. "X" means
+        only NaNs in independent variables are dropped. "y" means only NaNs in dependent
+        variables are dropped. Default is True.
 
     Notes
     -----
@@ -112,7 +115,7 @@ class SignalOptimizer(BasePanelLearner):
         lag=1,
         xcat_aggs=["last", "sum"],
         generate_labels=None,
-        drop_nas = True
+        drop_nas=True,
     ):
         # Run checks and necessary dataframe massaging
         super().__init__(
@@ -210,6 +213,7 @@ class SignalOptimizer(BasePanelLearner):
         include_train_folds=False,
         min_cids=4,
         min_periods=12 * 3,
+        min_xcats=1,
         test_size=1,
         max_periods=None,
         split_functions=None,
@@ -269,6 +273,8 @@ class SignalOptimizer(BasePanelLearner):
         min_periods : int, optional
             Minimum number of periods required for the initial training set, in units of
             the frequency `freq` specified in the constructor. Default is 36.
+        min_xcats : int, optional
+            Minimum number of xcats required for the initial training set. Default is 1.
         test_size : int, optional
             Number of periods to pass before retraining a selected model. Default is 1.
         max_periods : int, optional
@@ -321,7 +327,7 @@ class SignalOptimizer(BasePanelLearner):
             min_cids=min_cids,
             min_periods=min_periods,
             max_periods=max_periods,
-            drop_nas=self.drop_nas,
+            min_xcats=min_xcats,
         )
 
         results = self.run(
@@ -525,19 +531,30 @@ class SignalOptimizer(BasePanelLearner):
             else:
                 preds = optimal_model.predict(X_test)
         else:
-            preds = np.zeros(X_test.shape[0])
+            preds = np.zeros(y_test.shape)
 
         prediction_data = [adjusted_test_index, preds]
 
-        feature_names = np.array(X_train.columns)
         if isinstance(optimal_model, Pipeline):
             final_estimator = optimal_model[-1]
-            for _, transformer in reversed(optimal_model.steps):
-                if isinstance(transformer, SelectorMixin):
-                    feature_names = transformer.get_feature_names_out()
-                    break
+            feature_names_getter = getattr(
+                optimal_model[-2], "get_feature_names_out", None
+            )
+
+            if feature_names_getter is not None:
+                feature_names = feature_names_getter()
+            else:
+                feature_names = []
+                warnings.warn(
+                    "Unable to infer feature names. This is likely because one or"
+                    "more steps in the Pipeline are missing the `get_feature_names_out` method."
+                    "This may make it impossible to produce feature selection and feature "
+                    "importance plots later on",
+                    UserWarning,
+                )
         else:
             final_estimator = optimal_model
+            feature_names = np.array(X_train.columns)
 
         coefs = np.full(X_train.shape[1], np.nan)
 
@@ -578,14 +595,9 @@ class SignalOptimizer(BasePanelLearner):
             intercepts = np.nan
 
         # Get feature selection information
-        if len(feature_names) == X_train.shape[1]:
-            # Then all features were selected
-            ftr_selection_data = [timestamp] + [1 for _ in feature_names]
-        else:
-            # Then some features were excluded
-            ftr_selection_data = [timestamp] + [
-                1 if name in feature_names else 0 for name in np.array(X_train.columns)
-            ]
+        ftr_selection_data = [timestamp] + [
+            1 if name in feature_names else 0 for name in X_train.columns
+        ]
 
         ftr_corr_data = self._get_ftr_corr_data(
             pipeline_name, optimal_model, X_train, timestamp
@@ -950,6 +962,43 @@ class SignalOptimizer(BasePanelLearner):
         plt.yticks(fontsize=tick_fontsize)
         plt.show()
 
+    def available_cid_heatmap(
+        self,
+        title: str = "Number of Available CIDs Heatmap",
+        figsize: Tuple[int, int] = (12, 8),
+        start_date: Union[str, pd.Timestamp] = None,
+        tick_fontsize: int = None,
+    ) -> None:
+        """
+        Visualise the number of cids with data for each xcat at each date
+
+        Parameters
+        ----------
+        title : str
+            Title of the heatmap. Default is "Number of Available CIDs Heatmap""
+        figsize : tuple of floats or ints, optional
+            Tuple of floats or ints denoting the figure size. Default is (12, 8).
+        start_date : str or pd.Timestamp, optional
+            Show data from this date onwards
+        tick_fontsize: int, optional
+            Font size of the ticks on the heatmap. Default is None.
+        """
+        data = (
+            self.X[self.X.index.get_level_values("real_date") >= start_date]
+            if start_date else self.X
+        )
+
+        cid_count = data.groupby(level="real_date").count()
+        cid_count.index = cid_count.index.date
+
+        plt.figure(figsize=figsize)
+        sns.heatmap(cid_count.T, cmap="rocket_r")
+        plt.title(title)
+        plt.xticks(fontsize=tick_fontsize)
+        plt.yticks(fontsize=tick_fontsize)
+        plt.show()
+
+
     def _checks_feature_selection_heatmap(
         self,
         name: str,
@@ -1020,6 +1069,102 @@ class SignalOptimizer(BasePanelLearner):
         if tick_fontsize is not None:
             if not isinstance(tick_fontsize, int):
                 raise TypeError("The tick_fontsize argument must be an integer.")
+
+    def available_cid_heatmap(
+        self,
+        title: str = "Number of Available CIDs Heatmap",
+        figsize: Tuple[int, int] = (12, 8),
+        xcats: List[str] = None,
+        xcat_labels: Dict[str, str] = None,
+        start_date: Union[str, pd.Timestamp] = None,
+        tick_fontsize: int = None,
+        title_fontsize: int = None,
+    ) -> None:
+        """
+        Visualise the number of cids with data for each xcat at each date
+
+        Parameters
+        ----------
+        title : str
+            Title of the heatmap. Default is "Number of Available CIDs Heatmap""
+        figsize : tuple of floats or ints, optional
+            Tuple of floats or ints denoting the figure size. Default is (12, 8).
+        xcats : List[str], optional
+            A list of xcats to include in the heatmap. Default is None.
+        xcat_labels: Dict[str, str], optional
+            A dictionary which renames xcats for plotting. Default is None.
+        start_date : str or pd.Timestamp, optional
+            Show data from this date onwards
+        tick_fontsize: int, optional
+            Font size of the ticks on the heatmap. Default is None.
+        title_fontsize: int, optional
+            Font size of the title of the heatmap. Default is None.
+        """
+        self._check_available_cid_heatmap(
+            title=title,
+            figsize=figsize,
+            xcats=xcats,
+            xcats_labels=xcat_labels,
+            start_date=start_date,
+            tick_fontsize=tick_fontsize,
+            title_fontsize=title_fontsize,
+        )
+
+        data = (
+            self.X[self.X.index.get_level_values("real_date") >= start_date]
+            if start_date else self.X
+        )
+
+        if xcats is not None:
+            data = data[xcats]
+
+        if xcat_labels is not None:
+            data = data.rename(xcat_labels, axis="columns")
+
+        cid_count = data.groupby(level="real_date").count()
+        cid_count.index = cid_count.index.date
+
+        plt.figure(figsize=figsize)
+        sns.heatmap(cid_count.T, cmap="rocket_r")
+        plt.title(title, fontsize=title_fontsize)
+        plt.xticks(fontsize=tick_fontsize)
+        plt.yticks(fontsize=tick_fontsize)
+        plt.show()
+
+    def _check_available_cid_heatmap(
+        self,
+        title: str,
+        figsize: Tuple[int, int],
+        xcats: List[str],
+        xcats_labels: Dict[str, str],
+        start_date: Union[str, pd.Timestamp],
+        tick_fontsize: int,
+        title_fontsize: int,
+    ) -> None:
+        if not isinstance(title, str):
+            raise TypeError("title must be a string.")
+
+        if not isinstance(figsize, tuple):
+            raise TypeError("figsize must be a tuple.")
+
+        if len(figsize) != 2:
+            raise ValueError("The figsize argument must be a tuple of length 2.")
+
+        if xcats is not None and not isinstance(xcats, list):
+            raise TypeError("The xcats argument must be a list.")
+
+        if xcats_labels is not None and not isinstance(xcats_labels, dict):
+            raise TypeError("The xcats_labels argument must be a dictionary.")
+
+        if start_date is not None and not isinstance(start_date, (str, pd.Timestamp)):
+            raise TypeError("The start_date argument must be a pd.Timestamp or str.")
+
+        if tick_fontsize is not None and not isinstance(tick_fontsize, int):
+            raise TypeError("The tick_fontsize argument must be an integer.")
+
+        if title_fontsize is not None and not isinstance(title_fontsize, int):
+            raise TypeError("The title_fontsize argument must be an integer.")
+
 
     def correlations_heatmap(
         self,

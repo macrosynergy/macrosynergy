@@ -16,8 +16,10 @@ class TestAll(unittest.TestCase):
         tracker = 0
         n_vals -= n_cids
 
-        for cid in cids[:-1]:
-            index = random.randint(1, n_vals)
+        remaining_cids = len(cids[:-1])
+        for i, cid in enumerate(cids[:-1]):
+            max_index = n_vals - (remaining_cids - i)
+            index = random.randint(1, max_index)
             arr[tracker : (tracker + index)] = np.repeat(cid, index)
 
             tracker += index

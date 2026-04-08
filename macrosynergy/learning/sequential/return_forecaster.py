@@ -2,10 +2,10 @@
 Class to produce point forecasts of returns given knowledge of an indicator state on a
 specific date.
 """
+import warnings
 
 import numpy as np
 import pandas as pd
-from sklearn.feature_selection import SelectorMixin
 from sklearn.pipeline import Pipeline
 
 from macrosynergy.learning.sequential import BasePanelLearner
@@ -484,15 +484,26 @@ class ReturnForecaster(BasePanelLearner):
             and correlations between inputs to pipelines and those entered into a final
             model.
         """
-        feature_names = np.array(X_train.columns)
         if isinstance(optimal_model, Pipeline):
             final_estimator = optimal_model[-1]
-            for _, transformer in reversed(optimal_model.steps):
-                if isinstance(transformer, SelectorMixin):
-                    feature_names = transformer.get_feature_names_out()
-                    break
+            feature_names_getter = getattr(
+                optimal_model[-2], "get_feature_names_out", None
+            )
+
+            if feature_names_getter is not None:
+                feature_names = feature_names_getter()
+            else:
+                feature_names = []
+                warnings.warn(
+                    "Unable to infer feature names. This is likely because one or"
+                    "more steps in the Pipeline are missing the `get_feature_names_out` method."
+                    "This may make it impossible to produce feature selection and feature "
+                    "importance plots later on",
+                    UserWarning,
+                )
         else:
             final_estimator = optimal_model
+            feature_names = np.array(X_train.columns)
 
         coefs = np.full(X_train.shape[1], np.nan)
 
@@ -529,14 +540,9 @@ class ReturnForecaster(BasePanelLearner):
             intercepts = np.nan
 
         # Get feature selection information
-        if len(feature_names) == X_train.shape[1]:
-            # Then all features were selected
-            ftr_selection_data = [timestamp] + [1 for _ in feature_names]
-        else:
-            # Then some features were excluded
-            ftr_selection_data = [timestamp] + [
-                1 if name in feature_names else 0 for name in np.array(X_train.columns)
-            ]
+        ftr_selection_data = [timestamp] + [
+            1 if name in feature_names else 0 for name in X_train.columns
+        ]
 
         ftr_corr_data = self._get_ftr_corr_data(
             pipeline_name, optimal_model, X_train, timestamp

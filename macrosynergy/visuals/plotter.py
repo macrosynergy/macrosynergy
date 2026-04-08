@@ -20,6 +20,44 @@ from macrosynergy.management.types import QuantamentalDataFrame
 logger = logging.getLogger(__name__)
 
 
+def add_figure_footnote(
+    fig: plt.Figure,
+    footnote: Optional[str] = None,
+    fontsize: int = 9,
+    xpad: float = 0.01,
+    ypad: float = 0.01,
+) -> None:
+    """
+    Add a footnote to the bottom-left of a figure canvas.
+
+    Parameters
+    ----------
+    fig : plt.Figure
+        Figure to annotate.
+    footnote : str
+        Optional text to place at the bottom-left of the figure canvas.
+    fontsize : int
+        Font size of the footnote. Default is 9.
+    xpad : float
+        Horizontal figure-coordinate padding from the left edge. Default is 0.01.
+    ypad : float
+        Vertical figure-coordinate padding from the bottom edge. Default is 0.01.
+    """
+
+    if not footnote:
+        return
+
+    fig.text(
+        xpad,
+        ypad,
+        footnote,
+        ha="left",
+        va="bottom",
+        fontsize=fontsize,
+        alpha=0.8,
+    )
+
+
 class PlotterMetaClass(type):
     """
     Metaclass for the Plotter class. The purpose of this metaclass is to wrap all

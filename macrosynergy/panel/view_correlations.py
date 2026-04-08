@@ -14,6 +14,7 @@ def correl_matrix(
     df: pd.DataFrame,
     xcats: Union[str, List[str]] = None,
     cids: List[str] = None,
+    tickers: Optional[List[str]] = None,
     xcats_secondary: Optional[Union[str, List[str]]] = None,
     cids_secondary: Optional[List[str]] = None,
     start: str = None,
@@ -32,6 +33,9 @@ def correl_matrix(
     xcat_secondary_labels: Optional[Union[List[str], Dict[str, str]]] = None,
     cid_labels: Optional[Union[List[str], Dict[str, str]]] = None,
     cid_secondary_labels: Optional[Union[List[str], Dict[str, str]]] = None,
+    ticker_labels: Optional[Union[List[str], Dict[str, str]]] = None,
+    footnote: Optional[str] = None,
+    footnote_fontsize: int = 9,
     **kwargs: Any,
 ):
     """
@@ -50,6 +54,10 @@ def correl_matrix(
         be mirrored in the correlation matrix.
     cids : List[str]
         cross sections to be correlated. Default is all in the DataFrame.
+    tickers : List[str], optional
+        specific tickers to correlate (format: "CID_XCAT", e.g. "USD_FXXR_NSA").
+        If provided, correlations will be calculated between the full ticker combinations.
+        Cannot be used together with xcats/cids or xcats_secondary/cids_secondary.
     xcats_secondary : List[str]
         an optional second set of extended categories. If `xcats_secondary` is provided,
         correlations will be calculated between the categories in `xcats` and `xcats_secondary`.
@@ -101,6 +109,13 @@ def correl_matrix(
         order as cids, a dictionary should map from each cid to its label.
     cid_secondary_labels : Optional[Union[List[str], Dict[str, str]]]
         optional list or dictionary of labels for cids_secondary.
+    ticker_labels : Optional[Union[List[str], Dict[str, str]]]
+        optional list or dictionary of labels for tickers. A list should be in the same
+        order as tickers, a dictionary should map from each ticker to its label.
+    footnote : str
+        Optional text shown at the bottom-left of the figure canvas.
+    footnote_fontsize : int
+        Font size of the footnote. Default is 9.
     **kwargs : Dict
         Arbitrary keyword arguments that are passed to seaborn.heatmap.
 
@@ -117,6 +132,7 @@ def correl_matrix(
         df=df,
         xcats=xcats,
         cids=cids,
+        tickers=tickers,
         xcats_secondary=xcats_secondary,
         cids_secondary=cids_secondary,
         start=start,
@@ -135,6 +151,9 @@ def correl_matrix(
         xcat_secondary_labels=xcat_secondary_labels,
         cid_labels=cid_labels,
         cid_secondary_labels=cid_secondary_labels,
+        ticker_labels=ticker_labels,
+        footnote=footnote,
+        footnote_fontsize=footnote_fontsize,
         **kwargs,
     )
 
@@ -203,4 +222,6 @@ if __name__ == "__main__":
         lags_secondary=None,
         annot=True,
         fmt=".2f",
+        footnote="JPMaQS data",
+        footnote_fontsize=10,
     )
