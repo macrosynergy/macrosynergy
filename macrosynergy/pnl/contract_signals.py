@@ -9,10 +9,8 @@ from numbers import Number
 from typing import List, Union, Tuple, Optional, Set, Any, Dict
 
 from macrosynergy.management.types import NoneType, QuantamentalDataFrame
-from macrosynergy.panel import make_relative_value
 from macrosynergy.management.utils import (
     is_valid_iso_date,
-    update_df,
     reduce_df,
     estimate_release_frequency,
 )
@@ -109,16 +107,56 @@ def _check_estimation_frequency(df_wide: pd.DataFrame, rebal_freq: str) -> pd.Da
     return df_wide
 
 
-def _make_relative_value(
-    df: pd.DataFrame,
-    sig: str,
-    *args,
-    **kwargs,
+def _apply_relative_value(
+    df_positions: pd.DataFrame,
+    cids: List[str],
+    ctypes: List[str],
 ) -> pd.DataFrame:
-    assert isinstance(df, QuantamentalDataFrame), "`df` must be a QuantamentalDataFrame"
-    return make_relative_value(
-        df=df[df["xcat"] == sig], xcats=[sig], postfix="", *args, **kwargs
-    )
+    """
+    For each contract type, subtract the cross-sectional mean of positions at
+    each date. Because positions already include csign and cscale, this is
+    equivalent to adding an equal-weighted opposite-sign basket of positions
+    across all concurrently tradable cross-sections - the basket inherits
+    csigns (negated) and cscales from the positions it offsets.
+
+    For each ctype i, at each date t:
+        rv_pos(c, i, t) = pos(c, i, t) - mean_t(pos(·, i, t))
+
+    Non-NaN positions define the tradable set per date. Blacklisted or
+    unavailable cross-sections have NaN positions and are excluded from the
+    mean automatically.
+
+    Parameters
+    ----------
+    df_positions : pd.DataFrame
+        Wide-format DataFrame with columns "{cid}_{ctype}_CSIG", indexed by real_date.
+        Produced by _gen_contract_signals.
+    cids : List[str]
+        Cross-sections in the strategy.
+    ctypes : List[str]
+        Contract types in the strategy.
+
+    Returns
+    -------
+    pd.DataFrame
+        Same shape, with positions replaced by their relative values.
+    """
+    for ctype in ctypes:
+        # Collect columns for this ctype across all cids
+        ctype_cols = [f"{cid}_{ctype}_CSIG" for cid in cids]
+        ctype_cols = [c for c in ctype_cols if c in df_positions.columns]
+
+        if len(ctype_cols) == 0:
+            continue
+
+        # Cross-sectional mean of positions for this ctype (NaN-aware)
+        pos_mean = df_positions[ctype_cols].mean(axis=1)
+
+        # Subtract: position - mean(positions)
+        for col in ctype_cols:
+            df_positions[col] = df_positions[col] - pos_mean
+
+    return df_positions
 
 
 def _gen_contract_signals(
@@ -340,9 +378,10 @@ def contract_signals(
         return, often called "beta". The values of this category determine the direction
         and size of the overall hedge basket per unit of the cross-section-specific signal.
     relative_value : bool
-        If False (default), no relative value is calculated. If True boolean, relative
-        value is calculated for all cids in the strategy. # TODO split above
-        `relative_value` argument into two: `relative_value` and `relative_value_cids`?
+        If False (default), signals are calculated as is. If True, each position is made
+        relative to the equal-weighted cross-sectional mean of positions per contract
+        type - equivalent to adding an opposite-sign basket of positions (with cscales
+        and negated csigns) across all concurrently tradable cross-sections.
     start : str
         earliest date in ISO format. Default is None and earliest date in df is used.
     end : str
@@ -424,27 +463,8 @@ def contract_signals(
 
     # Actual calculation
 
-    ## Calculate relative value if requested
-    if relative_value:
-        rel_signals = _make_relative_value(
-            df=df,
-            sig=sig,
-            blacklist=blacklist,
-            cids=cids,
-            start=start,
-            end=end,
-            *args,
-            **kwargs,
-        )
-        df = update_df(df=df, df_add=rel_signals)
-
     ## Cast the dataframe to wide format
     df_wide: pd.DataFrame = QuantamentalDataFrame(df=df).to_wide()
-
-    ## Check rebal_freq or downsample the dataframe
-    # df_wide: pd.DataFrame = _check_estimation_frequency(
-    #     df_wide=df_wide, rebal_freq=rebal_freq
-    # )
 
     ## Generate primary contract signals
     df_contract_signals: pd.DataFrame = _gen_contract_signals(
@@ -455,6 +475,14 @@ def contract_signals(
         cscales=cscales,
         csigns=csigns,
     )
+
+    ## Apply relative value at the position level if requested
+    if relative_value:
+        df_contract_signals = _apply_relative_value(
+            df_positions=df_contract_signals,
+            cids=cids,
+            ctypes=ctypes,
+        )
 
     ## Generate hedge contract signals
     df_hedge_signals: Optional[pd.DataFrame] = None
