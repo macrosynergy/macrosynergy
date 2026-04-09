@@ -256,6 +256,8 @@ def is_valid_xcat(xcat_str: str) -> bool:
     """
     xcat_chars = string.ascii_letters + string.digits + "_"
     if xcat_str.startswith("i"):
+        if "_" not in xcat_str:
+            return False
         if (get_cid(xcat_str) + "_" + get_xcat(xcat_str)) != xcat_str:
             return False
     if len(set(xcat_str) - set(xcat_chars)) > 0:
