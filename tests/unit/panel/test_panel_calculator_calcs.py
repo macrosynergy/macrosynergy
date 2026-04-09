@@ -756,12 +756,25 @@ class TestPanelCalculatorCalcStrings(unittest.TestCase):
                 singles_used,
                 single_cids,
             ) = _get_xcats_used(ops)
-
+            error_message = f"Failed for case({key}) `{calc_str}`"
             self.assertEqual(
-                set(all_xcats_used), set(expected_output["all_xcats_used"])
+                set(all_xcats_used),
+                set(expected_output["all_xcats_used"]),
+                msg=error_message
+                + f" -- expected `all_xcats_used` = {expected_output['all_xcats_used']}, got {all_xcats_used}",
             )
-            self.assertEqual(set(singles_used), set(expected_output["singles_used"]))
-            self.assertEqual(set(single_cids), set(expected_output["single_cids"]))
+            self.assertEqual(
+                set(singles_used),
+                set(expected_output["singles_used"]),
+                msg=error_message
+                + f" -- expected `singles_used` = {expected_output['singles_used']}, got {singles_used}",
+            )
+            self.assertEqual(
+                set(single_cids),
+                set(expected_output["single_cids"]),
+                msg=error_message
+                + f" -- expected `single_cids` = {expected_output['single_cids']}, got {single_cids}",
+            )
 
         print(f"Tested {len(test_cases)} calculation strings successfully.")
 
