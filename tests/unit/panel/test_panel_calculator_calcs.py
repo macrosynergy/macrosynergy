@@ -659,6 +659,86 @@ TEST_CASES = {
             "single_cids": [],
         },
     },
+    83: {
+        "calc_str": "XR_LO = np.clip( XR , a_min=0, a_max=np.inf )",
+        "output": {
+            "all_xcats_used": ["XR"],
+            "singles_used": [],
+            "single_cids": [],
+        },
+    },
+    84: {
+        "calc_str": "XR_CLEAN = np.where( np.isinf( XR ), 0, XR )",
+        "output": {
+            "all_xcats_used": ["XR"],
+            "singles_used": [],
+            "single_cids": [],
+        },
+    },
+    85: {
+        "calc_str": "XR_CLEAN = np.where( np.isnan( XR ), CRY, XR )",
+        "output": {
+            "all_xcats_used": ["XR", "CRY"],
+            "singles_used": [],
+            "single_cids": [],
+        },
+    },
+    86: {
+        "calc_str": "XR_CLIP = np.clip( XR - iUSD_INFL , a_min=0, a_max=np.inf )",
+        "output": {
+            "all_xcats_used": ["XR", "INFL"],
+            "singles_used": ["iUSD_INFL"],
+            "single_cids": ["USD"],
+        },
+    },
+    87: {
+        "calc_str": "GROWTH_LO = np.clip( GROWTH , a_min=0, a_max=np.inf )",
+        "output": {
+            "all_xcats_used": ["GROWTH"],
+            "singles_used": [],
+            "single_cids": [],
+        },
+    },
+    88: {
+        "calc_str": "XR_BOUND = np.clip( XR , a_min=-np.inf, a_max=np.inf )",
+        "output": {
+            "all_xcats_used": ["XR"],
+            "singles_used": [],
+            "single_cids": [],
+        },
+    },
+    89: {
+        "calc_str": "XR_CLEAN = np.where( np.isinf( XR ) | np.isnan( XR ), 0, XR )",
+        "output": {
+            "all_xcats_used": ["XR"],
+            "singles_used": [],
+            "single_cids": [],
+        },
+    },
+    90: {
+        "calc_str": "XR_VALID = np.where( np.isfinite( XR ), XR, CRY )",
+        "output": {
+            "all_xcats_used": ["XR", "CRY"],
+            "singles_used": [],
+            "single_cids": [],
+        },
+    },
+    91: {
+        "calc_str": "XR_IMG = np.imag( XR ) + np.real( CRY )",
+        "output": {
+            "all_xcats_used": ["XR", "CRY"],
+            "singles_used": [],
+            "single_cids": [],
+        },
+    },
+    92: {
+        "calc_str": "NEW1 = np.clip( GROWTH - iEUR_INFL , a_min=-np.inf, a_max=np.inf )",
+        "output": {
+            "all_xcats_used": ["GROWTH", "INFL"],
+            "singles_used": ["iEUR_INFL"],
+            "single_cids": ["EUR"],
+        },
+    },
 }
 
 
@@ -682,8 +762,8 @@ class TestPanelCalculatorCalcStrings(unittest.TestCase):
             )
             self.assertEqual(set(singles_used), set(expected_output["singles_used"]))
             self.assertEqual(set(single_cids), set(expected_output["single_cids"]))
-            
-        print(f'Tested {len(test_cases)} calculation strings successfully.')
+
+        print(f"Tested {len(test_cases)} calculation strings successfully.")
 
 
 if __name__ == "__main__":
