@@ -3,11 +3,7 @@ import pandas as pd
 import pytest
 from sklearn.exceptions import NotFittedError
 
-from macrosynergy.learning.preprocessing.imputers.imputers import (
-    CrossSectionalImputer,
-    CIDS_INDEX_NAME,
-    DATE_INDEX_NAME,
-)
+from macrosynergy.learning.preprocessing.imputers.imputers import CrossSectionalImputer
 
 
 @pytest.fixture
@@ -22,7 +18,7 @@ def data():
     cids = ["CAD", "USD", "GBP", "EUR"]
     dates = pd.to_datetime(["2020-01-01", "2020-01-02", "2020-01-03"])
     index = pd.MultiIndex.from_product(
-        [cids, dates], names=[CIDS_INDEX_NAME, DATE_INDEX_NAME]
+        [cids, dates], names=["cid", "real_date"]
     )
     data = pd.DataFrame(
         index=index,
@@ -86,7 +82,7 @@ def test_peer_mean_imputation_basic(data):
 
     peer_map = {"CAD": ["USD", "GBP"]}
 
-    imputer = CrossSectionalImputer(peer_map=peer_map, fallback="none")
+    imputer = CrossSectionalImputer(peer_map=peer_map, fallback=None)
     out = imputer.fit_transform(data).sort_index()
 
     result_feature_A = out.loc[("CAD", "2020-01-01"), "feature_A"]
@@ -107,7 +103,7 @@ def test_peer_map_filters_missing_peers(data):
     data.loc[("CAD", "2020-01-01"), "feature_A"] = np.nan
 
     imputer = CrossSectionalImputer(
-        peer_map={"CAD": ["USD", "XXX", "GBP"]}, fallback="none"
+        peer_map={"CAD": ["USD", "XXX", "GBP"]}, fallback=None
     )
     out = imputer.fit_transform(data).sort_index()
 
@@ -139,7 +135,7 @@ def test_default_peers_all_when_not_in_map(data):
     imputer = CrossSectionalImputer(
         peer_map={"CAD": ["USD", "GBP"]},
         default_peers="all",
-        fallback="none",
+        fallback=None,
     )
     out = imputer.fit_transform(data).sort_index()
 
@@ -158,8 +154,8 @@ def test_default_peers_none_leaves_missing_when_no_fallback(data):
 
     imputer = CrossSectionalImputer(
         peer_map={"CAD": ["USD", "GBP"]},
-        default_peers="none",
-        fallback="none",
+        default_peers=None,
+        fallback=None,
     )
     out = imputer.fit_transform(data).sort_index()
 
@@ -194,6 +190,38 @@ def test_fallback_fill_uses_mean_when_peers_unavailable(data):
 
     assert result == expected
 
+def test_fallback_fill_uses_all_peer_mean_when_desired_peers_unavailable(data):
+    """
+    For feature_A on 2020-01-02:
+      USD and GBP are missing, CAD is missing, EUR=8, CHF=12.
+    If CAD peers are USD/GBP, peer mean is unavailable -> fallback should use
+    EUR + CHF mean.
+
+    Also, since default_peers=None, USD, GBP, should also be filled in with
+    EUR + CHF mean at fallback time
+    """
+    # Ensure CAD is missing on that date
+    data.loc[("CAD", "2020-01-02"), "feature_A"] = np.nan
+
+    # Ensure peers missing
+    data.loc[("USD", "2020-01-02"), "feature_A"] = np.nan
+    data.loc[("GBP", "2020-01-02"), "feature_A"] = np.nan
+
+    # EUR is already set to 8 in fixture
+    data.loc[("CHF", "2020-01-02"), "feature_A"] = 12
+
+    imputer = CrossSectionalImputer(
+        peer_map={"CAD": ["USD", "GBP"]},
+        fallback="all_peer_mean",
+        default_peers=None,
+    )
+    out = imputer.fit_transform(data).sort_index()
+
+    assert out.loc[("CAD", "2020-01-02"), "feature_A"].item() == pytest.approx(10)
+    assert out.loc[("USD", "2020-01-02"), "feature_A"].item() == pytest.approx(10)
+    assert out.loc[("GBP", "2020-01-02"), "feature_A"].item() == pytest.approx(10)
+    assert out.loc[("EUR", "2020-01-02"), "feature_A"].item() == pytest.approx(8)
+    assert out.loc[("CHF", "2020-01-02"), "feature_A"].item() == pytest.approx(12)
 
 def test_invalid_args():
     with pytest.raises(ValueError):
