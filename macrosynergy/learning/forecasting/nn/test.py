@@ -271,7 +271,7 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         for epoch in range(self.epochs):
             model.train()
             for X_i, y_i in train_loader:
-                self._fit_one_batch(
+                model = self._fit_one_batch(
                     model = model,
                     X_i = X_i,
                     y_i = y_i,
@@ -301,6 +301,43 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
 
         return model
 
+    def _fit_one_batch(
+        self,
+        model,
+        X_i,
+        y_i,
+        optimizer,
+        scheduler,
+        loss_func,
+        # reg_turnover
+    ):
+        optimizer.zero_grad()
+        preds = model(X_i)
+        loss = loss_func(preds, y_i)
+
+        # if reg_turnover > 0:
+        #     pweight_levels = preds[1:] - preds[:-1]
+        #     pweight_l1 = torch.mean(torch.abs(pweight_levels))
+        #     loss = loss + reg_turnover * pweight_l1
+
+        loss.backward()
+        optimizer.step()
+
+        if scheduler is not None:
+            scheduler.step()
+
+        return model
+    
+    def _eval_loss(self, model, loader, loss_func):
+        model.eval()
+        total_loss = 0.0
+        with torch.no_grad():
+            for X_i, y_i in loader:
+                preds = model(X_i)
+                total_loss += loss_func(preds, y_i).item()
+            avg_loss = total_loss / len(loader)
+
+        return avg_loss    
 
     def predict(self, X):
         # Scale data 
