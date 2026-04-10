@@ -15,6 +15,8 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
     def __init__(
         self,
         # Neural network structure
+        # TODO: alternatively could just take in a model object and skip this whole section
+        # But this would need some careful methods for 
         n_latent = 256,
         fit_encoder_intercept = False,
         fit_head_intercept = False, 
