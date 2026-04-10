@@ -1,3 +1,5 @@
+import numpy as np
+
 import torch
 import torch.nn as nn
 
@@ -262,7 +264,43 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         patience,
         verbose,
     ):
-        pass
+        best_score = np.inf
+        best_state = None 
+        counter = 0
+
+        for epoch in range(self.epochs):
+            model.train()
+            for X_i, y_i in train_loader:
+                self._fit_one_batch(
+                    model = model,
+                    X_i = X_i,
+                    y_i = y_i,
+                    optimizer = optimizer,
+                    scheduler = scheduler,
+                    loss_func = loss_func,
+                    #reg_turnover = reg_turnover
+                )
+            
+            train_loss = self._eval_loss(model, train_loader, loss_func)
+            valid_loss = self._eval_loss(model, valid_loader, loss_func)
+
+            best_score, best_state, counter = self.update_es_stats(
+                train_loss, valid_loss, best_score, best_state, counter, patience
+            )
+
+            if verbose and (epoch % 5 == 0):
+                print(
+                    f"Epoch {epoch+1}: train_loss={train_loss:.6g}, valid_loss={valid_loss:.6g}"
+                )
+
+        if best_state is not None:
+            model.load_state_dict(best_state)
+        else:
+            # TODO: handle this case later
+            pass
+
+        return model
+
 
     def predict(self, X):
         # Scale data 
