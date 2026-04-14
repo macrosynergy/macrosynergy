@@ -11,33 +11,35 @@ from typing import Optional
 from macrosynergy.learning.forecasting.torch.samplers.timeseries_sampler import TimeSeriesSampler
 from macrosynergy.learning.forecasting.torch.models.mlps import MultiLayerPerceptron
 
+from copy import deepcopy
+
 class MLPRegressor(BaseEstimator, RegressorMixin):
     def __init__(
         self,
         # Neural network structure
         # TODO: alternatively could just take in a model object and skip this whole section
-        # But this would need some careful methods for 
-        n_latent = 256,
-        fit_encoder_intercept = False,
-        fit_head_intercept = False, 
+        # But this would need some careful methods for cross-validating model hparams
+        n_latent = 32,
+        fit_encoder_intercept = True,
+        fit_head_intercept = True,
         encoder_activation = "relu",
         head_activation = "identity",
         # Neural network training dynamics
         loss_func = torch.nn.MSELoss(),
-        optimizer: str = "AdamW",
-        scheduler: Optional[str] = None, # TODO: consider default of one cycle LR
+        optimizer: str = "AdamW", # TODO: SGD, LARS, option for custom optimizer object
+        scheduler: Optional[str] = None, # TODO: consider default of one cycle LR, options for other schedulers, option for custom scheduler object
         batch_size = 32,
         learning_rate = 3e-4,
         weight_decay = 1e-4,
         reg_turnover = 0,
         use_ts_sampler = True,
-        aggregate_last = True,
+        aggregate_last = True, # TODO: aggregate last and drop_last can't both be set to True
         drop_last = False,
-        epochs = 10000,
+        epochs = 10000, # NOTE: when a scheduler is used, the epochs default is way too high unless the patience is high
         patience = 1000,
         train_pct = 0.7,
-        x_scaler = StandardScaler(with_mean=False), # Can be made optional due to panel z scoring
-        y_scaler = StandardScaler(with_mean=False), # Can be made optional due to vol targeted returns and sharpe loss
+        x_scaler = StandardScaler(with_mean=False), # TODO: Can be made optional due to panel z scoring
+        y_scaler = StandardScaler(with_mean=False), # TODO: Can be made optional due to vol targeted returns and sharpe loss
         # Other stuff 
         verbose = False,
         random_state = 42,
@@ -54,7 +56,8 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         self.batch_size = batch_size
         self.learning_rate = learning_rate
         self.weight_decay = weight_decay
-        #self.reg_turnover = reg_turnover
+        self.reg_turnover = reg_turnover
+
         self.use_ts_sampler = use_ts_sampler
         self.aggregate_last = aggregate_last
         self.drop_last = drop_last
@@ -70,6 +73,7 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         self.model = None
 
     def fit(self, X, y, sample_weight=None):
+        # TODO: sample_weight to be incorporated 
         torch.manual_seed(self.random_state)
 
         # Initialize model 
@@ -93,7 +97,7 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         train_dataset, valid_dataset = self.make_tensor_datasets(X_train_s, X_valid_s, y_train_s, y_valid_s)
 
         # Make torch dataloaders
-        train_loader, valid_loader = self.make_dataloaders(train_dataset, valid_dataset, self.batch_size, self.use_ts_sampler, self.aggregate_last, self.drop_last)
+        train_loader, train_loader_eval, valid_loader = self.make_dataloaders(train_dataset, valid_dataset, self.batch_size, self.use_ts_sampler, self.aggregate_last, self.drop_last)
 
         # Set up optimizer 
         optimizer = self.make_optimizer(self.model, self.optimizer, self.learning_rate, self.weight_decay)
@@ -105,7 +109,8 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         # Train model
         self.model = self.train_model(
             model = model, 
-            train_loader = train_loader, 
+            train_loader = train_loader,
+            train_loader_eval = train_loader_eval,
             valid_loader = valid_loader, 
             optimizer = optimizer, 
             scheduler = scheduler,
@@ -116,6 +121,23 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         )
 
         return self
+    
+    def predict(self, X):
+        # Scale data 
+        X_s = self.x_scaler.transform(X)
+
+        # Switch to evaluation mode 
+        self.model.eval()
+        with torch.no_grad():
+            # Convert to tensor and pass through network
+            X_s_torch = torch.Tensor(X_s)
+            preds = self.model(X_s_torch).numpy()
+
+            # Inverse scale predictions
+            if self.inverse_transform_preds:
+                preds = self.y_scaler.inverse_transform(preds)
+
+        return preds
 
     def initialize_model(
         self,
@@ -160,9 +182,18 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         x_scaler,
         y_scaler,
     ):
-        X_train_s = x_scaler.fit_transform(X_train)
+        """
+        TODO: handle case for no scaling 
+        """
+        # Scale independent variables
+        x_scaler.fit(X_train)
+        X_train_s = x_scaler.transform(X_train)
         X_valid_s = x_scaler.transform(X_valid)
-        y_train_s = y_scaler.fit_transform(y_train) # TODO: ensure y is 2d for this to work
+
+        # Scale dependent variables
+        # TODO: ensure ys are 2d for this to work
+        y_scaler.fit(y_train)
+        y_train_s = y_scaler.transform(y_train) 
         y_valid_s = y_scaler.transform(y_valid)
 
         return X_train_s, X_valid_s, y_train_s, y_valid_s
@@ -227,7 +258,7 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
             ),
         )
 
-        return train_loader, valid_loader
+        return train_loader, train_loader_eval, valid_loader
     
     def make_optimizer(self, model, optimizer_name, learning_rate, weight_decay):
         if optimizer_name == "AdamW":
@@ -258,6 +289,7 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         self,
         model,
         train_loader,
+        train_loader_eval,
         valid_loader,
         optimizer,
         scheduler,
@@ -283,17 +315,18 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
                     #reg_turnover = reg_turnover
                 )
             
-            train_loss = self._eval_loss(model, train_loader, loss_func)
+            train_loss = self._eval_loss(model, train_loader_eval, loss_func)
             valid_loss = self._eval_loss(model, valid_loader, loss_func)
 
             best_score, best_state, counter = self.update_es_stats(
                 train_loss, valid_loss, best_score, best_state, counter, patience
             )
 
-            if verbose and (epoch % 5 == 0):
-                print(
-                    f"Epoch {epoch+1}: train_loss={train_loss:.6g}, valid_loss={valid_loss:.6g}"
-                )
+            if counter >= patience:
+                break
+
+            if verbose and (epoch % 5 == 0 or epoch == self.epochs - 1):
+                print(f"Epoch {epoch + 1}: Train Loss = {train_loss:.4f}, Valid Loss = {valid_loss:.4f}, Best Valid Loss = {best_score:.4f}")
 
         if best_state is not None:
             model.load_state_dict(best_state)
@@ -340,23 +373,16 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
             avg_loss = total_loss / len(loader)
 
         return avg_loss    
-
-    def predict(self, X):
-        # Scale data 
-        X_s = self.x_scaler.transform(X)
-
-        # Switch to evaluation mode 
-        self.model.eval()
-        with torch.no_grad():
-            # Convert to tensor and pass through network
-            X_s_torch = torch.Tensor(X_s)
-            preds = self.model(X_s_torch).numpy()
-
-            # Inverse scale predictions
-            if self.inverse_transform_preds:
-                preds = self.y_scaler.inverse_transform(preds)
-
-        return preds
+    
+    def update_es_stats(self, train_loss, valid_loss, best_score, best_state, counter, patience):
+        if valid_loss < best_score:
+            best_score = valid_loss
+            best_state = deepcopy(self.model.state_dict())
+            counter = 0
+        else:
+            counter += 1
+            
+        return best_score, best_state, counter
 
 if __name__ == "__main__":
     print("foo")
