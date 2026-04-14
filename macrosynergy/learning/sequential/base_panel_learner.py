@@ -1379,8 +1379,29 @@ class BasePanelLearner(ABC):
                 )
 
             # Check model runs successfully on X and y
+            if isinstance(models[key], Pipeline):
+                n_samples = max(getattr(step, "min_periods", 0) for step in models[key])
+            else:
+                n_samples = getattr(models[key], "min_periods", 0)
+            n_samples = max(2 * n_samples, 10)
+
+            dates = self.X.index.get_level_values(1).unique()
+            n_samples = min(n_samples, len(dates))
+            dates = np.sort(np.random.choice(dates, size=n_samples, replace=False))
+
+            mask = self.X.index.get_level_values(1).isin(dates)
+            X_check = self.X[mask]
+            y_check = self.y[mask]
+
+            if self.drop_nas != True and not X_check.isna().any().any():
+                n_nans = 5
+                nan_rows = np.random.randint(0, X_check.shape[0], n_nans)
+                nan_cols = np.random.randint(0, X_check.shape[1], n_nans)
+
+                X_check.values[nan_rows, nan_cols] = np.nan
+
             try:
-                models[key].fit(self.X, self.y)
+                models[key].fit(X_check, y_check)
             except Exception as e:
                 raise RuntimeError(
                     f"Model {key} cannot be fit on the given X and y: {e}"

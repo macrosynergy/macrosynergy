@@ -619,6 +619,19 @@ class TestAll(unittest.TestCase):
                 inner_splitters=self.single_inner_splitter,
             )
 
+        # Classification model fails in the check when target is continuous
+        with self.assertRaises(RuntimeError):
+            self.so_with_calculated_preds.calculate_predictions(
+                name="test",
+                models={"log_reg": LogisticRegression()},
+                scorers=self.scorers,
+                hyperparameters={"log_reg": {}},
+                search_type="grid",
+                n_jobs_outer=1,
+                n_jobs_inner=1,
+                inner_splitters=self.single_inner_splitter,
+            )
+
         # Hyperparameters
         with self.assertRaises(TypeError):
             self.so_with_calculated_preds.calculate_predictions(
@@ -2645,12 +2658,13 @@ class TestAll(unittest.TestCase):
             cids=self.cids,
             drop_nas="y",
         )
+        so.X["CPI"] = np.nan
 
         so.calculate_predictions(
             name="RF",
             models={
                 "RF": Pipeline([
-                    ("imputer", CrossSectionalImputer(nan_threshold=0.01)),
+                    ("imputer", CrossSectionalImputer(nan_threshold=0.9)),
                     ("RF", RandomForestRegressor(n_estimators=10, max_depth=1))
                 ])
             },
@@ -2668,7 +2682,7 @@ class TestAll(unittest.TestCase):
         for i in range(2, 5):
             self.assertEqual(selected_ftrs.columns[i], self.X.columns[i - 2])
         assert selected_ftrs["XR"].eq(1).all()
-        assert selected_ftrs["CPI"].unique().tolist() == [0, 1]
+        assert selected_ftrs["CPI"].eq(0).all()
 
 
 
