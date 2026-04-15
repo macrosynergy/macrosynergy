@@ -151,3 +151,78 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
                 preds = self.y_scaler.inverse_transform(preds)
 
         return preds
+    
+if __name__ == "__main__":
+    from macrosynergy.learning import (
+        SignalOptimizer,
+    )
+    from macrosynergy.management.simulate import make_qdf
+    import pandas as pd
+    import numpy as np
+
+    cids = ["AUD", "CAD", "GBP", "USD"]
+    xcats = ["XR1", "CRY", "GROWTH", "RATES", "XR2"]
+    cols = ["earliest", "latest", "mean_add", "sd_mult", "ar_coef", "back_coef"]
+
+    df_cids = pd.DataFrame(
+        index=cids, columns=["earliest", "latest", "mean_add", "sd_mult"]
+    )
+    df_cids.loc["AUD"] = ["2012-01-01", "2020-12-31", 0, 1]
+    df_cids.loc["CAD"] = ["2012-01-01", "2020-12-31", 0, 1]
+    df_cids.loc["GBP"] = ["2012-01-01", "2020-12-31", 0, 1]
+    df_cids.loc["USD"] = ["2012-01-01", "2020-12-31", 0, 1]
+
+    df_xcats = pd.DataFrame(index=xcats, columns=cols)
+    df_xcats.loc["XR1"] = ["2012-01-01", "2020-12-31", 0.1, 1, 0, 0.3]
+    df_xcats.loc["CRY"] = ["2012-01-01", "2020-12-31", 1, 2, 0.95, 1]
+    df_xcats.loc["GROWTH"] = ["2012-01-01", "2020-12-31", 1, 2, 0.9, 1]
+    df_xcats.loc["RATES"] = ["2010-01-01", "2020-12-31", 0, 1, 0.5, 0.5]
+    df_xcats.loc["XR2"] = ["2015-01-01", "2020-12-31", -0.1, 2, 0.8, 0.3]
+
+    dfd = make_qdf(df_cids, df_xcats, back_ar=0.75, seed = 42)
+    dfd["grading"] = np.ones(dfd.shape[0])
+    black = {
+        "GBP": (
+            pd.Timestamp(year=2009, month=1, day=1),
+            pd.Timestamp(year=2012, month=6, day=30),
+        ),
+        "CAD": (
+            pd.Timestamp(year=2015, month=1, day=1),
+            pd.Timestamp(year=2016, month=1, day=1),
+        ),
+    }
+
+    so = SignalOptimizer(
+        df=dfd,
+        xcats=["CRY", "GROWTH", "RATES", "XR1", "XR2"],
+        cids=cids,
+        blacklist=black,
+        drop_nas=True,
+        n_targets=2,
+    )
+    X = so.X.copy(deep=True)
+    y = so.y.copy(deep=True)
+
+    mlp = MLPRegressor(
+        n_latent = 2, 
+        loss_func=torch.nn.MSELoss(),
+        weight_decay=1e-4,
+        reg_turnover=0,
+        batch_size=16,
+        learning_rate=3e-4,
+        use_ts_sampler=True,
+        encoder_activation = "tanh",
+        head_activation = "identity",
+        fit_encoder_intercept = False,
+        fit_head_intercept = True,
+        epochs=10000,
+        patience=10,
+        train_pct=0.7,
+        verbose=True,
+        random_state=42,
+        inverse_transform_preds=True
+    ).fit(X, y)
+
+    print(list(mlp.model.parameters()))
+
+    
