@@ -745,27 +745,36 @@ def reduce_df(
     if xcats is not None:
         if isinstance(xcats, str):
             xcats = [xcats]
-        df = df[df["xcat"].isin(xcats)]
 
     if cids is not None:
         cids = [cids] if isinstance(cids, str) else cids
-        df = df[df["cid"].isin(cids)]
+
+    # Build a single boolean mask instead of creating intermediate DataFrames.
+    mask = np.ones(len(df), dtype=bool)
+
+    if xcats is not None:
+        mask &= df["xcat"].isin(xcats).values
+
+    if cids is not None:
+        mask &= df["cid"].isin(cids).values
 
     if start:
-        df = df[df["real_date"] >= pd.to_datetime(start)]
+        mask &= (df["real_date"] >= pd.to_datetime(start)).values
 
     if end:
-        df = df[df["real_date"] <= pd.to_datetime(end)]
+        mask &= (df["real_date"] <= pd.to_datetime(end)).values
 
     if blacklist is not None:
+        bl_mask = np.zeros(len(df), dtype=bool)
         for key, value in blacklist.items():
-            df = df[
-                ~(
-                    (df["cid"] == key[:3])
-                    & (df["real_date"] >= pd.to_datetime(value[0]))
-                    & (df["real_date"] <= pd.to_datetime(value[1]))
-                )
-            ]
+            bl_mask |= (
+                (df["cid"].values == key[:3])
+                & (df["real_date"].values >= pd.to_datetime(value[0]))
+                & (df["real_date"].values <= pd.to_datetime(value[1]))
+            )
+        mask &= ~bl_mask
+
+    df = df[mask]
 
     if xcats is None:
         xcats = sorted(df["xcat"].unique())
