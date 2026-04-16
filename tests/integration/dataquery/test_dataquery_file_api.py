@@ -59,7 +59,7 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
             client = DataQueryFileAPIClient(
                 client_id=os.getenv("DQ_CLIENT_ID"),
                 client_secret=os.getenv("DQ_CLIENT_SECRET"),
-                base_url="https://example.com",
+                base_url="https://localhost:1",
             )
 
         # The resolved URL must be the known fallback, not example.com
