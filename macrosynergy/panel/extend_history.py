@@ -100,19 +100,27 @@ def extend_history(
         extended_series["cid"] = cid
 
         if backfill:
-            if not extended_series.empty:
-                min_date = extended_series["real_date"].min()
-                if min_date > start:
+            valid = extended_series.dropna(subset=["value"])
+            if not valid.empty:
+                first_valid_date = valid["real_date"].min()
+                first_valid_value = valid.loc[
+                    valid["real_date"] == first_valid_date, "value"
+                ].iloc[0]
+                if first_valid_date > start:
                     backfilled_data = pd.DataFrame(
                         {
                             "real_date": pd.bdate_range(
-                                start=start, end=min_date - pd.Timedelta(days=1)
+                                start=start,
+                                end=first_valid_date - pd.Timedelta(days=1),
                             ),
-                            "value": extended_series.iloc[0]["value"],
+                            "value": first_valid_value,
                             "cid": cid,
                             "xcat": new_xcat,
                         }
                     )
+                    extended_series = extended_series[
+                        extended_series["real_date"] >= first_valid_date
+                    ]
                     extended_series = pd.concat([backfilled_data, extended_series])
         elif start is not None:
             extended_series = extended_series[extended_series["real_date"] >= start]
