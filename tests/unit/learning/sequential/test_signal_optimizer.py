@@ -27,7 +27,7 @@ from macrosynergy.learning import (ExpandingIncrementPanelSplit,
                                    ExpandingKFoldPanelSplit, LassoSelector,
                                    RandomEffects, RollingKFoldPanelSplit,
                                    SignalOptimizer,
-                                   regression_balanced_accuracy)
+                                   regression_balanced_accuracy, ConstantImputer)
 from macrosynergy.learning.preprocessing.imputers.imputers import CrossSectionalImputer
 from macrosynergy.management.simulate import make_qdf
 from macrosynergy.management.utils.df_utils import categories_df
@@ -598,34 +598,6 @@ class TestAll(unittest.TestCase):
                 models={"LR": RandomEffects()},
                 scorers=self.scorers,
                 hyperparameters=self.hyperparameters,
-                search_type="grid",
-                n_jobs_outer=1,
-                n_jobs_inner=1,
-                inner_splitters=self.single_inner_splitter,
-            )
-
-        # Models when NAs aren't dropped cannot admit models that don't support NAs
-        with self.assertRaises(RuntimeError):
-            self.so_no_na.calculate_predictions(
-                name="test",
-                models={"Lasso": Lasso()},
-                scorers=self.scorers,
-                hyperparameters={
-                    "Lasso": {"alpha": [0.1, 1.0]},
-                },
-                search_type="grid",
-                n_jobs_outer=1,
-                n_jobs_inner=1,
-                inner_splitters=self.single_inner_splitter,
-            )
-
-        # Classification model fails in the check when target is continuous
-        with self.assertRaises(RuntimeError):
-            self.so_with_calculated_preds.calculate_predictions(
-                name="test",
-                models={"log_reg": LogisticRegression()},
-                scorers=self.scorers,
-                hyperparameters={"log_reg": {}},
                 search_type="grid",
                 n_jobs_outer=1,
                 n_jobs_inner=1,
@@ -1932,6 +1904,54 @@ class TestAll(unittest.TestCase):
         self.assertTrue(df8.real_date.min() == first_date)
         self.assertTrue(df8.real_date.max() == last_date)
         self.assertTrue(len(df8.value.value_counts()) == 2)
+
+    def test_invalid_calculate_predictions(self):
+        # Models that cannot be fit on NAs should fail early
+        with self.assertRaisesRegex(RuntimeError, "Initial fit check failed for model"):
+            self.so_no_na.calculate_predictions(
+                name="test",
+                models={"Lasso": Lasso()},
+                scorers=self.scorers,
+                hyperparameters={
+                    "Lasso": {"alpha": [0.1, 1.0]},
+                },
+                search_type="grid",
+                n_jobs_outer=1,
+                n_jobs_inner=1,
+                inner_splitters=self.single_inner_splitter,
+            )
+
+        # Classification model fails early when target is continuous
+        with self.assertRaisesRegex(RuntimeError, "Initial fit check failed for model"):
+            self.so_with_calculated_preds.calculate_predictions(
+                name="test",
+                models={"log_reg": LogisticRegression()},
+                scorers=self.scorers,
+                hyperparameters={"log_reg": {}},
+                search_type="grid",
+                n_jobs_outer=1,
+                n_jobs_inner=1,
+                inner_splitters=self.single_inner_splitter,
+            )
+
+        # Invalid pipeline step causes early failure
+        with self.assertRaisesRegex(RuntimeError, "Initial fit check failed for model"):
+            self.so_with_calculated_preds.calculate_predictions(
+                name="test",
+                models={"test": Pipeline(
+                    [
+                        ("imputer", ConstantImputer(nan_threshold=0)),
+                        ("predictor", LinearRegression())
+                    ]
+                )
+                },
+                scorers=self.scorers,
+                hyperparameters={"test": {}},
+                search_type="grid",
+                n_jobs_outer=1,
+                n_jobs_inner=1,
+                inner_splitters=self.single_inner_splitter,
+            )
 
     @parameterized.expand([True, "y"])
     def test_optional_hparam_validity(self, drop_nas):

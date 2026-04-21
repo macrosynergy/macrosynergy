@@ -346,7 +346,12 @@ class BasePanelLearner(ABC):
                 models[key].fit(X_first, y_first)
             except Exception as e:
                 raise RuntimeError(
-                    f"Model {key} cannot be fit on the given X and y: {e}"
+                    f"Initial fit check failed for model '{key}' on the first outer "
+                    f"training split. The model could not be trained with X shape"
+                    f"={X_first.shape} and y shape={y_first.shape}. This may indicate "
+                    f"that the estimator is incompatible with the provided features, "
+                    f"target, or preprocessing configuration. "
+                    f"Original error: {e}"
                 ) from e
 
         if inner_splitters is not None:
