@@ -69,14 +69,21 @@ class NaivePnL:
     ):
         cols = ["cid", "xcat", "real_date", "value"]
 
+        assert isinstance(ret, str), "The return category expects a single <str>."
+        self.ret = ret
+        xcats = [ret] + sigs
+
+        # Pre-filter to only the xcats needed before the expensive QDF construction.
+        needed_xcats = list(xcats)
+        if bms is not None:
+            bm_list = [bms] if isinstance(bms, str) else bms
+            needed_xcats += [bm.split("_", 1)[1] for bm in bm_list]
+        df = df[df["xcat"].isin(needed_xcats)]
+
         df = QuantamentalDataFrame(df[cols])
         self._as_categorical = df.InitializedAsCategorical
         # Will host the benchmarks.
         self.dfd = df
-
-        assert isinstance(ret, str), "The return category expects a single <str>."
-        self.ret = ret
-        xcats = [ret] + sigs
 
         # Potentially excludes the benchmarks but will be held on the instance level
         # through self.dfd.
