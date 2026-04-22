@@ -11,6 +11,7 @@ from macrosynergy.panel.panel_calculator import (
     _check_calcs,
     _get_xcats_used,
     xcat_isolator,
+    is_valid_xcat,
 )
 import warnings
 from random import choice
@@ -497,6 +498,48 @@ class TestPanelCalculatorParserHelpers(unittest.TestCase):
     def test_get_xcats_used_raises_if_any_op_has_no_xcats(self):
         ops = {"NEW1": "XR + 1", "NEW2": "0"}
         self.assertRaises(ValueError, _get_xcats_used, ops)
+
+    def test_is_valid_xcat_rejects_i_prefixed_tokens_without_underscore(self):
+        """Tokens like 'inf', 'isinf', 'isnan' start with 'i' but are not tickers."""
+        for token in ["inf", "isinf", "isnan", "isfinite", "imag", "int64", "index"]:
+            with self.subTest(token=token):
+                self.assertFalse(is_valid_xcat(token))
+
+    def test_is_valid_xcat_accepts_valid_i_prefixed_tickers(self):
+        for token in ["iUSD_XR", "iEUR_INFL", "iG2_NEW"]:
+            with self.subTest(token=token):
+                self.assertTrue(is_valid_xcat(token))
+
+    def test_xcat_isolator_with_np_inf(self):
+        """np.inf should not be misidentified as a ticker or xcat."""
+        rhs = "np.clip( XR , a_min=0, a_max=np.inf )"
+        self.assertEqual(set(xcat_isolator(rhs)), {"XR"})
+
+    def test_xcat_isolator_with_np_functions_starting_with_i(self):
+        """np.isinf, np.isnan, etc. should not crash the parser."""
+        test_cases = [
+            ("np.where( np.isinf( XR ), 0, XR )", {"XR"}),
+            ("np.where( np.isnan( XR ), 0, CRY )", {"XR", "CRY"}),
+            ("np.where( np.isfinite( XR ), XR, 0 )", {"XR"}),
+        ]
+        for rhs, expected in test_cases:
+            with self.subTest(rhs=rhs):
+                self.assertEqual(set(xcat_isolator(rhs)), expected)
+
+    def test_get_xcats_used_with_np_inf_in_formula(self):
+        ops = {"XR_LO": "np.clip( XR , a_min=0, a_max=np.inf )"}
+        all_xcats_used, singles_used, single_cids = _get_xcats_used(ops)
+        self.assertEqual(set(all_xcats_used), {"XR"})
+        self.assertEqual(singles_used, [])
+        self.assertEqual(single_cids, [])
+
+    def test_get_xcats_used_with_np_inf_and_single_ticker(self):
+        ops = {"NEW1": "np.clip( XR - iUSD_INFL , a_min=0, a_max=np.inf )"}
+        all_xcats_used, singles_used, single_cids = _get_xcats_used(ops)
+        self.assertIn("XR", all_xcats_used)
+        self.assertIn("INFL", all_xcats_used)
+        self.assertEqual(set(singles_used), {"iUSD_INFL"})
+        self.assertEqual(set(single_cids), {"USD"})
 
 
 if __name__ == "__main__":

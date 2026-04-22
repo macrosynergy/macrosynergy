@@ -34,6 +34,8 @@ def correl_matrix(
     cid_labels: Optional[Union[List[str], Dict[str, str]]] = None,
     cid_secondary_labels: Optional[Union[List[str], Dict[str, str]]] = None,
     ticker_labels: Optional[Union[List[str], Dict[str, str]]] = None,
+    footnote: Optional[str] = None,
+    footnote_fontsize: int = 9,
     **kwargs: Any,
 ):
     """
@@ -110,6 +112,10 @@ def correl_matrix(
     ticker_labels : Optional[Union[List[str], Dict[str, str]]]
         optional list or dictionary of labels for tickers. A list should be in the same
         order as tickers, a dictionary should map from each ticker to its label.
+    footnote : str
+        Optional text shown at the bottom-left of the figure canvas.
+    footnote_fontsize : int
+        Font size of the footnote. Default is 9.
     **kwargs : Dict
         Arbitrary keyword arguments that are passed to seaborn.heatmap.
 
@@ -146,6 +152,8 @@ def correl_matrix(
         cid_labels=cid_labels,
         cid_secondary_labels=cid_secondary_labels,
         ticker_labels=ticker_labels,
+        footnote=footnote,
+        footnote_fontsize=footnote_fontsize,
         **kwargs,
     )
 
@@ -214,4 +222,6 @@ if __name__ == "__main__":
         lags_secondary=None,
         annot=True,
         fmt=".2f",
+        footnote="JPMaQS data",
+        footnote_fontsize=10,
     )

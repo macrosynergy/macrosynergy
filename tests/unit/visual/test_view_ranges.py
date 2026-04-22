@@ -137,6 +137,20 @@ class TestAll(unittest.TestCase):
             sort_cids_by="std",
         )
 
+    def test_view_ranges_adds_footnote(self):
+        fig = msv.view_ranges(
+            self.df,
+            xcats=["XR", "CRY"],
+            cids=self.test_cids,
+            kind="bar",
+            footnote="Source: test",
+            footnote_fontsize=11,
+            return_fig=True,
+        )
+
+        texts = [text.get_text() for text in fig.texts]
+        self.assertIn("Source: test", texts)
+
 
 if __name__ == "__main__":
     unittest.main()

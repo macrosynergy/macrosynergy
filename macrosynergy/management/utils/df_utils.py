@@ -745,6 +745,11 @@ def reduce_df(
     if xcats is not None:
         if isinstance(xcats, str):
             xcats = [xcats]
+        df = df[df["xcat"].isin(xcats)]
+
+    if cids is not None:
+        cids = [cids] if isinstance(cids, str) else cids
+        df = df[df["cid"].isin(cids)]
 
     if start:
         df = df[df["real_date"] >= pd.to_datetime(start)]
@@ -768,8 +773,6 @@ def reduce_df(
         xcats_in_df = df["xcat"].unique()
         xcats = [xcat for xcat in xcats if xcat in xcats_in_df]
 
-    df = df[df["xcat"].isin(xcats)]
-
     if intersect:
         cids_in_df = set.intersection(
             *(set(df[df["xcat"] == xcat]["cid"].unique()) for xcat in xcats)
@@ -780,7 +783,6 @@ def reduce_df(
     if cids is None:
         cids = sorted(cids_in_df)
     else:
-        cids = [cids] if isinstance(cids, str) else cids
         cids = [cid for cid in cids if cid in cids_in_df]
 
     df = df[df["cid"].isin(cids)]
@@ -995,8 +997,7 @@ def categories_df(
     Returns
     -------
     pd.DataFrame
-        custom DataFrame with category columns. All rows that contain NaNs will be
-        excluded.  N.B.: The number of explanatory categories that can be included is not
+        custom DataFrame with category columns. N.B.: The number of explanatory categories that can be included is not
         restricted and will be appended column-wise to the returned DataFrame. The order of
         the DataFrame's columns will reflect the order of the categories list.
     """

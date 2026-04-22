@@ -41,7 +41,7 @@ class BasePanelLearner(ABC):
         xcat_aggs=["last", "sum"],
         generate_labels=None,
         skip_checks=False,
-        drop_nas=True
+        drop_nas=True,
     ):
         """
         Initialize a sequential learning process over a panel.
@@ -83,9 +83,11 @@ class BasePanelLearner(ABC):
             classification labels. Default is None.
         skip_checks : bool, 
             Whether to skip the initialization checks. Default is False.
-        drop_nas : bool, 
-            Whether to drop rows with NaN values in the dataframe. Default is True.
-            If False, only the rows with NaN values in the dependent variable are dropped.
+        drop_nas : bool, str
+            Strategy for dealing with NaNs in the data. Default is True, which means rows
+            with NaN values in the dependent or independent variables are dropped. If
+            "X", rows with NaN values in the independent variables are dropped. If "y"
+            rows with NaN values in the dependent variable are dropped.
 
         Notes
         -----
@@ -183,15 +185,24 @@ class BasePanelLearner(ABC):
             df_features = df_long.iloc[:,:len(features_xcats)]
             df_targets = df_long[targets_xcats]
             df_long = pd.concat([df_features, df_targets], axis=1)
-        if self.drop_nas:
-            df_long = df_long.dropna().sort_index()
+
+        # Handle NaNs
+        # No matter what, drop rows where all independent variables are NaN
+        df_long = df_long.dropna(
+            subset=self.xcats[:-self.n_targets], how="all"
+        ).sort_index()
+
+        # Handle remaining NaNs with specified strategy
+        if drop_nas == "X":
+            subset = self.xcats[:-self.n_targets]
+        elif drop_nas == "y":
+            subset = self.xcats[-self.n_targets:]
+        elif drop_nas == True:
+            subset = df_long.columns
         else:
-            # Only drop rows with NaN values in the dependent variable(s)
-            df_long = df_long.dropna(subset=self.xcats[-self.n_targets:]).sort_index()
-            # Drop if all independent variables are NaN
-            df_long = df_long.dropna(
-                how="all", subset=self.xcats[:-self.n_targets]
-            ).sort_index()
+            subset = []
+
+        df_long = df_long.dropna(subset=subset)
 
         # Create X and y
         self.X = df_long.iloc[:, :-self.n_targets]
@@ -326,6 +337,22 @@ class BasePanelLearner(ABC):
 
         # Determine all outer splits and run the learning process in parallel
         train_test_splits = list(outer_splitter.split(self.X, self.y))
+
+        # Check models can be fitted on first train set
+        X_first = self.X.iloc[train_test_splits[0][0]]
+        y_first = self.y.iloc[train_test_splits[0][0]]
+        for key, model in models.items():
+            try:
+                models[key].fit(X_first, y_first)
+            except Exception as e:
+                raise RuntimeError(
+                    f"Initial fit check failed for model '{key}' on the first outer "
+                    f"training split. The model could not be trained with X shape"
+                    f"={X_first.shape} and y shape={y_first.shape}. This may indicate "
+                    f"that the estimator is incompatible with the provided features, "
+                    f"target, or preprocessing configuration. "
+                    f"Original error: {e}"
+                ) from e
 
         if inner_splitters is not None:
             base_splits = self._get_base_splits(inner_splitters)
@@ -1161,8 +1188,8 @@ class BasePanelLearner(ABC):
         generate_labels : callable, optional
             Function to generate labels for a supervised learning process.
             Default is None.
-        drop_nas : bool, optional
-            Whether to drop rows with NAs in the dataframe. Default is True.
+        drop_nas : bool, str
+            Strategy for dealing with NaNs in the data.
         """
         # Dataframe checks
         if not isinstance(df, pd.DataFrame):
@@ -1281,8 +1308,10 @@ class BasePanelLearner(ABC):
                 raise TypeError("generate_labels must be a callable.")
             
         # drop_nas checks
-        if not isinstance(drop_nas, bool):
-            raise TypeError("drop_nas must be a boolean.")
+        if not isinstance(drop_nas, (bool, str)):
+            raise TypeError("drop_nas must be a boolean or string.")
+        if isinstance(drop_nas, str) and drop_nas not in ["X", "y"]:
+            raise ValueError("drop_nas must be either 'X', 'y', True, or False.")
 
     def _check_run(
         self,
@@ -1364,26 +1393,6 @@ class BasePanelLearner(ABC):
                 raise ValueError(
                     "The entered models must have 'fit' and 'predict' methods."
                 )
-            if not self.drop_nas:
-                # Generate data with nas to check if the model can handle them
-                X = pd.DataFrame(
-                    data =  np.random.rand(20, 5),
-                    columns = [f"feature_{i}" for i in range(5)],
-                     # multi index to simulate panel data
-                    index = pd.MultiIndex.from_product(
-                        [["cid1", "cid2"], pd.date_range("2020-01-01", periods=10, freq="D")],
-                        names=["cid", "real_date"],
-                    )
-                )
-                # Add some missing values
-                X.iloc[4:8, 3] = np.nan  # Introduce NaNs in the first column
-                y = pd.Series(np.random.rand(20), index=X.index)
-                try:
-                    models[key].fit(X, y)
-                except Exception as e:
-                    raise ValueError(
-                        f"The model {key} cannot handle missing values: {str(e)}"
-                    )
 
         # outer splitter
         if outer_splitter:

@@ -12,7 +12,10 @@ from macrosynergy.management.utils import (
     ticker_df_to_qdf,
 )
 from macrosynergy.management.types import QuantamentalDataFrame
-from macrosynergy.pnl.transaction_costs import TransactionCosts
+from macrosynergy.pnl.transaction_costs import (
+    TransactionCosts,
+    TransactionCostsDictAdapter,
+)
 
 
 def _replace_strs(
@@ -390,7 +393,9 @@ def proxy_pnl_calc(
     df: QuantamentalDataFrame,
     spos: str,
     rstring: str,
-    transaction_costs_object: Optional[TransactionCosts],
+    transaction_costs_object: Optional[
+        Union[TransactionCosts, TransactionCostsDictAdapter, Dict]
+    ],
     roll_freqs: Optional[Dict] = None,
     start: Optional[str] = None,
     end: Optional[str] = None,
@@ -421,12 +426,13 @@ def proxy_pnl_calc(
         for <pname> by the `notional_positions` function.
     rstring : str
         the string that identifies the returns series in the dataframe.
-    transaction_costs_object : TransactionCosts
+    transaction_costs_object : TransactionCosts or dict
         an initialized TransactionCosts object
         (macrosynergy.pnl.transaction_costs.TransactionCosts) that contains the transaction
         costs data. If the user does not have access to the TransactionCosts object, or does
         not want to use transaction costs, the function can be called with
-        `transaction_costs_object=None`.
+        `transaction_costs_object=None`. Users can alternatively pass a dictionary of
+        static cost parameters, which will be adapted to the TransactionCosts interface.
     roll_freqs : dict
         dictionary of roll frequencies for each contract type. This must use the
         contract types as keys and frequency string ("w", "m", or "q") as values. The
@@ -479,7 +485,11 @@ def proxy_pnl_calc(
 
     for _varx, _namex, _typex in [
         (spos, "spos", str),
-        (transaction_costs_object, "transaction_costs", (TransactionCosts, type(None))),
+        (
+            transaction_costs_object,
+            "transaction_costs",
+            (TransactionCosts, TransactionCostsDictAdapter, dict, type(None)),
+        ),
         (roll_freqs, "roll_freqs", (dict, type(None))),
         (start, "start", (str, type(None))),
         (end, "end", (str, type(None))),
@@ -522,6 +532,17 @@ def proxy_pnl_calc(
     _check_df(df=df, spos=spos, rstring=rstring)
 
     df_wide = df.to_wide()
+    _, pos_tickers = _split_returns_positions_tickers(
+        tickers=df_wide.columns.tolist(),
+        spos=spos,
+        rstring=rstring,
+    )
+    traded_fids = sorted(set(_replace_strs(pos_tickers, f"_{spos}")))
+    if isinstance(transaction_costs_object, dict):
+        transaction_costs_object = TransactionCostsDictAdapter(
+            cost_dict=transaction_costs_object,
+            fids=traded_fids,
+        )
 
     pnle_name = pnl_name + "e"
 
@@ -690,13 +711,48 @@ if __name__ == "__main__":
 
     dfx = pd.read_pickle("data/dfxn.pkl")
 
+    spos = "STRAT_POS"
+    rstring = "XR_NSA"
     df_all = proxy_pnl_calc(
         df=dfx,
-        spos="STRAT_POS",
-        rstring="XR_NSA",
+        spos=spos,
+        rstring=rstring,
         start="2001-01-01",
         end="2020-01-01",
         transaction_costs_object=tx,
+        portfolio_name="GLB",
+        pnl_name="PNL",
+        tc_name="TCOST",
+        return_pnl_excl_costs=True,
+        return_costs=True,
+        # concat_dfs=True,
+    )
+
+    # Example: dict-based transaction costs
+    pos_tickers = [
+        t for t in QuantamentalDataFrame(dfx).list_tickers() if t.endswith(f"_{spos}")
+    ]
+    traded_fids = sorted(set(_replace_strs(pos_tickers, f"_{spos}")))
+    cost_date = tx.change_index[0]
+    cost_dict = {}
+    for fid in traded_fids:
+        row = tx.get_costs(fid=fid, real_date=cost_date)
+        if row is None:
+            raise ValueError(f"Missing transaction costs for {fid}")
+        cost_dict[fid] = {
+            "median_cost": row[f"{fid}BIDOFFER_MEDIAN"],
+            "median_size": row[f"{fid}SIZE_MEDIAN"],
+            "pct90_cost": row[f"{fid}BIDOFFER_90PCTL"],
+            "pct90_size": row[f"{fid}SIZE_90PCTL"],
+        }
+
+    df_all_dict = proxy_pnl_calc(
+        df=dfx,
+        spos=spos,
+        rstring=rstring,
+        start="2001-01-01",
+        end="2020-01-01",
+        transaction_costs_object=cost_dict,
         portfolio_name="GLB",
         pnl_name="PNL",
         tc_name="TCOST",
