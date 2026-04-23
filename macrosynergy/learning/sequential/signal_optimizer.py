@@ -45,7 +45,7 @@ class SignalOptimizer(BasePanelLearner):
     end : str
         End date for considered data in subsequent analysis in ISO 8601 format.
         Default is None i.e. the latest date in the dataframe.
-    blacklist : dict or list[dict],
+    blacklist : dict, list[dict]
         Blacklisting dictionary specifying date ranges for which cross-sectional
         information should be excluded. The keys are cross-sections and the values
         are tuples of start and end dates in ISO 8601 format. A list of dictionaries

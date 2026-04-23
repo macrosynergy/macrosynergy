@@ -6,6 +6,7 @@ import numbers
 import warnings
 from abc import ABC
 from functools import partial
+from typing import Optional, List, Dict, Union
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -65,7 +66,7 @@ class BasePanelLearner(ABC):
         end : str, 
             End date for considered data in subsequent analysis in ISO 8601 format.
             Default is None i.e. the latest date in the dataframe.
-        blacklist : dict or list[dict],
+        blacklist : dict, list[dict]
             Blacklisting dictionary specifying date ranges for which cross-sectional
             information should be excluded. The keys are cross-sections and the values
             are tuples of start and end dates in ISO 8601 format. A list of dictionaries
@@ -162,15 +163,11 @@ class BasePanelLearner(ABC):
             xcat_aggs=self.xcat_aggs,
         )
 
-        if self.drop_nas:
-            df_long = df_long.dropna().sort_index()
-        else:
-            # Only drop rows with NaN values in the dependent variable(s)
-            df_long = df_long.dropna(subset=self.xcats[-self.n_targets:]).sort_index()
-            # Drop if all independent variables are NaN
-            df_long = df_long.dropna(
-                how="all", subset=self.xcats[:-self.n_targets]
-            ).sort_index()
+        # Handle NaNs
+        # No matter what, drop rows where all independent variables are NaN
+        df_long = df_long.dropna(
+            subset=self.xcats[:-self.n_targets], how="all"
+        ).sort_index()
 
         # Handle remaining NaNs with specified strategy
         if drop_nas == "X":
@@ -1235,45 +1232,61 @@ class BasePanelLearner(ABC):
                 raise ValueError("'start' must be before 'end'.")
 
         # blacklist checks
-        if blacklist is not None:
-            if not isinstance(blacklist, (dict, list)):
-                raise TypeError("The blacklist argument must be a dictionary or list.")
+        if not isinstance(blacklist, (dict, list, type(None))):
+            raise TypeError("The blacklist argument must be a dictionary, list, or None")
 
-            if isinstance(blacklist, list) and n_targets > 1 and len(blacklist) != n_targets:
+        if isinstance(blacklist, list):
+            if len(blacklist) != n_targets:
                 raise ValueError(
-                    f"When blacklist is a list and n_targets > 1, blacklist must have "
-                    f"exactly n_targets ({n_targets}) elements."
+                    f"When blacklist is a list, blacklist must have exactly "
+                    f"n_targets ({n_targets}) elements."
                 )
 
-            blacklists = [blacklist] if isinstance(blacklist, dict) else blacklist
-
-            for i, blacklist in enumerate(blacklists):
-                if not isinstance(blacklist, dict):
+            for i, _blacklist in enumerate(blacklist):
+                if not isinstance(_blacklist, dict):
                     raise TypeError(f"blacklist[{i}] must be a dict.")
 
-                for key, value in blacklist.items():
+                for key, value in _blacklist.items():
                     # check keys are strings
                     if not isinstance(key, str):
-                        raise TypeError(
-                            "The keys of the blacklist argument must be strings."
-                        )
+                        raise TypeError(f"The keys of blacklist[{i}] must be strings.")
                     # check values of tuples of length two
                     if not isinstance(value, tuple):
-                        raise TypeError(
-                            "The values of the blacklist argument must be tuples."
-                        )
+                        raise TypeError(f"The values of blacklist[{i}] must be tuples.")
                     if len(value) != 2:
                         raise ValueError(
-                            "The values of the blacklist argument must be tuples of length "
-                            "two."
+                            f"The values of blacklist[{i}] must be tuples of length two"
                         )
                     # ensure each of the dates in the dictionary are timestamps
-                    for date in value:
-                        if not isinstance(date, pd.Timestamp):
-                            raise TypeError(
-                                "The values of the blacklist argument must be tuples of "
-                                "pandas Timestamps."
-                            )
+                    if not all(isinstance(date, pd.Timestamp) for date in value):
+                        raise TypeError(
+                            f"The values of blacklist[{i}] must be tuples of "
+                            "pandas Timestamps."
+                        )
+
+        if isinstance(blacklist, dict):
+            for key, value in blacklist.items():
+                # check keys are strings
+                if not isinstance(key, str):
+                    raise TypeError(
+                        "The keys of the blacklist argument must be strings."
+                    )
+                # check values of tuples of length two
+                if not isinstance(value, tuple):
+                    raise TypeError(
+                        "The values of the blacklist argument must be tuples."
+                    )
+                if len(value) != 2:
+                    raise ValueError(
+                        "The values of the blacklist argument must be tuples of length "
+                        "two."
+                    )
+                # ensure each of the dates in the dictionary are timestamps
+                if not all(isinstance(date, pd.Timestamp) for date in value):
+                    raise TypeError(
+                        "The values of the blacklist argument must be tuples of "
+                        "pandas Timestamps."
+                    )
 
         # freq checks
         if not isinstance(freq, str):
@@ -1797,9 +1810,9 @@ class BasePanelLearner(ABC):
 
 
 def _resolve_blacklists(
-    blacklist: dict | list[dict] | None,
-    n_targets: int,
-) -> list[dict | None]:
+    blacklist: Optional[Union[Dict, List[Dict]]],
+    n_targets: numbers.Integral,
+) -> List[Union[Dict, None]]:
     if isinstance(blacklist, list):
         return blacklist
     return [blacklist] * n_targets
@@ -1807,15 +1820,15 @@ def _resolve_blacklists(
 
 def _create_long_format_df(
     df: pd.DataFrame,
-    xcats: list[str],
-    cids: list[str] | None,
-    n_targets: int,
-    start: str | None,
-    end: str | None,
-    blacklist: dict | list[dict] | None,
+    xcats: List[str],
+    n_targets: numbers.Integral,
     freq: str,
-    lag: int,
-    xcat_aggs: list[str],
+    lag: numbers.Integral,
+    xcat_aggs: List[str],
+    start: Optional[str] = None,
+    end: Optional[str] = None,
+    blacklist: Optional[Union[Dict, List[Dict]]] = None,
+    cids: Optional[List[str]] = None,
 ) -> pd.DataFrame:
     """
     Helper method for computing long-format dataframe in BasePanelLearner __init__
@@ -1830,6 +1843,7 @@ def _create_long_format_df(
     )
 
     if n_targets == 1:
+        blacklist = blacklist[0] if isinstance(blacklist, list) else blacklist
         return categories_df(df=df, xcats=xcats, blacklist=blacklist, **shared_kwargs)
 
     features_xcats = xcats[:-n_targets]
@@ -1852,9 +1866,6 @@ def _create_long_format_df(
     # 1. rows where all targets are part of a blacklist should be removed
     # 2. rows where some targets are blacklisted and some not should stay
     # as is except blacklisted target should be set to nan
-    # todo: point 2. begs the question of how would we work with missing
-    # y data when multiple blacklists exist? can't be sure if nan is from blacklist
-    # or is just missing
     target_blacklists = _resolve_blacklists(blacklist, n_targets)
     target_in_bl = np.zeros((df.shape[0], n_targets), dtype=bool)
     for i, bl in enumerate(target_blacklists):

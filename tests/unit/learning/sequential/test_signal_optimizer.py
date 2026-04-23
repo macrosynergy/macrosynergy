@@ -400,7 +400,10 @@ class TestAll(unittest.TestCase):
                 xcats=self.xcats,
                 end="invalid",
             )
-        with self.assertRaises(TypeError):
+        with self.assertRaisesRegex(
+            ValueError,
+            expected_regex=r"blacklist must have exactly n_targets"
+        ):
             so = SignalOptimizer(
                 df=self.df,
                 xcats=self.xcats,

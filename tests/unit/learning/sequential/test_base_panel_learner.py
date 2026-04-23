@@ -106,6 +106,35 @@ class TestCreateLongFormatDf:
             "2018-01-01":"2019-01-01",
         ].empty
 
+    def test_single_target_with_blacklist_as_list(self, qdf):
+        blacklist = [
+            {
+                "AUD": (
+                    pd.Timestamp("2018-01-01"),
+                    pd.Timestamp("2019-01-01"),
+                ),
+            }
+        ]
+
+        result = _create_long_format_df(
+            df=qdf,
+            xcats=["CPI", "GROWTH", "RIR"],
+            cids=["AUD", "CAD"],
+            n_targets=1,
+            start=None,
+            end=None,
+            blacklist=blacklist,
+            freq="M",
+            lag=1,
+            xcat_aggs=["last", "sum"],
+        )
+
+        assert not result.empty
+        assert result.loc[
+            "AUD",
+            "2018-01-01":"2019-01-01",
+        ].empty
+
     def test_multi_target_columns_and_index(self, qdf):
         result = _create_long_format_df(
             df=qdf,
