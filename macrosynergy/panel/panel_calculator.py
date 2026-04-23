@@ -120,7 +120,7 @@ def panel_calculator(
     assert all([isinstance(elem, str) for elem in calcs]), error_formula
     assert isinstance(cids, list), "List of cross-sections expected."
 
-    _check_calcs(calcs, existing_xcats=df["xcat"].unique().tolist())
+    _check_calcs(calcs)
 
     safe_globals = {"np": np, "pd": pd, **external_func}
 
@@ -184,12 +184,6 @@ def panel_calculator(
     df_out: pd.DataFrame
     for new_xcat, formula in ops.items():
         dfw_add = eval(formula, safe_globals, data_map)
-        if not isinstance(dfw_add, pd.DataFrame):
-            raise ValueError(
-                f"Formula for {new_xcat} did not evaluate to a DataFrame. "
-                "Check the formula and ensure it results in a DataFrame with "
-                "dates as index and cids as columns."
-            )
         df_add = pd.melt(dfw_add.reset_index(), id_vars=["real_date"]).rename(
             {"variable": "cid"}, axis=1
         )
@@ -308,33 +302,14 @@ def xcat_isolator(calc_rhs_str: str) -> List[str]:
     found_xcats: List[str] = []
     n = len(rhs_chars)
 
-    def _is_standalone_assignment(pos: int) -> bool:
-        """
-        True if ``rhs_chars[pos]`` is a standalone ``=`` (assignment-like typo
-        in the RHS) rather than part of a comparison operator (``==``, ``>=``,
-        ``<=``, ``!=``). Used to reject RHS strings like ``XR = CRY`` or
-        ``SIGNAL=0`` while still allowing ``XR == CRY`` etc.
-        """
-        if not (0 <= pos < n) or rhs_chars[pos] != "=":
-            return False
-        prev_char = rhs_chars[pos - 1] if pos > 0 else ""
-        next_char = rhs_chars[pos + 1] if pos + 1 < n else ""
-        # Part of `==`
-        if prev_char == "=" or next_char == "=":
-            return False
-        # Part of `>=`, `<=`, `!=`
-        if prev_char in (">", "<", "!"):
-            return False
-        return True
-
     for xcat, start in found_xcats_with_pos:
         if start is None:
             continue
 
         end = start + len(xcat) - 1
 
-        has_eq_left = _is_standalone_assignment(start - 1)
-        has_eq_right = _is_standalone_assignment(end + 1)
+        has_eq_left = start > 0 and rhs_chars[start - 1] == "="
+        has_eq_right = end < n - 1 and rhs_chars[end + 1] == "="
 
         if has_eq_left or has_eq_right:
             continue
@@ -386,64 +361,31 @@ def _get_xcats_used(ops: dict) -> Tuple[List[str], List[str]]:
     return all_xcats_used, singles_used, single_cids
 
 
-def _check_calcs(formulas: List[str], existing_xcats: List[str] = None):
+def _check_calcs(formulas: List[str]):
     """
-    Validate formulas for common structural issues before evaluation.
-
-    The first ``=`` is treated as the assignment separator; subsequent ``=``
-    characters on the RHS (e.g. ``==`` comparisons, keyword arguments like
-    ``axis=1``) are left intact.
-
-    Checks performed:
-        - LHS is a valid xcat name (``is_valid_xcat``).
-        - LHS does not collide with an existing xcat in the input DataFrame
-          (only when ``existing_xcats`` is supplied).
-        - RHS is non-empty.
-        - Parentheses on the RHS are balanced.
+    Check formulas for invalid characters in xcats.
 
     Parameters
     ----------
-    formulas : List[str]
+    calcs : List[str]
         list of formulas.
-    existing_xcats : List[str], optional
-        xcats already present in the input DataFrame. When supplied, LHS
-        names that collide with any of these are rejected to prevent
-        silently overwriting input data.
 
-    Raises
-    ------
-    ValueError
-        If any formula fails validation.
+    Returns
+    -------
+    List[str]
+        list of formulas.
     """
-    existing = set(existing_xcats or [])
+
+    pattern = r"[-+*()/](?=i?[A-Z])|(?<=[A-Z])[-+*()/]"
 
     for formula in formulas:
-        parts = formula.split("=", maxsplit=1)
-        if len(parts) != 2:
-            raise ValueError(f"Formula is missing an '=' separator: {formula!r}")
-        lhs, rhs = parts[0].strip(), parts[1].strip()
-
-        if not is_valid_xcat(lhs):
-            raise ValueError(
-                f"Invalid LHS {lhs!r} in formula {formula!r}. "
-                "LHS must be a valid xcat name: alphanumeric characters and "
-                "underscores only, with at least one uppercase letter."
-            )
-
-        if lhs in existing:
-            raise ValueError(
-                f"LHS {lhs!r} in formula {formula!r} collides with an xcat "
-                "already present in the input DataFrame. Choose a unique name "
-                "to avoid silently overwriting input data."
-            )
-
-        if not rhs:
-            raise ValueError(f"RHS is empty in formula: {formula!r}")
-
-        if rhs.count("(") != rhs.count(")"):
-            raise ValueError(
-                f"Unbalanced parentheses on the RHS of formula: {formula!r}"
-            )
+        for term in formula.split():
+            # Search for any occurrences of the pattern in the input string
+            if re.search(pattern, term):
+                raise ValueError(
+                    f"Invalid character found next to a capital letter or 'i' in string: {term}. "
+                    + "Arithmetic operators and parentheses must be separated by spaces."
+                )
 
 
 def _replace_zeros(df: pd.DataFrame):
