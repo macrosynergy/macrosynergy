@@ -47,13 +47,9 @@ class TestDataFrameTransformer(unittest.TestCase):
 
         cls.X = df.drop(columns="XR")
         cls.X_numpy = cls.X.values
-        cls.X_nan = cls.X.copy()
-        cls.X_nan.iloc[:, 0] = np.nan  # Introduce NaN in the first column
 
         cls.y = np.sign( df["XR"] )
         cls.y_numpy = cls.y.values
-        cls.y_nan = cls.y.copy()
-        cls.y_nan.iloc[0] = np.nan  # Introduce NaN in the first element
 
     def test_types_init(self):
         """
@@ -116,25 +112,14 @@ class TestDataFrameTransformer(unittest.TestCase):
         self.assertRaises(TypeError, dt.fit, X=1, y=self.y)
         self.assertRaises(TypeError, dt.fit, X="X", y=self.y)
         self.assertRaises(ValueError, dt.fit, X=self.X.reset_index(), y=self.y)
-        self.assertRaises(ValueError, dt.fit, X=self.X_nan, y=self.y)
         # y - when a series
         self.assertRaises(TypeError, dt.fit, X=self.X, y=1)
         self.assertRaises(TypeError, dt.fit, X=self.X, y="y")
-        self.assertRaises(ValueError, dt.fit, X=self.X, y=self.y_nan)
         # y - when a dataframe
         self.assertRaises(ValueError, dt.fit, X=self.X, y=self.y.reset_index())
-        self.assertRaises(
-            ValueError,
-            dt.fit,
-            X=self.X,
-            y=pd.DataFrame(self.y_nan.reset_index(drop=True)),
-        )
         # y - when a numpy array
         self.assertRaises(
             ValueError, dt.fit, X=self.X, y=np.zeros((len(self.X), 2))
-        )
-        self.assertRaises(
-            ValueError, dt.fit, X=self.X, y=np.array([np.nan] * len(self.X))
         )
 
         self.assertRaises(ValueError, dt.fit, X=self.X, y=self.y[:-1])

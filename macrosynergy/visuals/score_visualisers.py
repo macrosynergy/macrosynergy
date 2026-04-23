@@ -35,6 +35,9 @@ class ScoreVisualisers:
     xcat_labels : Dict[str, str], optional
         A dictionary mapping category tickers (keys) to their labels (values). Default is
         None.
+    cid_labels : Dict[str, str], optional
+        A dictionary mapping cross-section identifiers (keys) to their labels (values).
+        Default is None.
     xcat_comp : str
         The name of the composite category. Default is 'Composite'.
     weights : List[float]
@@ -98,6 +101,7 @@ class ScoreVisualisers:
         df: pd.DataFrame,
         xcats: List[str] = None,
         cids: List[str] = None,
+        cid_labels: Dict[str, str] = None,
         xcat_labels: Dict[str, str] = None,
         xcat_comp: str = "Composite",
         weights: List[float] = None,
@@ -146,17 +150,32 @@ class ScoreVisualisers:
                 self.xcats.remove(xcat)
                 warnings.warn(f"{xcat} not in the DataFrame")
 
-        composite_df = linear_composite(
-            self.df,
-            xcats=self.xcats,
-            cids=self.cids,
-            weights=self.weights,
-            normalize_weights=normalize_weights,
-            signs=signs,
-            blacklist=blacklist,
-            complete_xcats=complete_xcats,
-            new_xcat=self.xcat_comp,
-        )
+        original_xcats = list(df["xcat"].unique())
+        if self.xcat_comp in original_xcats or xcat_comp in original_xcats:
+            source_name = (
+                self.xcat_comp if self.xcat_comp in original_xcats else xcat_comp
+            )
+            if source_name == "Composite":
+                warnings.warn(
+                    f"'{source_name}' found in df — using pre-computed composite instead of "
+                    "recalculating it."
+                )
+            composite_df = df[df["xcat"] == source_name].copy()
+            composite_df = composite_df[composite_df["cid"].isin(self.cids)]
+            if source_name != self.xcat_comp:
+                composite_df["xcat"] = self.xcat_comp
+        else:
+            composite_df = linear_composite(
+                self.df,
+                xcats=self.xcats,
+                cids=self.cids,
+                weights=self.weights,
+                normalize_weights=normalize_weights,
+                signs=signs,
+                blacklist=blacklist,
+                complete_xcats=complete_xcats,
+                new_xcat=self.xcat_comp,
+            )
 
         if rescore_composite:
             composite_df = make_zn_scores(
@@ -176,6 +195,7 @@ class ScoreVisualisers:
 
         self.df = update_df(self.df, composite_df)
         self.xcats = [self.xcat_comp] + self.xcats
+        self.cid_labels = cid_labels
         self.xcat_labels = xcat_labels
 
     def _validate_params(self, cids, xcats, xcat_comp):
@@ -396,9 +416,13 @@ class ScoreVisualisers:
             dfw = dfw.sort_values(by=composite_zscore, ascending=False)
         if composite_zscore in xcats:
             if composite_to_end:
-                ordering = [xcat for xcat in xcats if xcat != composite_zscore] + [composite_zscore]
+                ordering = [xcat for xcat in xcats if xcat != composite_zscore] + [
+                    composite_zscore
+                ]
             else:
-                ordering = [composite_zscore] + [xcat for xcat in xcats if xcat != composite_zscore]
+                ordering = [composite_zscore] + [
+                    xcat for xcat in xcats if xcat != composite_zscore
+                ]
             dfw = dfw[ordering]
         else:
             dfw = dfw[xcats]
@@ -463,6 +487,7 @@ class ScoreVisualisers:
         title_fontsize: int = 20,
         xticks: dict = None,
         figsize: tuple = (20, 10),
+        cid_labels: Optional[Dict[str, str]] = None,
         cmap: str = None,
         cmap_range: Tuple[float, float] = None,
         round_decimals: int = 2,
@@ -504,6 +529,8 @@ class ScoreVisualisers:
             A dictionary of arguments to label the x axis.
         figsize : tuple
             The size of the figure.
+        cid_labels : dict
+            A dictionary mapping cross-section identifiers to their labels.
         round_decimals : int
             The number of decimals to round the scores to.
         cmap : str
@@ -515,6 +542,7 @@ class ScoreVisualisers:
         """
 
         cids = cids or self.cids
+        cid_labels = cid_labels or self.cid_labels
         xcat = xcat if xcat.endswith(self.postfix) else xcat + self.postfix
 
         freq = "2AS" if freq == "BA" else _map_to_business_day_frequency(freq)
@@ -535,32 +563,35 @@ class ScoreVisualisers:
             dfw_resampled = dfw_resampled.iloc[:-1]
 
         if include_latest_day:
-            if (
-                df["real_date"].max().normalize()
-                == pd.Timestamp.today().normalize()
-            ):
-                dfw_resampled.loc[
-                    df["real_date"].max() - pd.tseries.offsets.BDay(1)
-                ] = dfw.loc[
-                    df["real_date"].max() - pd.tseries.offsets.BDay(1)
-                ]
-                print(
-                    "Latest day: ",
-                    df["real_date"].max() - pd.tseries.offsets.BDay(1),
-                )
+            if df["real_date"].max().normalize() == pd.Timestamp.today().normalize():
+                latest_date = df["real_date"].max() - pd.tseries.offsets.BDay(1)
             else:
-                dfw_resampled.loc[df["real_date"].max()] = dfw.loc[
-                    df["real_date"].max()
-                ]
-                print("Latest day: ", df["real_date"].max())
-            if freq in ["Q", "BQ", "BQE"]:
-                dfw_resampled.index = list(
-                    dfw_resampled.index.to_period("Q").strftime("%YQ%q")[:-1]
-                ) + ["Latest"]
+                latest_date = df["real_date"].max()
+
+            latest_values = dfw.loc[latest_date]
+            print("Latest day: ", latest_date)
+
+            if latest_date in dfw_resampled.index:
+                # Latest date coincides with a resampled period boundary.
+                # Convert to string labels first, then append "Latest Day"
+                # to avoid overwriting the period average.
+                if freq in ["Q", "BQ", "BQE"]:
+                    dfw_resampled.index = list(
+                        dfw_resampled.index.to_period("Q").strftime("%YQ%q")
+                    )
+                else:
+                    dfw_resampled.index = list(dfw_resampled.index.strftime("%Y"))
+                dfw_resampled.loc["Latest Day"] = latest_values
             else:
-                dfw_resampled.index = list(dfw_resampled.index.strftime("%Y")[:-1]) + [
-                    "Latest"
-                ]
+                dfw_resampled.loc[latest_date] = latest_values
+                if freq in ["Q", "BQ", "BQE"]:
+                    dfw_resampled.index = list(
+                        dfw_resampled.index.to_period("Q").strftime("%YQ%q")[:-1]
+                    ) + ["Latest Day"]
+                else:
+                    dfw_resampled.index = list(
+                        dfw_resampled.index.strftime("%Y")[:-1]
+                    ) + ["Latest Day"]
         else:
             if freq in ["Q", "BQ", "BQE"]:
                 dfw_resampled.index = list(
@@ -571,6 +602,11 @@ class ScoreVisualisers:
 
         dfw_resampled = dfw_resampled.transpose()
         dfw_resampled = dfw_resampled.reindex(cids)
+
+        if cid_labels:
+            dfw_resampled.index = [
+                cid_labels.get(cid, cid) for cid in dfw_resampled.index
+            ]
 
         # Drop columns and rows with all NaNs
         dfw_resampled = dfw_resampled.dropna(axis=1, how="all")
@@ -676,7 +712,7 @@ class ScoreVisualisers:
         df = self.df[self.df["cid"] == cid]
         df = df if start is None else df[df["real_date"] >= start]
         df = df[df["xcat"].isin(xcats)]
-        
+
         # If there is an xcat that does not exist in the DataFrame, remove it and warn
         for xcat in xcats:
             if xcat not in df["xcat"].unique():
@@ -692,32 +728,35 @@ class ScoreVisualisers:
             dfw_resampled = dfw_resampled.iloc[:-1]
 
         if include_latest_day:
-            if (
-                df["real_date"].max().normalize()
-                == pd.Timestamp.today().normalize()
-            ):
-                dfw_resampled.loc[
-                    df["real_date"].max() - pd.tseries.offsets.BDay(1)
-                ] = dfw.loc[
-                    df["real_date"].max() - pd.tseries.offsets.BDay(1)
-                ]
-                print(
-                    "Latest day: ",
-                    df["real_date"].max() - pd.tseries.offsets.BDay(1),
-                )
+            if df["real_date"].max().normalize() == pd.Timestamp.today().normalize():
+                latest_date = df["real_date"].max() - pd.tseries.offsets.BDay(1)
             else:
-                dfw_resampled.loc[df["real_date"].max()] = dfw.loc[
-                    df["real_date"].max()
-                ]
-                print("Latest day: ", df["real_date"].max())
-            if freq in ["Q", "BQ", "BQE"]:
-                dfw_resampled.index = list(
-                    dfw_resampled.index.to_period("Q").strftime("%YQ%q")[:-1]
-                ) + ["Latest"]
+                latest_date = df["real_date"].max()
+
+            latest_values = dfw.loc[latest_date]
+            print("Latest day: ", latest_date)
+
+            if latest_date in dfw_resampled.index:
+                # Latest date coincides with a resampled period boundary.
+                # Convert to string labels first, then append "Latest Day"
+                # to avoid overwriting the period average.
+                if freq in ["Q", "BQ", "BQE"]:
+                    dfw_resampled.index = list(
+                        dfw_resampled.index.to_period("Q").strftime("%YQ%q")
+                    )
+                else:
+                    dfw_resampled.index = list(dfw_resampled.index.strftime("%Y"))
+                dfw_resampled.loc["Latest Day"] = latest_values
             else:
-                dfw_resampled.index = list(dfw_resampled.index.strftime("%Y")[:-1]) + [
-                    "Latest"
-                ]
+                dfw_resampled.loc[latest_date] = latest_values
+                if freq in ["Q", "BQ", "BQE"]:
+                    dfw_resampled.index = list(
+                        dfw_resampled.index.to_period("Q").strftime("%YQ%q")[:-1]
+                    ) + ["Latest Day"]
+                else:
+                    dfw_resampled.index = list(
+                        dfw_resampled.index.strftime("%Y")[:-1]
+                    ) + ["Latest Day"]
         else:
             if freq in ["Q", "BQ", "BQE"]:
                 dfw_resampled.index = list(
@@ -864,9 +903,7 @@ if __name__ == "__main__":
         )
     ]
 
-    blacklist = {
-        "USD": [pd.Timestamp("2020-06-06"), pd.Timestamp("2030-07-23")]
-    }
+    blacklist = {"USD": [pd.Timestamp("2020-06-06"), pd.Timestamp("2030-07-23")]}
 
     sv = ScoreVisualisers(
         df,
@@ -888,7 +925,9 @@ if __name__ == "__main__":
         transpose=False,
         yticks_rotation=45,
     )
-    sv.view_cid_evolution(cid="USD", xcats=xcats + ["Composite"] , freq="A", transpose=False)
+    sv.view_cid_evolution(
+        cid="USD", xcats=xcats + ["Composite"], freq="A", transpose=False
+    )
     sv.view_score_evolution(
         xcat="GGIEDGDP_NSA",
         cids=cids,

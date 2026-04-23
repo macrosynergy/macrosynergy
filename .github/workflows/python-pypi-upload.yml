@@ -31,7 +31,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install .[test]
+          pip install .[test,torch]
 
       - name: Lint with flake8
         run: |
@@ -80,6 +80,9 @@ jobs:
         with:
           role-to-assume: ${{ secrets.AWS_ROLE }}
           aws-region: eu-west-2
+
+      - name: Wait for PyPI
+        run: sleep 60
 
       - name: Upload Docker base image to ECR
         run: |

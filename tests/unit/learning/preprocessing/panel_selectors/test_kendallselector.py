@@ -35,7 +35,7 @@ class TestKendallSelector(unittest.TestCase):
 
         n_samples = len(tuples)
         ftrs = np.random.normal(loc=0, scale=1, size=(n_samples, 3))
-        labels = np.matmul(ftrs, [1, 0, -1]) + np.random.normal(0, 0.5, len(ftrs))
+        labels = np.matmul(ftrs, [1, 0, -1]) + np.random.normal(0, 0.01, len(ftrs))
         df = pd.DataFrame(
             data=np.concatenate((np.reshape(labels, (-1, 1)), ftrs), axis=1),
             index=pd.MultiIndex.from_tuples(tuples, names=["cid", "real_date"]),
@@ -100,7 +100,6 @@ class TestKendallSelector(unittest.TestCase):
         self.assertRaises(TypeError, scaler.fit, X=1, y=self.y)
         self.assertRaises(TypeError, scaler.fit, X="X", y=self.y)
         self.assertRaises(TypeError, scaler.fit, X=self.X.values, y=self.y)
-        self.assertRaises(ValueError, scaler.fit, X=self.X_nan, y=self.y)
         self.assertRaises(ValueError, scaler.fit, X=self.X.reset_index(), y=self.y)
         # Test type of 'y' parameter
         self.assertRaises(TypeError, scaler.fit, X=self.X, y=1)

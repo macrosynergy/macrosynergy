@@ -4,6 +4,7 @@ from .panel_selectors import (
     LassoSelector,
     MapSelector,
     KendallSignificanceSelector,
+    FactorAvailabilitySelector,
 )
 __all__ = [
     "BasePanelSelector",
@@ -11,4 +12,5 @@ __all__ = [
     "LassoSelector",
     "MapSelector",
     "KendallSignificanceSelector",
+    "FactorAvailabilitySelector",
 ]

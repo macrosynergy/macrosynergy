@@ -26,7 +26,7 @@ class DataFrameTransformer(BaseEstimator, TransformerMixin, MetaEstimatorMixin):
     def __init__(self, transformer, column_names=None):
         # Checks
         if not isinstance(transformer, TransformerMixin):
-            raise TypeError("transformer must be a scikit-learn transformer.")
+            raise TypeError("transformer must be a scikit-learn transformer.") # TODO: can this be a pipeline object? 
         if column_names is not None and not isinstance(column_names, list):
             raise TypeError("column_names must be a list of strings or None.")
         if column_names is not None and len(column_names) == 0:
@@ -152,22 +152,6 @@ class DataFrameTransformer(BaseEstimator, TransformerMixin, MetaEstimatorMixin):
             raise ValueError(
                 "The number of samples in the input feature matrix must match the number "
                 "of samples in the target vector."
-            )
-        # Check NaN values
-        if X.isnull().values.any():
-            raise ValueError(
-                "The input feature matrix contains NaN values. Please handle missing "
-                "values before fitting the transformer."
-            )
-        if isinstance(y, (pd.DataFrame, pd.Series)) and y.isnull().values.any():
-            raise ValueError(
-                "The target vector contains NaN values. Please handle missing values before "
-                "fitting the transformer."
-            )
-        elif isinstance(y, np.ndarray) and np.isnan(y).any():
-            raise ValueError(
-                "The target vector contains NaN values. Please handle missing values before "
-                "fitting the transformer."
             )
         
         # Check that the number of column names provided is less than or equal

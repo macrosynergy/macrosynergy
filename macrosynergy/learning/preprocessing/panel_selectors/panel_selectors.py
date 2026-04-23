@@ -344,6 +344,62 @@ class KendallSignificanceSelector(BasePanelSelector):
 
         return np.array(self.support_)
 
+class FactorAvailabilitySelector(BasePanelSelector):
+    def __init__(self, min_cids=2, min_periods=36):
+        """
+        Feature selector based on availability criteria.
+
+        Selects features that have sufficient data coverage across both
+        cross-sections and time periods. A feature is selected if there
+        are at least ``min_periods`` time periods in which that feature
+        has non-missing values for at least ``min_cids`` cross-sections.
+
+        Notes
+        -----
+        If the dataset contains fewer time periods than ``min_periods``, the
+        threshold is automatically reduced to the number of available periods.
+
+        Parameters
+        ----------
+        min_cids : int, default=2
+            Minimum number of cross-sections that must have non-missing data
+            for a feature at a given time period for that period to count
+            as sufficiently covered.
+        min_periods : int, default=36
+            Minimum number of sufficiently covered time periods required for
+            a feature to be selected.
+        """
+        super().__init__()
+
+        if not isinstance(min_cids, numbers.Integral):
+            raise TypeError("The 'min_cids' parameter must be a positive integer.")
+        if not isinstance(min_periods, numbers.Integral):
+            raise TypeError("The 'min_periods' parameter must be a positive integer.")
+        if min_cids < 0:
+            raise ValueError("The 'min_cids' parameter must be a positive integer.")
+        if min_periods < 0:
+            raise ValueError("The 'min_periods' parameter must be a positive integer.")
+
+        self.min_cids = min_cids
+        self.min_periods = min_periods
+
+    def determine_features(self, X, y):
+        # If the dataset doesn't have self.min_periods periods, then we need to
+        # restrict analysis to the number of periods in the dataset
+        num_dates = len(X.index.get_level_values(1).unique())
+        min_periods = min(self.min_periods, num_dates)
+
+        mask = (
+            X.notna()
+            .groupby(level=1)
+            .sum()
+            .ge(self.min_cids)
+            .sum()
+            .ge(min_periods)
+        )
+
+        return np.array(mask)
+
 
 if __name__ == "__main__":
     import macrosynergy.management as msm
