@@ -415,15 +415,67 @@ class TestAll(unittest.TestCase):
 
         self.assertTrue(round(growth, 5) == round(row_value_cad, 5))
 
-    def test_check_calcs(self):
-        invalid_calcs = ["NEW1 = GROWTH + INFL)"]
-        self.assertRaises(ValueError, _check_calcs, invalid_calcs)
+    def test_check_calcs_rejects_invalid_lhs(self):
+        """LHS must be a valid xcat name (uppercase letters + underscores/digits)."""
+        # lowercase LHS
+        self.assertRaises(ValueError, _check_calcs, ["new1 = XR"])
+        # invalid character in LHS
+        self.assertRaises(ValueError, _check_calcs, ["NEW-1 = XR"])
+        # empty LHS
+        self.assertRaises(ValueError, _check_calcs, [" = XR"])
 
-        invalid_calcs = ["NEW1 = GROWTH +INFL"]
-        self.assertRaises(ValueError, _check_calcs, invalid_calcs)
+    def test_check_calcs_rejects_lhs_colliding_with_existing_xcat(self):
+        """LHS must not silently overwrite an xcat already in the input DataFrame."""
+        self.assertRaises(
+            ValueError,
+            _check_calcs,
+            ["XR = XR + 1"],
+            ["XR", "CRY"],
+        )
+        # Without the existing_xcats hint, the same formula is accepted.
+        _check_calcs(["XR = XR + 1"])
 
-        invalid_calcs = ["NEW1 = GROWTH - INFL", "NEW1 = (GROWTH ) - INFL"]
-        self.assertRaises(ValueError, _check_calcs, invalid_calcs)
+    def test_check_calcs_rejects_empty_rhs(self):
+        """A formula with an empty RHS cannot evaluate to anything."""
+        self.assertRaises(ValueError, _check_calcs, ["NEW1 ="])
+        self.assertRaises(ValueError, _check_calcs, ["NEW1 =   "])
+
+    def test_check_calcs_rejects_unbalanced_parens(self):
+        """Missing closing parens would surface as a confusing SyntaxError in eval."""
+        self.assertRaises(ValueError, _check_calcs, ["NEW1 = (XR + CRY"])
+        self.assertRaises(ValueError, _check_calcs, ["NEW1 = XR + CRY)"])
+        self.assertRaises(ValueError, _check_calcs, ["NEW1 = np.abs( XR ))"])
+
+    def test_check_calcs_rejects_formula_without_equals(self):
+        """Formulas without an '=' separator have no LHS to assign to."""
+        self.assertRaises(ValueError, _check_calcs, ["XR + CRY"])
+
+    def test_check_calcs_allows_double_equals_on_rhs(self):
+        """
+        `==` is a comparison on the RHS, not an assignment — only the first
+        `=` acts as the separator. Rejecting multi-`=` formulas would
+        incorrectly ban valid comparisons, boolean masks, and keyword arguments.
+        """
+        _check_calcs(["NEWCAT = ( NEW1 == XR ).astype( int )"])
+        _check_calcs(["NEWCAT = XR.rolling( window=20 ).mean()"])
+        _check_calcs(["MASK = ( XR >= 0 ).astype( int )"])
+
+    def test_check_calcs_allows_parens_adjacent_to_xcats(self):
+        """Parentheses around xcats are valid Python and should not be rejected."""
+        _check_calcs(["RESULT = (GROWTH).isna() + (INFL).isna()"])
+        _check_calcs(["RESULT = (GROWTH) - (INFL)"])
+        _check_calcs(["RESULT = ( GROWTH ).isna() + ( INFL ).isna()"])
+
+    def test_check_calcs_allows_no_space_around_operators(self):
+        """
+        Arithmetic operator spacing is style, not correctness. The parser
+        handles `XR+CRY` identically to `XR + CRY`, so `_check_calcs`
+        should not reject either.
+        """
+        _check_calcs(["NEW1 = GROWTH+INFL"])
+        _check_calcs(["NEW1 = GROWTH- INFL"])
+        _check_calcs(["NEW1 = GROWTH*INFL"])
+        _check_calcs(["NEW1 = (XR+CRY)/2"])
 
 
 class TestPanelCalculatorParserHelpers(unittest.TestCase):
