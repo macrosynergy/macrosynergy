@@ -433,6 +433,17 @@ class TestAll(unittest.TestCase):
                 pan_weight=1.0,
                 postfix="ZN",
             )
+        with self.assertRaises(ValueError):
+            df = make_zn_scores(
+                self.dfd,
+                "XR",
+                self.cids,
+                sequential=False,
+                neutral="mean",
+                upfront_thresh=0,
+                pan_weight=1.0,
+                postfix="ZN",
+            )
 
         with self.assertRaises(ValueError):
             # Test catching panel weight.
@@ -584,6 +595,77 @@ class TestAll(unittest.TestCase):
         check = sum(values[~np.isnan(values)] > threshold)
 
         self.assertTrue(check == 0)
+
+    def test_upfront_thresh_limits_outlier_bias(self):
+        dates = pd.date_range("2020-01-01", periods=5, freq="B")
+        base_df = pd.DataFrame(
+            {
+                "cid": ["A"] * 5,
+                "xcat": ["CRY"] * 5,
+                "real_date": dates,
+                "value": [1.0, -1.0, 2.0, -2.0, 100000.0],
+            }
+        )
+
+        no_clip = make_zn_scores(
+            base_df,
+            "CRY",
+            ["A"],
+            sequential=False,
+            min_obs=0,
+            iis=False,
+            neutral="zero",
+            pan_weight=1,
+            postfix="ZN",
+        )
+        no_clip = no_clip.sort_values("real_date").reset_index(drop=True)
+
+        upfront_thresh = 10.0
+        with_clip = make_zn_scores(
+            base_df,
+            "CRY",
+            ["A"],
+            sequential=False,
+            min_obs=0,
+            iis=False,
+            neutral="zero",
+            pan_weight=1,
+            upfront_thresh=upfront_thresh,
+            postfix="ZN",
+        )
+        with_clip = with_clip.sort_values("real_date").reset_index(drop=True)
+
+        manually_winsorized_df = base_df.copy()
+        manually_winsorized_df["value"] = manually_winsorized_df["value"].clip(
+            lower=-upfront_thresh, upper=upfront_thresh
+        )
+        manual_clip = make_zn_scores(
+            manually_winsorized_df,
+            "CRY",
+            ["A"],
+            sequential=False,
+            min_obs=0,
+            iis=False,
+            neutral="zero",
+            pan_weight=1,
+            postfix="ZN",
+        )
+        manual_clip = manual_clip.sort_values("real_date").reset_index(drop=True)
+
+        np.testing.assert_allclose(
+            with_clip["value"].to_numpy(), manual_clip["value"].to_numpy()
+        )
+
+        normal_obs_mask = no_clip["real_date"] < dates[-1]
+        max_abs_without_clip = np.abs(
+            no_clip.loc[normal_obs_mask, "value"].to_numpy()
+        ).max()
+        max_abs_with_clip = np.abs(
+            with_clip.loc[normal_obs_mask, "value"].to_numpy()
+        ).max()
+
+        self.assertLess(max_abs_without_clip, 0.001)
+        self.assertGreater(max_abs_with_clip, 0.3)
 
     def test_zn_scores_warning(self):
         with self.assertWarns(UserWarning):

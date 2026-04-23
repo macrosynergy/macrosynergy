@@ -430,6 +430,144 @@ class TestAll(unittest.TestCase):
 
         # Todo: check correct exponential averages for a whole series on toy data set using (.rolling) and .ewm
 
+    # Regression tests for the "non-daily output cuts off early" bug.
+    # `make_qdf` builds a gapless Mon-Fri calendar; real panels are not
+    # gapless (market holidays). The tests below insert holiday gaps
+    # so the bug path is actually exercised.
+
+    def _dataframe_with_holiday_gaps(self):
+        # Drop one business day per month in 2020. With a 37-bday
+        # lookback (~1.75 months), every monthly trigger in 2020 then
+        # has at least one gap inside its window.
+        self.dataframe_generator()
+        holidays = pd.to_datetime(
+            [
+                "2020-01-15", "2020-02-17", "2020-03-13", "2020-04-10",
+                "2020-05-25", "2020-06-15", "2020-07-03", "2020-08-14",
+                "2020-09-07", "2020-10-12", "2020-11-11", "2020-11-26",
+                "2020-12-25",
+            ]
+        )
+        return self.dfd[~self.dfd["real_date"].isin(holidays)].reset_index(
+            drop=True
+        )
+
+    def test_historic_vol_holiday_gaps(self):
+        # Direct regression guard: on a panel with holiday gaps, the
+        # non-daily output must still reach the last observation date.
+        # Before the fix, triggers whose lookback window contained a
+        # gap dropped to NaN and the tail of the output was lost.
+        dfd = self._dataframe_with_holiday_gaps()
+
+        for freq in ["m", "w", "q"]:
+            out = historic_vol(
+                dfd,
+                xcat="XR",
+                cids=self.cids,
+                lback_periods=37,
+                lback_meth="sq",
+                half_life=11,
+                est_freq=freq,
+                nan_tolerance=0.9999,
+                postfix="ASD",
+            )
+            for cid in self.cids:
+                last_in = dfd.loc[dfd["cid"] == cid, "real_date"].max()
+                last_out = (
+                    out.loc[out["cid"] == cid]
+                    .set_index("real_date")["value"]
+                    .last_valid_index()
+                )
+                self.assertIsNotNone(
+                    last_out, f"{freq=} {cid=}: no valid output produced"
+                )
+                self.assertEqual(
+                    last_out,
+                    last_in,
+                    f"{freq=} {cid=}: output ends at {last_out}, "
+                    f"input ends at {last_in}",
+                )
+
+    def test_historic_vol_daily_monthly_parity_at_last_observation(self):
+        # Daily and monthly should produce the same value whenever they
+        # look at the same N most-recent observations. The last data
+        # date is always a trigger, so both paths emit a value there.
+        # We compare at that single date per cid — late enough that
+        # warm-up effects are gone — and require exact agreement.
+        dfd = self._dataframe_with_holiday_gaps()
+        common = dict(
+            xcat="XR",
+            cids=self.cids,
+            lback_periods=37,
+            lback_meth="sq",
+            half_life=11,
+            nan_tolerance=0.9999,
+            postfix="ASD",
+        )
+        out_d = historic_vol(dfd, est_freq="d", **common)
+        out_m = historic_vol(dfd, est_freq="m", **common)
+
+        for cid in self.cids:
+            last_in = dfd.loc[dfd["cid"] == cid, "real_date"].max()
+            dv_row = out_d.loc[
+                (out_d["cid"] == cid) & (out_d["real_date"] == last_in),
+                "value",
+            ]
+            mv_row = out_m.loc[
+                (out_m["cid"] == cid) & (out_m["real_date"] == last_in),
+                "value",
+            ]
+            self.assertEqual(len(dv_row), 1, f"{cid=}: no daily row at {last_in}")
+            self.assertEqual(len(mv_row), 1, f"{cid=}: no monthly row at {last_in}")
+            dv, mv = dv_row.iloc[0], mv_row.iloc[0]
+            self.assertFalse(
+                np.isnan(dv), f"{cid=}: daily NaN at final date {last_in}"
+            )
+            self.assertFalse(
+                np.isnan(mv),
+                f"{cid=}: monthly truncated before reaching {last_in}",
+            )
+            self.assertAlmostEqual(
+                dv, mv, places=10,
+                msg=f"{cid=}: daily={dv} monthly={mv} at {last_in}",
+            )
+
+    def test_historic_vol_holidays_do_not_consume_nan_budget(self):
+        # `nan_tolerance` should measure data quality, not the calendar.
+        # A holiday is a gap in the calendar, not a missing observation,
+        # so it must not count against the tolerance. With strict
+        # `nan_tolerance=0` on a gapped panel, the final trigger should
+        # still produce a value because the actual data is clean.
+        dfd = self._dataframe_with_holiday_gaps()
+        out = historic_vol(
+            dfd,
+            xcat="XR",
+            cids=self.cids,
+            lback_periods=37,
+            lback_meth="sq",
+            half_life=11,
+            est_freq="m",
+            nan_tolerance=0,
+            postfix="ASD",
+        )
+        for cid in self.cids:
+            last_out = (
+                out.loc[out["cid"] == cid]
+                .set_index("real_date")["value"]
+                .last_valid_index()
+            )
+            last_in = dfd.loc[dfd["cid"] == cid, "real_date"].max()
+            self.assertIsNotNone(
+                last_out,
+                f"{cid=}: nan_tolerance=0 produced no valid output despite "
+                f"clean observations (holidays were consumed as NaNs)",
+            )
+            self.assertEqual(
+                last_out,
+                last_in,
+                f"{cid=}: last valid {last_out} != input end {last_in}",
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

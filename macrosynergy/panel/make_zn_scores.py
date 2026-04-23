@@ -30,6 +30,7 @@ def make_zn_scores(
     neutral: Union[str, Number] = "zero",
     est_freq: str = "D",
     thresh: float = None,
+    upfront_thresh: float = None,
     pan_weight: float = 1,
     postfix: str = "ZN",
     ffill: int = 0,
@@ -79,6 +80,11 @@ def make_zn_scores(
         threshold value beyond which scores are winsorized, i.e. contained at that
         threshold. The threshold is the maximum absolute score value that the function is
         allowed to produce. The minimum threshold is 1 mean absolute deviation.
+    upfront_thresh : float
+        threshold value beyond which the original input data are winsorized, i.e. capped
+        or floored at that threshold on the positive or negative side. Default is None.
+        The threshold limits the values of the original data in their native units to
+        avoid large outliers compromising subsequent operations.
     pan_weight : float
         weight of panel (versus individual cross section) for calculating the z-score
         parameters, i.e. the neutral level and the mean absolute deviation. Default is 1,
@@ -129,6 +135,13 @@ def make_zn_scores(
         if not isinstance(thresh, Number):
             raise TypeError(err)
         elif thresh < 1.0:
+            raise ValueError(err)
+
+    if upfront_thresh is not None:
+        err = "The `upfront_thresh` parameter must be a positive numerical value."
+        if not isinstance(upfront_thresh, Number):
+            raise TypeError(err)
+        elif upfront_thresh <= 0:
             raise ValueError(err)
 
     if not isinstance(iis, bool):
@@ -185,6 +198,9 @@ def make_zn_scores(
         dfw = forward_fill_wide_df(
             dfw, blacklist, n=ffill
         )
+
+    if upfront_thresh is not None:
+        dfw = dfw.clip(lower=-upfront_thresh, upper=upfront_thresh)
 
     # --- The actual scoring.
 
