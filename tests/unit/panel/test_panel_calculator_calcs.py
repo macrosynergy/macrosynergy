@@ -1,4 +1,6 @@
 import unittest
+import numpy as np
+import pandas as pd
 from macrosynergy.panel.panel_calculator import _get_xcats_used
 
 
@@ -532,7 +534,11 @@ TEST_CASES = {
         },
     },
     67: {
-        "calc_str": "TS14 = ( SIGNAL - SIGNAL.mean( axis=1 ) ) / ( SIGNAL.std( axis=1 ) + 1e-9 )",
+        # Cross-sectional z-score. Uses .sub/.div with axis=0 because
+        # `DataFrame - Series` defaults to aligning the Series index with
+        # the DataFrame's columns, which produces a garbage (n_dates,
+        # n_dates+n_cids) DataFrame instead of the intended (n_dates, n_cids).
+        "calc_str": "TS14 = SIGNAL.sub( SIGNAL.mean( axis=1 ), axis=0 ).div( SIGNAL.std( axis=1 ) + 1e-9, axis=0 )",
         "output": {
             "all_xcats_used": ["SIGNAL"],
             "singles_used": [],
@@ -668,7 +674,9 @@ TEST_CASES = {
         },
     },
     84: {
-        "calc_str": "XR_CLEAN = np.where( np.isinf( XR ), 0, XR )",
+        # np.where(...) returns an ndarray and breaks panel_calculator at
+        # `.reset_index()`. Use DataFrame.mask to keep the DataFrame type.
+        "calc_str": "XR_CLEAN = XR.mask( np.isinf( XR ), 0 )",
         "output": {
             "all_xcats_used": ["XR"],
             "singles_used": [],
@@ -676,7 +684,9 @@ TEST_CASES = {
         },
     },
     85: {
-        "calc_str": "XR_CLEAN = np.where( np.isnan( XR ), CRY, XR )",
+        # Replace NaN values in XR with the corresponding value from CRY.
+        # DataFrame.where(cond, other) keeps self where cond is True, else other.
+        "calc_str": "XR_CLEAN = XR.where( XR.notna(), CRY )",
         "output": {
             "all_xcats_used": ["XR", "CRY"],
             "singles_used": [],
@@ -708,7 +718,8 @@ TEST_CASES = {
         },
     },
     89: {
-        "calc_str": "XR_CLEAN = np.where( np.isinf( XR ) | np.isnan( XR ), 0, XR )",
+        # Replace both inf and NaN with 0, keep finite values.
+        "calc_str": "XR_CLEAN = XR.where( np.isfinite( XR ), 0 )",
         "output": {
             "all_xcats_used": ["XR"],
             "singles_used": [],
@@ -716,7 +727,9 @@ TEST_CASES = {
         },
     },
     90: {
-        "calc_str": "XR_VALID = np.where( np.isfinite( XR ), XR, CRY )",
+        # Keep XR where finite, use CRY as the fallback (mirrors the intent
+        # of the old np.where(np.isfinite(XR), XR, CRY) formulation).
+        "calc_str": "XR_VALID = XR.where( np.isfinite( XR ), CRY )",
         "output": {
             "all_xcats_used": ["XR", "CRY"],
             "singles_used": [],
@@ -724,7 +737,8 @@ TEST_CASES = {
         },
     },
     91: {
-        "calc_str": "XR_IMG = np.imag( XR ) + np.real( CRY )",
+        # Use XR values where present, fall back to CRY where XR is NaN.
+        "calc_str": "XR_COMBINED = XR.combine_first( CRY )",
         "output": {
             "all_xcats_used": ["XR", "CRY"],
             "singles_used": [],
@@ -739,44 +753,260 @@ TEST_CASES = {
             "single_cids": ["EUR"],
         },
     },
+    93: {
+        "calc_str": "RESULT = NETENERGYGDPRATIO_NSA_12MMA.isna()",
+        "output": {
+            "all_xcats_used": ["NETENERGYGDPRATIO_NSA_12MMA"],
+            "singles_used": [],
+            "single_cids": [],
+        },
+    },
+    94: {
+        "calc_str": "RESULT = ( NETENERGYGDPRATIO_NSA_12MMA ).isna() + ( NETGRAINSGDPRATIO_NSA_12MMA ).isna()",
+        "output": {
+            "all_xcats_used": [
+                "NETENERGYGDPRATIO_NSA_12MMA",
+                "NETGRAINSGDPRATIO_NSA_12MMA",
+            ],
+            "singles_used": [],
+            "single_cids": [],
+        },
+    },
+    95: {
+        "calc_str": "RESULT = ( NETENERGYGDPRATIO_NSA_12MMA ).isna() + ( NETGRAINSGDPRATIO_NSA_12MMA ).isna() + ( NETIMETALSGDPRATIO_NSA_12MMA ).isna() + ( NETLIVESTOCKGDPRATIO_NSA_12MMA ).isna() + ( NETPMETALSGDPRATIO_NSA_12MMA ).isna() + ( NETSOFTSGDPRATIO_NSA_12MMA ).isna()",
+        "output": {
+            "all_xcats_used": [
+                "NETENERGYGDPRATIO_NSA_12MMA",
+                "NETGRAINSGDPRATIO_NSA_12MMA",
+                "NETIMETALSGDPRATIO_NSA_12MMA",
+                "NETLIVESTOCKGDPRATIO_NSA_12MMA",
+                "NETPMETALSGDPRATIO_NSA_12MMA",
+                "NETSOFTSGDPRATIO_NSA_12MMA",
+            ],
+            "singles_used": [],
+            "single_cids": [],
+        },
+    },
+    96: {
+        "calc_str": "RESULT = XR.isna() + CRY.isna()",
+        "output": {
+            "all_xcats_used": ["XR", "CRY"],
+            "singles_used": [],
+            "single_cids": [],
+        },
+    },
+    97: {
+        "calc_str": "RESULT = ( XR ).isna() * 1",
+        "output": {
+            "all_xcats_used": ["XR"],
+            "singles_used": [],
+            "single_cids": [],
+        },
+    },
+    98: {
+        "calc_str": "RESULT = XR.isna().astype( int )",
+        "output": {
+            "all_xcats_used": ["XR"],
+            "singles_used": [],
+            "single_cids": [],
+        },
+    },
+    # --- Comparisons on the RHS ---
+    # `==` on the RHS is a comparison, not an assignment. The parser must not
+    # skip xcats that sit next to a `==` (only truly standalone `=` should be
+    # treated as the typo indicator).
+    99: {
+        "calc_str": "MASK = ( XR == CRY ).astype( int )",
+        "output": {
+            "all_xcats_used": ["XR", "CRY"],
+            "singles_used": [],
+            "single_cids": [],
+        },
+    },
+    100: {
+        "calc_str": "MASK = ( XR != CRY ).astype( int )",
+        "output": {
+            "all_xcats_used": ["XR", "CRY"],
+            "singles_used": [],
+            "single_cids": [],
+        },
+    },
+    101: {
+        "calc_str": "MASK = ( XR >= 0 ).astype( int )",
+        "output": {
+            "all_xcats_used": ["XR"],
+            "singles_used": [],
+            "single_cids": [],
+        },
+    },
+    102: {
+        "calc_str": "MASK = ( XR <= CRY ).astype( int )",
+        "output": {
+            "all_xcats_used": ["XR", "CRY"],
+            "singles_used": [],
+            "single_cids": [],
+        },
+    },
+    103: {
+        "calc_str": "MASK = ( ( XR == CRY ) & ( GROWTH > 0 ) ).astype( int )",
+        "output": {
+            "all_xcats_used": ["XR", "CRY", "GROWTH"],
+            "singles_used": [],
+            "single_cids": [],
+        },
+    },
+    # --- No-space arithmetic ---
+    # Operator spacing is cosmetic; the parser handles both forms. These
+    # cases live in addition to the "stripped" variant test because they
+    # document the intent explicitly.
+    104: {
+        "calc_str": "NEW1 = GROWTH+INFL",
+        "output": {
+            "all_xcats_used": ["GROWTH", "INFL"],
+            "singles_used": [],
+            "single_cids": [],
+        },
+    },
+    105: {
+        "calc_str": "NEW1 = (XR+CRY)/2",
+        "output": {
+            "all_xcats_used": ["XR", "CRY"],
+            "singles_used": [],
+            "single_cids": [],
+        },
+    },
+    106: {
+        "calc_str": "NEW1 = GROWTH*INFL - (XR+CRY)",
+        "output": {
+            "all_xcats_used": ["GROWTH", "INFL", "XR", "CRY"],
+            "singles_used": [],
+            "single_cids": [],
+        },
+    },
 }
 
 
 class TestPanelCalculatorCalcStrings(unittest.TestCase):
-    def test_get_xcats_used(self):
-        test_cases = TEST_CASES.copy()
+    # Mock data config for shape verification
+    MOCK_CIDS = ["USD", "EUR", "GBP"]
+    MOCK_N_DATES = 30
+    MOCK_SEED = 42
+
+    def _build_mock_data_map(self, xcats, singles):
+        """
+        Build a data_map mirroring what panel_calculator constructs internally:
+        one wide DataFrame (index=real_date, columns=cids) per xcat and per single ticker.
+        """
+        dates = pd.date_range("2020-01-01", periods=self.MOCK_N_DATES, freq="B")
+        rng = np.random.default_rng(self.MOCK_SEED)
+        data_map = {}
+        for name in set(xcats) | set(singles):
+            data = rng.standard_normal((self.MOCK_N_DATES, len(self.MOCK_CIDS)))
+            # Inject a NaN so isna/notna/fillna paths have something to act on.
+            data[0, 0] = np.nan
+            data_map[name] = pd.DataFrame(
+                data, index=dates, columns=list(self.MOCK_CIDS)
+            )
+        return data_map, dates
+
+    def _assert_produces_dataframe(self, key, label, calc_str, xcats, singles):
+        """
+        Verify the RHS of the calc string evaluates to a DataFrame that matches the
+        shape/index/columns panel_calculator expects. This catches formulas that
+        silently return ndarrays (np.where, np.isnan, np.imag, ...) or that
+        misalign via pandas broadcasting (DataFrame - Series with wrong axis),
+        both of which crash panel_calculator at runtime.
+        """
+        _, rhs = calc_str.split("=", 1)
+        data_map, dates = self._build_mock_data_map(xcats, singles)
+        safe_globals = {"np": np, "pd": pd}
+        prefix = f"Case {key} ({label}) `{calc_str}`:"
+        try:
+            result = eval(rhs.strip(), safe_globals, data_map)
+        except Exception as e:
+            self.fail(f"{prefix} eval raised {type(e).__name__}: {e}")
+
+        self.assertIsInstance(
+            result,
+            pd.DataFrame,
+            msg=(
+                f"{prefix} eval returned {type(result).__name__}, expected DataFrame. "
+                "panel_calculator will crash on `.reset_index()`."
+            ),
+        )
+        expected_shape = (self.MOCK_N_DATES, len(self.MOCK_CIDS))
+        self.assertEqual(
+            result.shape,
+            expected_shape,
+            msg=f"{prefix} result shape {result.shape}, expected {expected_shape}",
+        )
+        self.assertTrue(
+            result.index.equals(dates),
+            msg=f"{prefix} result index does not match the input dates.",
+        )
+        self.assertEqual(
+            set(result.columns),
+            set(self.MOCK_CIDS),
+            msg=(
+                f"{prefix} result columns {list(result.columns)}, "
+                f"expected {self.MOCK_CIDS}"
+            ),
+        )
+
+    def _run_cases(self, test_cases, strip_spaces=False):
+        label = "stripped" if strip_spaces else "original"
         for key in test_cases:
-            calc_str: str = test_cases[key]["calc_str"].replace(" ", "")
+            calc_str: str = test_cases[key]["calc_str"]
+            if strip_spaces:
+                calc_str = calc_str.replace(" ", "")
             expected_output = test_cases[key]["output"]
             lhs, rhs = calc_str.split("=", 1)
             ops = {lhs.strip(): rhs.strip()}
 
-            (
-                all_xcats_used,
-                singles_used,
-                single_cids,
-            ) = _get_xcats_used(ops)
-            error_message = f"Failed for case({key}) `{calc_str}`"
-            self.assertEqual(
-                set(all_xcats_used),
-                set(expected_output["all_xcats_used"]),
-                msg=error_message
-                + f" -- expected `all_xcats_used` = {expected_output['all_xcats_used']}, got {all_xcats_used}",
-            )
-            self.assertEqual(
-                set(singles_used),
-                set(expected_output["singles_used"]),
-                msg=error_message
-                + f" -- expected `singles_used` = {expected_output['singles_used']}, got {singles_used}",
-            )
-            self.assertEqual(
-                set(single_cids),
-                set(expected_output["single_cids"]),
-                msg=error_message
-                + f" -- expected `single_cids` = {expected_output['single_cids']}, got {single_cids}",
-            )
+            with self.subTest(case=key, label=label, calc=calc_str):
+                (
+                    all_xcats_used,
+                    singles_used,
+                    single_cids,
+                ) = _get_xcats_used(ops)
 
-        print(f"Tested {len(test_cases)} calculation strings successfully.")
+                # Pre-check: the formula must actually produce a DataFrame of
+                # the correct shape. If this fails, the parser-level assertions
+                # below are moot because panel_calculator would crash anyway.
+                self._assert_produces_dataframe(
+                    key, label, calc_str, all_xcats_used, singles_used
+                )
+
+                error_message = f"Failed for case({key}, {label}) `{calc_str}`"
+                self.assertEqual(
+                    set(all_xcats_used),
+                    set(expected_output["all_xcats_used"]),
+                    msg=error_message
+                    + f" -- expected `all_xcats_used` = {expected_output['all_xcats_used']}, got {all_xcats_used}",
+                )
+                self.assertEqual(
+                    set(singles_used),
+                    set(expected_output["singles_used"]),
+                    msg=error_message
+                    + f" -- expected `singles_used` = {expected_output['singles_used']}, got {singles_used}",
+                )
+                self.assertEqual(
+                    set(single_cids),
+                    set(expected_output["single_cids"]),
+                    msg=error_message
+                    + f" -- expected `single_cids` = {expected_output['single_cids']}, got {single_cids}",
+                )
+        return len(test_cases)
+
+    def test_get_xcats_used(self):
+        test_cases = TEST_CASES.copy()
+        n = self._run_cases(test_cases, strip_spaces=False)
+        print(f"Tested {n} calculation strings (original) successfully.")
+
+    def test_get_xcats_used_stripped(self):
+        test_cases = TEST_CASES.copy()
+        n = self._run_cases(test_cases, strip_spaces=True)
+        print(f"Tested {n} calculation strings (stripped) successfully.")
 
 
 if __name__ == "__main__":
