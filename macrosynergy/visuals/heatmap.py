@@ -14,7 +14,7 @@ from seaborn.utils import relative_luminance
 
 from macrosynergy.management.simulate import make_test_df
 from macrosynergy.management.utils import downsample_df_on_real_date
-from macrosynergy.visuals.plotter import Plotter
+from macrosynergy.visuals.plotter import Plotter, add_figure_footnote
 
 
 class Heatmap(Plotter):
@@ -75,6 +75,8 @@ class Heatmap(Plotter):
         title_fontsize: int = 22,
         title_xadjust: Number = 0.5,
         title_yadjust: Number = 1.0,
+        footnote: Optional[str] = None,
+        footnote_fontsize: int = 9,
         vmin: Optional[Number] = None,
         vmax: Optional[Number] = None,
         show: bool = True,
@@ -117,6 +119,10 @@ class Heatmap(Plotter):
             sets the x position of the title text.
         title_yadjust : float
             sets the y position of the title text.
+        footnote : str
+            Optional text shown at the bottom-left of the figure canvas.
+        footnote_fontsize : int
+            Font size of the footnote. Default is 9.
         vmin : float
             optional minimum value for heatmap scale.
         vmax : float
@@ -244,6 +250,8 @@ class Heatmap(Plotter):
 
         ax.tick_params(axis="y", which="major", pad=8)
 
+        add_figure_footnote(fig, footnote=footnote, fontsize=footnote_fontsize)
+
         if save_to_file:
             plt.savefig(
                 save_to_file,
@@ -277,6 +285,8 @@ class Heatmap(Plotter):
         title_fontsize: int = 22,
         title_xadjust: Number = 0.5,
         title_yadjust: Number = 1.0,
+        footnote: Optional[str] = None,
+        footnote_fontsize: int = 9,
         vmin: Optional[Number] = None,
         vmax: Optional[Number] = None,
         show: bool = True,
@@ -294,7 +304,6 @@ class Heatmap(Plotter):
         show_boundaries: Optional[bool] = False,
         annotation_fontsize: int = 14,
         tick_fontsize: int = 13,
-        return_fig: bool = False,
         *args,
         **kwargs,
     ):
@@ -340,6 +349,10 @@ class Heatmap(Plotter):
             sets the x position of the title text.
         title_yadjust : float
             sets the y position of the title text.
+        footnote : str
+            Optional text shown at the bottom-left of the figure canvas.
+        footnote_fontsize : int
+            Font size of the footnote. Default is 9.
         vmin : float
             optional minimum value for heatmap scale.
         vmax : float
@@ -443,12 +456,14 @@ class Heatmap(Plotter):
             title_fontsize=title_fontsize,
             title_xadjust=title_xadjust,
             title_yadjust=title_yadjust,
+            footnote=footnote,
+            footnote_fontsize=footnote_fontsize,
             vmin=vmin,
             vmax=vmax,
             show=show,
             save_to_file=save_to_file,
             dpi=dpi,
-            return_figure=return_fig,
+            return_figure=return_figure,
             on_axis=on_axis,
             max_xticks=max_xticks,
             cmap=cmap,

@@ -130,6 +130,10 @@ Here are the generic arguments that behave the same across all plotting methods:
 
 :param <float> title_yadjust: the y-adjustment of the title.
 
+:param <str> footnote: optional figure-level footnote placed at the bottom-left of the figure canvas.
+
+:param <int> footnote_fontsize: the font size of the footnote.
+
 :param <bool> legend: whether or not to show a legend for the plot.
 
 :param <str> legend_loc: Location of the legend.

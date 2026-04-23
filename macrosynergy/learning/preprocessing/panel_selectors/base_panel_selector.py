@@ -144,12 +144,6 @@ class BasePanelSelector(BaseEstimator, SelectorMixin, ABC):
                 "All columns in the input feature matrix for a panel selector ",
                 "must be numeric.",
             )
-        if X.isnull().values.any():
-            raise ValueError(
-                "The input feature matrix for a panel selector must not contain any "
-                "missing values."
-            )
-        # Check target vector, if provided
         if y is not None:
             if not (isinstance(y, pd.Series) or isinstance(y, pd.DataFrame)):
                 raise TypeError(
@@ -211,12 +205,6 @@ class BasePanelSelector(BaseEstimator, SelectorMixin, ABC):
                 "All columns in the input feature matrix for a panel selector ",
                 "must be numeric.",
             )
-        if X.isnull().values.any():
-            raise ValueError(
-                "The input feature matrix for a panel selector must not contain any "
-                "missing values."
-            )
-
         if X.shape[1] != self.n_features_in_:
             raise ValueError(
                 "The input feature matrix must have the same number of columns as the "

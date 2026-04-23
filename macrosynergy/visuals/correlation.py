@@ -15,6 +15,7 @@ from matplotlib import pyplot as plt
 from macrosynergy.management.simulate import make_qdf
 from macrosynergy.management.utils import _map_to_business_day_frequency, reduce_df
 from macrosynergy.management.types import QuantamentalDataFrame
+from macrosynergy.visuals.plotter import add_figure_footnote
 
 
 def view_correlation(
@@ -44,6 +45,8 @@ def view_correlation(
     ticker_labels: Optional[Union[List[str], Dict[str, str]]] = None,
     cbar_shrink: Union[float, int] = 0.5,
     cbar_fontsize: int = 12,
+    footnote: Optional[str] = None,
+    footnote_fontsize: int = 9,
     **kwargs: Any,
 ):
     """
@@ -126,6 +129,10 @@ def view_correlation(
         shrinkage factor of the color bar. Default is 0.5.
     cbar_fontsize : int
         font size of the color bar. Default is 12.
+    footnote : str
+        Optional text shown at the bottom-left of the figure canvas.
+    footnote_fontsize : int
+        Font size of the footnote. Default is 9.
     **kwargs : Dict
         Arbitrary keyword arguments that are passed to seaborn.heatmap.
 
@@ -413,6 +420,7 @@ def view_correlation(
     ax.tick_params(axis="y", labelsize=fontsize)
 
     plt.tight_layout()
+    add_figure_footnote(fig, footnote=footnote, fontsize=footnote_fontsize)
     if show:
         plt.show()
         return
