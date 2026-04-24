@@ -133,8 +133,7 @@ def historic_vol(
         Helper function to calculate the historic volatility for a single row in the
         DataFrame.
         """
-        target_dates = pd.bdate_range(end=row["real_date"], periods=lback_periods)
-        target_df: pd.DataFrame = dfw.loc[dfw.index.isin(target_dates)]
+        target_df: pd.DataFrame = dfw.loc[: row["real_date"]].tail(lback_periods)
 
         if weights is None:
             out = np.sqrt(252) * target_df.agg(roll_func, remove_zeros=remove_zeros)
