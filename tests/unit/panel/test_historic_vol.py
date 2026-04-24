@@ -479,12 +479,12 @@ class TestAll(unittest.TestCase):
                     .last_valid_index()
                 )
                 self.assertIsNotNone(
-                    last_out, f"{freq=} {cid=}: no valid output produced"
+                    last_out, f"freq={freq} cid={cid}: no valid output produced"
                 )
                 self.assertEqual(
                     last_out,
                     last_in,
-                    f"{freq=} {cid=}: output ends at {last_out}, "
+                    f"freq={freq} cid={cid}: output ends at {last_out}, "
                     f"input ends at {last_in}",
                 )
 
@@ -517,19 +517,19 @@ class TestAll(unittest.TestCase):
                 (out_m["cid"] == cid) & (out_m["real_date"] == last_in),
                 "value",
             ]
-            self.assertEqual(len(dv_row), 1, f"{cid=}: no daily row at {last_in}")
-            self.assertEqual(len(mv_row), 1, f"{cid=}: no monthly row at {last_in}")
+            self.assertEqual(len(dv_row), 1, f"cid={cid}: no daily row at {last_in}")
+            self.assertEqual(len(mv_row), 1, f"cid={cid}: no monthly row at {last_in}")
             dv, mv = dv_row.iloc[0], mv_row.iloc[0]
             self.assertFalse(
-                np.isnan(dv), f"{cid=}: daily NaN at final date {last_in}"
+                np.isnan(dv), f"cid={cid}: daily NaN at final date {last_in}"
             )
             self.assertFalse(
                 np.isnan(mv),
-                f"{cid=}: monthly truncated before reaching {last_in}",
+                f"cid={cid}: monthly truncated before reaching {last_in}",
             )
             self.assertAlmostEqual(
                 dv, mv, places=10,
-                msg=f"{cid=}: daily={dv} monthly={mv} at {last_in}",
+                msg=f"cid={cid}: daily={dv} monthly={mv} at {last_in}",
             )
 
     def test_historic_vol_holidays_do_not_consume_nan_budget(self):
@@ -559,13 +559,13 @@ class TestAll(unittest.TestCase):
             last_in = dfd.loc[dfd["cid"] == cid, "real_date"].max()
             self.assertIsNotNone(
                 last_out,
-                f"{cid=}: nan_tolerance=0 produced no valid output despite "
+                f"cid={cid}: nan_tolerance=0 produced no valid output despite "
                 f"clean observations (holidays were consumed as NaNs)",
             )
             self.assertEqual(
                 last_out,
                 last_in,
-                f"{cid=}: last valid {last_out} != input end {last_in}",
+                f"cid={cid}: last valid {last_out} != input end {last_in}",
             )
 
 
