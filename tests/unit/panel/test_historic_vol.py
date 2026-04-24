@@ -1,18 +1,18 @@
 import unittest
+from typing import List
+
 import numpy as np
 import pandas as pd
 
-from typing import List
-
 from macrosynergy.management.simulate import make_qdf
+from macrosynergy.management.utils import reduce_df
 from macrosynergy.panel.historic_vol import (
-    historic_vol,
-    expo_weights,
     expo_std,
+    expo_weights,
     flat_std,
+    historic_vol,
     sq_std,
 )
-from macrosynergy.management.utils import reduce_df
 
 
 class TestEstimationMethods(unittest.TestCase):
@@ -442,15 +442,22 @@ class TestAll(unittest.TestCase):
         self.dataframe_generator()
         holidays = pd.to_datetime(
             [
-                "2020-01-15", "2020-02-17", "2020-03-13", "2020-04-10",
-                "2020-05-25", "2020-06-15", "2020-07-03", "2020-08-14",
-                "2020-09-07", "2020-10-12", "2020-11-11", "2020-11-26",
+                "2020-01-15",
+                "2020-02-17",
+                "2020-03-13",
+                "2020-04-10",
+                "2020-05-25",
+                "2020-06-15",
+                "2020-07-03",
+                "2020-08-14",
+                "2020-09-07",
+                "2020-10-12",
+                "2020-11-11",
+                "2020-11-26",
                 "2020-12-25",
             ]
         )
-        return self.dfd[~self.dfd["real_date"].isin(holidays)].reset_index(
-            drop=True
-        )
+        return self.dfd[~self.dfd["real_date"].isin(holidays)].reset_index(drop=True)
 
     def test_historic_vol_holiday_gaps(self):
         # Direct regression guard: on a panel with holiday gaps, the
@@ -528,7 +535,9 @@ class TestAll(unittest.TestCase):
                 f"cid={cid}: monthly truncated before reaching {last_in}",
             )
             self.assertAlmostEqual(
-                dv, mv, places=10,
+                dv,
+                mv,
+                places=10,
                 msg=f"cid={cid}: daily={dv} monthly={mv} at {last_in}",
             )
 
