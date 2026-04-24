@@ -4,7 +4,7 @@ Module for calculating z-scores for a panel around a neutral level ("zn scores")
 
 import numpy as np
 import pandas as pd
-from typing import List, Union
+from typing import List, Optional, Union
 from numbers import Number
 from macrosynergy.management.simulate import make_qdf
 from macrosynergy.management.utils import (
@@ -14,13 +14,13 @@ from macrosynergy.management.utils import (
     forward_fill_wide_df,
 )
 from macrosynergy.management.types import QuantamentalDataFrame
-from numbers import Number
 
 
 def make_zn_scores(
     df: pd.DataFrame,
-    xcat: str,
+    xcat: Optional[str] = None,
     cids: List[str] = None,
+    xcats: Optional[List[str]] = None,
     start: str = None,
     end: str = None,
     blacklist: dict = None,
@@ -46,6 +46,10 @@ def make_zn_scores(
         'real_date' and 'value'.
     xcat : str
         extended category for which the zn_score is calculated.
+    xcats : List[str]
+        extended categories for which zn-scores are calculated. If provided, the
+        function computes scores separately for each category and returns the combined
+        standardized DataFrame.
     cids : List[str]
         cross sections for which zn_scores are calculated; default is all available for
         category.
@@ -118,6 +122,76 @@ def make_zn_scores(
 
     expected_columns = ["cid", "xcat", "real_date", "value"]
     df = QuantamentalDataFrame(df[expected_columns])
+
+    if xcats is not None:
+        if not isinstance(xcats, list) or not all(isinstance(cat, str) for cat in xcats):
+            raise TypeError("The `xcats` parameter must be a list of strings.")
+        if len(xcats) == 0:
+            raise ValueError("The `xcats` parameter must not be empty.")
+        xcats = list(dict.fromkeys(xcats))
+        if xcat is not None and xcat not in xcats:
+            raise ValueError(
+                "If both `xcat` and `xcats` are provided, `xcat` must be included in "
+                "`xcats`."
+            )
+    elif xcat is None:
+        raise ValueError("One of `xcat` or `xcats` must be provided.")
+
+    if xcats is None:
+        xcats = [xcat]
+
+    outputs = [
+        _make_zn_scores_for_xcat(
+            df=df,
+            xcat=category,
+            cids=cids,
+            start=start,
+            end=end,
+            blacklist=blacklist,
+            sequential=sequential,
+            min_obs=min_obs,
+            iis=iis,
+            neutral=neutral,
+            est_freq=est_freq,
+            thresh=thresh,
+            upfront_thresh=upfront_thresh,
+            pan_weight=pan_weight,
+            postfix=postfix,
+            ffill=ffill,
+            unscore=unscore,
+        )
+        for category in xcats
+    ]
+
+    if len(outputs) == 1:
+        return outputs[0]
+
+    return QuantamentalDataFrame(
+        pd.concat(outputs, axis=0, ignore_index=True).sort_values(
+            by=["cid", "xcat", "real_date"]
+        )
+    )
+
+
+def _make_zn_scores_for_xcat(
+    df: pd.DataFrame,
+    xcat: str,
+    cids: List[str] = None,
+    start: str = None,
+    end: str = None,
+    blacklist: dict = None,
+    sequential: bool = True,
+    min_obs: int = 261,
+    iis: bool = True,
+    neutral: Union[str, Number] = "zero",
+    est_freq: str = "D",
+    thresh: float = None,
+    upfront_thresh: float = None,
+    pan_weight: float = 1,
+    postfix: str = "ZN",
+    ffill: int = 0,
+    unscore: bool = False,
+) -> pd.DataFrame:
 
     # --- Assertions
     err: str = (
@@ -610,3 +684,19 @@ if __name__ == "__main__":
     )
 
     print(panel_df_7)
+
+    multi_xcat_df = make_zn_scores(
+        dfd,
+        xcats=["XR", "CRY"],
+        cids=cids,
+        start="2010-01-04",
+        sequential=False,
+        min_obs=0,
+        neutral="mean",
+        iis=True,
+        thresh=None,
+        pan_weight=0.5,
+        postfix="ZN",
+    )
+
+    print(multi_xcat_df)
