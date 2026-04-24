@@ -57,6 +57,7 @@ def timelines(
     footnote: Optional[str] = None,
     footnote_fontsize: int = 9,
     return_fig: bool = False,
+    y_axis_label: Optional[str] = None,
 ):
     """
     Displays a facet grid of time line charts of one or more categories.
@@ -201,11 +202,8 @@ def timelines(
     )
 
     if cumsum:
-        df[val] = (
-            df.sort_values(["cid", "xcat", "real_date"])[["cid", "xcat", val]]
-            .groupby(["cid", "xcat"])
-            .cumsum()
-        )
+        df = df.sort_values(["cid", "xcat", "real_date"])
+        df[val] = df.groupby(["cid", "xcat"])[val].cumsum()
 
     cross_mean_series: Optional[str] = f"mean_{xcats[0]}" if cs_mean else None
     if cs_mean:
@@ -303,6 +301,7 @@ def timelines(
                 footnote_fontsize=footnote_fontsize,
                 show=not return_fig,
                 return_figure=return_fig,
+                y_axis_label=y_axis_label,
             )
 
     elif single_chart or (len(cids) == 1):
@@ -333,6 +332,7 @@ def timelines(
                 footnote_fontsize=footnote_fontsize,
                 show=not return_fig,
                 return_figure=return_fig,
+                y_axis_label=y_axis_label,
             )
 
     else:
@@ -380,6 +380,7 @@ def timelines(
                 footnote_fontsize=footnote_fontsize,
                 show=not return_fig,
                 return_figure=return_fig,
+                y_axis_label=y_axis_label,
             )
 
     if return_fig:

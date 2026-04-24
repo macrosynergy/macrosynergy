@@ -1,10 +1,10 @@
 """
 Implementation of the ProxyPnL class.
 """
-
+import numpy as np
 import pandas as pd
 from numbers import Number
-from typing import List, Union, Tuple, Optional
+from typing import Dict, List, Union, Tuple, Optional
 
 from macrosynergy.management.utils import (
     reduce_df,
@@ -15,6 +15,7 @@ import macrosynergy.visuals as msv
 from macrosynergy.pnl import (
     notional_positions,
     contract_signals,
+    evaluate_pnl,
     proxy_pnl_calc,
     TransactionCosts,
 )
@@ -312,11 +313,71 @@ class ProxyPnL(object):
         assert len(outs) == 3
         assert all(map(lambda x: isinstance(x, QuantamentalDataFrame), outs))
         self.proxy_pnl: QuantamentalDataFrame = outs[0]
-        self.txn_costs_df: QuantamentalDataFrame = outs[1]
-        self.pnl_excl_costs: QuantamentalDataFrame = outs[2]
-        outs = None
+        self.pnl_excl_costs: QuantamentalDataFrame = outs[1]
+        self.txn_costs_df: QuantamentalDataFrame = outs[2]
 
         return self.proxy_pnl
+
+    def evaluate_pnl(
+        self,
+        aum: Number,
+        include_pnle: bool = False,
+        include_tcosts: bool = False,
+        pnl_name: str = "PNL",
+        tcost_name: str = "TCOST",
+        label_dict: Optional[Dict[str, str]] = None,
+    ) -> pd.DataFrame:
+        pnl_exists = hasattr(self, "proxy_pnl") and self.proxy_pnl is not None
+        pnle_exists = hasattr(self, "pnl_excl_costs") and self.proxy_pnl is not None
+        tcosts_exists = hasattr(self, "txn_costs_df") and self.proxy_pnl is not None
+
+        missing_data_msg = (
+            "Either pass a DataFrame with {data} or run "
+            "`ProxyPnL.proxy_pnl_calc` first"
+        )
+        if not pnl_exists:
+            raise ValueError(missing_data_msg.format("proxy pnl"))
+        if not pnle_exists and include_pnle:
+            raise ValueError(missing_data_msg.format("pnl excluding costs"))
+        if not tcosts_exists and include_tcosts:
+            raise ValueError(missing_data_msg.format("transaction costs"))
+
+        # PnL summary
+        df = self.proxy_pnl
+        pnl_cats = [f"{self.sname}_{self.pname}_{pnl_name}"]
+
+        if include_pnle:
+            pnl_cats += [f"{self.sname}_{self.pname}_{pnl_name}e"]
+            df = pd.concat((df, self.pnl_excl_costs))
+
+        df["value"] = 100 * df["value"] / aum
+        pnl_summary: pd.DataFrame = evaluate_pnl(
+            df=df,
+            pnl_cats=pnl_cats,
+            start=self.start,
+            end=self.end,
+            blacklist=self.blacklist,
+            label_dict=label_dict,
+        )
+
+        # Include transaction cost summary
+        if include_tcosts:
+            txn_df = reduce_df(
+                df=self.txn_costs_df,
+                xcats=[f"{self.sname}_{self.pname}_{tcost_name}"],
+                cids=[self.portfolio_name],
+                blacklist=self.blacklist,
+            )
+            total_txn_cost = txn_df["value"].sum()
+            total_txn_cost = [total_txn_cost, 0] if include_pnle else total_txn_cost
+
+            pnl_summary.loc["Total Costs"] = total_txn_cost
+
+        pnl_summary = pnl_summary.astype(float)
+
+        return pnl_summary
+
+
 
     def plot_pnl(self, title: str = "Proxy PnL", cumsum: bool = True, **kwargs):
         """
@@ -335,7 +396,7 @@ class ProxyPnL(object):
         """
         cdf = pd.concat((self.proxy_pnl, self.pnl_excl_costs), axis=0)
         rdf = reduce_df(cdf, cids=["GLB"])
-        msv.timelines(rdf, title=title, cumsum=cumsum)
+        msv.timelines(rdf, title=title, cumsum=cumsum, **kwargs)
 
 
 if __name__ == "__main__":

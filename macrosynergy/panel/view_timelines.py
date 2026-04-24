@@ -45,6 +45,7 @@ def view_timelines(
     footnote: Optional[str] = None,
     footnote_fontsize: int = 9,
     return_fig: bool = False,
+    y_axis_label: Optional[str] = None,
 ):
     """
     Displays a grid with subplots of time line charts of one or more categories.
@@ -165,6 +166,7 @@ def view_timelines(
         footnote=footnote,
         footnote_fontsize=footnote_fontsize,
         return_fig=return_fig,
+        y_axis_label=y_axis_label,
     )
 
 
