@@ -373,15 +373,31 @@ def contract_signals(
         The former are fixed across time, the latter are variable. This must have the
         same length as `basket_contracts`.
     hedge_xcat : str
-        category name for cross-section-specific hedge ratios. A hedge ratio is defined as
-        the sensitivity of the cross-section specific position return to the hedge basket
-        return, often called "beta". The values of this category determine the direction
-        and size of the overall hedge basket per unit of the cross-section-specific signal.
+        Category name for cross-section-specific hedge ratios. A hedge ratio is defined
+        as the sensitivity of the cross-section specific position return to the hedge
+        basket return. It is often called "beta". The values of this category determine
+        the direction and size of the overall hedge basket per unit of the
+        cross-section-specific signal. Positive hedge ratios create opposite-sign
+        basket positions. If `relative_value=True`, relative value is applied to
+        primary contract signals first. Then the hedge basket's contract signals are
+        computed separately as the negative of the product of cross-sectional signal,
+        hedge ratio and the weight of the contract in the basket (as per
+        `basket_weights`). This means that the contract signals with hedge positions
+        represent a hedged relative return not a relative hedged return. The hedge
+        ratio passed to the function must be the beta of the relative return. The
+        hedge basket contract signals are added to the primary contract signals if
+        the same contract already exists; otherwise a new contract signal column is
+        created.
     relative_value : bool
-        If False (default), signals are calculated as is. If True, each position is made
-        relative to the equal-weighted cross-sectional mean of positions per contract
-        type - equivalent to adding an opposite-sign basket of positions (with cscales
-        and negated csigns) across all concurrently tradable cross-sections.
+        If False (default), contract signals are simply cross-sectional signals
+        multiplied by scales (`cscales`) and signs (`csigns`). If True, an additional
+        opposing position in all available cross sections (basket) with equal weights
+        is imputed. This is done by subtracting from each contract signal the mean of
+        all signed and scaled positions, across all tradable cross sections. That mean
+        simply aggregates all basket positions that result from all cross-sectional
+        signals for that contract. This operation takes place before basket hedge
+        signals are added. If the targets are relative values the hedge ratio must be
+        the beta of the relative return with respect to the hedge basket return.
     start : str
         earliest date in ISO format. Default is None and earliest date in df is used.
     end : str
