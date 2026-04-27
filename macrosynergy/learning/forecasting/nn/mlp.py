@@ -98,86 +98,88 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         self.x_scaler = x_scaler
         self.y_scaler = y_scaler
         self.verbose = verbose
-        self.random_state = random_state
+        self.random_states = [random_state] if not isinstance(random_state, list) else random_state
         self.inverse_transform_preds = inverse_transform_preds
 
-        self.model = None
+        self.models = []
 
     def fit(self, X, y, sample_weight=None):
         # Additional checks 
         sample_weight_strategy = self._check_fit_params(X, y, sample_weight)
 
-        # Set random seed for reproducibility
-        torch.manual_seed(self.random_state)
-
-        # Initialize model 
-        model = self.initialize_model(
-            n_inputs = X.shape[1],
-            n_latent = self.n_latent,
-            n_outputs = y.shape[1],
-            encoder_activation = self.encoder_activation,
-            head_activation = self.head_activation,
-            fit_encoder_intercept = self.fit_encoder_intercept,
-            fit_head_intercept = self.fit_head_intercept
-        )
-
-        torch.manual_seed(self.random_state) # TODO: take this out
-
-        # Create training and validation splits 
+        # Create training and validation splits
         X_train, X_valid, y_train, y_valid = self.create_train_valid_splits(X, y, self.train_pct)
 
-        # Scale training and validation splits 
+        # Scale training and validation splits
         X_train_s, X_valid_s, y_train_s, y_valid_s = self.scale_data(X_train, X_valid, y_train, y_valid, self.x_scaler, self.y_scaler)
 
         # Make tensor datasets
         train_dataset, valid_dataset = self.make_tensor_datasets(X_train_s, X_valid_s, y_train_s, y_valid_s, sample_weight)
 
-        # Make torch dataloaders
-        train_loader, train_loader_eval, valid_loader = self.make_dataloaders(train_dataset, valid_dataset, self.batch_size, self.use_ts_sampler, self.aggregate_last, self.drop_last)
+        # Iterate through random states
+        for random_state in self.random_states:
+            torch.manual_seed(random_state)
 
-        # Set up optimizer 
-        optimizer = self.make_optimizer(model, self.optimizer, self.learning_rate, self.weight_decay)
+            # Make torch dataloaders
+            train_loader, train_loader_eval, valid_loader = self.make_dataloaders(train_dataset, valid_dataset, self.batch_size, self.use_ts_sampler, self.aggregate_last, self.drop_last)
 
-        # Set up scheduler
-        if self.scheduler is not None:
-            scheduler = self.make_scheduler(optimizer, self.scheduler, self.epochs, len(train_loader))
-        else:
-            scheduler = None
+            # Initialize model 
+            model = self.initialize_model(
+                n_inputs = X.shape[1],
+                n_latent = self.n_latent,
+                n_outputs = y.shape[1],
+                encoder_activation = self.encoder_activation,
+                head_activation = self.head_activation,
+                fit_encoder_intercept = self.fit_encoder_intercept,
+                fit_head_intercept = self.fit_head_intercept
+            )
+
+            # Set up optimizer 
+            optimizer = self.make_optimizer(model, self.optimizer, self.learning_rate, self.weight_decay)
+
+            # Set up scheduler
+            if self.scheduler is not None:
+                scheduler = self.make_scheduler(optimizer, self.scheduler, self.epochs, len(train_loader))
+            else:
+                scheduler = None
         
-        # Train model
-        self.model = self.train_model(
-            model = model, 
-            train_loader = train_loader,
-            train_loader_eval = train_loader_eval,
-            valid_loader = valid_loader, 
-            optimizer = optimizer, 
-            scheduler = scheduler,
-            loss_func = self.loss_func,
-            sample_weight = sample_weight,
-            sample_weight_strategy = sample_weight_strategy,
-            #reg_turnover = self.reg_turnover, 
-            patience = self.patience, 
-            verbose = self.verbose
-        )
+            # Train model
+            trained_model = self.train_model(
+                model = model, 
+                train_loader = train_loader,
+                train_loader_eval = train_loader_eval,
+                valid_loader = valid_loader, 
+                optimizer = optimizer, 
+                scheduler = scheduler,
+                loss_func = self.loss_func,
+                sample_weight = sample_weight,
+                sample_weight_strategy = sample_weight_strategy,
+                #reg_turnover = self.reg_turnover, 
+                patience = self.patience, 
+                verbose = self.verbose
+            )
+            self.models.append(trained_model)
 
         return self
     
     def predict(self, X):
         # Scale data 
         X_s = self.x_scaler.transform(X)
+        model_preds = []
 
-        # Switch to evaluation mode 
-        self.model.eval()
         with torch.no_grad():
-            # Convert to tensor and pass through network
+            # Convert to tensor and pass through each network
             X_s_torch = torch.Tensor(X_s)
-            preds = self.model(X_s_torch).numpy()
+            for model in self.models:
+                model.eval()
+                preds = model(X_s_torch).numpy()
 
-            # Inverse scale predictions
-            if self.inverse_transform_preds:
-                preds = self.y_scaler.inverse_transform(preds)
+                # Inverse scale predictions
+                if self.inverse_transform_preds:
+                    preds = self.y_scaler.inverse_transform(preds)
+                model_preds.append(preds)
 
-        return preds
+        return np.mean(np.concatenate(model_preds, axis=1), axis = 1)
 
     def initialize_model(
         self,
@@ -629,7 +631,18 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         
         # random_state
         if not isinstance(random_state, numbers.Integral):
-            raise TypeError("random_state must be an integer.")
+            if not isinstance(random_state, list):
+                raise TypeError("random_state must be either an integer or a list of integers.")
+            else:
+                if not all(isinstance(x, numbers.Integral) for x in random_state):
+                    raise TypeError("When random_state is a list, all elements must be integers.")
+                if not all(x >= 0 for x in random_state):
+                    raise ValueError("When random_state is a list, all elements must be non-negative.")
+                if len(random_state) <= 1:
+                    raise ValueError("When random_state is a list, it must contain more than one element.")
+        else:     
+            if random_state < 0:
+                raise ValueError("When random_state is an integer, it must be non-negative.")
         
         # inverse_transform_preds
         if not isinstance(inverse_transform_preds, bool):
@@ -740,8 +753,10 @@ if __name__ == "__main__":
         x_scaler = StandardScaler(with_mean=False),
         y_scaler = StandardScaler(with_mean=False),
         verbose = True, 
-        random_state = 42,
+        random_state = [42, 43],
         inverse_transform_preds = True
     ).fit(X,y)
 
-    print(list(mlp.model.parameters()))
+    print(list(mlp.models[0].parameters()))
+    preds = mlp.predict(X)
+    print(preds)
