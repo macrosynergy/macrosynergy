@@ -7,6 +7,7 @@ from sklearn.base import BaseEstimator, RegressorMixin
 from sklearn.preprocessing import StandardScaler
 
 from typing import Optional
+import inspect
 
 from macrosynergy.learning.forecasting.torch.samplers.timeseries_sampler import TimeSeriesSampler
 from macrosynergy.learning.forecasting.torch.models.mlps import MultiLayerPerceptron
@@ -44,7 +45,7 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         y_scaler = StandardScaler(with_mean=False), 
         # Other stuff 
         verbose = False,
-        random_state = 42,
+        random_state = 42, # TODO: can accept a list. The average across random states can be taken.
         inverse_transform_preds = False
     ):
         # Checks 
@@ -103,7 +104,10 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         self.model = None
 
     def fit(self, X, y, sample_weight=None):
-        # TODO: sample_weight to be incorporated 
+        # Additional checks 
+        sample_weight_strategy = self._check_fit_params(X, y, sample_weight)
+
+        # Set random seed for reproducibility
         torch.manual_seed(self.random_state)
 
         # Initialize model 
@@ -125,8 +129,8 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         # Scale training and validation splits 
         X_train_s, X_valid_s, y_train_s, y_valid_s = self.scale_data(X_train, X_valid, y_train, y_valid, self.x_scaler, self.y_scaler)
 
-        # Make tensor datasets 
-        train_dataset, valid_dataset = self.make_tensor_datasets(X_train_s, X_valid_s, y_train_s, y_valid_s)
+        # Make tensor datasets
+        train_dataset, valid_dataset = self.make_tensor_datasets(X_train_s, X_valid_s, y_train_s, y_valid_s, sample_weight)
 
         # Make torch dataloaders
         train_loader, train_loader_eval, valid_loader = self.make_dataloaders(train_dataset, valid_dataset, self.batch_size, self.use_ts_sampler, self.aggregate_last, self.drop_last)
@@ -148,7 +152,9 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
             valid_loader = valid_loader, 
             optimizer = optimizer, 
             scheduler = scheduler,
-            loss_func = self.loss_func, 
+            loss_func = self.loss_func,
+            sample_weight = sample_weight,
+            sample_weight_strategy = sample_weight_strategy,
             #reg_turnover = self.reg_turnover, 
             patience = self.patience, 
             verbose = self.verbose
@@ -244,8 +250,13 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         X_valid_s,
         y_train_s,
         y_valid_s,
+        sample_weight,
     ):
-        train_dataset = torch.utils.data.TensorDataset(torch.Tensor(X_train_s), torch.Tensor(y_train_s))
+        if sample_weight is not None: 
+            train_dataset = torch.utils.data.TensorDataset(torch.Tensor(X_train_s), torch.Tensor(y_train_s), torch.Tensor(sample_weight))
+        else:
+            train_dataset = torch.utils.data.TensorDataset(torch.Tensor(X_train_s), torch.Tensor(y_train_s))
+
         valid_dataset = torch.utils.data.TensorDataset(torch.Tensor(X_valid_s), torch.Tensor(y_valid_s))
 
         return train_dataset, valid_dataset
@@ -349,6 +360,8 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         optimizer,
         scheduler,
         loss_func,
+        sample_weight,
+        sample_weight_strategy,
         #reg_turnover,
         patience,
         verbose,
@@ -359,16 +372,32 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
 
         for epoch in range(self.epochs):
             model.train()
-            for X_i, y_i in train_loader:
-                model = self._fit_one_batch(
-                    model = model,
-                    X_i = X_i,
-                    y_i = y_i,
-                    optimizer = optimizer,
-                    scheduler = scheduler,
-                    loss_func = loss_func,
-                    #reg_turnover = reg_turnover
-                )
+            if sample_weight:
+                for X_i, y_i, sw_i in train_loader:
+                    model = self._fit_one_batch(
+                        model = model,
+                        X_i = X_i,
+                        y_i = y_i,
+                        optimizer = optimizer,
+                        scheduler = scheduler,
+                        loss_func = loss_func,
+                        sample_weight = sw_i,
+                        sample_weight_strategy = sample_weight_strategy,
+                        #reg_turnover = reg_turnover
+                    )
+            else:
+                for X_i, y_i in train_loader:
+                    model = self._fit_one_batch(
+                        model = model,
+                        X_i = X_i,
+                        y_i = y_i,
+                        optimizer = optimizer,
+                        scheduler = scheduler,
+                        loss_func = loss_func,
+                        sample_weight = None,
+                        sample_weight_strategy = sample_weight_strategy,
+                        #reg_turnover = reg_turnover
+                    )
             
             train_loss = self._eval_loss(model, train_loader_eval, loss_func)
             valid_loss = self._eval_loss(model, valid_loader, loss_func)
@@ -399,11 +428,19 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         optimizer,
         scheduler,
         loss_func,
+        sample_weight,
+        sample_weight_strategy,
         # reg_turnover
     ):
         optimizer.zero_grad()
         preds = model(X_i)
-        loss = loss_func(preds, y_i)
+        if not sample_weight:
+            loss = loss_func(preds, y_i)
+        elif sample_weight_strategy == "native":
+            loss = loss_func(preds, y_i, sample_weight)
+        elif sample_weight_strategy == "reduction_none":
+            loss = loss_func(preds, y_i) * sample_weight
+            loss = loss.mean()
 
         # if reg_turnover > 0:
         #     pweight_levels = preds[1:] - preds[:-1]
@@ -597,6 +634,38 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         # inverse_transform_preds
         if not isinstance(inverse_transform_preds, bool):
             raise TypeError("inverse_transform_preds must be a boolean.")
+        
+    def _check_fit_params(self, X, y, sample_weight):
+        # TODO: X and y checks 
+        # sample_weight 
+        if sample_weight is not None:
+            if not isinstance(sample_weight, np.ndarray):
+                raise TypeError("sample_weight must be a numpy array or None.")
+            if sample_weight.ndim != 1:
+                raise ValueError("sample_weight must be a 1D array.")
+            if len(sample_weight) != len(X):
+                raise ValueError("Length of sample_weight must match number of samples in X.")
+            
+            # Check compatibility with loss function
+            sig_forward = inspect.signature(self.loss_func.forward)
+            sig_constructor = inspect.signature(self.loss_func.__init__)
+            if "sample_weight" not in sig_forward.parameters:
+                if "reduction" not in sig_constructor.parameters:
+                    raise ValueError(
+                        "Sample weights are not supported by the specified loss function. The loss function must either accept a `sample_weight` tensor in its forward method or have a `reduction` parameter in its constructor."
+                    )
+                else:
+                    reduction = sig_constructor.parameters["reduction"]
+                    if reduction.default == "none":
+                        return "reduction_none"
+                    else:
+                        raise ValueError(
+                            "When the loss function does not accept a `sample_weight` tensor in its forward method but has a `reduction` parameter in its constructor, the `reduction` must be set to 'none' to support sample weights."
+                        )
+            else:
+                return "native" 
+        else:
+            return None
 
 if __name__ == "__main__":
     from macrosynergy.learning import (
