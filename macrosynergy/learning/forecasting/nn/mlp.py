@@ -45,7 +45,7 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         y_scaler = StandardScaler(with_mean=False), 
         # Other stuff 
         verbose = False,
-        random_state = 42, # TODO: can accept a list. The average across random states can be taken.
+        random_state = 42,
         inverse_transform_preds = False
     ):
         # Checks 
