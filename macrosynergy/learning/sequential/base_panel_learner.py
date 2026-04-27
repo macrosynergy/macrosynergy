@@ -338,6 +338,22 @@ class BasePanelLearner(ABC):
         # Determine all outer splits and run the learning process in parallel
         train_test_splits = list(outer_splitter.split(self.X, self.y))
 
+        # Check models can be fitted on first train set
+        X_first = self.X.iloc[train_test_splits[0][0]]
+        y_first = self.y.iloc[train_test_splits[0][0]]
+        for key, model in models.items():
+            try:
+                models[key].fit(X_first, y_first)
+            except Exception as e:
+                raise RuntimeError(
+                    f"Initial fit check failed for model '{key}' on the first outer "
+                    f"training split. The model could not be trained with X shape"
+                    f"={X_first.shape} and y shape={y_first.shape}. This may indicate "
+                    f"that the estimator is incompatible with the provided features, "
+                    f"target, or preprocessing configuration. "
+                    f"Original error: {e}"
+                ) from e
+
         if inner_splitters is not None:
             base_splits = self._get_base_splits(inner_splitters)
         else:
@@ -1377,14 +1393,6 @@ class BasePanelLearner(ABC):
                 raise ValueError(
                     "The entered models must have 'fit' and 'predict' methods."
                 )
-
-            # Check model runs successfully on X and y
-            try:
-                models[key].fit(self.X, self.y)
-            except Exception as e:
-                raise RuntimeError(
-                    f"Model {key} cannot be fit on the given X and y: {e}"
-                ) from e
 
         # outer splitter
         if outer_splitter:
