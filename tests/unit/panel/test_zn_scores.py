@@ -601,7 +601,7 @@ class TestAll(unittest.TestCase):
         multi_df = make_zn_scores(
             self.qdf,
             cids=self.cids,
-            xcats=["CRY", "XR"],
+            xcat=["CRY", "XR"],
             sequential=False,
             min_obs=0,
             iis=False,
@@ -646,13 +646,13 @@ class TestAll(unittest.TestCase):
             make_zn_scores(self.qdf, cids=self.cids)
 
         with self.assertRaises(TypeError):
-            make_zn_scores(self.qdf, cids=self.cids, xcats="CRY")
+            make_zn_scores(self.qdf, cids=self.cids, xcat=123)
+
+        with self.assertRaises(TypeError):
+            make_zn_scores(self.qdf, cids=self.cids, xcat=["CRY", 1])
 
         with self.assertRaises(ValueError):
-            make_zn_scores(self.qdf, cids=self.cids, xcats=[])
-
-        with self.assertRaises(ValueError):
-            make_zn_scores(self.qdf, xcat="CRY", xcats=["XR"], cids=self.cids)
+            make_zn_scores(self.qdf, cids=self.cids, xcat=[])
 
     def test_upfront_thresh_limits_outlier_bias(self):
         dates = pd.date_range("2020-01-01", periods=5, freq="B")

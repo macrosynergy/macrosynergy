@@ -18,9 +18,8 @@ from macrosynergy.management.types import QuantamentalDataFrame
 
 def make_zn_scores(
     df: pd.DataFrame,
-    xcat: Optional[str] = None,
+    xcat: Union[str, List[str]] = None,
     cids: List[str] = None,
-    xcats: Optional[List[str]] = None,
     start: str = None,
     end: str = None,
     blacklist: dict = None,
@@ -44,12 +43,10 @@ def make_zn_scores(
     df : ~pandas.Dataframe
         standardized JPMaQS DataFrame with the necessary columns: 'cid', 'xcat',
         'real_date' and 'value'.
-    xcat : str
-        extended category for which the zn_score is calculated.
-    xcats : List[str]
-        extended categories for which zn-scores are calculated. If provided, the
-        function computes scores separately for each category and returns the combined
-        standardized DataFrame.
+    xcat : str or List[str]
+        extended category (or list of categories) for which zn-scores are calculated.
+        If a list is provided, scores are computed separately for each category and the
+        combined standardized DataFrame is returned.
     cids : List[str]
         cross sections for which zn_scores are calculated; default is all available for
         category.
@@ -123,22 +120,17 @@ def make_zn_scores(
     expected_columns = ["cid", "xcat", "real_date", "value"]
     df = QuantamentalDataFrame(df[expected_columns])
 
-    if xcats is not None:
-        if not isinstance(xcats, list) or not all(isinstance(cat, str) for cat in xcats):
-            raise TypeError("The `xcats` parameter must be a list of strings.")
-        if len(xcats) == 0:
-            raise ValueError("The `xcats` parameter must not be empty.")
-        xcats = list(dict.fromkeys(xcats))
-        if xcat is not None and xcat not in xcats:
-            raise ValueError(
-                "If both `xcat` and `xcats` are provided, `xcat` must be included in "
-                "`xcats`."
-            )
-    elif xcat is None:
-        raise ValueError("One of `xcat` or `xcats` must be provided.")
+    if xcat is None:
+        raise ValueError("The `xcat` parameter must be provided.")
 
-    if xcats is None:
+    if isinstance(xcat, str):
         xcats = [xcat]
+    elif isinstance(xcat, list) and all(isinstance(c, str) for c in xcat):
+        if len(xcat) == 0:
+            raise ValueError("The `xcat` parameter must not be empty.")
+        xcats = list(dict.fromkeys(xcat))
+    else:
+        raise TypeError("The `xcat` parameter must be a string or a list of strings.")
 
     outputs = [
         _make_zn_scores_for_xcat(
@@ -166,10 +158,12 @@ def make_zn_scores(
     if len(outputs) == 1:
         return outputs[0]
 
-    return QuantamentalDataFrame(
-        pd.concat(outputs, axis=0, ignore_index=True).sort_values(
-            by=["cid", "xcat", "real_date"]
-        )
+    combined = pd.concat(outputs, axis=0, ignore_index=True).sort_values(
+        by=["cid", "xcat", "real_date"]
+    )
+    return QuantamentalDataFrame.from_long_df(
+        df=combined,
+        categorical=df.InitializedAsCategorical,
     )
 
 
@@ -687,7 +681,7 @@ if __name__ == "__main__":
 
     multi_xcat_df = make_zn_scores(
         dfd,
-        xcats=["XR", "CRY"],
+        xcat=["XR", "CRY"],
         cids=cids,
         start="2010-01-04",
         sequential=False,
