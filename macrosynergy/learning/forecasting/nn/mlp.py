@@ -20,13 +20,12 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
     def __init__(
         self,
         # Neural network structure
-        # TODO: alternatively could just take in a model object and skip this whole section
-        # But this would need some careful methods for cross-validating model hparams
         n_latent = 32,
         fit_encoder_intercept = True,
         fit_head_intercept = True,
         encoder_activation = "relu",
         head_activation = "identity",
+        torch_model = None,
         # Neural network training dynamics
         loss_func = torch.nn.MSELoss(),
         optimizer: str = "AdamW", # TODO: Add lars and ability to pass in a custom optimizer. 
@@ -55,6 +54,7 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
             fit_head_intercept,
             encoder_activation,
             head_activation,
+            torch_model,
             loss_func,
             optimizer,
             scheduler,
@@ -81,6 +81,7 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         self.fit_head_intercept = fit_head_intercept
         self.encoder_activation = encoder_activation
         self.head_activation = head_activation
+        self.torch_model = torch_model
         self.loss_func = loss_func
         self.optimizers = [optimizer] if not isinstance(optimizer, list) else optimizer
         self.scheduler = scheduler 
@@ -104,7 +105,9 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         self.models = []
 
     def fit(self, X, y, sample_weight=None):
-        # Additional checks 
+        # Additional checks
+        # TODO: if torch_model is provided, check it has the right structure 
+        # to be trained by this class by passing a batch through it
         sample_weight_strategy = self._check_fit_params(X, y, sample_weight)
 
         # Create training and validation splits
@@ -125,16 +128,23 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
                 # Make torch dataloaders
                 train_loader, train_loader_eval, valid_loader = self.make_dataloaders(train_dataset, valid_dataset, self.batch_size, self.use_ts_sampler, self.aggregate_last, self.drop_last)
 
-                # Initialize model 
-                model = self.initialize_model(
-                    n_inputs = X.shape[1],
-                    n_latent = self.n_latent,
-                    n_outputs = y.shape[1],
-                    encoder_activation = self.encoder_activation,
-                    head_activation = self.head_activation,
-                    fit_encoder_intercept = self.fit_encoder_intercept,
-                    fit_head_intercept = self.fit_head_intercept
-                )
+                # Initialize model
+                if self.torch_model is not None:
+                    # Reinitialise torch_model under the random seed 
+                    # TODO: check this will work upfront
+                    params = self.torch_model.get_params(deep=False)
+                    model = type(self.torch_model)(**params)
+
+                else:
+                    model = self.initialize_model(
+                        n_inputs = X.shape[1],
+                        n_latent = self.n_latent,
+                        n_outputs = y.shape[1],
+                        encoder_activation = self.encoder_activation,
+                        head_activation = self.head_activation,
+                        fit_encoder_intercept = self.fit_encoder_intercept,
+                        fit_head_intercept = self.fit_head_intercept,
+                    )
 
                 # Set up optimizer 
                 optim = self.make_optimizer(model, optimizer, self.learning_rate, self.weight_decay)
@@ -488,6 +498,7 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         fit_head_intercept,
         encoder_activation,
         head_activation,
+        torch_model,
         loss_func,
         optimizer,
         scheduler,
@@ -507,44 +518,71 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         random_state,
         inverse_transform_preds
     ):
-        # n_latent
-        if not isinstance(n_latent, numbers.Integral):
-            if not isinstance(n_latent, list):
-                raise TypeError("n_latent must be either an integer or a list of integers.")
-            if not all(isinstance(x, numbers.Integral) for x in n_latent):
-                raise TypeError("When n_latent is a list, all elements must be integers.")
-            if len(n_latent) <= 1:
-                raise ValueError("When n_latent is a list, it must contain more than one element.")
-            if not all(x >= 1 for x in n_latent):
-                raise ValueError("When n_latent is a list, all elements must be at least 1.")
+        # First check either torch_model is set or (n_latent, fit_encoder_intercept, fit_head_intercept, encoder_activation, head_activation) are set.
+        if torch_model is None:
+            if n_latent is None or fit_encoder_intercept is None or fit_head_intercept is None or encoder_activation is None or head_activation is None:
+                raise ValueError(
+                    "When torch_model is not provided, (n_latent, fit_encoder_intercept, fit_head_intercept, encoder_activation, head_activation) must all be specified."
+                )
         else:
-            if n_latent < 1:
-                raise ValueError("When n_latent is an integer, it must be at least 1.")
+            if n_latent is not None or fit_encoder_intercept is not None or fit_head_intercept is not None or encoder_activation is not None or head_activation is not None:
+                raise ValueError(
+                    "When torch_model is provided, (n_latent, fit_encoder_intercept, fit_head_intercept, encoder_activation, head_activation) should be set to None."
+                )
             
-        # fit_encoder_intercept
-        if not isinstance(fit_encoder_intercept, bool):
-            raise TypeError("fit_encoder_intercept must be a boolean.")
+        if torch_model is None:
+            # n_latent
+            if not isinstance(n_latent, numbers.Integral):
+                if not isinstance(n_latent, list):
+                    raise TypeError("n_latent must be either an integer or a list of integers.")
+                if not all(isinstance(x, numbers.Integral) for x in n_latent):
+                    raise TypeError("When n_latent is a list, all elements must be integers.")
+                if len(n_latent) <= 1:
+                    raise ValueError("When n_latent is a list, it must contain more than one element.")
+                if not all(x >= 1 for x in n_latent):
+                    raise ValueError("When n_latent is a list, all elements must be at least 1.")
+            else:
+                if n_latent < 1:
+                    raise ValueError("When n_latent is an integer, it must be at least 1.")
+            
+            # fit_encoder_intercept
+            if not isinstance(fit_encoder_intercept, bool):
+                raise TypeError("fit_encoder_intercept must be a boolean.")
         
-        # fit_head_intercept
-        if not isinstance(fit_head_intercept, bool):
-            raise TypeError("fit_head_intercept must be a boolean.")
+            # fit_head_intercept
+            if not isinstance(fit_head_intercept, bool):
+                raise TypeError("fit_head_intercept must be a boolean.")
         
-        # encoder_activation
-        if not isinstance(encoder_activation, str):
-            raise TypeError("encoder_activation must be a string.")
-        if encoder_activation not in {"tanh", "relu", "sigmoid"}:
-            raise ValueError(
-                "encoder_activation must be one of 'tanh', 'relu', or 'sigmoid'."
-            )
+            # encoder_activation
+            if not isinstance(encoder_activation, str):
+                raise TypeError("encoder_activation must be a string.")
+            if encoder_activation not in {"tanh", "relu", "sigmoid"}:
+                raise ValueError(
+                    "encoder_activation must be one of 'tanh', 'relu', or 'sigmoid'."
+                )
         
-        # head_activation
-        if not isinstance(head_activation, str):
-            raise TypeError("head_activation must be a string.")
-        if head_activation not in {"tanh", "relu", "sigmoid", "identity"}:
-            raise ValueError(
-                "head_activation must be one of 'tanh', 'relu', 'sigmoid', or 'identity'."
-            )
+            # head_activation
+            if not isinstance(head_activation, str):
+                raise TypeError("head_activation must be a string.")
+            if head_activation not in {"tanh", "relu", "sigmoid", "identity"}:
+                raise ValueError(
+                    "head_activation must be one of 'tanh', 'relu', 'sigmoid', or 'identity'."
+                )
         
+        # torch_model
+        if torch_model is not None:
+            if not isinstance(torch_model, nn.Module):
+                raise TypeError("torch_model must be an instance of torch.nn.Module or None.")
+            if not isinstance(torch_model, BaseEstimator):
+                raise TypeError(
+                    "torch_model must be an instance of a class inheriting from" \
+                    "sklearn.base.BaseEstimator. This is to allow for cross-validation" \
+                    "on model hyperparameters in a `scikit-learn` framework."
+                )
+            # it needs a forward method
+            if not hasattr(torch_model, "forward"):
+                raise ValueError("torch_model must have a forward method.")
+
         # loss_func
         if not isinstance(loss_func, nn.Module):
             raise TypeError("loss_func must inherit from nn.Module.")
@@ -700,6 +738,8 @@ if __name__ == "__main__":
     import pandas as pd
     import numpy as np
 
+    from sklearn.base import BaseEstimator
+
     cids = ["AUD", "CAD", "GBP", "USD"]
     xcats = ["XR1", "CRY", "GROWTH", "RATES", "XR2"]
     cols = ["earliest", "latest", "mean_add", "sd_mult", "ar_coef", "back_coef"]
@@ -743,14 +783,33 @@ if __name__ == "__main__":
     X = so.X.copy(deep=True)
     y = so.y.copy(deep=True)
 
+    class BasicMLP(nn.Module, BaseEstimator):
+        def __init__(self, n_inputs, n_latent, n_outputs, dropout=0.1):
+            super().__init__()
+            self.n_inputs = n_inputs
+            self.n_latent = n_latent
+            self.n_outputs = n_outputs
+            self.dropout = dropout
+
+            self.encoder = nn.Linear(n_inputs, n_latent)
+            self.dropout_layer = nn.Dropout(dropout)
+            self.head = nn.Linear(n_latent, n_outputs)
+
+        def forward(self, x):
+            z = torch.tanh(self.encoder(x))
+            z = self.dropout_layer(z)
+            out = self.head(z)
+            return out
+
     mlp = MLPRegressor(
         n_latent = 2, 
         fit_encoder_intercept = False,
         fit_head_intercept = True,
         encoder_activation = "tanh",
         head_activation="identity",
+        #torch_model = BasicMLP(n_inputs=X.shape[1], n_latent=16, n_outputs=y.shape[1]),
         loss_func=torch.nn.MSELoss(),
-        optimizer = ["AdamW", "SGD+mom"],
+        optimizer = "AdamW",
         scheduler = None, 
         batch_size = 16,
         learning_rate = 3e-4, 
@@ -770,6 +829,6 @@ if __name__ == "__main__":
     ).fit(X,y)
 
     print(list(mlp.models[0].parameters()))
-    print(list(mlp.models[1].parameters()))
+    #print(list(mlp.models[1].parameters()))
     # preds = mlp.predict(X)
     # print(preds)
