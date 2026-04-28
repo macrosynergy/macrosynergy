@@ -360,6 +360,14 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
                 pct_start=0.3,
                 anneal_strategy='cos',
             )
+        # elif scheduler_name == "ReduceLROnPlateau":
+        #     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+        #         optimizer,
+        #         mode='min',
+        #         factor=0.1,
+        #         patience=int(self.patience / 2), # TODO: see what a reasonable default would be
+        #         verbose=self.verbose
+        #     )
         else:
             # TODO: add more schedulers later
             raise ValueError(f"Unsupported scheduler: {scheduler_name}")
