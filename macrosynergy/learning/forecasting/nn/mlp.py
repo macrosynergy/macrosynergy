@@ -29,8 +29,8 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         head_activation = "identity",
         # Neural network training dynamics
         loss_func = torch.nn.MSELoss(),
-        optimizer: str = "AdamW", # TODO: option for multiple optimizers as well as lars and ability to pass in a custom optimizer. 
-        scheduler: Optional[str] = None, # TODO: options for other schedulers, option for custom scheduler object
+        optimizer: str = "AdamW", # TODO: Add lars and ability to pass in a custom optimizer. 
+        scheduler: Optional[str] = None, # TODO: options for other schedulers, probably ReduceLRonPlateau, option for custom scheduler object
         batch_size = 32,
         learning_rate = 3e-4,
         weight_decay = 1e-4,
@@ -181,6 +181,7 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
                     preds = self.y_scaler.inverse_transform(preds)
                 model_preds.append(preds)
 
+        # Concatenate predictions and average across models
         return np.mean(np.concatenate(model_preds, axis=1), axis = 1)
 
     def initialize_model(
