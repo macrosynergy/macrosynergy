@@ -82,7 +82,7 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         self.encoder_activation = encoder_activation
         self.head_activation = head_activation
         self.loss_func = loss_func
-        self.optimizer = optimizer
+        self.optimizers = [optimizer] if not isinstance(optimizer, list) else optimizer
         self.scheduler = scheduler 
         self.batch_size = batch_size
         self.learning_rate = learning_rate
@@ -117,48 +117,50 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         train_dataset, valid_dataset = self.make_tensor_datasets(X_train_s, X_valid_s, y_train_s, y_valid_s, sample_weight)
 
         # Iterate through random states
-        for random_state in self.random_states:
-            torch.manual_seed(random_state)
+        for optimizer in self.optimizers:
+            for random_state in self.random_states:
+                # Set seed 
+                torch.manual_seed(random_state)
 
-            # Make torch dataloaders
-            train_loader, train_loader_eval, valid_loader = self.make_dataloaders(train_dataset, valid_dataset, self.batch_size, self.use_ts_sampler, self.aggregate_last, self.drop_last)
+                # Make torch dataloaders
+                train_loader, train_loader_eval, valid_loader = self.make_dataloaders(train_dataset, valid_dataset, self.batch_size, self.use_ts_sampler, self.aggregate_last, self.drop_last)
 
-            # Initialize model 
-            model = self.initialize_model(
-                n_inputs = X.shape[1],
-                n_latent = self.n_latent,
-                n_outputs = y.shape[1],
-                encoder_activation = self.encoder_activation,
-                head_activation = self.head_activation,
-                fit_encoder_intercept = self.fit_encoder_intercept,
-                fit_head_intercept = self.fit_head_intercept
-            )
+                # Initialize model 
+                model = self.initialize_model(
+                    n_inputs = X.shape[1],
+                    n_latent = self.n_latent,
+                    n_outputs = y.shape[1],
+                    encoder_activation = self.encoder_activation,
+                    head_activation = self.head_activation,
+                    fit_encoder_intercept = self.fit_encoder_intercept,
+                    fit_head_intercept = self.fit_head_intercept
+                )
 
-            # Set up optimizer 
-            optimizer = self.make_optimizer(model, self.optimizer, self.learning_rate, self.weight_decay)
+                # Set up optimizer 
+                optim = self.make_optimizer(model, optimizer, self.learning_rate, self.weight_decay)
 
-            # Set up scheduler
-            if self.scheduler is not None:
-                scheduler = self.make_scheduler(optimizer, self.scheduler, self.epochs, len(train_loader))
-            else:
-                scheduler = None
+                # Set up scheduler
+                if self.scheduler is not None:
+                    scheduler = self.make_scheduler(optim, self.scheduler, self.epochs, len(train_loader))
+                else:
+                    scheduler = None
         
-            # Train model
-            trained_model = self.train_model(
-                model = model, 
-                train_loader = train_loader,
-                train_loader_eval = train_loader_eval,
-                valid_loader = valid_loader, 
-                optimizer = optimizer, 
-                scheduler = scheduler,
-                loss_func = self.loss_func,
-                sample_weight = sample_weight,
-                sample_weight_strategy = sample_weight_strategy,
-                #reg_turnover = self.reg_turnover, 
-                patience = self.patience, 
-                verbose = self.verbose
-            )
-            self.models.append(trained_model)
+                # Train model
+                trained_model = self.train_model(
+                    model = model, 
+                    train_loader = train_loader,
+                    train_loader_eval = train_loader_eval,
+                    valid_loader = valid_loader, 
+                    optimizer = optim, 
+                    scheduler = scheduler,
+                    loss_func = self.loss_func,
+                    sample_weight = sample_weight,
+                    sample_weight_strategy = sample_weight_strategy,
+                    #reg_turnover = self.reg_turnover, 
+                    patience = self.patience, 
+                    verbose = self.verbose
+                )
+                self.models.append(trained_model)
 
         return self
     
@@ -548,9 +550,18 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         
         # optimizer
         if not isinstance(optimizer, str):
-            raise TypeError("optimizer must be a string.")
-        if optimizer not in {"AdamW", "SGD", "SGD+mom"}:
-            raise ValueError("optimizer must be one of 'AdamW', 'SGD', or 'SGD+mom'.")
+            if not isinstance(optimizer, list):
+                raise TypeError("optimizer must be either a string or a list of strings.")
+            else:
+                if len(optimizer) <= 1:
+                    raise ValueError("When optimizer is a list, it must contain more than one element.")
+                if not all(isinstance(x, str) for x in optimizer):
+                    raise TypeError("When optimizer is a list, all elements must be strings.")
+                if not all(x in {"AdamW", "SGD", "SGD+mom"} for x in optimizer):
+                    raise ValueError("When optimizer is a list, all elements must be one of 'AdamW', 'SGD', or 'SGD+mom'.")
+        else:
+            if optimizer not in {"AdamW", "SGD", "SGD+mom"}:
+                raise ValueError("optimizer must be one of 'AdamW', 'SGD', or 'SGD+mom'.")
         
         # scheduler
         if scheduler is not None:
@@ -738,7 +749,7 @@ if __name__ == "__main__":
         encoder_activation = "tanh",
         head_activation="identity",
         loss_func=torch.nn.MSELoss(),
-        optimizer = "AdamW",
+        optimizer = ["AdamW", "SGD+mom"],
         scheduler = None, 
         batch_size = 16,
         learning_rate = 3e-4, 
@@ -753,10 +764,11 @@ if __name__ == "__main__":
         x_scaler = StandardScaler(with_mean=False),
         y_scaler = StandardScaler(with_mean=False),
         verbose = True, 
-        random_state = [42, 43],
+        random_state = 42,
         inverse_transform_preds = True
     ).fit(X,y)
 
     print(list(mlp.models[0].parameters()))
-    preds = mlp.predict(X)
-    print(preds)
+    print(list(mlp.models[1].parameters()))
+    # preds = mlp.predict(X)
+    # print(preds)
