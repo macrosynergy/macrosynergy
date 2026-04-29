@@ -37,6 +37,7 @@ class LinearMultiTargetRegression(BaseEstimator, RegressorMixin):
         covariance_estimator = "ewm",
         span=60,
         feature_selection=None,
+        min_samples = 36,
     ):
         # Checks
         if not isinstance(fit_intercept, bool):
@@ -67,6 +68,7 @@ class LinearMultiTargetRegression(BaseEstimator, RegressorMixin):
         self.covariance_estimator = covariance_estimator
         self.span = span
         self.feature_selection = feature_selection
+        self.min_samples = min_samples
 
     def fit(self, X, y, sample_weight=None):
         """
@@ -86,11 +88,10 @@ class LinearMultiTargetRegression(BaseEstimator, RegressorMixin):
         # Checks
         self._check_fit_params(X, y, sample_weight)
         
-        # For now, only support pandas dataframes with no missing values
         if isinstance(y, pd.Series):
             y = y.to_frame()
         assert isinstance(y, pd.DataFrame)
-        assert y.isna().sum().sum() == 0
+        #assert y.isna().sum().sum() == 0
 
         # Store data and metadata
         X = X.copy()
@@ -98,8 +99,11 @@ class LinearMultiTargetRegression(BaseEstimator, RegressorMixin):
 
         if self.fit_intercept:
             X.insert(0, "intercept", 1)
+        
+        # Filter out assets with bad availabiltiy
+        asset_counts = y.notna().sum()
 
-        self.assets = list(y.columns)
+        self.assets = list(asset_counts.index[asset_counts >= self.min_samples])
         self.n_assets = len(self.assets)
         self.n_samples = y.shape[
             0
@@ -116,32 +120,33 @@ class LinearMultiTargetRegression(BaseEstimator, RegressorMixin):
         if self.feature_selection is not None:
             col_index = {col: i for i, col in enumerate(X.columns)} # includes an intercept if fit_intercept=True
             for asset in self.assets:
+                # Get indices with no NAs for this asset
+                valid_idx = y[asset].notna()
                 # Store selected features indices per asset
                 if self.fit_intercept:
-                    selector = self.feature_selection.fit(X.iloc[:, 1:], y[asset])
+                    selector = self.feature_selection.fit(X.loc[valid_idx].iloc[:, 1:], y.loc[valid_idx, asset])
                     feats = selector.get_feature_names_out()
                     cols = [0] + [col_index[f] for f in feats]
                 else:
-                    selector = self.feature_selection.fit(X, y[asset])
+                    selector = self.feature_selection.fit(X.loc[valid_idx], y.loc[valid_idx, asset])
                     feats = selector.get_feature_names_out()
                     cols = [col_index[f] for f in feats]
                 self.X_features[asset] = cols
 
                 # Fit OLS on selected features and store them
                 lr = LinearRegression(fit_intercept=False)
-                lr.fit(X.iloc[:, cols], y[asset])
+                lr.fit(X.loc[valid_idx].iloc[:, cols], y.loc[valid_idx, asset])
                 self.initial_coefs[asset] = lr.coef_
         else:
             # Simply use all features for all assets
             cols = list(range(self.n_features))
             self.X_features = {asset: cols for asset in self.assets}
 
-            # Fit OLS jointly and store coefficients
-            lr = LinearRegression(fit_intercept=False).fit(X, y)
-            W = lr.coef_.T  # shape (n_features × n_assets)
-            self.initial_coefs = {
-                asset: W[:, idx] for idx, asset in enumerate(self.assets)
-            }
+            # Fit OLS for each asset and store coefficients
+            for asset in self.assets:
+                valid_idx = y[asset].notna()
+                lr = LinearRegression(fit_intercept=False).fit(X.loc[valid_idx], y.loc[valid_idx, asset])
+                self.initial_coefs[asset] = lr.coef_
 
         # If not sur, job is done here
         # Just store OLS coefficients
@@ -176,12 +181,13 @@ class LinearMultiTargetRegression(BaseEstimator, RegressorMixin):
 
         # Estimate covariance matrix
         if self.covariance_estimator == "ewm":
+            # TODO: fix this under NAs.
             weights = np.array(
                 [(1 - 2 / (self.span + 1)) ** i for i in range(len(y))][::-1]
             )
             cov = np.cov(resids.values.T, aweights=weights)
         elif self.covariance_estimator == "ml":
-            cov = np.cov(resids.values.T)
+            cov = resids.cov(min_periods=self.min_samples).fillna(0).values
         else:
             self.covariance_estimator.fit(resids)
             cov = self.covariance_estimator.covariance_
@@ -378,8 +384,8 @@ class LinearMultiTargetRegression(BaseEstimator, RegressorMixin):
         # This model can't handle NAs.
         if X.isna().sum().sum() > 0:
             raise ValueError("X must not contain missing values.")
-        if y.isna().sum().sum() > 0:
-            raise ValueError("y must not contain missing values.")
+        # if y.isna().sum().sum() > 0:
+        #     raise ValueError("y must not contain missing values.")
         # Ensure shapes align
         if X.shape[0] != y.shape[0]:
             raise ValueError("X and y must have the same number of samples.")
