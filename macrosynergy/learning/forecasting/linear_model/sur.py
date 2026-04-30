@@ -120,24 +120,24 @@ class LinearMultiTargetRegression(BaseEstimator, RegressorMixin):
             y = y.to_frame()
         assert isinstance(y, pd.DataFrame)
 
-        # Use min_samples to remove targets with insufficient history to learn target 
-        # specific coefficients. 
-        asset_counts = y.notna().sum()
+        # Store data and metadata
+        X = X.copy()
+        y = y.copy()
 
+        if self.fit_intercept:
+            X.insert(0, "intercept", 1)
+
+        self.features_ = list(X.columns)
+        self.n_features = X.shape[1]
+
+        # Remove targets with insufficient history to learn target specific coefficients. 
+        asset_counts = y.notna().sum()
         self.assets = list(asset_counts.index[asset_counts >= self.min_samples])
         self.n_assets = len(self.assets)
         self.n_samples = y.shape[
             0
         ] 
-        self.features_ = list(X.columns)
-        self.n_features = X.shape[1]
-
-        # Store data and metadata
-        X = X.copy()
         y = y.loc[:, self.assets].copy()
-
-        if self.fit_intercept:
-            X.insert(0, "intercept", 1)
         
         # Store initial coefficients after optional feature selection
         self.X_features = {}
@@ -221,6 +221,8 @@ class LinearMultiTargetRegression(BaseEstimator, RegressorMixin):
             # TODO: review - how to handle NAs here? Probably within the covariance estimator itself.
             self.covariance_estimator.fit(resids)
             cov = self.covariance_estimator.covariance_
+
+        # TODO: Add optional step to "clean" the covariance matrix, to ensure positive definiteness. 
         
         # Invert matrix 
         if isinstance(self.covariance_estimator, BaseEstimator) and hasattr(
@@ -229,6 +231,7 @@ class LinearMultiTargetRegression(BaseEstimator, RegressorMixin):
             invcov = self.covariance_estimator.precision_
         else:
             invcov = np.linalg.inv(cov)
+
         invcov = pd.DataFrame(invcov, index=self.assets, columns=self.assets)
 
         # FGLS optimization
@@ -254,7 +257,7 @@ class LinearMultiTargetRegression(BaseEstimator, RegressorMixin):
             sample: mask
             for sample, mask in zip(self.samples, (~y.isna()).to_numpy())
         }
-        # TODO: reflect on it should be this or np.linalg.inv(cov.loc[cov_mask, cov_mask].values)
+        # TODO: Make this the default with an option for np.linalg.inv(cov.loc[cov_mask, cov_mask].values)
         self.invcov_per_sample = {
             sample: invcov.loc[cov_mask, cov_mask].values
             for sample, cov_mask in self.targets_per_samples.items()
@@ -580,7 +583,7 @@ if __name__ == "__main__":
 
     model = LinearMultiTargetRegression(
         seemingly_unrelated=True,
-        fit_intercept=False,
+        fit_intercept=True,
         feature_selection=LarsSelector(n_factors=2),
         #covariance_estimator="ml"
     )
