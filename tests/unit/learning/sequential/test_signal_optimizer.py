@@ -3749,7 +3749,12 @@ class TestAll(unittest.TestCase):
             cids=self.cids,
             n_targets=2,
             blacklist=[black_target_growth, black_target_rir],
+            drop_nas="X",
         )
+
+        # sklearn models don't allow nans in y, so fill here just so
+        # the test doesn't error. The same logic is still being tested
+        so.y = so.y.fillna(0)
         try:
             so.calculate_predictions(
                 name="test_multi_bl",
@@ -3763,16 +3768,25 @@ class TestAll(unittest.TestCase):
 
         result = so.preds
 
-        assert not result.empty
         assert result[
             result["cid"].eq("AUD") &
-            result["real_date"].between("2018-09-01", "2018-04-01") &
+            result["real_date"].between("2018-09-01", "2020-04-01") &
             result["xcat"].eq("GROWTH_test_multi_bl")
+        ].empty
+        assert not result[
+            result["cid"].eq("AUD") &
+            result["real_date"].between("2018-09-01", "2020-04-01") &
+            result["xcat"].eq("RIR_test_multi_bl")
         ].empty
         assert result[
             result["cid"].eq("GBP") &
             result["real_date"].between("2019-06-01", "2020-02-01") &
             result["xcat"].eq("RIR_test_multi_bl")
+        ].empty
+        assert not result[
+            result["cid"].eq("GBP") &
+            result["real_date"].between("2019-06-01", "2020-02-01") &
+            result["xcat"].eq("GROWTH_test_multi_bl")
         ].empty
 
 

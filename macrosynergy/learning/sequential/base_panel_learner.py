@@ -89,8 +89,8 @@ class BasePanelLearner(ABC):
         drop_nas : bool, str
             Strategy for dealing with NaNs in the data. Default is True, which means rows
             with NaN values in the dependent or independent variables are dropped. If
-            "X", rows with NaN values in the independent variables are dropped. If "y"
-            rows with NaN values in the dependent variable are dropped.
+            "X", rows with NaN values in the independent variables are dropped. If "y",
+            rows where the dependent variables are all NaNs are dropped.
 
         Notes
         -----
@@ -171,15 +171,13 @@ class BasePanelLearner(ABC):
 
         # Handle remaining NaNs with specified strategy
         if drop_nas == "X":
-            subset = self.xcats[:-self.n_targets]
+            df_long = df_long.dropna(subset=self.xcats[:-self.n_targets], how="any")
         elif drop_nas == "y":
-            subset = self.xcats[-self.n_targets:]
+            df_long = df_long.dropna(subset=self.xcats[-self.n_targets:], how="all")
         elif drop_nas == True:
-            subset = df_long.columns
+            df_long = df_long.dropna(how="any")
         else:
-            subset = []
-
-        df_long = df_long.dropna(subset=subset)
+            pass
 
         # Create X and y
         self.X = df_long.iloc[:, :-self.n_targets]
@@ -1872,6 +1870,7 @@ def _create_long_format_df(
 
         in_blacklist = np.zeros(target_in_bl.shape[0], dtype=bool)
         for cid, (start, end) in bl.items():
+            cid = cid.split("_")[0]
             in_blacklist |= (
                 (df.index.get_level_values("cid") == cid) &
                 (df.index.get_level_values("real_date") <= end) &
