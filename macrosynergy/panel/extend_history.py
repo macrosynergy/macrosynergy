@@ -22,6 +22,11 @@ def extend_history(
     The method prioritizes superior categories for the new xcat and supplements with inferior ones
     where superior category data is unavailable.
 
+    .. deprecated::
+        `extend_history` is deprecated and will be removed in a future release. Use
+        `merge_categories` instead — it provides per-date hierarchy fill plus the same
+        `backfill`/`start` options.
+
     Parameters
     ----------
     df : pd.DataFrame
@@ -46,6 +51,14 @@ def extend_history(
         standardized DataFrame for the new xcat with extended history, with the columns:
         'cid', 'xcat', 'real_date' and 'value'.
     """
+
+    warnings.warn(
+        "`extend_history` is deprecated and will be removed in a future release. "
+        "Use `merge_categories(df, hierarchy=..., new_xcat=..., backfill=..., "
+        "start=...)` instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
 
     df = QuantamentalDataFrame(df)
     result_as_categorical = df.InitializedAsCategorical
@@ -90,7 +103,6 @@ def extend_history(
                 extended_series = cat_df.copy()
             else:
                 min_real_date = extended_series["real_date"].min()
-
                 inferior_values = cat_df[cat_df["real_date"] < min_real_date]
                 extended_series = pd.concat([extended_series, inferior_values])
 
