@@ -95,10 +95,8 @@ class LinearMultiTargetRegression(BaseEstimator, RegressorMixin):
             raise ValueError("The 'min_samples' parameter must be positive.")
         # covariance_cleaning 
         if covariance_cleaning is not None:
-            if covariance_cleaning not in ["clipped_eigenvalues", "nearest_positive_definite"]:
-                raise ValueError("If `covariance_cleaning` is not None, it must be either 'clipped_eigenvalues' or 'nearest_positive_definite'.")
-            if covariance_cleaning in ["clipped_eigenvalues", "nearest_positive_definite"]:
-                raise NotImplementedError("Covariance cleaning methods are not yet implemented.")
+            if covariance_cleaning not in ["clipped_eigenvalues"]:
+                raise ValueError("If `covariance_cleaning` is not None, it must be 'clipped_eigenvalues'.")
         
         # Attributes
         self.fit_intercept = fit_intercept
@@ -238,9 +236,6 @@ class LinearMultiTargetRegression(BaseEstimator, RegressorMixin):
             eigvals, eigvecs = np.linalg.eigh(cov)
             eigvals_clipped = np.clip(eigvals, a_min=1e-6, a_max=None)
             cov = eigvecs @ np.diag(eigvals_clipped) @ eigvecs.T
-        elif self.covariance_cleaning == "nearest_positive_definite":
-            # Higham's algorithm for finding nearest positive definite matrix
-            raise NotImplementedError("Nearest positive definite covariance cleaning is not yet implemented.")
 
         # Invert matrix 
         if isinstance(self.covariance_estimator, BaseEstimator) and hasattr(
