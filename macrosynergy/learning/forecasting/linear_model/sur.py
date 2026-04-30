@@ -17,6 +17,10 @@ class LinearMultiTargetRegression(BaseEstimator, RegressorMixin):
     ----------
     fit_intercept : bool, default=True
         Whether to include an intercept term in the regression.
+    feature_selection : object, default=None
+        A feature selection object inheriting from scikit-learn's `SelectorMixin` base
+        class in `sklearn.feature_selection`.
+        If provided, feature selection is applied per target before fitting.
     seemingly_unrelated : bool, default=False
         Whether to make the regression seemingly unrelated.
     covariance_estimator : Union[str, BaseEstimator], default="ewm"
@@ -25,10 +29,9 @@ class LinearMultiTargetRegression(BaseEstimator, RegressorMixin):
         compatible covariance estimator.
     span : int, default=60
         Span parameter for exponentially weighted covariance estimation of residuals.
-    feature_selection : object, default=None
-        A feature selection object inheriting from scikit-learn's `SelectorMixin` base
-        class in `sklearn.feature_selection`.
-        If provided, feature selection is applied per target before fitting.
+    covariance_cleaning : Optional[str], default=None
+        Optional method for "cleaning" the covariance matrix to ensure positive definiteness.
+        Current options are None, "clipped_eigenvalues" or "nearest_positive_definite".
     min_samples : int, default=36
         Minimum number of samples for a given asset to learn asset-specific coefficients.
 
@@ -57,10 +60,11 @@ class LinearMultiTargetRegression(BaseEstimator, RegressorMixin):
     def __init__(
         self,
         fit_intercept=True,
+        feature_selection=None,
         seemingly_unrelated=False,
         covariance_estimator = "ewm",
         span=60,
-        feature_selection=None,
+        covariance_cleaning=None,
         min_samples = 36,
     ):
         # Checks
@@ -89,6 +93,12 @@ class LinearMultiTargetRegression(BaseEstimator, RegressorMixin):
             raise TypeError("The 'min_samples' parameter must be an integer.")
         if min_samples <= 0:
             raise ValueError("The 'min_samples' parameter must be positive.")
+        # covariance_cleaning 
+        if covariance_cleaning is not None:
+            if covariance_cleaning not in ["clipped_eigenvalues", "nearest_positive_definite"]:
+                raise ValueError("If `covariance_cleaning` is not None, it must be either 'clipped_eigenvalues' or 'nearest_positive_definite'.")
+            if covariance_cleaning in ["clipped_eigenvalues", "nearest_positive_definite"]:
+                raise NotImplementedError("Covariance cleaning methods are not yet implemented.")
         
         # Attributes
         self.fit_intercept = fit_intercept
@@ -97,6 +107,7 @@ class LinearMultiTargetRegression(BaseEstimator, RegressorMixin):
         self.span = span
         self.feature_selection = feature_selection
         self.min_samples = min_samples
+        self.covariance_cleaning = covariance_cleaning
 
     def fit(self, X, y, sample_weight=None):
         """
@@ -222,8 +233,15 @@ class LinearMultiTargetRegression(BaseEstimator, RegressorMixin):
             self.covariance_estimator.fit(resids)
             cov = self.covariance_estimator.covariance_
 
-        # TODO: Add optional step to "clean" the covariance matrix, to ensure positive definiteness. 
-        
+        # Clean covariance matrix
+        if self.covariance_cleaning == "clipped_eigenvalues":
+            eigvals, eigvecs = np.linalg.eigh(cov)
+            eigvals_clipped = np.clip(eigvals, a_min=1e-6, a_max=None)
+            cov = eigvecs @ np.diag(eigvals_clipped) @ eigvecs.T
+        elif self.covariance_cleaning == "nearest_positive_definite":
+            # Higham's algorithm for finding nearest positive definite matrix
+            raise NotImplementedError("Nearest positive definite covariance cleaning is not yet implemented.")
+
         # Invert matrix 
         if isinstance(self.covariance_estimator, BaseEstimator) and hasattr(
             self.covariance_estimator, "precision_"
@@ -573,7 +591,7 @@ if __name__ == "__main__":
     so = SignalOptimizer(
         df=dfd,
         xcats=["CRY", "GROWTH", "RATES", "XR1", "XR2", "XR3"],
-        cids=["USD"],
+        cids=cids,
         blacklist=black,
         drop_nas="X",
         n_targets=3,
