@@ -42,6 +42,7 @@ class TestAll(unittest.TestCase):
 
         # Standard df for tests.
         dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
+        self.qdf: pd.DataFrame = dfd
         self.dfd: pd.DataFrame = dfd[dfd["xcat"] == "CRY"]
         self.dfw: pd.DataFrame = self.dfd.pivot(
             index="real_date", columns="cid", values="value"
@@ -595,6 +596,63 @@ class TestAll(unittest.TestCase):
         check = sum(values[~np.isnan(values)] > threshold)
 
         self.assertTrue(check == 0)
+
+    def test_make_zn_scores_multiple_xcats(self):
+        multi_df = make_zn_scores(
+            self.qdf,
+            cids=self.cids,
+            xcat=["CRY", "XR"],
+            sequential=False,
+            min_obs=0,
+            iis=False,
+            neutral="mean",
+            thresh=None,
+            postfix="ZN",
+        ).sort_values(["cid", "xcat", "real_date"]).reset_index(drop=True)
+
+        cry_df = make_zn_scores(
+            self.qdf,
+            "CRY",
+            self.cids,
+            sequential=False,
+            min_obs=0,
+            iis=False,
+            neutral="mean",
+            thresh=None,
+            postfix="ZN",
+        )
+        xr_df = make_zn_scores(
+            self.qdf,
+            "XR",
+            self.cids,
+            sequential=False,
+            min_obs=0,
+            iis=False,
+            neutral="mean",
+            thresh=None,
+            postfix="ZN",
+        )
+        expected = (
+            pd.concat([cry_df, xr_df], axis=0, ignore_index=True)
+            .sort_values(["cid", "xcat", "real_date"])
+            .reset_index(drop=True)
+        )
+
+        self.assertEqual(set(multi_df["xcat"].unique()), {"CRYZN", "XRZN"})
+        pd.testing.assert_frame_equal(multi_df, expected)
+
+    def test_make_zn_scores_xcats_validation(self):
+        with self.assertRaises(ValueError):
+            make_zn_scores(self.qdf, cids=self.cids)
+
+        with self.assertRaises(TypeError):
+            make_zn_scores(self.qdf, cids=self.cids, xcat=123)
+
+        with self.assertRaises(TypeError):
+            make_zn_scores(self.qdf, cids=self.cids, xcat=["CRY", 1])
+
+        with self.assertRaises(ValueError):
+            make_zn_scores(self.qdf, cids=self.cids, xcat=[])
 
     def test_upfront_thresh_limits_outlier_bias(self):
         dates = pd.date_range("2020-01-01", periods=5, freq="B")

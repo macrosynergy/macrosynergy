@@ -1425,7 +1425,13 @@ def get_eops(
 
 
 def merge_categories(
-    df: pd.DataFrame, xcats: List[str], new_xcat: str, cids: List[str] = None
+    df: pd.DataFrame,
+    xcats: Optional[List[str]] = None,
+    new_xcat: Optional[str] = None,
+    cids: Optional[List[str]] = None,
+    hierarchy: Optional[List[str]] = None,
+    backfill: bool = False,
+    start: Optional[str] = None,
 ):
     """
     Merges categories into a new category, given a list of categories to be merged. The
@@ -1436,14 +1442,24 @@ def merge_categories(
     Parameters
     ----------
     df : pd.DataFrame
-        standardized JPMaQS DataFrame with the necessary columns 'cid', 'xcat',
-        'real_date' and at least one column with values of interest.
+        standardized JPMaQS DataFrame with the columns 'cid', 'xcat', 'real_date' and
+        'value'.
     xcats : List[str]
-        extended categories to be merged.
-    cids : List[str]
-        cross sections to be included. Default is all in the DataFrame.
+        extended categories to be merged, in preferred order. Alias for `hierarchy`;
+        provide one or the other.
     new_xcat : str
-        name of the new category to be created. Default is None.
+        name of the new category to be created.
+    cids : List[str], optional
+        cross sections to be included. Default is all in the DataFrame.
+    hierarchy : List[str], optional
+        alias for `xcats`. Provided for parity with the previous `extend_history` API.
+    backfill : bool, optional
+        If True, the new xcat is backfilled with its first valid value to the date
+        specified by `start`. Default is False.
+    start : str, optional
+        ISO date. If `backfill` is True, the first valid value is propagated back to
+        this date. If `backfill` is False and `start` is provided, the output is
+        trimmed to dates >= start.
 
     Returns
     -------
@@ -1453,60 +1469,101 @@ def merge_categories(
 
     if not isinstance(df, pd.DataFrame):
         raise TypeError("The DataFrame must be a pandas DataFrame.")
+
+    if hierarchy is not None and xcats is not None:
+        raise ValueError("Provide either `xcats` or `hierarchy`, not both.")
+    if hierarchy is not None:
+        xcats = hierarchy
+    if xcats is None:
+        raise ValueError("`xcats` (or `hierarchy`) must be provided.")
+
     if not isinstance(xcats, list):
         raise TypeError("The categories must be a list of strings.")
     if not all(isinstance(xcat, str) for xcat in xcats):
         raise TypeError("The categories must be a list of strings.")
-    if not isinstance(df, QuantamentalDataFrame):
-        raise TypeError("The DataFrame must be a Quantamental DataFrame.")
+
+    if new_xcat is None:
+        raise ValueError("`new_xcat` must be provided.")
     if not isinstance(new_xcat, str):
         raise TypeError("The new category must be a string.")
-    if not set(xcats).issubset(df["xcat"].unique()):
+    if not isinstance(backfill, bool):
+        raise TypeError("`backfill` must be a boolean.")
+    if start is not None and not isinstance(start, str):
+        raise TypeError("`start` must be a string.")
+    if backfill and start is None:
+        raise ValueError("`start` must be provided if `backfill` is True.")
+
+    if not isinstance(df, QuantamentalDataFrame):
+        raise TypeError("The DataFrame must be a Quantamental DataFrame.")
+    qdf = QuantamentalDataFrame(df)
+    result_as_categorical = qdf.InitializedAsCategorical
+
+    if not set(xcats).issubset(qdf["xcat"].unique()):
         raise ValueError("The categories must be present in the DataFrame.")
     if cids is None:
-        cids = list(df["cid"].unique())
+        cids = list(qdf["cid"].unique())
     if not isinstance(cids, list):
         raise TypeError("The cross sections must be a list of strings.")
     if not all(isinstance(cid, str) for cid in cids):
         raise TypeError("The cross sections must be a list of strings.")
-    if not set(cids).issubset(df["cid"].unique()):
+    if not set(cids).issubset(qdf["cid"].unique()):
         raise ValueError("The cross sections must be present in the DataFrame.")
 
-    unique_dates = df["real_date"].unique()
-    real_dates = [pd.Timestamp(date) for date in unique_dates]
+    start_ts = pd.to_datetime(start) if start is not None else None
 
-    def _get_values_for_xcat(real_dates, xcat_index, cid):
-        values = df[
-            (df["real_date"].isin(real_dates))
-            & (df["xcat"] == xcats[xcat_index])
-            & (df["cid"] == cid)
-        ]
-        if not real_dates == list(values["real_date"].unique()):
-            if xcat_index + 1 >= len(xcats):
-                return values
-            values = update_df(
-                values,
-                _get_values_for_xcat(
-                    list(set(real_dates) - set(values["real_date"].unique())),
-                    xcat_index + 1,
-                    cid,
-                ),
-            )
-
-        values.loc[:, "xcat"] = new_xcat
-        return values
-
-    result_df = None
+    merged_results = []
 
     for cid in cids:
-        if result_df is None:
-            result_df = _get_values_for_xcat(real_dates, 0, cid)
-        else:
-            result_df = update_df(
-                result_df, _get_values_for_xcat(real_dates, xcat_index=0, cid=cid)
-            )
+        cid_df = qdf[qdf["cid"] == cid]
+        merged_series = pd.DataFrame()
 
-    return result_df.sort_values(by=IDX_COLS_SORT_ORDER).reset_index(drop=True)
+        for category in xcats:
+            cat_df = cid_df[cid_df["xcat"] == category].sort_values("real_date")
+            if merged_series.empty:
+                merged_series = cat_df.copy()
+            else:
+                inferior_values = cat_df[
+                    ~cat_df["real_date"].isin(merged_series["real_date"])
+                ]
+                merged_series = pd.concat([merged_series, inferior_values])
+
+        merged_series = merged_series.sort_values("real_date")
+        merged_series["xcat"] = new_xcat
+        merged_series["cid"] = cid
+
+        if backfill:
+            valid = merged_series.dropna(subset=["value"])
+            if not valid.empty:
+                first_valid_date = valid["real_date"].min()
+                first_valid_value = valid.loc[
+                    valid["real_date"] == first_valid_date, "value"
+                ].iloc[0]
+                if first_valid_date > start_ts:
+                    backfilled_data = pd.DataFrame(
+                        {
+                            "real_date": pd.bdate_range(
+                                start=start_ts,
+                                end=first_valid_date - pd.Timedelta(days=1),
+                            ),
+                            "value": first_valid_value,
+                            "cid": cid,
+                            "xcat": new_xcat,
+                        }
+                    )
+                    merged_series = merged_series[
+                        merged_series["real_date"] >= first_valid_date
+                    ]
+                    merged_series = pd.concat([backfilled_data, merged_series])
+        elif start_ts is not None:
+            merged_series = merged_series[merged_series["real_date"] >= start_ts]
+
+        merged_results.append(merged_series)
+
+    result_df = pd.concat(merged_results, ignore_index=True).sort_values(
+        by=IDX_COLS_SORT_ORDER
+    )
+
+    return QuantamentalDataFrame(result_df, categorical=result_as_categorical)
 
 
 def get_sops(
