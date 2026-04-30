@@ -17,6 +17,104 @@ from copy import deepcopy
 import numbers
 
 class MLPRegressor(BaseEstimator, RegressorMixin):
+    """
+    Scikit-learn comptatible multi-layer perceptron, implemented in PyTorch.
+
+    Parameters
+    ----------
+    n_latent : Union[int, List[int]], optional
+        Numer of hidden units in the latent layer(s) of the MLP.
+        If an integer is provided, the MLP will have a single hidden layer with n_latent
+        units. If a list of integers is provided, the MLP will have multiple hidden layers
+        with the number of units in each layer specified by the corresponding element in
+        the list. If provided, all (n_latent, fit_encoder_intercept, fit_head_intercept, encoder_activation, head_activation)
+        must be specified and torch_model must be None. Default is 32.
+    fit_encoder_intercept : bool, optional
+        Whether to include an intercept (bias term) in the encoder layers of the MLP.
+        If provided, all (n_latent, fit_encoder_intercept, fit_head_intercept, encoder_activation, head_activation)
+        must be specified and torch_model must be None. Default is True.
+    fit_head_intercept : bool, optional
+        Whether to include an intercept (bias term) in the output layer of the MLP.
+        If provided, all (n_latent, fit_encoder_intercept, fit_head_intercept, encoder_activation, head_activation)
+        must be specified and torch_model must be None.Default is True.
+    encoder_activation : str, optional
+        Activation function for the encoder (hidden) component of the network.
+        If provided, all (n_latent, fit_encoder_intercept, fit_head_intercept, encoder_activation, head_activation)
+        must be specified and torch_model must be None. Default is "relu".
+        Must be one of "tanh", "relu", or "sigmoid".
+    head_activation : str, optional
+        Activation function for the head (output) component of the network.
+        If provided, all (n_latent, fit_encoder_intercept, fit_head_intercept, encoder_activation, head_activation)
+        must be specified and torch_model must be None. Default is "identity". Must be one
+        of "tanh", "relu", "sigmoid", or "identity".
+    torch_model : Intersection[torch.nn.Module, BaseEstimator], optional
+        Custom PyTorch model to use instead of the default MLP. Must be a subclass of both
+        torch.nn.Module and sklearn.base.BaseEstimator. If torch_model is provided, all 
+        parameters (n_latent, fit_encoder_intercept, fit_head_intercept, encoder_activation, head_activation)
+        must be None. Default is None.
+    loss_func : torch.nn.Module, optional
+        Loss function used during training. Must be a subclass of torch.nn.Module.
+        Default is nn.MSELoss().
+    optimizer : Union[str, List[str]], optional
+        Optimizer(s) used during training. If a single string is provided, it specifies the
+        optimizer used in backpropagation. If a list of strings is provided, each string
+        specifies an optimizer to be used in separate training runs, forming an neural
+        network ensemble. Currently supported optimizers are "AdamW", "SGD", and "SGD+mom".
+        Default is "AdamW".
+    scheduler : Optional[str], optional
+        Learning rate scheduler used during training. Currently supported schedulers are
+        "OneCycleLR" and None. Default is None.
+    batch_size : int, optional
+        Batch size used during training. Default is 32.
+    learning_rate : float, optional
+        Learning rate used by the optimizer. Default is 3e-4.
+    weight_decay : float, optional
+        Weight decay used by the optimizer. Default is 1e-4.
+    reg_turnover : float, optional
+        L2 regularization strength for the turnover in model outputs. Default is 0.
+    use_ts_sampler : bool, optional
+        Whether to use a time-series aware batch sampler during training.
+        Default is True.
+    aggregate_last : bool, optional
+        When using time-series batch sampling, whether or not to aggregate the last batch
+        into the previous batch if it is smaller than the specified batch size. When True,
+        `drop_last` must be False. Default is True.
+    drop_last : bool, optional
+        When using time-series batch sampling, whether or not to drop the last batch if it
+        is smaller than the specified batch size. When True, `aggregate_last` must be
+        False. Default is False.
+    epochs : int, optional
+        Maximum number of training epochs. Default is 10000.
+    patience : int, optional
+        Number of epochs to wait for improvement before early stopping. Default is 1000.
+    train_pct : float, optional
+        Fraction of samples used for training (remainder used for validation). This is
+        needed for the early stopping process. Default is 0.7.
+    x_scaler : Optional[TransformerMixin], optional
+        Scaler for the input features. Must be a subclass of sklearn's TransformerMixin.
+        This can also be set to None.
+        Default is StandardScaler(with_mean=False).
+    y_scaler : Optional[TransformerMixin], optional
+        Scaler for the target values. Must be a subclass of sklearn's TransformerMixin.
+        This can also be set to None.
+        Default is StandardScaler(with_mean=False).
+    verbose : bool, optional
+        Whether to print training diagnostics during training. Default is False.
+    random_state : Union[int, List[int]], optional
+        Random seed(s) used for PyTorch initialization and training. If multiple seeds
+        are spsecified, then a neural network ensemble will be trained with each seed
+        in the list. Default is 42.
+    inverse_transform_preds : bool, optional
+        Whether to inverse-transform predictions back to the original target scale using
+        the fitted target scaler. Default is False.
+
+    Notes
+    -----
+    A neural network is the composition of many "neurons", which are themselves the
+    composition of a linear transformation and a non-linear 'activation function'. A 
+    single neuron compresses the input data into a single latent factor. The outputs 
+    of each neuron 
+    """
     def __init__(
         self,
         # Neural network structure
