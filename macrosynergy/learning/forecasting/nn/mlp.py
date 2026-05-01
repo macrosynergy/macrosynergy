@@ -110,10 +110,108 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
 
     Notes
     -----
-    A neural network is the composition of many "neurons", which are themselves the
-    composition of a linear transformation and a non-linear 'activation function'. A 
-    single neuron compresses the input data into a single latent factor. The outputs 
-    of each neuron 
+    A neural network is a parametric model that, given a collection of input features, 
+    learns a mapping to target values by passing the feature set through "neurons", which
+    are themselves the composition of a linear transformation and a non-linear 'activation
+    function'. The output of these neurons should be interpreted as latent factors. These
+    neuron outputs can then be passed through further neurons, and so on, until the final
+    'layer' of neurons that produces the model predictions. The parameters of the linear
+    transformations are learned during training. This is the basic structure of a neural
+    network, with other types of neural network building upon this to handle sequential 
+    data/images/videos more efficiently. 
+
+    When the input dataset is tabular, with each sample consisting of a set of features
+    and a target value, and each treated as independent, then the model defined by mapping
+    the input features to a layer of latent factors via neurons, then (possibly) to 
+    another layer of latent factors, and so on, until the final layer of neurons that maps
+    to the target value(s), is called a multi-layer perceptron (MLP).
+
+    Learning corresponds to estimating the optimal parameters of the neural network. 
+    Optimality refers to the suitability of the parameters for the forecasting task at hand,
+    which is quantified by a loss function. `MLPRegressor` expects a PyTorch-compatible
+    loss function to be provided, which inherits from `torch.nn.Module` and has a `forward`
+    method that takes in the model predictions and the true target values and outputs 
+    a scalar loss value. The default loss function is mean squared error. Practically 
+    optimizing the parameters of this network is not trivial, because unlike an OLS model
+    (which optimizes mean squared error) the activation functions introduce non-linearity 
+    in the model, which (firstly) means that no closed-form solution exists for optimal
+    parameters, and (secondly) means that the loss landscape is non-convex with many 
+    local minima, saddle points and generically complicated geometry. The algorithm used 
+    to train such a neural network is called 'backpropogation', which involves:
+
+    1. Randomly initializing the parameters of the network
+    2. Passing the input features through the network to get (initially rubbish) predictions
+    3. Calculating the loss of the predictions with respect to the true target values
+    using the specified loss function
+    4. Calculating the derivative of the loss with respect to each parameter in the network,
+    based on the data.
+    5. Updating the parameters in the direction that reduces the loss, with the step size
+    determined by the learning rate and the optimizer. 
+    6. Iterating until convergence. 
+
+    Traditionally, the optimizer used in step 5 was stochastic gradient descent (SGD), 
+    which simply updates the parameters in the direction of the negative gradient of the loss. 
+    If one imagines a ball rolling down a hill, to get the bottom the ball has to move in
+    the direction of the steepest descent, which is the negative gradient. The 'stochastic'
+    part means that data is provided to the network in batches, meaning that the gradient
+    calculation is noisy. This noise is helpful for optimization because it prevents 
+    convergence to a poor minimum in the loss surface. In particular, SGD tends to converge
+    to flatter minima in the loss surface, which are associated with better generalization
+    performance. SGD, however, can be slow and other optimizers have been developed that
+    can converge faster, such as SGD + momentum, or AdamW.
+
+    The previous paragraph touches on the importance of the geometry of the loss surface 
+    for optimization and generalization. For those who are new to the world of neural
+    networks, it likely seems that the goal is to optimize the parameters to achieve the 
+    global minimum in the loss surface. This, however, is a bad idea. The global minimum 
+    is very likely to memorise the training data and consequently generalise poorly. This
+    is because the neural network typically has a vast number of parameters. This means 
+    that is in fact preferable to converge to a local minimum, particularly if we can 
+    characterise certain local minima as being better than others. Indeed, we can; we prefer
+    flatter minima rather than steep minima. Intuitively, if we converge to a steep minimum, 
+    then a small change in the underlying data leads us out of the minimum, indicating 
+    that the model is unstable and likely to generalise poorly. On the other hand,
+    small changes in the data do not lead us out of a flat minimum, indicating that the
+    model is stable and likely to generalise better. Certain techniques can be employed 
+    to encourage convergence to a flatter minimum, such as using a learning rate scheduler
+    that forces a large learning rate at periods of training, allowing the model to escape
+    steep minima, and reducing the learning rate when a favourable region of the parameter
+    space is being explored. Small batch sizes also encourage convergence to a flatter 
+    minimum. 
+
+    Convergence is also complicated by the fact that indefinite training of the network 
+    leads to overfitting. Early stopping is a common regularization strategy for neural
+    network training. The idea is split a training set into a smaller training subset 
+    and a validation subset. The model is trained on the training subset, but at the end
+    of each epoch (each complete pass of the training subset), it is evaluated against 
+    the validation subset. If the validation loss does not improve for a certain number of
+    epochs, then training is stopped and the parameters from the epoch with the best
+    validation loss are returned. 
+
+    In this implementation of a multilayer perceptron, the structure of the model is 
+    determined either by setting (`n_latent`, `fit_encoder_intercept`, `fit_head_intercept`, 
+    `encoder_activation`, `head_activation`) jointly or by providing a custom `torch_model`.
+    The loss function is determined by the `loss_func` parameter, and the training dynamics
+    are determined by the `optimizer`, `scheduler`, `batch_size`, `learning_rate`,
+    `weight_decay`, and `reg_turnover` parameters. Weight decay is a regularization strategy
+    that penalizes large weights in the network, whilst `reg_turnover` penalizes
+    large changes in model outputs from one time period to the next, which is useful
+    information when transaction cost data is incorporated in the loss function. 
+
+    The usual theory for neural network training is centred around each sample within a
+    batch being independent and identically distributed, implying that the random variables
+    corresponding to the derivative of the loss, for a fixed set of parameters, evaluated
+    at each sample are independent and identically distributed. This means that the average
+    derivative over a batch is a consistent, unbiased estimate of the true
+    gradient of the loss with respect to the parameters. On time series data, however,
+    mixing samples from different time periods leads to can lead to biased gradient estimates
+    due to the presence of different regimes within a single batch, violating the assumption
+    of samples coming from the same distribution. This confuses the learning process
+    because the model is pulled in conflicting directions by samples drawn from different
+    regimes, resulting in a poorly performing learning algorithm. To remedy this, we have
+    provided the option to use a time series-aware batch sampler that ensures that each
+    batch is comprised of samples from contiguous time periods. This should help
+    convergence. This can be toggled on/off with the `use_ts_sampler` parameter.
     """
     def __init__(
         self,
