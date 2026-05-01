@@ -1,20 +1,4 @@
-"""
-Sharpe Stability Ratio (SSR)
-
-Implements the Sharpe Stability Ratio as described in:
-    Bajo Traver & Rodríguez Domínguez (2026), "The Sharpe Stability Ratio:
-    Temporal Consistency of Risk-Adjusted Performance".
-
-SSR measures the temporal consistency of risk-adjusted returns. It is defined
-as the HAC-robust t-statistic for the hypothesis that the mean of the rolling
-Sharpe ratio series equals a benchmark value:
-
-    SSR = (Z_bar - SR*) / HAC_SE(Z)
-
-where Z is the rolling Sharpe ratio series, Z_bar its sample mean, SR* a
-benchmark Sharpe ratio (default 0), and HAC_SE is the Newey-West HAC standard
-error of the mean, i.e. sqrt(LRV / N).
-"""
+"""Sharpe Stability Ratio: HAC-robust t-stat for the mean rolling Sharpe, accounting for sample size and serial dependence."""
 
 import numpy as np
 import pandas as pd
@@ -30,40 +14,48 @@ def sharpe_stability_ratio(
     min_periods: Optional[int] = None,
 ) -> float:
     """
-    Compute the Sharpe Stability Ratio (SSR) for a return series.
+    The SSR is the ratio between an average (rolling) Sharpe ratio and its
+    estimated deviation from a true mean ("estimated parameter error"). Thus,
+    it accounts not only for the risk-adjusted return of a strategy but also
+    for its uncertainty given the sample size, seasonality, and autocorrelation.
 
-    SSR measures the temporal consistency of risk-adjusted returns. It is the
-    HAC-robust t-statistic for the hypothesis that the mean of the rolling
-    Sharpe ratio series equals a benchmark Sharpe ratio:
+    By default, Sharpe ratios and their estimated errors are calculated using
+    rolling 252-trading-day windows on a daily return series. The error is
+    estimated using the HAC (Heteroskedasticity and Autocorrelation Consistent)
+    Newey-West (1987) variance estimator, which adjusts the variance of the
+    sample mean for serial dependence in the rolling Sharpe series.
 
-        SSR = (Z_bar - SR*) / HAC_SE(Z)
+    The SSR can be interpreted as a signal-to-noise measure, indicating how
+    strongly the Sharpe ratios deviate from zero after accounting for their
+    serial dependence. If the SSR is above 1, its value exceeds its estimated
+    noise, providing evidence of a non-zero mean. Under standard regularity
+    conditions, the SSR approximates a t-statistic for the mean of the Sharpe
+    ratio: a value of 1 corresponds to ~68% confidence in a non-zero mean,
+    1.64 to ~90%, 1.96 to ~95%, and 2.58 to ~99%.
 
-    where Z is the rolling Sharpe ratio series with window length ``window``,
-    Z_bar its sample mean, SR* is ``benchmark_sr``, and HAC_SE is the
-    Newey-West HAC standard error of the mean (sqrt(LRV / N)).
+    For non-daily inputs, ``window`` and ``annualization_factor`` must be set
+    together to match the input frequency (monthly: 12/12, weekly: 52/52).
 
     Parameters
     ----------
     returns : pd.Series or np.ndarray
-        Daily return series. NaN values are dropped before computation.
+        Return series at the frequency implied by ``window`` /
+        ``annualization_factor``. NaNs are dropped.
     window : int, default 252
         Rolling window length (number of observations) for computing the
         Sharpe ratio series. Must be >= 2.
     benchmark_sr : float, default 0.0
-        Benchmark Sharpe ratio (SR*) against which the mean rolling SR is
-        tested. The default of 0.0 tests for positive temporal consistency.
+        Benchmark Sharpe ratio (SR*) the mean rolling Sharpe is tested against.
     annualization_factor : int, default 252
-        Number of business days per year for annualizing the rolling Sharpe
-        ratios.
+        Periods per year. Must match input frequency.
     min_periods : int or None, default None
-        Minimum non-NaN observations required in each rolling window. If None,
-        defaults to ``window`` (requires a fully-filled window).
+        Minimum non-NaN observations per window. Defaults to ``window``.
 
     Returns
     -------
     float
-        The SSR scalar. Returns np.nan if there is insufficient data or if
-        the rolling SR series has zero variance.
+        SSR, or NaN if data is insufficient or the rolling Sharpe series has
+        zero variance.
     """
     if not isinstance(window, int) or window < 2:
         raise ValueError("window must be an integer >= 2")
@@ -94,8 +86,7 @@ def sharpe_stability_ratio(
 
     z_bar = float(np.mean(z))
 
-    # Newey-West rule-of-thumb bandwidth
-    # L = _newey_west_rule_of_thumb_bandwidth(N)
+    # Set bandwidth to equal window
     L = window
 
     # Newey-West long-run variance
@@ -110,23 +101,7 @@ def sharpe_stability_ratio(
 
 
 def _newey_west_lrv(z: np.ndarray, L: int) -> float:
-    """
-    Newey-West (1987) long-run variance with Bartlett kernel.
-
-    LRV = gamma_0 + 2 * sum_{k=1}^{L} (1 - k/(L+1)) * gamma_k
-
-    Parameters
-    ----------
-    z : np.ndarray
-        1-D array (the rolling Sharpe ratio series).
-    L : int
-        Bandwidth (number of lags to include).
-
-    Returns
-    -------
-    float
-        Long-run variance estimate, floored at 0.0.
-    """
+    """Newey-West (1987) Bartlett-kernel long-run variance with bandwidth ``L``."""
     gammas = acovf(z, nlag=L, fft=True, demean=True)
     lrv = gammas[0]
     for k in range(1, L + 1):
@@ -135,24 +110,8 @@ def _newey_west_lrv(z: np.ndarray, L: int) -> float:
     return max(float(lrv), 0.0)
 
 
-def _newey_west_rule_of_thumb_bandwidth(N: int) -> int:
-    """
-    Newey-West rule-of-thumb bandwidth for the Bartlett kernel:
-
-        L = floor(4 * (N / 100) ** (2 / 9))
-
-    clamped to [1, N-1].
-
-    Parameters
-    ----------
-    N : int
-        Length of the series.
-
-    Returns
-    -------
-    int
-        Bandwidth parameter L >= 1.
-    """
+def _newey_west_heuristic_bandwidth(N: int) -> int:
+    """Newey-West heuristic bandwidth: ``L = floor(4*(N/100)**(2/9))``, fixed in N."""
     if N < 3:
         return 1
     L = int(np.floor(4.0 * (N / 100.0) ** (2.0 / 9.0)))
@@ -160,27 +119,7 @@ def _newey_west_rule_of_thumb_bandwidth(N: int) -> int:
 
 
 def _andrews_ar1_bandwidth(z: np.ndarray) -> int:
-    """
-    Andrews (1991) AR(1) plug-in bandwidth for the Bartlett kernel.
-
-    Fits an AR(1) model on the demeaned series and returns the bandwidth L
-    based on the formula in Andrews (1991), Table 1:
-
-        alpha_1 = 4 * rho^2 / (1 - rho^2)^2
-        L = floor(1.1447 * (alpha_1 * N)^(1/3))
-
-    clamped to [1, N-1].
-
-    Parameters
-    ----------
-    z : np.ndarray
-        1-D array of the rolling Sharpe ratio series.
-
-    Returns
-    -------
-    int
-        Bandwidth parameter L >= 1.
-    """
+    """Andrews (1991) AR(1) plug-in bandwidth — adapts to series persistence."""
     N = len(z)
     if N < 3:
         return 1
@@ -202,10 +141,7 @@ def _andrews_ar1_bandwidth(z: np.ndarray) -> int:
 
 
 if __name__ == "__main__":
-    # The point of SSR: two strategies with similar realized Sharpes can have
-    # very different temporal consistency. SSR separates them; Sharpe alone
-    # cannot. Two paired demos below — each pair has matched Sharpe, contrasting
-    # SSR.
+
 
     def _sharpe(r: pd.Series, ann: int = 252) -> float:
         return float(r.mean() / r.std() * np.sqrt(ann))
@@ -213,7 +149,6 @@ if __name__ == "__main__":
     N = 3000  # ~12y of daily obs
 
     # ---- Pair A: smooth drift vs multi-year regime switching ----
-    # Both target Sharpe ~ 1.25 over the full sample.
     rng = np.random.default_rng(0)
 
     a_consistent = pd.Series(rng.normal(0.0008, 0.01, N))

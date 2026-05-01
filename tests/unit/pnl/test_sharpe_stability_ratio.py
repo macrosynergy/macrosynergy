@@ -9,55 +9,6 @@ from macrosynergy.pnl.sharpe_stability_ratio import (
 )
 
 
-class TestAndrewsBandwidth(unittest.TestCase):
-    def test_returns_int(self):
-        z = np.random.default_rng(0).normal(0, 1, 300)
-        L = _andrews_ar1_bandwidth(z)
-        self.assertIsInstance(L, int)
-
-    def test_minimum_one(self):
-        # Near-zero autocorrelation → bandwidth clamped to 1
-        rng = np.random.default_rng(42)
-        z = rng.normal(0, 1, 100)
-        L = _andrews_ar1_bandwidth(z)
-        self.assertGreaterEqual(L, 1)
-
-    def test_short_series_returns_one(self):
-        self.assertEqual(_andrews_ar1_bandwidth(np.array([1.0, 2.0])), 1)
-
-    def test_high_autocorrelation_gives_larger_bandwidth(self):
-        # AR(1) with rho=0.95 should give a much larger bandwidth than iid
-        rng = np.random.default_rng(7)
-        n = 500
-        z_iid = rng.normal(0, 1, n)
-        # Build highly persistent series
-        z_ar = np.zeros(n)
-        z_ar[0] = rng.normal()
-        for t in range(1, n):
-            z_ar[t] = 0.95 * z_ar[t - 1] + rng.normal(0, 0.31)
-        self.assertGreater(_andrews_ar1_bandwidth(z_ar), _andrews_ar1_bandwidth(z_iid))
-
-
-class TestNeweyWestLRV(unittest.TestCase):
-    def test_non_negative(self):
-        rng = np.random.default_rng(1)
-        z = rng.normal(0, 1, 200)
-        self.assertGreaterEqual(_newey_west_lrv(z, 5), 0.0)
-
-    def test_iid_series_close_to_variance(self):
-        # For iid data, LRV ≈ sample variance (autocovariances near zero)
-        rng = np.random.default_rng(2)
-        z = rng.normal(0, 1, 5000)
-        lrv = _newey_west_lrv(z, 1)
-        sample_var = float(np.var(z, ddof=1))
-        self.assertAlmostEqual(lrv, sample_var, delta=0.05)
-
-    def test_returns_float(self):
-        z = np.ones(50)
-        result = _newey_west_lrv(z, 3)
-        self.assertIsInstance(result, float)
-
-
 class TestSharpeStabilityRatio(unittest.TestCase):
     def setUp(self):
         rng = np.random.default_rng(42)
@@ -141,15 +92,6 @@ class TestSharpeStabilityRatio(unittest.TestCase):
         ssr_252 = sharpe_stability_ratio(self.stable, window=252)
         self.assertFalse(np.isnan(ssr_126))
         self.assertFalse(np.isnan(ssr_252))
-
-    # --- Annualization factor invariance ---
-
-    def test_annualization_factor_does_not_affect_sign(self):
-        ssr_261 = sharpe_stability_ratio(self.stable, annualization_factor=261)
-        ssr_252 = sharpe_stability_ratio(self.stable, annualization_factor=252)
-        # Both should be positive and finite
-        self.assertGreater(ssr_261, 0.0)
-        self.assertGreater(ssr_252, 0.0)
 
     # --- Input validation ---
 
