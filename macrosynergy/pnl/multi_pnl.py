@@ -270,8 +270,11 @@ class MultiPnL:
         - Max 6-Month Draw %
         - Peak to Trough Draw %
         - Top 5% Monthly PnL Share
-        - Traded Months
         - Correlation with benchmarks (if available)
+        - Sharpe Stability Ratio - HAC-robust t-stat for the mean rolling
+          Sharpe ratio (see :func:`sharpe_stability_ratio`); accounts for
+          sample size and serial dependence
+        - Traded Months
 
         .. note::
             The evaluation metrics are calculated in a manner similar to NaivePnL's `evaluate_pnls()`.

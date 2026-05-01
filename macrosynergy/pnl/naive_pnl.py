@@ -1340,6 +1340,9 @@ class NaivePnL:
             - Max 6-Month Draw - percentage
             - Peak to Trough Draw - percentage
             - Top 5% Monthly PnL Share
+            - Sharpe Stability Ratio - HAC-robust t-stat for the mean rolling
+              Sharpe ratio (see ``sharpe_stability_ratio``); accounts for
+              sample size and serial dependence
             - Traded Months
 
         Parameters
