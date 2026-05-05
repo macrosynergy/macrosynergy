@@ -27,6 +27,9 @@ class MultiLayerPerceptron(nn.Module):
         Whether to fit intercepts in the encoder layers. Default is False.
     fit_head_intercept : bool, optional
         Whether to fit intercepts in the output head. Default is True.
+    dropout_p: float, optional
+        Dropout probability for regularization. Default is 0 (no dropout).
+        Must be between 0 and 0.5. 
 
     Notes
     -----
@@ -58,9 +61,10 @@ class MultiLayerPerceptron(nn.Module):
     to refer to the ability to customize architectures and loss functions to suit
     a particular problem.
 
+    TODO: add description of dropout
+
     Future work
     -----------
-    - Add dropout layers for regularization.
     - Support for skip connections.
     """
     def __init__(
@@ -72,6 +76,7 @@ class MultiLayerPerceptron(nn.Module):
         head_activation = "identity",
         fit_encoder_intercept = False,
         fit_head_intercept = True,
+        dropout_p = 0,
     ):
         super().__init__()
 
@@ -84,6 +89,7 @@ class MultiLayerPerceptron(nn.Module):
             head_activation,
             fit_encoder_intercept,
             fit_head_intercept,
+            dropout_p,
         )
 
         # Attributes
@@ -98,6 +104,7 @@ class MultiLayerPerceptron(nn.Module):
         self.head_activation = head_activation
         self.fit_encoder_intercept = fit_encoder_intercept
         self.fit_head_intercept = fit_head_intercept
+        self.dropout_p = dropout_p
 
         self.activation_map = {
             "tanh": lambda: nn.Tanh(),
@@ -107,7 +114,7 @@ class MultiLayerPerceptron(nn.Module):
         }
 
         # Encoder
-        self.encoder = self._build_encoder(self.n_inputs, self.n_latent, self.encoder_activation, self.fit_encoder_intercept)
+        self.encoder = self._build_encoder(self.n_inputs, self.n_latent, self.encoder_activation, self.fit_encoder_intercept, self.dropout_p)
 
         # Projection head
         self.head = self._build_head(self.n_latent[-1], self.n_outputs, self.head_activation, self.fit_head_intercept)
@@ -130,17 +137,21 @@ class MultiLayerPerceptron(nn.Module):
         output = self.head(latent)
         return output
 
-    def _build_encoder(self, n_inputs, n_latent, encoder_activation, fit_encoder_intercept):
+    def _build_encoder(self, n_inputs, n_latent, encoder_activation, fit_encoder_intercept, dropout_p):
         # Identify encoder activation
         activation_func = self.activation_map[encoder_activation]
         # Build encoder
         encoder_modules = [nn.Linear(n_inputs, n_latent[0], bias = fit_encoder_intercept), activation_func()]
+        if dropout_p > 0:
+            encoder_modules.append(nn.Dropout(p=dropout_p))
         if len(n_latent) > 1:
             for layer_idx in range(1, len(n_latent)):
                 encoder_modules.append(
                     nn.Linear(n_latent[layer_idx - 1], n_latent[layer_idx], bias = fit_encoder_intercept)
                 )
                 encoder_modules.append(activation_func())
+                if dropout_p > 0:
+                    encoder_modules.append(nn.Dropout(p=dropout_p*2))
         
         return nn.Sequential(*encoder_modules)
     
@@ -160,6 +171,7 @@ class MultiLayerPerceptron(nn.Module):
         head_activation,
         fit_encoder_intercept,
         fit_head_intercept,
+        dropout_p,
     ):
         # n_inputs
         if not isinstance(n_inputs, numbers.Integral):
@@ -205,6 +217,12 @@ class MultiLayerPerceptron(nn.Module):
         if not isinstance(fit_head_intercept, bool):
             raise TypeError("fit_head_intercept must be a boolean.")
         
+        # dropout_p
+        if not isinstance(dropout_p, numbers.Real):
+            raise TypeError("dropout_p must be a real number.")
+        if not (0 <= dropout_p < 0.5):
+            raise ValueError("dropout_p must be between 0 and 0.5.")
+        
 if __name__=="__main__":
     print("========================================")
     print("MLP: 5-32-1 structure, tanh activation")
@@ -212,6 +230,7 @@ if __name__=="__main__":
         n_inputs=5,
         n_latent = 32,
         n_outputs=1,
+        dropout_p=0.1,
     )
     print(model)
     print("========================================")
@@ -224,6 +243,7 @@ if __name__=="__main__":
         head_activation="sigmoid",
         fit_encoder_intercept=True,
         fit_head_intercept=False,
+        dropout_p=0.1,
     )
     print(model)
     print("========================================")
