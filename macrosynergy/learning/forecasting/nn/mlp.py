@@ -107,6 +107,9 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
     inverse_transform_preds : bool, optional
         Whether to inverse-transform predictions back to the original target scale using
         the fitted target scaler. Default is False.
+    min_samples : int, optional
+        Minimum number of samples for an asset to have a head in the neural network.
+        Default is 36.
 
     Notes
     -----
@@ -242,7 +245,8 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         # Other stuff 
         verbose = False,
         random_state = 42,
-        inverse_transform_preds = False
+        inverse_transform_preds = False,
+        min_samples = 36
     ):
         # Checks 
         self._check_init_params(
@@ -270,7 +274,8 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
             y_scaler,
             verbose,
             random_state,
-            inverse_transform_preds
+            inverse_transform_preds,
+            min_samples,
         )
 
         # Attributes
@@ -300,6 +305,7 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         self.verbose = verbose
         self.random_state = random_state
         self.inverse_transform_preds = inverse_transform_preds
+        self.min_samples = min_samples
 
         self.models = []
         self.optimizers = [self.optimizer] if not isinstance(self.optimizer, list) else self.optimizer
@@ -310,6 +316,13 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         # TODO: if torch_model is provided, check it has the right structure 
         # to be trained by this class by passing a batch through it
         sample_weight_strategy = self._check_fit_params(X, y, sample_weight)
+
+        # Filter assets with insufficient samples to have a head in the network
+        target_counts = y.count()
+        self.targets = target_counts[target_counts >= self.min_samples].index
+        self.n_targets = len(self.targets)
+
+        y = y[self.targets]
 
         # Create training and validation splits
         X_train, X_valid, y_train, y_valid = self.create_train_valid_splits(X, y, self.train_pct)
@@ -394,7 +407,9 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
                 model_preds.append(preds)
 
         # Concatenate predictions and average across models
-        return np.mean(np.stack(model_preds, axis=0), axis = 0)
+        final_preds = np.mean(np.stack(model_preds, axis=0), axis = 0)
+
+        return pd.DataFrame(final_preds, index=X.index, columns=self.targets)
 
     def initialize_model(
         self,
@@ -729,7 +744,8 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         y_scaler,
         verbose,
         random_state,
-        inverse_transform_preds
+        inverse_transform_preds,
+        min_samples,
     ):
         # First check either torch_model is set or (n_latent, fit_encoder_intercept, fit_head_intercept, encoder_activation, head_activation) are set.
         if torch_model is None:
@@ -917,6 +933,12 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         if not isinstance(inverse_transform_preds, bool):
             raise TypeError("inverse_transform_preds must be a boolean.")
         
+        # min_samples
+        if not isinstance(min_samples, numbers.Integral):
+            raise TypeError("min_samples must be an integer.")
+        if min_samples < 1:
+            raise ValueError("min_samples must be at least 1.")
+        
     def _check_fit_params(self, X, y, sample_weight):
         # TODO: X and y checks 
         # sample_weight 
@@ -976,7 +998,7 @@ if __name__ == "__main__":
     df_xcats.loc["CRY"] = ["2012-01-01", "2020-12-31", 1, 2, 0.95, 1]
     df_xcats.loc["GROWTH"] = ["2012-01-01", "2020-12-31", 1, 2, 0.9, 1]
     df_xcats.loc["RATES"] = ["2010-01-01", "2020-12-31", 0, 1, 0.5, 0.5]
-    df_xcats.loc["XR2"] = ["2015-01-01", "2020-12-31", -0.1, 2, 0.8, 0.3]
+    df_xcats.loc["XR2"] = ["2020-01-01", "2020-12-31", -0.1, 2, 0.8, 0.3]
 
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75, seed = 42)
     dfd["grading"] = np.ones(dfd.shape[0])
@@ -994,9 +1016,9 @@ if __name__ == "__main__":
     so = SignalOptimizer(
         df=dfd,
         xcats=["CRY", "GROWTH", "RATES", "XR1", "XR2"],
-        cids=cids,
+        cids=["USD"],
         blacklist=black,
-        drop_nas=True,
+        drop_nas="X",
         n_targets=2,
     )
     X = so.X.copy(deep=True)
@@ -1043,12 +1065,23 @@ if __name__ == "__main__":
         train_pct = 0.7,
         x_scaler = StandardScaler(with_mean=False),
         y_scaler = StandardScaler(with_mean=False),
-        verbose = True, 
+        verbose = False, 
         random_state = [42,43],
-        inverse_transform_preds = True
-    ).fit(X,y)
+        inverse_transform_preds = True,
+        min_samples = 36,
+    )#.fit(X,y)
+
+    so.calculate_predictions(
+        name = "MLP",
+        models = {
+            "MLP": mlp
+        },
+        min_cids = 1,
+        min_xcats = 1,
+        min_periods = 36,
+    )
 
     #print(list(mlp.models[0].parameters()))
     #print(list(mlp.models[1].parameters()))
-    preds = mlp.predict(X)
-    print(preds)
+    # preds = mlp.predict(X)
+    # print(preds)
