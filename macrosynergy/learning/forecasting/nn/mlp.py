@@ -221,6 +221,7 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         fit_head_intercept = True,
         encoder_activation = "relu",
         head_activation = "identity",
+        dropout_p = 0,
         torch_model = None,
         # Neural network training dynamics
         loss_func = torch.nn.MSELoss(),
@@ -250,6 +251,7 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
             fit_head_intercept,
             encoder_activation,
             head_activation,
+            dropout_p,
             torch_model,
             loss_func,
             optimizer,
@@ -277,9 +279,10 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         self.fit_head_intercept = fit_head_intercept
         self.encoder_activation = encoder_activation
         self.head_activation = head_activation
+        self.dropout_p = dropout_p
         self.torch_model = torch_model
         self.loss_func = loss_func
-        self.optimizers = [optimizer] if not isinstance(optimizer, list) else optimizer
+        self.optimizer = optimizer
         self.scheduler = scheduler 
         self.batch_size = batch_size
         self.learning_rate = learning_rate
@@ -295,10 +298,12 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         self.x_scaler = x_scaler
         self.y_scaler = y_scaler
         self.verbose = verbose
-        self.random_states = [random_state] if not isinstance(random_state, list) else random_state
+        self.random_state = random_state
         self.inverse_transform_preds = inverse_transform_preds
 
         self.models = []
+        self.optimizers = [self.optimizer] if not isinstance(self.optimizer, list) else self.optimizer
+        self.random_states = [self.random_state] if not isinstance(self.random_state, list) else self.random_state
 
     def fit(self, X, y, sample_weight=None):
         # Additional checks
@@ -340,6 +345,7 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
                         head_activation = self.head_activation,
                         fit_encoder_intercept = self.fit_encoder_intercept,
                         fit_head_intercept = self.fit_head_intercept,
+                        dropout_p = self.dropout_p
                     )
 
                 # Set up optimizer 
@@ -388,7 +394,7 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
                 model_preds.append(preds)
 
         # Concatenate predictions and average across models
-        return np.mean(np.concatenate(model_preds, axis=1), axis = 1)
+        return np.mean(np.stack(model_preds, axis=0), axis = 0)
 
     def initialize_model(
         self,
@@ -399,6 +405,7 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         head_activation,
         fit_encoder_intercept,
         fit_head_intercept,
+        dropout_p
     ):
         model = MultiLayerPerceptron(
             n_inputs=n_inputs,
@@ -408,6 +415,7 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
             head_activation=head_activation,
             fit_encoder_intercept=fit_encoder_intercept,
             fit_head_intercept=fit_head_intercept,
+            dropout_p=dropout_p
         )
 
         return model
@@ -702,6 +710,7 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         fit_head_intercept,
         encoder_activation,
         head_activation,
+        dropout_p,
         torch_model,
         loss_func,
         optimizer,
@@ -724,14 +733,14 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
     ):
         # First check either torch_model is set or (n_latent, fit_encoder_intercept, fit_head_intercept, encoder_activation, head_activation) are set.
         if torch_model is None:
-            if n_latent is None or fit_encoder_intercept is None or fit_head_intercept is None or encoder_activation is None or head_activation is None:
+            if n_latent is None or fit_encoder_intercept is None or fit_head_intercept is None or encoder_activation is None or head_activation is None or dropout_p is None:
                 raise ValueError(
-                    "When torch_model is not provided, (n_latent, fit_encoder_intercept, fit_head_intercept, encoder_activation, head_activation) must all be specified."
+                    "When torch_model is not provided, (n_latent, fit_encoder_intercept, fit_head_intercept, encoder_activation, head_activation, dropout_p) must all be specified."
                 )
         else:
-            if n_latent is not None or fit_encoder_intercept is not None or fit_head_intercept is not None or encoder_activation is not None or head_activation is not None:
+            if n_latent is not None or fit_encoder_intercept is not None or fit_head_intercept is not None or encoder_activation is not None or head_activation is not None or dropout_p is not None:
                 raise ValueError(
-                    "When torch_model is provided, (n_latent, fit_encoder_intercept, fit_head_intercept, encoder_activation, head_activation) should be set to None."
+                    "When torch_model is provided, (n_latent, fit_encoder_intercept, fit_head_intercept, encoder_activation, head_activation, dropout_p) should be set to None."
                 )
             
         if torch_model is None:
@@ -772,6 +781,12 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
                 raise ValueError(
                     "head_activation must be one of 'tanh', 'relu', 'sigmoid', or 'identity'."
                 )
+        
+            # dropout_p
+            if not isinstance(dropout_p, numbers.Real):
+                raise TypeError("dropout_p must be a real number.")
+            if not (0 <= dropout_p <= 0.5):
+                raise ValueError("dropout_p must be between 0 and 0.5.")
         
         # torch_model
         if torch_model is not None:
@@ -1011,9 +1026,10 @@ if __name__ == "__main__":
         fit_head_intercept = True,
         encoder_activation = "tanh",
         head_activation="identity",
+        dropout_p = 0.1,
         #torch_model = BasicMLP(n_inputs=X.shape[1], n_latent=16, n_outputs=y.shape[1]),
         loss_func=torch.nn.MSELoss(),
-        optimizer = "AdamW",
+        optimizer = ["AdamW","SGD+mom"],
         scheduler = None, 
         batch_size = 16,
         learning_rate = 3e-4, 
@@ -1028,11 +1044,11 @@ if __name__ == "__main__":
         x_scaler = StandardScaler(with_mean=False),
         y_scaler = StandardScaler(with_mean=False),
         verbose = True, 
-        random_state = 42,
+        random_state = [42,43],
         inverse_transform_preds = True
     ).fit(X,y)
 
-    print(list(mlp.models[0].parameters()))
+    #print(list(mlp.models[0].parameters()))
     #print(list(mlp.models[1].parameters()))
-    # preds = mlp.predict(X)
-    # print(preds)
+    preds = mlp.predict(X)
+    print(preds)
