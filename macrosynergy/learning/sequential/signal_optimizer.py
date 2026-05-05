@@ -381,7 +381,21 @@ class SignalOptimizer(BasePanelLearner):
             )
         # Create quantamental dataframe of forecasts
         for idx, forecasts in prediction_data:
-            forecasts_df.loc[idx, :] = forecasts
+            # TODO: add a check that forecasts are in the right format.
+            if self.n_targets == 1:
+                # Usual single output expects numpy array
+                forecasts_df.loc[idx, name] = forecasts
+            elif forecasts.shape[1] == self.n_targets:
+                # Multi output model with same number of targets as response variables
+                if isinstance(forecasts, np.ndarray):
+                    forecasts_df.loc[idx, :] = forecasts 
+                else:
+                    # Dataframe
+                    forecasts_df.loc[idx, :] = forecasts.values
+            else:
+                # Multi output model with less targets than response variables.
+                # This is usually due to excluded assets with insufficient data at training time
+                forecasts_df.loc[idx, [f"{target}_{name}" for target in forecasts.columns]] = forecasts.values
 
         forecasts_df = forecasts_df.groupby(level=0).ffill().dropna()
 
