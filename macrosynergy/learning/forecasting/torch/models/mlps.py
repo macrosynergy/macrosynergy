@@ -61,7 +61,10 @@ class MultiLayerPerceptron(nn.Module):
     to refer to the ability to customize architectures and loss functions to suit
     a particular problem.
 
-    TODO: add description of dropout
+    The model allows for dropout regularization, which regularizes a neural network
+    by randomly "dropping out" (setting to zero) a fraction of the neurons during training.
+    This prevents over-reliance on specific neurons and encourages the network to become
+    robust to the design of the neural network architecture. 
 
     Future work
     -----------
