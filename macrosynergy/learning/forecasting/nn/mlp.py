@@ -1076,10 +1076,14 @@ if __name__ == "__main__":
         models = {
             "MLP": mlp
         },
+        multi_target_fill="mean",
         min_cids = 1,
         min_xcats = 1,
         min_periods = 36,
     )
+
+    dfa = so.get_optimized_signals()
+    print(dfa)
 
     #print(list(mlp.models[0].parameters()))
     #print(list(mlp.models[1].parameters()))
