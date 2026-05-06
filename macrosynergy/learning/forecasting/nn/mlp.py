@@ -1085,7 +1085,7 @@ if __name__ == "__main__":
     dfa = so.get_optimized_signals()
     print(dfa)
 
-    #print(list(mlp.models[0].parameters()))
-    #print(list(mlp.models[1].parameters()))
-    # preds = mlp.predict(X)
-    # print(preds)
+    print(list(mlp.models[0].parameters()))
+    print(list(mlp.models[1].parameters()))
+    preds = mlp.predict(X)
+    print(preds)
