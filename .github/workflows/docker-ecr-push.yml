@@ -1,0 +1,150 @@
+name: Build & Push Docker Image to ECR
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Git tag to build and push (e.g. v1.5.6)"
+        required: true
+        type: string
+  workflow_call:
+    inputs:
+      tag:
+        description: "Git tag to build and push"
+        required: true
+        type: string
+    secrets:
+      AWS_ROLE:
+        required: true
+      ECR_REPOSITORY:
+        required: true
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    outputs:
+      ms_version: ${{ steps.check-tag.outputs.ms_version }}
+      is_latest: ${{ steps.check-tag.outputs.is_latest }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install setuptools
+        run: pip install --quiet setuptools
+
+      - name: Verify tag exists and inspect
+        id: check-tag
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -eu
+          if ! git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null; then
+            echo "::error::Tag '${TAG}' does not exist in this repository. Aborting."
+            exit 1
+          fi
+          echo "Tag '${TAG}' exists."
+
+          LATEST_TAG=$(git tag --sort=-v:refname | head -n 1)
+          echo "Latest tag in repo: ${LATEST_TAG}"
+
+          IS_LATEST=false
+          if [ "${TAG}" = "${LATEST_TAG}" ]; then
+            IS_LATEST=true
+          fi
+          echo "is_latest=${IS_LATEST}"
+          echo "is_latest=${IS_LATEST}" >> "${GITHUB_OUTPUT}"
+
+          git checkout --quiet "${TAG}"
+          MS_VERSION=$(python ./setup.py --version 2>/dev/null | tail -n 1)
+          echo "MS_VERSION=${MS_VERSION}"
+          echo "ms_version=${MS_VERSION}" >> "${GITHUB_OUTPUT}"
+
+      - name: Poll PyPI for macrosynergy
+        env:
+          MS_VERSION: ${{ steps.check-tag.outputs.ms_version }}
+          IS_LATEST: ${{ steps.check-tag.outputs.is_latest }}
+        run: |
+          set -u
+          URL="https://pypi.org/pypi/macrosynergy/${MS_VERSION}/json"
+          MAX_ATTEMPTS=10
+          SLEEP_SECS=60
+
+          for ATTEMPT in $(seq 1 ${MAX_ATTEMPTS}); do
+            CODE=$(curl -s -o /tmp/pypi_ver.json -w "%{http_code}" "${URL}" || echo "000")
+            echo "Attempt ${ATTEMPT}/${MAX_ATTEMPTS}: HTTP ${CODE} for ${URL}"
+
+            if [ "${CODE}" = "200" ]; then
+              YANKED=$(jq -r '.info.yanked // false' /tmp/pypi_ver.json)
+              if [ "${YANKED}" = "true" ]; then
+                REASON=$(jq -r '.info.yanked_reason // "(no reason given)"' /tmp/pypi_ver.json)
+                echo "::warning::macrosynergy ${MS_VERSION} is YANKED on PyPI. Reason: ${REASON}. Proceeding with build."
+              fi
+              echo "macrosynergy ${MS_VERSION} is available on PyPI."
+              exit 0
+            fi
+
+            if [ "${IS_LATEST}" != "true" ]; then
+              echo "::error::Tag is not the latest and macrosynergy ${MS_VERSION} is not on PyPI (HTTP ${CODE})."
+              curl -s -o /tmp/pypi_pkg.json "https://pypi.org/pypi/macrosynergy/json" || true
+              REL_PRESENT=$(jq --arg v "${MS_VERSION}" '.releases | has($v)' /tmp/pypi_pkg.json 2>/dev/null || echo "error")
+              if [ "${REL_PRESENT}" = "true" ]; then
+                FILE_COUNT=$(jq --arg v "${MS_VERSION}" '.releases[$v] | length' /tmp/pypi_pkg.json)
+                if [ "${FILE_COUNT}" = "0" ]; then
+                  echo "::error::Version ${MS_VERSION} is listed in PyPI releases but has no files (possibly deleted)."
+                else
+                  ALL_YANKED=$(jq --arg v "${MS_VERSION}" '[.releases[$v][] | .yanked] | all' /tmp/pypi_pkg.json)
+                  if [ "${ALL_YANKED}" = "true" ]; then
+                    REASONS=$(jq -r --arg v "${MS_VERSION}" '[.releases[$v][] | .yanked_reason // "(no reason)"] | unique | join(", ")' /tmp/pypi_pkg.json)
+                    echo "::error::Version ${MS_VERSION} was YANKED on PyPI. Reason(s): ${REASONS}."
+                  else
+                    echo "::error::Version ${MS_VERSION} exists in PyPI releases but version endpoint returned HTTP ${CODE}. Unexpected state."
+                  fi
+                fi
+              else
+                echo "::error::Version ${MS_VERSION} is not listed in PyPI releases (never published, or fully deleted)."
+              fi
+              exit 1
+            fi
+
+            if [ ${ATTEMPT} -lt ${MAX_ATTEMPTS} ]; then
+              echo "Latest tag ${MS_VERSION} not yet on PyPI. Sleeping ${SLEEP_SECS}s before retry..."
+              sleep ${SLEEP_SECS}
+            fi
+          done
+
+          TOTAL_MIN=$((MAX_ATTEMPTS * SLEEP_SECS / 60))
+          echo "::error::macrosynergy ${MS_VERSION} did not appear on PyPI after ${MAX_ATTEMPTS} polls at ${SLEEP_SECS}s intervals (${TOTAL_MIN} minutes total). Giving up."
+          exit 1
+
+  build-and-push:
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
+
+      - name: Set up AWS credentials
+        uses: aws-actions/configure-aws-credentials@v3
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE }}
+          aws-region: eu-west-2
+
+      - name: Build and push Docker image to ECR
+        env:
+          MS_VERSION: ${{ needs.verify.outputs.ms_version }}
+        run: |
+          aws ecr get-login-password --region eu-west-2 | docker login --username AWS --password-stdin ${{ secrets.ECR_REPOSITORY }}
+          docker build -t ${{ secrets.ECR_REPOSITORY }}:latest -t ${{ secrets.ECR_REPOSITORY }}:${MS_VERSION} . --build-arg MS_VERSION=${MS_VERSION}
+          docker push ${{ secrets.ECR_REPOSITORY }}:latest
+          docker push ${{ secrets.ECR_REPOSITORY }}:${MS_VERSION}
