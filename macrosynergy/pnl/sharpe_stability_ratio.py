@@ -1,5 +1,6 @@
 """Sharpe Stability Ratio: HAC-robust t-stat for the mean rolling Sharpe, accounting for sample size and serial dependence."""
 
+import warnings
 import numpy as np
 import pandas as pd
 from statsmodels.tsa.stattools import acovf
@@ -84,10 +85,19 @@ def sharpe_stability_ratio(
     if N < 3:
         return float("nan")
 
-    z_bar = float(np.mean(z))
-
-    # Set bandwidth to equal window
+    # Set bandwidth to window; acovf requires nlag < nobs - 1
     L = window
+    if N <= L + 1:
+        min_obs = 2 * window + 2
+        warnings.warn(
+            f"Insufficient data: need at least {min_obs} observations "
+            f"(~{min_obs / annualization_factor:.1f} years); returning NaN.",
+            UserWarning,
+            stacklevel=2,
+        )
+        return float("nan")
+
+    z_bar = float(np.mean(z))
 
     # Newey-West long-run variance
     lrv = _newey_west_lrv(z, L)
