@@ -4,7 +4,7 @@ Module for calculating z-scores for a panel around a neutral level ("zn scores")
 
 import numpy as np
 import pandas as pd
-from typing import List, Union
+from typing import List, Optional, Union
 from numbers import Number
 from macrosynergy.management.simulate import make_qdf
 from macrosynergy.management.utils import (
@@ -14,12 +14,11 @@ from macrosynergy.management.utils import (
     forward_fill_wide_df,
 )
 from macrosynergy.management.types import QuantamentalDataFrame
-from numbers import Number
 
 
 def make_zn_scores(
     df: pd.DataFrame,
-    xcat: str,
+    xcat: Union[str, List[str]] = None,
     cids: List[str] = None,
     start: str = None,
     end: str = None,
@@ -30,6 +29,7 @@ def make_zn_scores(
     neutral: Union[str, Number] = "zero",
     est_freq: str = "D",
     thresh: float = None,
+    upfront_thresh: float = None,
     pan_weight: float = 1,
     postfix: str = "ZN",
     ffill: int = 0,
@@ -43,8 +43,10 @@ def make_zn_scores(
     df : ~pandas.Dataframe
         standardized JPMaQS DataFrame with the necessary columns: 'cid', 'xcat',
         'real_date' and 'value'.
-    xcat : str
-        extended category for which the zn_score is calculated.
+    xcat : str or List[str]
+        extended category (or list of categories) for which zn-scores are calculated.
+        If a list is provided, scores are computed separately for each category and the
+        combined standardized DataFrame is returned.
     cids : List[str]
         cross sections for which zn_scores are calculated; default is all available for
         category.
@@ -79,6 +81,11 @@ def make_zn_scores(
         threshold value beyond which scores are winsorized, i.e. contained at that
         threshold. The threshold is the maximum absolute score value that the function is
         allowed to produce. The minimum threshold is 1 mean absolute deviation.
+    upfront_thresh : float
+        threshold value beyond which the original input data are winsorized, i.e. capped
+        or floored at that threshold on the positive or negative side. Default is None.
+        The threshold limits the values of the original data in their native units to
+        avoid large outliers compromising subsequent operations.
     pan_weight : float
         weight of panel (versus individual cross section) for calculating the z-score
         parameters, i.e. the neutral level and the mean absolute deviation. Default is 1,
@@ -113,6 +120,73 @@ def make_zn_scores(
     expected_columns = ["cid", "xcat", "real_date", "value"]
     df = QuantamentalDataFrame(df[expected_columns])
 
+    if xcat is None:
+        raise ValueError("The `xcat` parameter must be provided.")
+
+    if isinstance(xcat, str):
+        xcats = [xcat]
+    elif isinstance(xcat, list) and all(isinstance(c, str) for c in xcat):
+        if len(xcat) == 0:
+            raise ValueError("The `xcat` parameter must not be empty.")
+        xcats = list(dict.fromkeys(xcat))
+    else:
+        raise TypeError("The `xcat` parameter must be a string or a list of strings.")
+
+    outputs = [
+        _make_zn_scores_for_xcat(
+            df=df,
+            xcat=category,
+            cids=cids,
+            start=start,
+            end=end,
+            blacklist=blacklist,
+            sequential=sequential,
+            min_obs=min_obs,
+            iis=iis,
+            neutral=neutral,
+            est_freq=est_freq,
+            thresh=thresh,
+            upfront_thresh=upfront_thresh,
+            pan_weight=pan_weight,
+            postfix=postfix,
+            ffill=ffill,
+            unscore=unscore,
+        )
+        for category in xcats
+    ]
+
+    if len(outputs) == 1:
+        return outputs[0]
+
+    combined = pd.concat(outputs, axis=0, ignore_index=True).sort_values(
+        by=["cid", "xcat", "real_date"]
+    )
+    return QuantamentalDataFrame.from_long_df(
+        df=combined,
+        categorical=df.InitializedAsCategorical,
+    )
+
+
+def _make_zn_scores_for_xcat(
+    df: pd.DataFrame,
+    xcat: str,
+    cids: List[str] = None,
+    start: str = None,
+    end: str = None,
+    blacklist: dict = None,
+    sequential: bool = True,
+    min_obs: int = 261,
+    iis: bool = True,
+    neutral: Union[str, Number] = "zero",
+    est_freq: str = "D",
+    thresh: float = None,
+    upfront_thresh: float = None,
+    pan_weight: float = 1,
+    postfix: str = "ZN",
+    ffill: int = 0,
+    unscore: bool = False,
+) -> pd.DataFrame:
+
     # --- Assertions
     err: str = (
         "The `neutral` parameter must be a number or a string with value,"
@@ -129,6 +203,13 @@ def make_zn_scores(
         if not isinstance(thresh, Number):
             raise TypeError(err)
         elif thresh < 1.0:
+            raise ValueError(err)
+
+    if upfront_thresh is not None:
+        err = "The `upfront_thresh` parameter must be a positive numerical value."
+        if not isinstance(upfront_thresh, Number):
+            raise TypeError(err)
+        elif upfront_thresh <= 0:
             raise ValueError(err)
 
     if not isinstance(iis, bool):
@@ -185,6 +266,9 @@ def make_zn_scores(
         dfw = forward_fill_wide_df(
             dfw, blacklist, n=ffill
         )
+
+    if upfront_thresh is not None:
+        dfw = dfw.clip(lower=-upfront_thresh, upper=upfront_thresh)
 
     # --- The actual scoring.
 
@@ -594,3 +678,19 @@ if __name__ == "__main__":
     )
 
     print(panel_df_7)
+
+    multi_xcat_df = make_zn_scores(
+        dfd,
+        xcat=["XR", "CRY"],
+        cids=cids,
+        start="2010-01-04",
+        sequential=False,
+        min_obs=0,
+        neutral="mean",
+        iis=True,
+        thresh=None,
+        pan_weight=0.5,
+        postfix="ZN",
+    )
+
+    print(multi_xcat_df)
