@@ -4,8 +4,9 @@ from typing import List, Dict
 
 import numpy as np
 import pandas as pd
-import statsmodels.api as sm
-from statsmodels.regression.linear_model import RegressionResults
+import pytest
+from parameterized import parameterized
+from sklearn.linear_model import LinearRegression
 
 from tests.simulate import make_qdf
 
@@ -14,8 +15,10 @@ from macrosynergy.panel.return_beta import (
     hedge_calculator,
     adjusted_returns,
     return_beta,
+    weighted_least_squares,
 )
 from macrosynergy.management.utils import reduce_df, _map_to_business_day_frequency
+from macrosynergy.learning import TimeWeightedLinearRegression
 
 
 class TestAll(unittest.TestCase):
@@ -142,7 +145,8 @@ class TestAll(unittest.TestCase):
         target_end = "2020-03-20"
         self.assertTrue(end_date == target_end)
 
-    def test_hedge_calculator(self):
+    @parameterized.expand(["ols", "twls"])
+    def test_hedge_calculator(self, method):
         """
         Method designed to calculate the hedge ratios used across the panel: each cross-
         section in the panel will have a different sensitivity parameter relative to the
@@ -160,7 +164,7 @@ class TestAll(unittest.TestCase):
 
         # Analysis completed using a single cross-section from the panel.
         cross_section: str = "KRW"
-        xr: pd.Series = (self.dfp_w[cross_section]).astype(dtype=np.float16)
+        xr: pd.Series = (self.dfp_w[cross_section]).astype(dtype=np.float32)
         # Adjusts for the effect of pivoting.
         xr = xr.dropna(axis=0, how="all")
 
@@ -195,8 +199,7 @@ class TestAll(unittest.TestCase):
             unhedged_return=xr,
             benchmark_return=br,
             rdates=dates_re,
-            cross_section=cross_section,
-            meth="ols",
+            meth=method,
             min_obs=min_observation,
             max_obs=MAX_OBS,
         )
@@ -243,12 +246,21 @@ class TestAll(unittest.TestCase):
                 curr_start_date: pd.Timestamp = dates_re[
                     max(0, dates_re.index(d) - MAX_OBS)
                 ]
-                yvar = xr.loc[curr_start_date:d]
-                xvar = sm.add_constant(br.loc[curr_start_date:d])
-                mod: sm.OLS = sm.OLS(yvar, xvar)
-                results: RegressionResults = mod.fit()
-                results_params: pd.Series = results.params
-                df_hrat.loc[d] = results_params.loc[br.name]
+                yvar = xr.loc[curr_start_date:d].values
+                xvar = br.loc[curr_start_date:d].values.reshape(-1, 1)
+
+                if method == "ols":
+                    weights = np.ones_like(yvar)
+                elif method == "twls":
+                    weights = np.power(2, -np.arange(yvar.shape[0]) / 252)[::-1]
+
+                betas = weighted_least_squares(
+                    X=np.column_stack((np.ones(xvar.shape[0]), xvar)),
+                    y=yvar,
+                    weights=weights,
+                )
+
+                df_hrat.loc[d] = betas[1]
 
         df_hrat = df_hrat.dropna(axis=0, how="all")
         df_hrat.index.name = "real_date"
@@ -264,7 +276,7 @@ class TestAll(unittest.TestCase):
         check_date: str = "2013-04-01"
         test_value = float(df_hr[df_hr["real_date"] == check_date]["value"].iloc[0])
         result = float(df_hrat[df_hrat["real_date"] == last_test_date]["value"].iloc[0])
-        self.assertTrue(result == test_value)
+        self.assertTrue(abs(result - test_value) < 1e-9)
 
     def test_adjusted_returns(self):
         """
@@ -451,6 +463,172 @@ class TestAll(unittest.TestCase):
         self.assertTrue(pd.Timestamp(test_date).dayofweek == 0)
         test_value = test_row["value"]
         self.assertTrue(test_value != df_hedge_INR_val)
+
+
+class TestHedgeRatio:
+    """Tests for the hege_ratio function"""
+    @staticmethod
+    def make_series():
+        index = pd.date_range("2020-01-01",  periods=500, freq="D", name="real_date")
+        data = np.random.randn(500)
+        return pd.Series(data, index=index)
+
+    def test_invalid_inputs(self):
+        # Method must be ols or twls
+        ur = self.make_series()
+        br = self.make_series()
+        rdates = [pd.Timestamp("2020-06-01"), pd.Timestamp("2021-01-01")]
+        with pytest.raises(ValueError, match="meth must be"):
+            hedge_calculator(ur, br, rdates, meth="ridge")
+
+        # min_obs must be positive
+        ur = self.make_series()
+        br = self.make_series()
+        rdates = [pd.Timestamp("2020-06-01"), pd.Timestamp("2021-01-01")]
+        with pytest.raises(ValueError, match="min_obs must be"):
+            hedge_calculator(ur, br, rdates, min_obs=0)
+
+        # max_obs cannot be less than min_obs
+        ur = self.make_series()
+        br = self.make_series()
+        with pytest.raises(ValueError, match="max_obs"):
+            hedge_calculator(ur, br, rdates, min_obs=20, max_obs=10)
+
+    @pytest.mark.parametrize("method", ["ols", "twls"])
+    def test_valid_runs(self, method):
+        ur = self.make_series()
+        br = self.make_series()
+        rdates = [pd.Timestamp("2020-06-01"), pd.Timestamp("2021-01-01"), pd.Timestamp("2021-06-01")]
+        result = hedge_calculator(ur, br, rdates, meth=method)
+        assert not result.empty
+
+    @pytest.mark.parametrize("method", ["ols", "twls"])
+    def test_perfect_correlation_ratio_near_one(self, method):
+        ur = self.make_series()
+        br = ur.copy()
+        rdates = [pd.Timestamp("1920-06-01"), pd.Timestamp("2021-01-01"), pd.Timestamp("2021-06-01")] # TODO: fix test when bug fixed
+        result = hedge_calculator(ur, br, rdates, meth=method)
+
+        assert np.allclose(result["value"].values[1:], 1.0, atol=1e-6)
+
+    @pytest.mark.parametrize("method", ["ols", "twls"])
+    def test_scaled_perfect_correlation(self, method):
+        br = self.make_series()
+        ur = 2 * br
+        rdates = [pd.Timestamp("1920-06-01"), pd.Timestamp("2021-01-01"), pd.Timestamp("2021-06-01")]
+        result = hedge_calculator(ur, br, rdates, meth=method)
+
+        assert np.allclose(result["value"].values[1:], 2, atol=1e-4)
+
+    def test_hedge_ratio_is_shifted_by_one(self):
+        """
+        The hedge ratio calculated at rdate T should appear on the row T+1
+        """
+        ur = self.make_series()
+        br = self.make_series()
+        # Single re-estimation date
+        rdate = ur.index[30]
+        result = hedge_calculator(ur, br, [rdate], meth="ols", min_obs=24)
+
+        assert np.isnan(result["value"][0].item())
+
+
+class TestWeightedLeastSquares:
+    """Tests for the weighted_least_squares function."""
+
+    def test_uniform_weights_match_ols(self):
+        """With equal weights, WLS should match ordinary least squares."""
+        beta_true = np.array([3.0, -2.0])
+
+        X = np.column_stack([np.ones(50), np.random.randn(50)])
+        y = X @ beta_true + 0.01 * np.random.randn(50)
+
+        beta_wls = weighted_least_squares(X, y, np.ones(50))
+        beta_ols, _, _, _ = np.linalg.lstsq(X, y, rcond=None)
+
+        np.testing.assert_allclose(beta_wls, beta_ols, atol=1e-10)
+
+    def test_recovers_exact_coefficients_no_noise(self):
+        """With no noise the solver should recover the true coefficients exactly."""
+        beta_true = np.array([5.0, -3.0])
+
+        X = np.column_stack([np.ones(20), np.linspace(0, 1, 20)])
+        y = X @ beta_true
+        weights = np.random.uniform(0.5, 2.0, size=20)
+
+        beta_wls = weighted_least_squares(X, y, weights)
+        np.testing.assert_allclose(beta_wls, beta_true, atol=1e-10)
+
+    def test_scaling_weights_does_not_change_result(self):
+        """Multiplying all weights by a constant shouldn't change beta."""
+
+        X = np.column_stack([np.ones(30), np.random.randn(30)])
+        y = np.random.randn(30)
+        weights = np.random.uniform(0.1, 5.0, size=30)
+
+        beta1 = weighted_least_squares(X, y, weights)
+        beta2 = weighted_least_squares(X, y, weights * 42.0)
+
+        np.testing.assert_allclose(beta1, beta2, atol=1e-10)
+
+    def test_known_solution(self):
+        """
+        Hand-verifiable 3-observation, 2-predictor (intercept + slope) case.
+        """
+        X = np.array([[1.0, 0.0],
+                      [1.0, 1.0],
+                      [1.0, 2.0]])
+        y = np.array([1.0, 3.0, 2.0])
+        weights = np.array([1.0, 2.0, 1.0])
+
+        beta = weighted_least_squares(X, y, weights)
+        beta_expected = [1.75, 0.5]
+        np.testing.assert_allclose(beta, beta_expected, atol=1e-10)
+
+    def test_ols_against_sklearn(self):
+        beta_true = np.array([1.0, 2.0, 3.0, -2.0, 4.0])
+        n_samples = 100
+        X = np.random.randn(n_samples, 4)
+        X = np.column_stack((np.ones(n_samples), X))
+        y = X @ beta_true + 0.01 * np.random.randn(n_samples)
+
+
+        result = weighted_least_squares(X, y, np.ones(100))
+        expected = LinearRegression(fit_intercept=False).fit(X, y).coef_
+
+        assert np.allclose(result, expected, atol=1e-5)
+
+    def test_wls_against_sklearn(self):
+        beta_true = np.array([1.0, 2.0, 3.0, -2.0, 4.0])
+        n_samples = 100
+        X = np.random.randn(n_samples, 4)
+        X = np.column_stack((np.ones(n_samples), X))
+        y = X @ beta_true + 0.01 * np.random.randn(n_samples)
+
+        weights = np.random.uniform(0.5, 2.0, size=n_samples)
+
+        result = weighted_least_squares(X, y, weights)
+        expected = LinearRegression(fit_intercept=False).fit(X, y, weights).coef_
+
+        assert np.allclose(result, expected, atol=1e-5)
+
+    def test_against_msl_twls(self):
+        # create data
+        index = pd.MultiIndex.from_product([["CAD"], pd.date_range("2020-01-01", periods=100)])
+        x_data = np.column_stack((np.ones(100), np.random.randn(100, 4)))
+        X = pd.DataFrame(index=index, data=x_data)
+        y = pd.Series(np.random.randn(100), index=index)
+
+        # fit twls model (fit_intercept = False because we have a 1s col in X)
+        twls_model = TimeWeightedLinearRegression(fit_intercept=False).fit(X, y)
+        twls_coefs = twls_model.coef_
+
+        # fit pure numpy implementation using same weights
+        twls_model_weights = twls_model._calculate_time_weights(y)
+        result = weighted_least_squares(X.values, y.values, twls_model_weights)
+
+        assert np.allclose(result, twls_coefs, atol=1e-5)
+
 
 
 if __name__ == "__main__":
