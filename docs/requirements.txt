@@ -9,3 +9,4 @@ sphinx-copybutton==0.5.2
 requests >= 2.27.1
 packaging >= 21.0
 sphinxcontrib-mermaid >= 0.9.2
+torch

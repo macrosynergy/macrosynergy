@@ -120,7 +120,6 @@ class TestNotionalPositions(unittest.TestCase):
             )
 
     def test__leverage_positions(self):
-
         ## Test 1 - Test with all values as 1
         df_wide = self.mock_df_wide.copy()
         # set all values to 1
@@ -161,7 +160,6 @@ class TestNotionalPositions(unittest.TestCase):
 
         for _leverage in [1, np.random.randint(1, 10), np.random.rand()]:
             for _aum in [1, np.random.randint(1, int(1e6)), np.random.rand() * 1e6]:
-
                 # create a few nans in the dataframe randomly but record the locations
                 shuffled_fx_fids = [f"{t}_CSIG_{self.sname}" for t in fx_fids]
                 np.random.shuffle(shuffled_fx_fids)
@@ -282,8 +280,8 @@ class TestNotionalPositions(unittest.TestCase):
         cscales = [1.0, 0.5, 0.1]
         csigns = [1, -1, 1]
 
-        hbasket = ["USD_EQ", "EUR_EQ"]
-        hscales = [0.7, 0.3]
+        basket_contracts = ["USD_EQ", "EUR_EQ"]
+        basket_weights = [0.7, 0.3]
 
         df_cs: pd.DataFrame = contract_signals(
             df=df,
@@ -292,9 +290,9 @@ class TestNotionalPositions(unittest.TestCase):
             ctypes=ctypes,
             cscales=cscales,
             csigns=csigns,
-            hbasket=hbasket,
-            hscales=hscales,
-            hratios="HR",
+            basket_contracts=basket_contracts,
+            basket_weights=basket_weights,
+            hedge_xcat="HR",
         )
 
         fids: List[str] = [f"{cid}_{ctype}" for cid in cids for ctype in ctypes]

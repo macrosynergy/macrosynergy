@@ -605,7 +605,7 @@ class TestProxyPNLCalc(unittest.TestCase):
         _tickers = [f"{cid}_{xcat}" for cid in self.cids for xcat in self.xcats]
         self.spos = "SNAME_POS"
         self.rstring = "RETURNS"
-        self.tickers: List = [f"{tk}_{self.spos}" for tk in _tickers]
+        self.tickers: List[str] = [f"{tk}_{self.spos}" for tk in _tickers]
         self.tickers += [f"{tk}{self.rstring}" for tk in _tickers]
         self.fids = [
             f"{cid}_{xcat}" for cid in self.cids for xcat in self.xcats if xcat != "EQ"
@@ -715,6 +715,50 @@ class TestProxyPNLCalc(unittest.TestCase):
                 )
             )
         )
+
+    def test_proxy_pnl_calc_with_cost_dict(self):
+        pos_tickers = [tk for tk in self.tickers if tk.endswith(f"_{self.spos}")]
+        fids = sorted({tk.replace(f"_{self.spos}", "") for tk in pos_tickers})
+
+        cost_template = {
+            "median_cost": 0.2,
+            "median_size": 35,
+            "pct90_cost": 0.4,
+            "pct90_size": 90,
+        }
+        cost_dict = {fid: dict(cost_template) for fid in fids}
+
+        df_const = pd.DataFrame(index=self.df_wide.index)
+        for fid in fids:
+            df_const[f"{fid}BIDOFFER_MEDIAN"] = cost_template["median_cost"]
+            df_const[f"{fid}BIDOFFER_90PCTL"] = cost_template["pct90_cost"]
+            df_const[f"{fid}ROLLCOST_MEDIAN"] = cost_template["median_cost"]
+            df_const[f"{fid}ROLLCOST_90PCTL"] = cost_template["pct90_cost"]
+            df_const[f"{fid}SIZE_MEDIAN"] = cost_template["median_size"]
+            df_const[f"{fid}SIZE_90PCTL"] = cost_template["pct90_size"]
+        df_const.index.name = "real_date"
+
+        tc_qdf = QuantamentalDataFrame.from_wide(df_const)
+        tc_obj = TransactionCosts(df=tc_qdf, fids=fids)
+
+        args_obj = self.good_args.copy()
+        args_obj["transaction_costs_object"] = tc_obj
+        args_dict = self.good_args.copy()
+        args_dict["transaction_costs_object"] = cost_dict
+
+        result_obj = proxy_pnl_calc(**args_obj)
+        result_dict = proxy_pnl_calc(**args_dict)
+
+        for res_a, res_b in zip(result_obj, result_dict):
+            self.assertTrue(
+                res_a.sort_values(by=QuantamentalDataFrame.IndexCols)
+                .reset_index(drop=True)
+                .equals(
+                    res_b.sort_values(by=QuantamentalDataFrame.IndexCols).reset_index(
+                        drop=True
+                    )
+                )
+            )
 
     def test_plot_pnl(self):
         self.good_args["concat_dfs"] = True
