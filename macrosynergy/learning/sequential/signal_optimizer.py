@@ -548,7 +548,7 @@ class SignalOptimizer(BasePanelLearner):
                 warnings.warn(
                     "Unable to infer feature names. This is likely because one or"
                     "more steps in the Pipeline are missing the `get_feature_names_out` method."
-                    "This may make it impossible to produce feature selection and feature "
+                    "This may cause issues producing feature selection and feature "
                     "importance plots later on",
                     UserWarning,
                 )
