@@ -12,11 +12,11 @@ from macrosynergy.management.utils import (
 )
 from macrosynergy.management.types import QuantamentalDataFrame, NoneType
 import macrosynergy.visuals as msv
-from macrosynergy.pnl import (
-    notional_positions,
-    contract_signals,
-    proxy_pnl_calc,
+from macrosynergy.pnl import notional_positions, contract_signals, proxy_pnl_calc
+
+from macrosynergy.pnl.transaction_costs import (
     TransactionCosts,
+    TransactionCostsDictAdapter,
 )
 
 
@@ -39,7 +39,7 @@ class ProxyPnL(object):
     df : QuantamentalDataFrame
         DataFrame containing the data to be used in the PnL estimation. Initially, this
         DataFrame should contain the data used to contract signals (i.e. raw signals).
-    transaction_costs_object : TransactionCosts
+    transaction_costs_object : Optional[Union[TransactionCosts, TransactionCostsDictAdapter]]
         Object containing the transaction costs data.
     start : str, optional
         Start date for the PnL estimation. If not provided, the minimum date in the
@@ -64,7 +64,9 @@ class ProxyPnL(object):
     def __init__(
         self,
         df: QuantamentalDataFrame,
-        transaction_costs_object: Optional[TransactionCosts],
+        transaction_costs_object: Optional[
+            Union[TransactionCosts, TransactionCostsDictAdapter]
+        ] = None,
         start: Optional[str] = None,
         end: Optional[str] = None,
         blacklist: Optional[dict] = None,
@@ -90,6 +92,9 @@ class ProxyPnL(object):
         if transaction_costs_object is None:
             pass  # allowed for no-transaction-costs case
         elif isinstance(transaction_costs_object, TransactionCosts):
+            transaction_costs_object.check_init()
+            self.transaction_costs_object: TransactionCosts = transaction_costs_object
+        elif isinstance(transaction_costs_object, TransactionCostsDictAdapter):
             transaction_costs_object.check_init()
             self.transaction_costs_object: TransactionCosts = transaction_costs_object
         else:
