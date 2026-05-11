@@ -487,6 +487,13 @@ class TransactionCostsDictAdapter:
         for fid in self.fids:
             self._validate_cost_entry(fid, cost_dict[fid])
 
+    def check_init(self) -> bool:
+        if not hasattr(self, "cost_dict") or not isinstance(self.cost_dict, Mapping):
+            raise ValueError(
+                "The TransactionCostsDictAdapter object has not been initialised properly"
+            )
+        return True
+
     @classmethod
     def _validate_cost_entry(cls, fid: str, entry: Mapping[str, Number]) -> None:
         if not isinstance(entry, Mapping):
