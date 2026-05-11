@@ -10,9 +10,11 @@ from macrosynergy.pnl.proxy_pnl_calc import (
     _apply_trading_costs,
     _calculate_trading_costs,
     _check_df,
+    _generate_roll_dates,
     _get_rebal_dates,
     _pnl_excl_costs,
     _portfolio_sums,
+    _preprocess_positions_for_costs,
     _prep_dfs_for_pnl_calcs,
     _replace_strs,
     _split_returns_positions_df,
@@ -270,6 +272,132 @@ class TestHelperFunctions(unittest.TestCase):
 
         with self.assertRaises(TypeError):
             _check_df(df=123, rstring=self.rstring, spos=self.spos)
+
+    def test_preprocess_positions_for_costs_rejects_bad_last_row(self):
+        # A position panel whose latest row carries no information (all-NaN or
+        # all-zero) is rejected: we can't tell whether positions are still held,
+        # so any downstream cost attribution would be guessing.
+        idx = pd.bdate_range("2020-01-01", periods=5, name="real_date")
+        cols = [f"USD_FX_{self.spos}", f"EUR_FX_{self.spos}"]
+        df = pd.DataFrame(np.random.randn(5, len(cols)), idx, cols)
+        for sentinel in (np.nan, 0.0):
+            bad = df.copy()
+            bad.iloc[-1] = sentinel
+            with self.assertRaises(ValueError):
+                _preprocess_positions_for_costs(bad)
+
+    def test_preprocess_positions_for_costs_prepends_zero_anchor_and_fills_nans(self):
+        # Leading NaNs (e.g. a contract that has not started trading yet) are
+        # filled with zero, and a synthetic zero-position row is prepended one
+        # business day before the panel starts. This makes the opening trade enter
+        # as a regular absolute change `|pos[t] - pos[t-1]|` rather than needing a
+        # special-cased first-date charge.
+        idx = pd.bdate_range("2020-01-01", periods=5, name="real_date")
+        cols = [f"USD_FX_{self.spos}", f"EUR_FX_{self.spos}"]
+        df = pd.DataFrame(
+            [[np.nan, 1.0], [2.0, np.nan], [3.0, 4.0], [5.0, 6.0], [7.0, 8.0]],
+            index=idx,
+            columns=cols,
+        )
+        out = _preprocess_positions_for_costs(df)
+        self.assertEqual(len(out), len(df) + 1)
+        self.assertEqual(out.iloc[0].tolist(), [0.0, 0.0])
+        self.assertLess(out.index[0], df.index.min())
+        self.assertFalse(out.isna().any().any())
+
+    def test_generate_roll_dates_subsets_index(self):
+        # Roll dates always sit on trading days that exist in the position panel,
+        # and quarterly rolls are sparser than monthly, which are sparser than
+        # weekly, over a multi-year window.
+        idx = pd.bdate_range("2020-01-01", "2022-12-31")
+        for freq in ("D", "W", "M", "Q"):
+            roll_dates = _generate_roll_dates(idx, roll_freq=freq)
+            self.assertTrue(set(roll_dates).issubset(set(idx)))
+        m = _generate_roll_dates(idx, roll_freq="M")
+        q = _generate_roll_dates(idx, roll_freq="Q")
+        w = _generate_roll_dates(idx, roll_freq="W")
+        self.assertGreater(len(w), len(m))
+        self.assertGreater(len(m), len(q))
+
+    def test_generate_roll_dates_date_alignment(self):
+        # Date alignment: every returned roll date must be a trading day that
+        # actually exists in the position panel. When a calendar period-end falls
+        # on a weekend or holiday, or is otherwise absent from the panel (e.g. an
+        # exchange-closure gap), the helper snaps back to the prior available
+        # trading day for that period rather than silently dropping the roll.
+        # This keeps the residual roll-cost calculation well-defined even when
+        # the data calendar is imperfect.
+
+        # (a) Weekend calendar month-end: 31 May 2020 is a Sunday, so May's roll
+        # is anchored to the prior Friday (29 May 2020).
+        idx = pd.bdate_range("2020-01-01", "2020-06-30")
+        rolls = _generate_roll_dates(idx, roll_freq="M")
+        self.assertIn(pd.Timestamp("2020-05-29"), rolls)
+        self.assertNotIn(pd.Timestamp("2020-05-31"), rolls)
+
+        # (b) Mid-sample gap: drop 28 Feb 2020 (a Friday and February's natural
+        # month-end). The helper falls back to the prior trading day (27 Feb,
+        # Thursday) so the February roll is still booked.
+        idx_with_gap = idx.drop(pd.Timestamp("2020-02-28"))
+        rolls = _generate_roll_dates(idx_with_gap, roll_freq="M")
+        self.assertIn(pd.Timestamp("2020-02-27"), rolls)
+        self.assertNotIn(pd.Timestamp("2020-02-28"), rolls)
+
+        # (c) Truncated trailing period: data ends 15 Jan 2020 (a Wednesday) so
+        # there is no real January month-end available. The last in-period
+        # trading day is used; positions are still observed there.
+        idx_short = pd.bdate_range("2020-01-01", "2020-01-15")
+        rolls = _generate_roll_dates(idx_short, roll_freq="M")
+        self.assertEqual(list(rolls), [pd.Timestamp("2020-01-15")])
+
+        # (d) Leap year with the leap day on a weekday: 29 Feb 2024 is a
+        # Thursday and is itself February's month-end - no snap-back is needed,
+        # and 28 Feb must not appear instead.
+        idx_leap_weekday = pd.bdate_range("2024-01-01", "2024-04-30")
+        rolls = _generate_roll_dates(idx_leap_weekday, roll_freq="M")
+        self.assertIn(pd.Timestamp("2024-02-29"), rolls)
+        self.assertNotIn(pd.Timestamp("2024-02-28"), rolls)
+
+        # (e) Leap year with the leap day on a weekend: 29 Feb 2020 is a
+        # Saturday and so absent from the business-day panel. The February
+        # roll snaps back to Friday 28 Feb, exactly as a non-leap-year
+        # February-on-Saturday would.
+        idx_leap_weekend = pd.bdate_range("2020-01-01", "2020-04-30")
+        rolls = _generate_roll_dates(idx_leap_weekend, roll_freq="M")
+        self.assertIn(pd.Timestamp("2020-02-28"), rolls)
+        self.assertNotIn(pd.Timestamp("2020-02-29"), rolls)
+
+        # (f) Weekend quarter-end: in 2024 both 31 Mar and 30 Jun fall on a
+        # Sunday, so the corresponding quarterly rolls snap to the prior
+        # Fridays. The Q3 end (30 Sep, a Monday) and Q4 end (31 Dec, a Tuesday)
+        # fall on weekdays and remain as-is.
+        idx_q = pd.bdate_range("2024-01-01", "2024-12-31")
+        q_rolls = _generate_roll_dates(idx_q, roll_freq="Q")
+        self.assertIn(pd.Timestamp("2024-03-29"), q_rolls)
+        self.assertIn(pd.Timestamp("2024-06-28"), q_rolls)
+        self.assertIn(pd.Timestamp("2024-09-30"), q_rolls)
+        self.assertIn(pd.Timestamp("2024-12-31"), q_rolls)
+        self.assertNotIn(pd.Timestamp("2024-03-31"), q_rolls)
+        self.assertNotIn(pd.Timestamp("2024-06-30"), q_rolls)
+
+        # (g) Subset invariant must hold for every alignment scenario above.
+        cases = [
+            ("M", idx),
+            ("M", idx_with_gap),
+            ("M", idx_short),
+            ("M", idx_leap_weekday),
+            ("M", idx_leap_weekend),
+            ("Q", idx_q),
+        ]
+        for freq, test_idx in cases:
+            rolls = _generate_roll_dates(test_idx, roll_freq=freq)
+            self.assertTrue(set(rolls).issubset(set(test_idx)))
+
+    def test_generate_roll_dates_rejects_unsupported_frequency(self):
+        # Only "D", "W", "M", "Q" are supported; anything else is a caller error.
+        idx = pd.bdate_range("2020-01-01", "2022-12-31")
+        with self.assertRaises(ValueError):
+            _generate_roll_dates(idx, roll_freq="A")
 
 
 def mock_pnl_excl_costs(
