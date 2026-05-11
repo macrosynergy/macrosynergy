@@ -96,10 +96,13 @@ class ProxyPnL(object):
             self.transaction_costs_object: TransactionCosts = transaction_costs_object
         elif isinstance(transaction_costs_object, TransactionCostsDictAdapter):
             transaction_costs_object.check_init()
-            self.transaction_costs_object: TransactionCosts = transaction_costs_object
+            self.transaction_costs_object: TransactionCostsDictAdapter = (
+                transaction_costs_object
+            )
         else:
             raise ValueError(
-                "Invalid type for `transaction_costs_object`. Expected `TransactionCosts` object."
+                "Invalid type for `transaction_costs_object`."
+                " Expected `TransactionCosts` or `TransactionCostsDictAdapter` object."
             )
 
         assert hasattr(
