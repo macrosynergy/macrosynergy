@@ -215,6 +215,13 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
     provided the option to use a time series-aware batch sampler that ensures that each
     batch is comprised of samples from contiguous time periods. This should help
     convergence. This can be toggled on/off with the `use_ts_sampler` parameter.
+
+    Further work
+    ------------
+    * Implement turnover regularization 
+    * Custom optimizer and scheduler
+    * LARS and ReduceLROnPlateau 
+    * Optional retraining after early stopping to avoid data waste
     """
     def __init__(
         self,
