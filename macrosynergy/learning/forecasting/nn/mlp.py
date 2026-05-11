@@ -233,7 +233,7 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         batch_size = 32,
         learning_rate = 3e-4,
         weight_decay = 1e-4,
-        reg_turnover = 0,
+        reg_turnover = 0, # TODO: implement but this is only useful when transaction costs are included in the loss function, which is not currently the case
         use_ts_sampler = True, # TODO: turn this into an optional sampler object
         aggregate_last = True,
         drop_last = False,
@@ -307,12 +307,16 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         self.inverse_transform_preds = inverse_transform_preds
         self.min_samples = min_samples
 
-        self.models = []
         self.optimizers = [self.optimizer] if not isinstance(self.optimizer, list) else self.optimizer
         self.random_states = [self.random_state] if not isinstance(self.random_state, list) else self.random_state
 
     def fit(self, X, y, sample_weight=None):
-        # Additional checks
+        # Copy data and initialize empty list of models to be trained
+        X = X.copy()
+        y = y.copy()
+        self.models = []
+
+        # Data checks
         # TODO: if torch_model is provided, check it has the right structure 
         # to be trained by this class by passing a batch through it
         sample_weight_strategy = self._check_fit_params(X, y, sample_weight)
