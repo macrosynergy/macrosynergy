@@ -18,7 +18,7 @@ import numbers
 
 class MLPRegressor(BaseEstimator, RegressorMixin):
     """
-    Scikit-learn comptatible multi-layer perceptron, implemented in PyTorch.
+    Scikit-learn compatible multi-layer perceptron, implemented in PyTorch.
 
     Parameters
     ----------
