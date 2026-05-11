@@ -10,12 +10,41 @@ import macrosynergy.visuals as msv
 from macrosynergy.management.utils import (
     reduce_df,
     ticker_df_to_qdf,
+    get_eops,
 )
 from macrosynergy.management.types import QuantamentalDataFrame
 from macrosynergy.pnl.transaction_costs import (
     TransactionCosts,
     TransactionCostsDictAdapter,
 )
+
+
+def _generate_roll_dates(
+    index: pd.DatetimeIndex,
+    roll_freq: str,
+) -> pd.DatetimeIndex:
+    # End-of-period roll dates from `roll_freq`, constrained to `index`.
+    rf = roll_freq.upper()
+    if rf not in {"D", "W", "M", "Q"}:
+        raise ValueError(f"Unsupported roll frequency {roll_freq!r}.")
+    eops = pd.DatetimeIndex(get_eops(dates=pd.DatetimeIndex(index), freq=rf))
+    # Each roll date is anchored to a trading day on which an actual position is observed.
+    # If a calendar period-end falls on a weekend or holiday and is not in the data,
+    # the roll for that period is booked on the prior available trading day.
+    return eops.intersection(index)
+
+
+def _preprocess_positions_for_costs(pivot_pos: pd.DataFrame) -> pd.DataFrame:
+    # Reject a all-NaN/0s last row, fill remaining NaNs with 0, and prepend a
+    # zero-position anchor one business day before the first index date so
+    # that the opening trade enters as an absolute delta.
+    last = pivot_pos.iloc[-1]
+    if last.isna().all() or (last.fillna(0) == 0).all():
+        raise ValueError("The latest row of the positions frame is all-NaN/zero.")
+    pivot_pos = pivot_pos.fillna(0.0)
+    anchor = pivot_pos.index.min() - pd.tseries.offsets.BDay(1)
+    zero_row = pd.DataFrame(0.0, index=[anchor], columns=pivot_pos.columns)
+    return pd.concat([zero_row, pivot_pos])
 
 
 def _replace_strs(
