@@ -1136,6 +1136,26 @@ class TestAll(unittest.TestCase):
                     f"single_statistic_table with pval_stat raised {e}"
                 )
 
+            # significance_threshold builds a mask: pval below (1-thr) is
+            # highlighted. Verify the mask the call would produce by running
+            # the same comparison directly.
+            df_pval_only = sr.single_statistic_table(stat="kendall_pval")
+            expected_mask = df_pval_only < (1 - 0.9)
+            self.assertTrue(expected_mask.any().any())
+            # Re-rendering with significance_threshold=None disables it.
+            try:
+                sr.single_statistic_table(
+                    stat="kendall",
+                    pval_stat="kendall_pval",
+                    show_heatmap=True,
+                    significance_threshold=None,
+                )
+            except Exception as e:
+                self.fail(
+                    f"single_statistic_table with significance_threshold=None "
+                    f"raised {e}"
+                )
+
             # Invalid pval_stat is rejected.
             with self.assertRaises(ValueError):
                 sr.single_statistic_table(

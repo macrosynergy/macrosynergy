@@ -1512,6 +1512,7 @@ class SignalReturnRelations:
         round: int = 3,
         pval_stat: Optional[str] = None,
         round_pval: int = 3,
+        significance_threshold: Optional[float] = 0.9,
     ):
         """
         Creates a table which shows the specified statistic for each row and column
@@ -1578,6 +1579,12 @@ class SignalReturnRelations:
         round_pval : int
             number of decimals to round ``pval_stat`` values to in the heatmap
             annotations. Default is 3.
+        significance_threshold : float, optional
+            probability-of-significance threshold above which a cell's
+            annotation is rendered in black and bold. Defined as
+            ``1 - pval_stat``, so a value of 0.9 highlights cells whose
+            ``pval_stat`` is below 0.1. Only takes effect when ``pval_stat``
+            is set. Pass ``None`` to disable highlighting. Default is 0.9.
 
         Returns
         -------
@@ -1725,6 +1732,14 @@ class SignalReturnRelations:
                 heatmap_annot = annotate
                 heatmap_fmt = f".{round}f"
 
+            highlight_mask = None
+            if (
+                df_pval is not None
+                and significance_threshold is not None
+            ):
+                pval_cutoff = 1.0 - float(significance_threshold)
+                highlight_mask = df_pval < pval_cutoff
+
             msv.view_table(
                 df_result,
                 title=title,
@@ -1736,6 +1751,7 @@ class SignalReturnRelations:
                 annot=heatmap_annot,
                 xticklabels=column_names,
                 yticklabels=row_names,
+                highlight_mask=highlight_mask,
             )
 
         return df_result

@@ -19,6 +19,7 @@ def view_table(
     annot: Union[bool, np.ndarray, pd.DataFrame] = True,
     fmt: str = ".2f",
     return_fig: bool = False,
+    highlight_mask: Optional[Union[np.ndarray, pd.DataFrame]] = None,
 ):
     """
     Displays a DataFrame representing a table as a heatmap.
@@ -54,6 +55,10 @@ def view_table(
         is array-like.
     return_fig : bool
         If True, return the Matplotlib figure object instead of displaying.
+    highlight_mask : array-like of bool, optional
+        DataFrame or 2D array of the same shape as ``df``. Cells where the
+        mask is True have their annotation text rendered in black and bold.
+        Has no effect when ``annot`` is False.
     """
 
     if not isinstance(df, pd.DataFrame):
@@ -103,6 +108,22 @@ def view_table(
         xticklabels=xticklabels,
         yticklabels=yticklabels,
     )
+
+    if highlight_mask is not None and not (annot is False):
+        if isinstance(highlight_mask, pd.DataFrame):
+            mask_arr = highlight_mask.values
+        else:
+            mask_arr = np.asarray(highlight_mask)
+        if mask_arr.shape != df.shape:
+            raise ValueError(
+                "highlight_mask shape must match the DataFrame shape "
+                f"{df.shape}, got {mask_arr.shape}."
+            )
+        # seaborn lays out ax.texts in row-major order matching df.values.ravel()
+        for txt, hi in zip(ax.texts, mask_arr.ravel()):
+            if bool(hi):
+                txt.set_color("black")
+                txt.set_weight("bold")
 
     ax.set(xlabel=xlabel, ylabel=ylabel)
     ax.set_title(title, fontsize=title_fontsize)
