@@ -290,7 +290,7 @@ class TestHelperFunctions(unittest.TestCase):
         # Leading NaNs (e.g. a contract that has not started trading yet) are
         # filled with zero, and a synthetic zero-position row is prepended one
         # business day before the panel starts. This makes the opening trade enter
-        # as a regular absolute change `|pos[t] - pos[t-1]|` rather than needing a
+        # as a regular absolute change `abs(pos[t] - pos[t-1])` rather than needing a
         # special-cased first-date charge.
         idx = pd.bdate_range("2020-01-01", periods=5, name="real_date")
         cols = [f"USD_FX_{self.spos}", f"EUR_FX_{self.spos}"]
@@ -432,65 +432,46 @@ def mock_calculate_trading_costs(
     rstring: str,
     transaction_costs: TransactionCosts,
     tc_name: str,
+    roll_freq: str = "M",
     bidoffer_name: str = "BIDOFFER",
     rollcost_name: str = "ROLLCOST",
 ) -> pd.DataFrame:
+    # Naive per-(ticker, date) oracle for `_calculate_trading_costs` -- built
+    # independently from production so a vectorisation bug shows up as a diff.
     _, pivot_pos = _split_returns_positions_df(
         df_wide=df_wide, spos=spos, rstring=rstring
     )
-    rebal_dates = _get_rebal_dates(pivot_pos)
-    _end = pd.Timestamp(pivot_pos.last_valid_index())
-    rebal_dates = sorted(set(rebal_dates + [_end]))
-    pos_cols = pivot_pos.columns.tolist()
-    tc_cols = [
-        f"{col}_{tc_name}_{cost_type}"
-        for col in pos_cols
-        for cost_type in [bidoffer_name, rollcost_name]
-    ]
-    # Create a dataframe to store the trading costs with all 0s
-    tc_df = pd.DataFrame(data=0.0, index=pivot_pos.index, columns=tc_cols)
+    roll_dates = _generate_roll_dates(pivot_pos.index, roll_freq)
+    pivot_pos = _preprocess_positions_for_costs(pivot_pos)
     tickers = pivot_pos.columns.tolist()
-    ## Taking the 1st position
-    ## Here, only the bidoffer is considered, as there is nothing to roll
-    first_pos = pivot_pos.loc[rebal_dates[0]]
+    tc_cols = [
+        f"{c}_{tc_name}_{k}" for c in tickers for k in (bidoffer_name, rollcost_name)
+    ]
+    tc_df = pd.DataFrame(0.0, index=pivot_pos.index, columns=tc_cols)
+    roll_list = sorted(roll_dates)
+
     for ticker in tickers:
-        _fid = ticker.replace(f"_{spos}", "")
-        bidoffer = transaction_costs.bidoffer(
-            trade_size=first_pos[ticker],
-            fid=_fid,
-            real_date=rebal_dates[0],
-        )
-        # Add a 0 for rollcost
-        tc_df.loc[rebal_dates[0], f"{ticker}_{tc_name}_{rollcost_name}"] = 0
-        tc_df.loc[rebal_dates[0], f"{ticker}_{tc_name}_{bidoffer_name}"] = (
-            bidoffer / 100
-        )
+        fid = ticker.replace(f"_{spos}", "")
+        col_bo = f"{ticker}_{tc_name}_{bidoffer_name}"
+        col_rc = f"{ticker}_{tc_name}_{rollcost_name}"
+        prev = pivot_pos[ticker].shift(1)
 
-    for ix, (dt1, dt2) in enumerate(zip(rebal_dates[:-1], rebal_dates[1:])):
-        dt2x = dt2 - pd.offsets.BDay(1)
-        prev_pos, next_pos = pivot_pos.loc[dt1], pivot_pos.loc[dt2]
-        curr_pos = pivot_pos.loc[dt1:dt2x]
-        avg_pos: pd.Series = curr_pos.abs().mean(axis=0)
-        delta_pos = (next_pos - prev_pos).abs()
-        for ticker in tickers:
-            _fid = ticker.replace(f"_{spos}", "")
-            _rcn = f"{ticker}_{tc_name}_{rollcost_name}"
-            _bon = f"{ticker}_{tc_name}_{bidoffer_name}"
-            rollcost = transaction_costs.rollcost(
-                trade_size=avg_pos[ticker],
-                fid=_fid,
-                real_date=dt2,
-            )
-            bidoffer = transaction_costs.bidoffer(
-                trade_size=delta_pos[ticker],
-                fid=_fid,
-                real_date=dt2,
-            )
-            # delta_pos and avg_pos are already in absolute terms
-            tc_df.loc[dt2, _rcn] = avg_pos[ticker] * rollcost / 100
-            tc_df.loc[dt2, _bon] = delta_pos[ticker] * bidoffer / 100
+        for dt in pivot_pos.index:
+            d = abs(pivot_pos[ticker].loc[dt] - prev.loc[dt])
+            if d > 0:
+                bo = transaction_costs.bidoffer(trade_size=d, fid=fid, real_date=dt)
+                tc_df.loc[dt, col_bo] = d * bo / 100
 
-    # Sum TICKER_TCOST_BIDOFFER and TICKER_TCOST_ROLLCOST into TICKER_TCOST
+        for i, dt in enumerate(roll_list[1:], start=1):
+            curr_pos = pivot_pos[ticker].loc[dt]
+            prev_pos = pivot_pos[ticker].loc[roll_list[i - 1]]
+            held_long = curr_pos > 0 and prev_pos > 0
+            held_short = curr_pos < 0 and prev_pos < 0
+            if held_long or held_short:
+                r = min(abs(curr_pos), abs(prev_pos))
+                rc = transaction_costs.rollcost(trade_size=r, fid=fid, real_date=dt)
+                tc_df.loc[dt, col_rc] = r * rc / 100
+
     for ticker in tickers:
         tc_df[f"{ticker}_{tc_name}"] = tc_df[
             [
@@ -498,12 +479,8 @@ def mock_calculate_trading_costs(
                 f"{ticker}_{tc_name}_{rollcost_name}",
             ]
         ].sum(axis=1)
-    # Drop rows with no trading costs
-    tc_df = tc_df.loc[tc_df.abs().sum(axis=1) > 0]
-    # check that remaining dates are part of rebal_dates
-    assert set(tc_df.index) <= set(rebal_dates)
-    assert not (tc_df < 0).any().any()
-    return tc_df
+
+    return tc_df.loc[tc_df.abs().sum(axis=1) > 0]
 
 
 class TestCalculations(unittest.TestCase):
@@ -588,6 +565,7 @@ class TestCalculations(unittest.TestCase):
             "rstring": rstring,
             "transaction_costs": transaction_costs,
             "tc_name": "tc",
+            "roll_freq": "M",
         }
 
         _test_eq(argsx)
@@ -605,6 +583,7 @@ class TestCalculations(unittest.TestCase):
                 df=make_tx_cost_df(cids=self.cids), fids=self.fids
             ),
             tc_name="TC",
+            roll_freq="M",
         )
 
         # Call the function
@@ -664,6 +643,7 @@ class TestCalculations(unittest.TestCase):
                 df=make_tx_cost_df(cids=self.cids), fids=self.fids
             ),
             tc_name=tc_name,
+            roll_freq="M",
         )
         pnl_incl_costs = _apply_trading_costs(
             pnlx_wide_df=pnl_wide,
