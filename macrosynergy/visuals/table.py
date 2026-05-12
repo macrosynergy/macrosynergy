@@ -1,5 +1,6 @@
+import numpy as np
 import pandas as pd
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Union
 import seaborn as sns
 import matplotlib.pyplot as plt
 
@@ -15,7 +16,7 @@ def view_table(
     ylabel: Optional[str] = None,
     xticklabels: Optional[List[str]] = None,
     yticklabels: Optional[List[str]] = None,
-    annot: bool = True,
+    annot: Union[bool, np.ndarray, pd.DataFrame] = True,
     fmt: str = ".2f",
     return_fig: bool = False,
 ):
@@ -44,10 +45,13 @@ def view_table(
         list of strings to label x-axis ticks. Default is None.
     yticklabels : List[str], optional
         list of strings to label y-axis ticks. Default is None.
-    annot : bool
-        whether to annotate heatmap with values.
+    annot : bool or array-like of str
+        if a bool, controls whether the numeric values of ``df`` are annotated.
+        If a DataFrame or 2D array of strings is supplied, those strings are
+        rendered as cell annotations verbatim (``fmt`` is ignored).
     fmt : str
-        string format for annotations. Default is '.2f'.
+        string format for annotations. Default is '.2f'. Ignored when ``annot``
+        is array-like.
     return_fig : bool
         If True, return the Matplotlib figure object instead of displaying.
     """
@@ -73,6 +77,17 @@ def view_table(
     elif len(yticklabels) != len(df.index):
         raise ValueError("Number of yticklabels must match number of rows")
 
+    annot_fmt = fmt
+    if isinstance(annot, (pd.DataFrame, np.ndarray)):
+        annot_arr = annot.values if isinstance(annot, pd.DataFrame) else annot
+        if annot_arr.shape != df.shape:
+            raise ValueError(
+                "annot array shape must match the DataFrame shape "
+                f"{df.shape}, got {annot_arr.shape}."
+            )
+        annot = annot_arr
+        annot_fmt = ""
+
     fig, ax = plt.subplots(figsize=figsize)
     sns.set(style="ticks")
     sns.heatmap(
@@ -84,7 +99,7 @@ def view_table(
         linewidths=0.5,
         cbar_kws={"shrink": 0.5},
         annot=annot,
-        fmt=fmt,
+        fmt=annot_fmt,
         xticklabels=xticklabels,
         yticklabels=yticklabels,
     )
@@ -97,6 +112,7 @@ def view_table(
         return fig
     else:
         plt.show()
+
 
 if __name__ == "__main__":
     data = {

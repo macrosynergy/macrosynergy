@@ -1509,7 +1509,9 @@ class SignalReturnRelations:
         max_color: Optional[float] = None,
         figsize: Tuple[float, float] = (14, 8),
         annotate: bool = True,
-        round: int = 5,
+        round: int = 3,
+        pval_stat: Optional[str] = None,
+        round_pval: int = 3,
     ):
         """
         Creates a table which shows the specified statistic for each row and column
@@ -1564,7 +1566,18 @@ class SignalReturnRelations:
         annotate : bool
             Default is True, where the values shown in the heatmap are annotated.
         round : int
-            number of decimals to round the values to on the heatmap's annotations.
+            number of decimals to round the primary statistic to in the heatmap
+            annotations. Default is 3.
+        pval_stat : str, optional
+            name of an additional statistic — typically a p-value such as
+            ``"kendall_pval"``, ``"pearson_pval"`` or ``"map_pval"`` (the
+            Macrosynergy Panel test) — whose value is rendered in brackets
+            beneath the primary statistic in each heatmap cell. Default is None.
+            When ``pval_stat="map_pval"``, ``SignalReturnRelations`` must have
+            been constructed with ``ms_panel_test=True``.
+        round_pval : int
+            number of decimals to round ``pval_stat`` values to in the heatmap
+            annotations. Default is 3.
 
         Returns
         -------
@@ -1576,6 +1589,17 @@ class SignalReturnRelations:
 
         if not stat in self.metrics:
             raise ValueError(f"Stat must be one of {self.metrics}")
+
+        if pval_stat is not None:
+            if pval_stat == "map_pval" and not self.ms_panel_test:
+                raise ValueError(
+                    "pval_stat='map_pval' requires SignalReturnRelations to "
+                    "be constructed with ms_panel_test=True."
+                )
+            if pval_stat not in self.metrics:
+                raise ValueError(
+                    f"pval_stat must be one of {self.metrics}"
+                )
 
         if not isinstance(rows, list):
             raise TypeError("Rows must be a list")
@@ -1609,6 +1633,13 @@ class SignalReturnRelations:
         # sort index to prevent performance degradation: PerformanceWarning
         df_result.sort_index(inplace=True)
 
+        df_pval: Optional[pd.DataFrame] = None
+        if pval_stat is not None:
+            df_pval = pd.DataFrame(
+                columns=df_column_names, index=df_row_names, dtype=np.float64
+            )
+            df_pval.sort_index(inplace=True)
+
         loop_tuples: List[Tuple[str, str, str, str]] = [
             (ret, sig, freq, agg_sig)
             for ret in self.rets
@@ -1630,6 +1661,10 @@ class SignalReturnRelations:
             df_result.loc[row, column] = self.calculate_single_stat(
                 stat, ret, sig, type
             )
+            if pval_stat is not None:
+                df_pval.loc[row, column] = self.calculate_single_stat(
+                    pval_stat, ret, sig, type
+                )
 
             # Reset self.df and sig to original values
             self.df = self.original_df
@@ -1641,9 +1676,17 @@ class SignalReturnRelations:
                 df_result = self.reindex_multindex_df(
                     df_result, signal_name_dict.values(), "Signal"
                 )
+                if df_pval is not None:
+                    df_pval.rename(index=signal_name_dict, inplace=True)
+                    df_pval = self.reindex_multindex_df(
+                        df_pval, signal_name_dict.values(), "Signal"
+                    )
             else:
                 df_result.rename(columns=signal_name_dict, inplace=True)
                 df_result = df_result[signal_name_dict.values()]
+                if df_pval is not None:
+                    df_pval.rename(columns=signal_name_dict, inplace=True)
+                    df_pval = df_pval[signal_name_dict.values()]
 
         if return_name_dict is not None:
             # Reorder the index according to the return_name_dict
@@ -1652,9 +1695,17 @@ class SignalReturnRelations:
                 df_result = self.reindex_multindex_df(
                     df_result, return_name_dict.values(), "Return"
                 )
+                if df_pval is not None:
+                    df_pval.rename(index=return_name_dict, inplace=True)
+                    df_pval = self.reindex_multindex_df(
+                        df_pval, return_name_dict.values(), "Return"
+                    )
             else:
                 df_result.rename(columns=return_name_dict, inplace=True)
                 df_result = df_result[return_name_dict.values()]
+                if df_pval is not None:
+                    df_pval.rename(columns=return_name_dict, inplace=True)
+                    df_pval = df_pval[return_name_dict.values()]
 
         if show_heatmap:
             if not title:
@@ -1665,6 +1716,15 @@ class SignalReturnRelations:
             if max_color is None:
                 max_color = df_result.values.max()
 
+            if annotate and df_pval is not None:
+                heatmap_annot = self._format_dual_annot(
+                    df_result, df_pval, round, round_pval
+                )
+                heatmap_fmt = ""
+            else:
+                heatmap_annot = annotate
+                heatmap_fmt = f".{round}f"
+
             msv.view_table(
                 df_result,
                 title=title,
@@ -1672,13 +1732,46 @@ class SignalReturnRelations:
                 min_color=min_color,
                 max_color=max_color,
                 figsize=figsize,
-                fmt=f".{round}f",
-                annot=annotate,
+                fmt=heatmap_fmt,
+                annot=heatmap_annot,
                 xticklabels=column_names,
                 yticklabels=row_names,
             )
 
         return df_result
+
+    @staticmethod
+    def _format_dual_annot(
+        df_stat: pd.DataFrame,
+        df_pval: pd.DataFrame,
+        round_stat: int,
+        round_pval: int,
+    ) -> pd.DataFrame:
+        """
+        Build a string-typed DataFrame of cell annotations of the form
+        ``"<stat>\\n(<pval>)"`` aligned with ``df_stat``. NaN values render
+        as empty strings.
+        """
+
+        def _fmt(value: float, ndigits: int) -> str:
+            if value is None or (isinstance(value, float) and np.isnan(value)):
+                return ""
+            return f"{value:.{ndigits}f}"
+
+        annot = pd.DataFrame(
+            index=df_stat.index, columns=df_stat.columns, dtype=object
+        )
+        for row in df_stat.index:
+            for col in df_stat.columns:
+                stat_str = _fmt(df_stat.loc[row, col], round_stat)
+                pval_str = _fmt(df_pval.loc[row, col], round_pval)
+                if stat_str == "" and pval_str == "":
+                    annot.loc[row, col] = ""
+                elif pval_str == "":
+                    annot.loc[row, col] = stat_str
+                else:
+                    annot.loc[row, col] = f"{stat_str}\n({pval_str})"
+        return annot
 
     def set_df_labels(self, rows_dict: Dict, rows: List[str], columns: List[str]):
         """

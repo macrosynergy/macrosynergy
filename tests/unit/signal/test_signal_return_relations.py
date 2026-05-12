@@ -1084,6 +1084,73 @@ class TestAll(unittest.TestCase):
         plt.close("all")
         matplotlib.use(self.mpl_backend)
 
+    def test_single_statistic_table_pval_brackets(self):
+        self.mpl_backend: str = matplotlib.get_backend()
+        matplotlib.use("Agg")
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+
+            sr = SignalReturnRelations(
+                df=self.dfd,
+                rets="XR",
+                sigs="CRY",
+                freqs="Q",
+                blacklist=self.blacklist,
+                slip=1,
+            )
+
+            # Numeric DataFrame returned is the primary statistic only,
+            # independent of pval_stat.
+            df_plain = sr.single_statistic_table(stat="kendall")
+            df_with_pval = sr.single_statistic_table(
+                stat="kendall", pval_stat="kendall_pval"
+            )
+            self.assertTrue((df_plain == df_with_pval).all().all())
+
+            # Annotation array is built with the expected shape and contains
+            # at least one bracketed value.
+            annot = sr._format_dual_annot(
+                df_plain,
+                sr.single_statistic_table(stat="kendall_pval"),
+                round_stat=3,
+                round_pval=3,
+            )
+            self.assertEqual(annot.shape, df_plain.shape)
+            bracketed = [
+                str(v) for v in annot.values.ravel() if "(" in str(v)
+            ]
+            self.assertTrue(len(bracketed) >= 1)
+
+            # Heatmap renders without raising.
+            try:
+                sr.single_statistic_table(
+                    stat="kendall",
+                    pval_stat="kendall_pval",
+                    show_heatmap=True,
+                    round=3,
+                    round_pval=4,
+                )
+            except Exception as e:
+                self.fail(
+                    f"single_statistic_table with pval_stat raised {e}"
+                )
+
+            # Invalid pval_stat is rejected.
+            with self.assertRaises(ValueError):
+                sr.single_statistic_table(
+                    stat="kendall", pval_stat="not_a_metric"
+                )
+
+            # map_pval requires ms_panel_test=True on the SRR.
+            with self.assertRaises(ValueError):
+                sr.single_statistic_table(
+                    stat="kendall", pval_stat="map_pval"
+                )
+
+        plt.close("all")
+        matplotlib.use(self.mpl_backend)
+
 
 if __name__ == "__main__":
     unittest.main()
