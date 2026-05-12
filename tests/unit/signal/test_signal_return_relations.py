@@ -1136,11 +1136,12 @@ class TestAll(unittest.TestCase):
                     f"single_statistic_table with pval_stat raised {e}"
                 )
 
-            # significance_threshold builds a mask: pval below (1-thr) is
-            # highlighted. Verify the mask the call would produce by running
-            # the same comparison directly.
+            # significance_threshold builds a mask: cells whose probability
+            # of significance (1 - pval) exceeds the threshold are
+            # highlighted. Verify by reproducing the comparison directly.
             df_pval_only = sr.single_statistic_table(stat="kendall_pval")
-            expected_mask = df_pval_only < (1 - 0.9)
+            df_psig = 1.0 - df_pval_only
+            expected_mask = df_psig > 0.9
             self.assertTrue(expected_mask.any().any())
             # Re-rendering with significance_threshold=None disables it.
             try:

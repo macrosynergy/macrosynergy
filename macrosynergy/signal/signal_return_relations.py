@@ -1570,21 +1570,23 @@ class SignalReturnRelations:
             number of decimals to round the primary statistic to in the heatmap
             annotations. Default is 3.
         pval_stat : str, optional
-            name of an additional statistic — typically a p-value such as
-            ``"kendall_pval"``, ``"pearson_pval"`` or ``"map_pval"`` (the
-            Macrosynergy Panel test) — whose value is rendered in brackets
-            beneath the primary statistic in each heatmap cell. Default is None.
-            When ``pval_stat="map_pval"``, ``SignalReturnRelations`` must have
-            been constructed with ``ms_panel_test=True``.
+            name of a p-value statistic — typically ``"kendall_pval"``,
+            ``"pearson_pval"`` or ``"map_pval"`` (the Macrosynergy Panel
+            test). When set, each heatmap cell shows the **probability of
+            significance**, ``1 - pval_stat``, in brackets beneath the
+            primary statistic. Default is None. When ``pval_stat="map_pval"``
+            the SignalReturnRelations must have been constructed with
+            ``ms_panel_test=True``.
         round_pval : int
-            number of decimals to round ``pval_stat`` values to in the heatmap
-            annotations. Default is 3.
+            number of decimals to round the bracketed probability of
+            significance to in the heatmap annotations. Default is 3.
         significance_threshold : float, optional
-            probability-of-significance threshold above which a cell's
-            annotation is rendered in black and bold. Defined as
-            ``1 - pval_stat``, so a value of 0.9 highlights cells whose
-            ``pval_stat`` is below 0.1. Only takes effect when ``pval_stat``
-            is set. Pass ``None`` to disable highlighting. Default is 0.9.
+            probability-of-significance cutoff above which a cell's
+            annotation is rendered in black and bold. Compared directly
+            against the bracketed value (``1 - pval_stat``), so 0.9
+            highlights cells whose probability of significance exceeds 0.9
+            (equivalently, raw p-value below 0.1). Only takes effect when
+            ``pval_stat`` is set. Pass ``None`` to disable. Default is 0.9.
 
         Returns
         -------
@@ -1723,9 +1725,14 @@ class SignalReturnRelations:
             if max_color is None:
                 max_color = df_result.values.max()
 
-            if annotate and df_pval is not None:
+            # Convert raw p-values to probability of significance (1 - pval)
+            # so the bracketed value and the highlight threshold share the
+            # same scale.
+            df_psig = 1.0 - df_pval if df_pval is not None else None
+
+            if annotate and df_psig is not None:
                 heatmap_annot = self._format_dual_annot(
-                    df_result, df_pval, round, round_pval
+                    df_result, df_psig, round, round_pval
                 )
                 heatmap_fmt = ""
             else:
@@ -1734,11 +1741,10 @@ class SignalReturnRelations:
 
             highlight_mask = None
             if (
-                df_pval is not None
+                df_psig is not None
                 and significance_threshold is not None
             ):
-                pval_cutoff = 1.0 - float(significance_threshold)
-                highlight_mask = df_pval < pval_cutoff
+                highlight_mask = df_psig > float(significance_threshold)
 
             msv.view_table(
                 df_result,
