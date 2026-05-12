@@ -23,7 +23,10 @@ from macrosynergy.pnl.proxy_pnl_calc import (
     proxy_pnl_calc,
     plot_pnl,
 )
-from macrosynergy.pnl.transaction_costs import TransactionCosts
+from macrosynergy.pnl.transaction_costs import (
+    TransactionCosts,
+    TransactionCostsDictAdapter,
+)
 
 from macrosynergy.download.transaction_costs import (  # noqa
     AVAIALBLE_COSTS,
@@ -703,6 +706,203 @@ class TestCalculations(unittest.TestCase):
 
         for key in df_outs.keys():
             pd.testing.assert_frame_equal(df_outs[key], expc_df_outs[key])
+
+    def _hand_calc_setup(self):
+        # 4-contract, 6 rebal-date fixture; rebal == roll == "M".
+        #
+        # Cost adapter: each fid has median_cost == pct90_cost == 1.0, so
+        # extrapolate_cost returns 1.0 for any trade size (a flat per-unit
+        # cost in percentage points). The production cost path computes
+        # `dollar_cost = trade_size * pct / 100`, so a trade of size N here
+        # produces a dollar cost of N / 100. The expected cost tables in
+        # the tests below are therefore the integer trade-size and roll-
+        # residual values divided by 100.
+        #
+        # Position trajectories cover the regimes the cost path must handle:
+        #   X_FID: long increase, long decrease, close, open short, held short
+        #   Y_FID: open long, sign flip, held short, sign flip, held long
+        #   Z_FID: held short, sign flip, held long x2, close
+        #   S_FID: open short, short increase, short decrease, held short,
+        #          short increase, held short (negative-magnitude coverage).
+        spos, rstring = "SNAME_POS", "RETURNS"
+        contracts = ["X_FID", "Y_FID", "Z_FID", "S_FID"]
+        idx = pd.bdate_range("2020-01-01", "2020-07-31", name="real_date")
+        rebal = _generate_roll_dates(idx, roll_freq="M")[:6]
+
+        rows = pd.DataFrame(
+            [
+                [10, 0, -4, -5],
+                [12, 5, -4, -7],
+                [8, -5, 4, -3],
+                [0, -5, 4, -3],
+                [-5, 3, 4, -8],
+                [-5, 3, 0, -8],
+            ],
+            index=rebal,
+            columns=contracts,
+            dtype=float,
+        )
+        positions = pd.DataFrame(np.nan, index=idx, columns=contracts)
+        positions.loc[rebal] = rows.values
+        positions = positions.ffill().fillna(0.0)
+
+        pos_df = positions.add_suffix(f"_{spos}")
+        ret_df = pd.DataFrame(
+            0.0, index=positions.index, columns=positions.columns
+        ).add_suffix(rstring)
+        df_wide = pd.concat([pos_df, ret_df], axis=1)
+        df_wide.index.name = "real_date"
+
+        cost_dict = {
+            fid: dict(median_cost=1.0, median_size=1.0, pct90_cost=1.0, pct90_size=10.0)
+            for fid in contracts
+        }
+        adapter = TransactionCostsDictAdapter(cost_dict=cost_dict, fids=contracts)
+
+        return df_wide, spos, rstring, adapter, rebal, contracts
+
+    def test_calculate_trading_costs_bidoffer_matches_hand_calc(self):
+        # Bid-offer is charged on each trade; the trade size is abs(new
+        # target - previous target). The expected table is exactly those
+        # per-contract per-rebal-date absolute deltas. S_FID exercises the
+        # negative-magnitude moves explicitly: a short going from 5 to 7
+        # is a trade of size 2, and a short shrinking from 7 to 3 is a
+        # trade of size 4.
+        df_wide, spos, rstring, adapter, rebal, contracts = self._hand_calc_setup()
+        tc_df = _calculate_trading_costs(
+            df_wide, spos, rstring, adapter, "TC", roll_freq="M"
+        )
+        expected = (
+            pd.DataFrame(
+                [
+                    [10, 0, 4, 5],
+                    [2, 5, 0, 2],
+                    [4, 10, 8, 4],
+                    [8, 0, 0, 0],
+                    [5, 8, 0, 5],
+                    [0, 0, 4, 0],
+                ],
+                index=rebal,
+                columns=contracts,
+                dtype=float,
+            )
+            / 100
+        )
+        for col in contracts:
+            actual = tc_df.reindex(rebal)[f"{col}_{spos}_TC_BIDOFFER"].fillna(0.0)
+            pd.testing.assert_series_equal(
+                actual, expected[col].rename(actual.name), check_exact=False
+            )
+
+    def test_calculate_trading_costs_rollcost_matches_hand_calc(self):
+        # Roll cost is charged on the size that survives the roll with its
+        # direction unchanged: min(abs(prev), abs(curr)) when both have the
+        # same sign, and zero on opens, closes and sign flips. S_FID covers
+        # the negative-magnitude case: a held short of size 3 carries 3,
+        # a short shrinking from 7 to 3 carries 3 (the part that survived),
+        # and a short growing from 3 to 8 also carries 3 (the prior size).
+        df_wide, spos, rstring, adapter, rebal, contracts = self._hand_calc_setup()
+        tc_df = _calculate_trading_costs(
+            df_wide, spos, rstring, adapter, "TC", roll_freq="M"
+        )
+        expected = (
+            pd.DataFrame(
+                [
+                    [0, 0, 0, 0],
+                    [10, 0, 4, 5],
+                    [8, 0, 0, 3],
+                    [0, 5, 4, 3],
+                    [0, 0, 4, 3],
+                    [5, 3, 0, 8],
+                ],
+                index=rebal,
+                columns=contracts,
+                dtype=float,
+            )
+            / 100
+        )
+        for col in contracts:
+            actual = tc_df.reindex(rebal)[f"{col}_{spos}_TC_ROLLCOST"].fillna(0.0)
+            pd.testing.assert_series_equal(
+                actual, expected[col].rename(actual.name), check_exact=False
+            )
+
+    def test_calculate_trading_costs_flat_rebal_charges_no_bidoffer(self):
+        # A rebal date that does not change the target position is not a
+        # trade and must book zero bid-offer. Contract Y's target on the
+        # fifth rebal date equals its target on the fourth (both 3), so
+        # its bid-offer there must be zero. Contract X moves from zero
+        # to minus five on the fourth rebal, so its bid-offer there must
+        # be strictly positive.
+        df_wide, spos, rstring, adapter, rebal, _ = self._hand_calc_setup()
+        tc_df = _calculate_trading_costs(
+            df_wide, spos, rstring, adapter, "TC", roll_freq="M"
+        )
+        d4, d5 = rebal[4], rebal[5]
+        self.assertEqual(tc_df.reindex([d5])[f"Y_FID_{spos}_TC_BIDOFFER"].iloc[0], 0.0)
+        self.assertGreater(
+            tc_df.reindex([d4])[f"X_FID_{spos}_TC_BIDOFFER"].iloc[0], 0.0
+        )
+
+    def test_calculate_trading_costs_alternating_signs_book_no_rollcost(self):
+        # Single-contract panel that flips sign at every rebal date
+        # (+5, -5, +5, -5, +5, -5). No held position ever survives a sign
+        # flip, so the roll-cost column must be exactly zero on every
+        # rebal. Bid-offer must be strictly positive on every rebal: the
+        # opening trade of size 5, then a close-and-reopen of size 10 at
+        # each flip. Stresses the sign check in the roll cost path under
+        # repeated alternation.
+        spos, rstring = "SNAME_POS", "RETURNS"
+        contracts = ["F_FID"]
+        idx = pd.bdate_range("2020-01-01", "2020-07-31", name="real_date")
+        rebal = _generate_roll_dates(idx, roll_freq="M")[:6]
+
+        flips = pd.DataFrame(
+            [[5], [-5], [5], [-5], [5], [-5]],
+            index=rebal,
+            columns=contracts,
+            dtype=float,
+        )
+        positions = pd.DataFrame(np.nan, index=idx, columns=contracts)
+        positions.loc[rebal] = flips.values
+        positions = positions.ffill().fillna(0.0)
+
+        pos_df = positions.add_suffix(f"_{spos}")
+        ret_df = pd.DataFrame(
+            0.0, index=positions.index, columns=positions.columns
+        ).add_suffix(rstring)
+        df_wide = pd.concat([pos_df, ret_df], axis=1)
+        df_wide.index.name = "real_date"
+
+        cost_dict = {
+            "F_FID": dict(
+                median_cost=1.0, median_size=1.0, pct90_cost=1.0, pct90_size=10.0
+            )
+        }
+        adapter = TransactionCostsDictAdapter(cost_dict=cost_dict, fids=contracts)
+
+        tc_df = _calculate_trading_costs(
+            df_wide, spos, rstring, adapter, "TC", roll_freq="M"
+        )
+        rc = tc_df.reindex(rebal)[f"F_FID_{spos}_TC_ROLLCOST"].fillna(0.0)
+        bo = tc_df.reindex(rebal)[f"F_FID_{spos}_TC_BIDOFFER"].fillna(0.0)
+        self.assertTrue((rc == 0.0).all())
+        self.assertTrue((bo > 0.0).all())
+
+    def test_calculate_trading_costs_rejects_bad_last_row(self):
+        # An all-zero (or all-NaN) latest position row leaves the cost
+        # path with no information about what is currently held.
+        # _preprocess_positions_for_costs rejects such a panel with a
+        # ValueError; this test asserts that the rejection surfaces all
+        # the way through _calculate_trading_costs and is not silently
+        # swallowed.
+        df_wide, spos, rstring, adapter, _, _ = self._hand_calc_setup()
+        pos_cols = [c for c in df_wide.columns if c.endswith(f"_{spos}")]
+        df_wide.loc[df_wide.index[-1], pos_cols] = 0.0
+        with self.assertRaises(ValueError):
+            _calculate_trading_costs(
+                df_wide, spos, rstring, adapter, "TC", roll_freq="M"
+            )
 
 
 class TestProxyPNLCalc(unittest.TestCase):
