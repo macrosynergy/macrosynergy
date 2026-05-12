@@ -913,8 +913,9 @@ class TestProxyPNLCalc(unittest.TestCase):
         _tickers = [f"{cid}_{xcat}" for cid in self.cids for xcat in self.xcats]
         self.spos = "SNAME_POS"
         self.rstring = "RETURNS"
-        self.tickers: List[str] = [f"{tk}_{self.spos}" for tk in _tickers]
-        self.tickers += [f"{tk}{self.rstring}" for tk in _tickers]
+        pos_tickers: List[str] = [f"{tk}_{self.spos}" for tk in _tickers]
+        ret_tickers: List[str] = [f"{tk}{self.rstring}" for tk in _tickers]
+        self.tickers: List[str] = pos_tickers + ret_tickers
         self.fids = [
             f"{cid}_{xcat}" for cid in self.cids for xcat in self.xcats if xcat != "EQ"
         ]
@@ -922,11 +923,22 @@ class TestProxyPNLCalc(unittest.TestCase):
         self.rd_idx = pd.Series(
             pd.bdate_range(start="2020-01-01", end="2020-12-31"), name="real_date"
         )
-        self.df_wide = pd.DataFrame(
-            data=np.random.randn(len(self.rd_idx), len(self.tickers)),
-            index=self.rd_idx,
-            columns=self.tickers,
+        # Returns: a synthetic daily return series for each contract.
+        # Positions: drawn on the monthly rebalancing dates and forward-filled
+        # in between, so the cost path sees a realistic monthly rebalancing
+        # cadence rather than a fresh position on every business day.
+        rebal_idx = _generate_roll_dates(
+            index=pd.DatetimeIndex(self.rd_idx), roll_freq="M"
         )
+        pos_panel = pd.DataFrame(index=self.rd_idx, columns=pos_tickers, dtype=float)
+        pos_panel.loc[rebal_idx] = np.random.randn(len(rebal_idx), len(pos_tickers))
+        pos_panel = pos_panel.ffill().bfill()
+        ret_panel = pd.DataFrame(
+            data=np.random.randn(len(self.rd_idx), len(ret_tickers)),
+            index=self.rd_idx,
+            columns=ret_tickers,
+        )
+        self.df_wide = pd.concat([pos_panel, ret_panel], axis=1)[self.tickers]
         self.qdf = ticker_df_to_qdf(df=self.df_wide)
         self.tc = TransactionCosts(df=make_tx_cost_df(cids=self.cids), fids=self.fids)
         self.good_args = {
