@@ -2,6 +2,7 @@
 Module for calculating an approximate nominal PnL under consideration of transaction costs.
 """
 
+import numpy as np
 import pandas as pd
 from typing import List, Union, Tuple, Optional, Dict
 from numbers import Number
@@ -257,68 +258,61 @@ def _calculate_trading_costs(
     rstring: str,
     transaction_costs: TransactionCosts,
     tc_name: str,
+    roll_freq: str = "M",
     bidoffer_name: str = "BIDOFFER",
     rollcost_name: str = "ROLLCOST",
 ) -> pd.DataFrame:
-
-    pivot_returns, pivot_pos = _split_returns_positions_df(
+    _, pivot_pos = _split_returns_positions_df(
         df_wide=df_wide, spos=spos, rstring=rstring
     )
-    rebal_dates = _get_rebal_dates(pivot_pos)
-    # Add last end date - as position taken on the last rebal date,
-    # is held until notional_positions data is available
-    _end = pd.Timestamp(pivot_pos.last_valid_index())
-    rebal_dates = sorted(set(rebal_dates + [_end]))
-    pos_cols = pivot_pos.columns.tolist()
-    tc_cols = [
-        f"{col}_{tc_name}_{cost_type}"
-        for col in pos_cols
-        for cost_type in [bidoffer_name, rollcost_name]
-    ]
-    # Create a dataframe to store the trading costs with all 0s
-    tc_df = pd.DataFrame(data=0.0, index=pivot_pos.index, columns=tc_cols)
+    roll_dates = _generate_roll_dates(pivot_pos.index, roll_freq)
+    pivot_pos = _preprocess_positions_for_costs(pivot_pos)
 
     tickers = pivot_pos.columns.tolist()
+    tc_cols = [
+        f"{col}_{tc_name}_{cost}"
+        for col in tickers
+        for cost in (bidoffer_name, rollcost_name)
+    ]
+    tc_df = pd.DataFrame(data=0.0, index=pivot_pos.index, columns=tc_cols)
 
-    ## Taking the 1st position
-    ## Here, only the bidoffer is considered, as there is nothing to roll
-    first_pos = pivot_pos.loc[rebal_dates[0]]
+    # Trading costs decompose into two passes: bid-offer on every trade, and
+    # roll cost on the residual position carried across each roll date.
+
+    # Step 1: Bid-offer cost on the absolute change in position. Positions are
+    # flat between rebals, so non-zero deltas only occur on actual trades.
+    abs_position_change = pivot_pos.diff().abs()
     for ticker in tickers:
-        _fid = ticker.replace(f"_{spos}", "")
-        bidoffer = transaction_costs.bidoffer(
-            trade_size=first_pos[ticker],
-            fid=_fid,
-            real_date=rebal_dates[0],
-        )
-        # Add a 0 for rollcost
-        tc_df.loc[rebal_dates[0], f"{ticker}_{tc_name}_{rollcost_name}"] = 0
-        tc_df.loc[rebal_dates[0], f"{ticker}_{tc_name}_{bidoffer_name}"] = (
-            bidoffer / 100
-        )
+        fid = ticker.replace(f"_{spos}", "")
+        bo_col = f"{ticker}_{tc_name}_{bidoffer_name}"
+        traded = abs_position_change[ticker][abs_position_change[ticker] > 0]
+        for date, trade_size in traded.items():
+            bo_pct = transaction_costs.bidoffer(
+                trade_size=trade_size, fid=fid, real_date=date
+            )
+            tc_df.loc[date, bo_col] = trade_size * bo_pct / 100
 
-    for ix, (dt1, dt2) in enumerate(zip(rebal_dates[:-1], rebal_dates[1:])):
-        dt2x = dt2 - pd.offsets.BDay(1)
-        prev_pos, next_pos = pivot_pos.loc[dt1], pivot_pos.loc[dt2]
-        curr_pos = pivot_pos.loc[dt1:dt2x]
-        avg_pos: pd.Series = curr_pos.abs().mean(axis=0)
-        delta_pos = (next_pos - prev_pos).abs()
-        for ticker in tickers:
-            _fid = ticker.replace(f"_{spos}", "")
-            _rcn = f"{ticker}_{tc_name}_{rollcost_name}"
-            _bon = f"{ticker}_{tc_name}_{bidoffer_name}"
-            rollcost = transaction_costs.rollcost(
-                trade_size=avg_pos[ticker],
-                fid=_fid,
-                real_date=dt2,
+    # Step 2: Roll cost on the held position carried across each roll date.
+    # A position only carries through a roll if its direction is unchanged from
+    # one roll date to the next: a long that stayed long, or a short that
+    # stayed short. The residual that survived is then min(abs(prev), abs(curr)).
+    # Opens, closes and sign flips carry nothing and book no roll cost.
+    pos_at_roll = pivot_pos.loc[roll_dates]
+    pos_before_roll = pos_at_roll.shift(1)
+    held_long = (pos_before_roll > 0) & (pos_at_roll > 0)
+    held_short = (pos_before_roll < 0) & (pos_at_roll < 0)
+    held_position = np.minimum(pos_at_roll.abs(), pos_before_roll.abs()).where(
+        held_long | held_short, 0.0
+    )
+    for ticker in tickers:
+        fid = ticker.replace(f"_{spos}", "")
+        rc_col = f"{ticker}_{tc_name}_{rollcost_name}"
+        rolled: pd.Series = held_position[ticker][held_position[ticker] > 0]
+        for date, roll_size in rolled.items():
+            rc_pct = transaction_costs.rollcost(
+                trade_size=roll_size, fid=fid, real_date=date
             )
-            bidoffer = transaction_costs.bidoffer(
-                trade_size=delta_pos[ticker],
-                fid=_fid,
-                real_date=dt2,
-            )
-            # delta_pos and avg_pos are already in absolute terms
-            tc_df.loc[dt2, _rcn] = avg_pos[ticker] * rollcost / 100
-            tc_df.loc[dt2, _bon] = delta_pos[ticker] * bidoffer / 100
+            tc_df.loc[date, rc_col] = roll_size * rc_pct / 100
 
     # Sum TICKER_TCOST_BIDOFFER and TICKER_TCOST_ROLLCOST into TICKER_TCOST
     for ticker in tickers:
@@ -329,13 +323,10 @@ def _calculate_trading_costs(
             ]
         ].sum(axis=1)
 
-    # Drop rows with no trading costs
+    # Drop rows with no trading costs (also removes the synthetic anchor row)
+    # added to the positions df for the opening trade
     tc_df = tc_df.loc[tc_df.abs().sum(axis=1) > 0]
-
-    # check that remaining dates are part of rebal_dates
-    assert set(tc_df.index) <= set(rebal_dates)
     assert not (tc_df < 0).any().any()
-
     return tc_df
 
 
