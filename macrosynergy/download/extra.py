@@ -3,14 +3,14 @@ import logging
 import json
 import pickle
 from pathlib import Path
-from typing import Any
+from typing import Any, Union
 
 import pandas as pd
 
 logger = logging.getLogger(__name__)
 
 
-def save_data(path: str | Path, data: Any) -> Path:
+def save_data(path: Union[str, Path], data: Any) -> Path:
     """Save data locally, choosing the file format based on the data type.
 
     DataFrames are saved as Parquet, dicts and lists as JSON, and all other
@@ -60,7 +60,7 @@ def save_data(path: str | Path, data: Any) -> Path:
     return out
 
 
-def load_data(path: str | Path) -> Any:
+def load_data(path: Union[str, Path]) -> Any:
     """Load data previously saved by "save_data", inferring the format from the file extension.
 
     If "path" has no extension, the function probes for ".parquet", ".json",
