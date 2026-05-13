@@ -20,30 +20,30 @@ def view_table(
     fmt: str = ".2f",
     return_fig: bool = False,
     highlight_mask: Optional[Union[np.ndarray, pd.DataFrame]] = None,
-):
+) -> Optional[plt.Figure]:
     """
-    Displays a DataFrame representing a table as a heatmap.
+    Display a numeric DataFrame as an annotated colour-coded heatmap table.
 
     Parameters
     ----------
-    df : ~pandas.DataFrame
-        table to be displayed.
+    df : pd.DataFrame
+        Numeric DataFrame to display.
     title : str, optional
-        string of chart title; defaults depend on type of range plot.
+        Title displayed above the heatmap.
     title_fontsize : int, optional
-        font size of chart header. Default is 16.
+        Font size of the title. Default is 16.
     figsize : Tuple[float, float], optional
-        Tuple (w, h) of width and height of plot.
+        Width and height of the figure in inches.
     min_color : float
-        minimum value of colorbar. Default is -1.
+        Data value mapped to the bottom of the colormap. Default is -1.
     max_color : float
-        maximum value of colorbar. Default is 1.
+        Data value mapped to the top of the colormap. Default is 1.
     xlabel : str, optional
-        string of x-axis label. Default is None.
+        Label for the x-axis.
     ylabel : str, optional
-        string of y-axis label. Default is None.
+        Label for the y-axis.
     xticklabels : List[str], optional
-        list of strings to label x-axis ticks. Default is None.
+        Tick labels for the columns. Defaults to the DataFrame column names.
     yticklabels : List[str], optional
         list of strings to label y-axis ticks. Default is None.
     annot : bool or array-like of str
