@@ -412,6 +412,18 @@ class PanelPCA(BaseEstimator, TransformerMixin):
             data=X.values @ self.adjusted_evecs,
         )
 
+    def get_feature_names_out(self, input_features=None):
+        """
+        Get output feature names produced by the transformation.
+
+        Parameters
+        ----------
+        input_features : None
+            This parameter has no effect and is included for compatibility
+            with the scikit-learn API.
+        """
+        return np.array([f"PCA {i+1}" for i in range(self.adjusted_evecs.shape[1])])
+
     def _check_fit_params(self, X, y):
         """
         Checks the input data for the fit method.
