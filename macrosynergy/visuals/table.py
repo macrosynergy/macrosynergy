@@ -1,5 +1,6 @@
+import numpy as np
 import pandas as pd
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Union
 import seaborn as sns
 import matplotlib.pyplot as plt
 
@@ -15,9 +16,10 @@ def view_table(
     ylabel: Optional[str] = None,
     xticklabels: Optional[List[str]] = None,
     yticklabels: Optional[List[str]] = None,
-    annot: bool = True,
+    annot: Union[bool, np.ndarray, pd.DataFrame] = True,
     fmt: str = ".2f",
     return_fig: bool = False,
+    highlight_mask: Optional[Union[np.ndarray, pd.DataFrame]] = None,
 ) -> Optional[plt.Figure]:
     """
     Display a numeric DataFrame as an annotated colour-coded heatmap table.
@@ -43,18 +45,20 @@ def view_table(
     xticklabels : List[str], optional
         Tick labels for the columns. Defaults to the DataFrame column names.
     yticklabels : List[str], optional
-        Tick labels for the rows. Defaults to the DataFrame index values.
-    annot : bool
-        Whether to annotate each cell with its numeric value. Default is True.
+        list of strings to label y-axis ticks. Default is None.
+    annot : bool or array-like of str
+        if a bool, controls whether the numeric values of ``df`` are annotated.
+        If a DataFrame or 2D array of strings is supplied, those strings are
+        rendered as cell annotations verbatim (``fmt`` is ignored).
     fmt : str
-        Format string for cell annotations, for example ".2f". Default is ".2f".
+        string format for annotations. Default is '.2f'. Ignored when ``annot``
+        is array-like.
     return_fig : bool
-        If True, return the Matplotlib figure instead of displaying it.
-
-    Returns
-    -------
-    plt.Figure or None
-        The figure object when "return_fig" is True, otherwise None.
+        If True, return the Matplotlib figure object instead of displaying.
+    highlight_mask : array-like of bool, optional
+        DataFrame or 2D array of the same shape as ``df``. Cells where the
+        mask is True have their annotation text rendered in black and bold.
+        Has no effect when ``annot`` is False.
     """
 
     if not isinstance(df, pd.DataFrame):
@@ -78,6 +82,17 @@ def view_table(
     elif len(yticklabels) != len(df.index):
         raise ValueError("Number of yticklabels must match number of rows")
 
+    annot_fmt = fmt
+    if isinstance(annot, (pd.DataFrame, np.ndarray)):
+        annot_arr = annot.values if isinstance(annot, pd.DataFrame) else annot
+        if annot_arr.shape != df.shape:
+            raise ValueError(
+                "annot array shape must match the DataFrame shape "
+                f"{df.shape}, got {annot_arr.shape}."
+            )
+        annot = annot_arr
+        annot_fmt = ""
+
     fig, ax = plt.subplots(figsize=figsize)
     sns.set(style="ticks")
     sns.heatmap(
@@ -89,10 +104,26 @@ def view_table(
         linewidths=0.5,
         cbar_kws={"shrink": 0.5},
         annot=annot,
-        fmt=fmt,
+        fmt=annot_fmt,
         xticklabels=xticklabels,
         yticklabels=yticklabels,
     )
+
+    if highlight_mask is not None and not (annot is False):
+        if isinstance(highlight_mask, pd.DataFrame):
+            mask_arr = highlight_mask.values
+        else:
+            mask_arr = np.asarray(highlight_mask)
+        if mask_arr.shape != df.shape:
+            raise ValueError(
+                "highlight_mask shape must match the DataFrame shape "
+                f"{df.shape}, got {mask_arr.shape}."
+            )
+        # seaborn lays out ax.texts in row-major order matching df.values.ravel()
+        for txt, hi in zip(ax.texts, mask_arr.ravel()):
+            if bool(hi):
+                txt.set_color("black")
+                txt.set_weight("bold")
 
     ax.set(xlabel=xlabel, ylabel=ylabel)
     ax.set_title(title, fontsize=title_fontsize)
