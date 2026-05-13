@@ -7,7 +7,7 @@ from macrosynergy.management.constants import FREQUENCY_MAP, FFILL_LIMITS, DAYS_
 
 import warnings
 from typing import Iterable, List, Optional, Union, Dict
-
+import re
 from numbers import Number
 
 import numpy as np
@@ -49,9 +49,7 @@ def is_categorical_qdf(df: pd.DataFrame) -> bool:
     return all([df[col].dtype.name == "category" for col in ["cid", "xcat"]])
 
 
-def standardise_dataframe(
-    df: pd.DataFrame
-) -> QuantamentalDataFrame:
+def standardise_dataframe(df: pd.DataFrame) -> QuantamentalDataFrame:
     """
     Applies the standard JPMaQS Quantamental DataFrame format to a DataFrame.
 
@@ -477,7 +475,6 @@ def apply_slip(
 
         df = df.sort_values(by=["cid", "xcat", "real_date"])
 
-    
     for col in metrics:
         tks_isin = df["ticker"].isin(sel_tickers)
         df.loc[tks_isin, col] = df.groupby("ticker", observed=True)[col].shift(slip)
@@ -1170,7 +1167,7 @@ def estimate_release_frequency(
     Estimates the release frequency of a timeseries, by inferring the frequency of the
     timeseries index. Before calling `pd.infer_freq`, the function drops NaNs, and rounds
     values as specified by the tolerance parameters to allow dropping of "duplicate" values.
-    
+
     Parameters
     ----------
     timeseries : pd.Series, optional
@@ -1276,6 +1273,7 @@ def _determine_freq(dates: List[str]) -> str:
         lambda x: min(frequencies, key=lambda freq: abs(x - frequencies[freq]))
     )
     return closest_freq.value_counts().idxmax()
+
 
 def years_btwn_dates(start_date: pd.Timestamp, end_date: pd.Timestamp) -> int:
     """Returns the number of years between two dates."""
@@ -1675,7 +1673,7 @@ def forward_fill_wide_df(df, blacklist=None, n=1):
     """
     Forward fills NaN values in a wide DataFrame using the last valid value in each column.
     It will not forward fill gaps in the data, only the next `n` periods after the last valid value.
-    
+
     Parameters
     ----------
     df : pd.DataFrame
@@ -1695,7 +1693,7 @@ def forward_fill_wide_df(df, blacklist=None, n=1):
         raise TypeError("df must be a pandas DataFrame.")
     if not isinstance(n, int):
         raise ValueError("Parameter 'n' must be an integer.")
-    
+
     for col in df.columns:
         series = df[col]
 
@@ -1718,6 +1716,115 @@ def forward_fill_wide_df(df, blacklist=None, n=1):
         to_fill = mask & series.isna()
         df.loc[to_fill, col] = series.iloc[last_pos]
     return df
+
+
+def _long_to_wide(df: pd.DataFrame, value_col: str) -> pd.DataFrame:
+    """
+    Pivot a long-format panel to wide format (dates × cids).
+
+    Parameters
+    ----------
+    df : pd.DataFrame or QuantamentalDataFrame
+        Long-format DataFrame with at least ``"real_date"``, ``"cid"``, and
+        ``value_col`` columns.
+    value_col : str
+        Name of the column to use as cell values.
+
+    Returns
+    -------
+    pd.DataFrame
+        Wide-format DataFrame indexed by ``"real_date"`` with one column per
+        unique ``"cid"``.
+    """
+    wide = df.pivot(index="real_date", columns="cid", values=value_col)
+    return wide
+
+
+def _wide_to_long(df: pd.DataFrame, value_name: str = "value") -> pd.DataFrame:
+    """
+    Melt a wide-format panel back to long format, dropping NaN rows.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Wide-format DataFrame with a ``"real_date"``-named index and one column
+        per cid.
+    value_name : str, default ``"value"``
+        Name for the melted value column in the output.
+
+    Returns
+    -------
+    pd.DataFrame
+        Long-format DataFrame with columns ``["real_date", "cid", value_name]``,
+        sorted by ``(cid, real_date)`` with NaN rows dropped.
+    """
+    long = (
+        df.rename_axis("real_date")
+        .reset_index()
+        .melt(id_vars="real_date", var_name="cid", value_name=value_name)
+        .dropna(subset=[value_name])
+        .sort_values(["cid", "real_date"])
+        .reset_index(drop=True)
+    )
+    return long
+
+
+def rotate_cid_xcat(
+    df: pd.DataFrame,
+    direction: str,
+    xcat_template: str,
+    fixed_value: str,
+) -> pd.DataFrame:
+    """
+    Rotate a panel DataFrame between cid-per-row and xcat-per-row representations.
+
+    Two directions are supported:
+
+    - ``"to_xcats"``: for each row, replaces ``cid`` with a per-stock xcat derived
+      from ``xcat_template`` (substituting the cid value into the ``"{cid}"``
+      placeholder) and sets ``cid`` to ``fixed_value``.
+    - ``"to_cids"``: the inverse — extracts the stock identifier from ``xcat``
+      using the template as a regex, writes it into ``cid``, and replaces ``xcat``
+      with ``fixed_value``.
+
+    Parameters
+    ----------
+    df : pd.DataFrame or QuantamentalDataFrame
+        Panel DataFrame with at least ``"cid"`` and ``"xcat"`` columns.
+    direction : str
+        Transformation direction: ``"to_xcats"`` or ``"to_cids"``.
+    xcat_template : str
+        Template string containing the placeholder ``"{cid}"`` that maps between
+        a stock identifier and an xcat name, e.g. ``"EQXR_{cid}_NSA"``.
+    fixed_value : str
+        Value assigned to the column being collapsed.  When
+        ``direction="to_xcats"``, all rows will have ``cid = fixed_value``; when
+        ``direction="to_cids"``, all rows will have ``xcat = fixed_value``.
+
+    Returns
+    -------
+    pd.DataFrame
+        A copy of ``df`` with ``"cid"`` and ``"xcat"`` updated according to
+        ``direction``.
+
+    Raises
+    ------
+    ValueError
+        If ``direction`` is not ``"to_xcats"`` or ``"to_cids"``.
+    """
+    dfa = df.copy()
+    if direction == "to_xcats":
+        dfa["xcat"] = dfa["cid"].apply(lambda x: xcat_template.replace("{cid}", x))
+        dfa["cid"] = fixed_value
+    elif direction == "to_cids":
+        pattern = "^" + re.escape(xcat_template).replace(r"\{cid\}", "(.+)") + "$"
+        dfa["cid"] = dfa["xcat"].str.extract(pattern)[0]
+        dfa["xcat"] = fixed_value
+    else:
+        raise ValueError(
+            f"direction must be 'to_xcats' or 'to_cids', got {direction!r}"
+        )
+    return dfa
 
 
 if __name__ == "__main__":

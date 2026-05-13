@@ -98,6 +98,77 @@ def view_table(
     else:
         plt.show()
 
+
+def plot_availability(
+    df: pd.DataFrame,
+    title: str = "Variable Availability",
+    fig_kw: dict = None,
+    heatmap_kw: dict = None,
+) -> None:
+    """
+    Plot a binary availability heatmap.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        DataFrame with DatetimeIndex, string column names, and 0/1 values.
+    title : str
+        Plot title.
+    fig_kw : dict, optional
+        Keyword arguments forwarded to ``plt.subplots`` (e.g. ``figsize``).
+    heatmap_kw : dict, optional
+        Keyword arguments forwarded to ``sns.heatmap`` (e.g. ``cmap``, ``linewidths``).
+    """
+    # Sort columns: descending by last date traded, then by count traded, then alphabetically.
+    last_date = df.apply(lambda s: s[s > 0].index.max() if s.any() else pd.NaT)
+    count_available = df.sum()
+    sort_keys = pd.DataFrame(
+        {"last_date": last_date, "count": count_available, "name": df.columns}
+    )
+    sort_keys = sort_keys.sort_values(
+        ["last_date", "count", "name"],
+        ascending=[False, False, False],
+    )
+    df = df[sort_keys.index]
+
+    _fig_kw = {"figsize": (14, max(3, len(df.columns) * 0.4))}
+    if fig_kw:
+        _fig_kw.update(fig_kw)
+
+    fig, ax = plt.subplots(**_fig_kw)
+
+    _heatmap_kw = {
+        "cmap": ["white", "#1f77b4"],
+        "vmin": 0,
+        "vmax": 1,
+        "linewidths": 0,
+        "cbar": False,
+        "xticklabels": False,
+    }
+    if heatmap_kw:
+        _heatmap_kw.update(heatmap_kw)
+
+    sns.heatmap(df.T, ax=ax, **_heatmap_kw)
+
+    n_ticks = 10
+    tick_positions = [int(i) for i in range(0, len(df), max(1, len(df) // n_ticks))]
+    ax.set_xticks(tick_positions)
+    ax.set_xticklabels(
+        [df.index[i].strftime("%Y-%m") for i in tick_positions],
+        rotation=45,
+        ha="right",
+        fontsize=9,
+    )
+
+    ax.set_yticklabels(ax.get_yticklabels(), rotation=0, fontsize=9)
+    ax.set_xlabel("")
+    ax.set_ylabel("")
+    ax.set_title(title, fontsize=12, pad=10)
+
+    plt.tight_layout()
+    plt.show()
+
+
 if __name__ == "__main__":
     data = {
         "Col1": [1, 2, 3, 4],

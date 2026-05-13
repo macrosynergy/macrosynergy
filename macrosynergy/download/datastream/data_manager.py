@@ -34,7 +34,7 @@ Typical usage::
 """
 
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple, Union
 
 import pandas as pd
@@ -173,7 +173,9 @@ class DatastreamDataManager:
         list_code = index_code if index_code.endswith("|L") else f"{index_code}|L"
         start_date = self._format_date(date) if date is not None else "0D"
 
-        logger.info("Fetching constituents for list '%s' at date '%s'.", list_code, start_date)
+        logger.info(
+            "Fetching constituents for list '%s' at date '%s'.", list_code, start_date
+        )
 
         ds = self._connection.get_connection()
         try:
@@ -194,9 +196,7 @@ class DatastreamDataManager:
         mnemonics: List[str] = []
 
         # Detect error markers in any Value/value column.
-        value_col = next(
-            (c for c in result.columns if c.lower() == "value"), None
-        )
+        value_col = next((c for c in result.columns if c.lower() == "value"), None)
         if value_col and result[value_col].astype(str).str.startswith("$$ER:").any():
             error_sample = result[value_col].astype(str).iloc[0]
             logger.error("API error in constituents response: %s", error_sample)
@@ -270,7 +270,9 @@ class DatastreamDataManager:
         for t_chunk in ticker_chunks:
             row_frames: List[pd.DataFrame] = []
             for f_chunk in field_chunks:
-                ticker_arg = self._format_tickers_arg(t_chunk, multi_field=len(f_chunk) > 1)
+                ticker_arg = self._format_tickers_arg(
+                    t_chunk, multi_field=len(f_chunk) > 1
+                )
                 logger.debug(
                     "get_metadata chunk: tickers=%s, fields=%s", ticker_arg, f_chunk
                 )
@@ -350,7 +352,9 @@ class DatastreamDataManager:
 
         for t_chunk in ticker_chunks:
             for f_chunk in field_chunks:
-                ticker_arg = self._format_tickers_arg(t_chunk, multi_field=len(f_chunk) > 1)
+                ticker_arg = self._format_tickers_arg(
+                    t_chunk, multi_field=len(f_chunk) > 1
+                )
                 logger.debug(
                     "get_data chunk: tickers=%s, fields=%s, start=%s, end=%s, freq=%s",
                     ticker_arg,
@@ -531,12 +535,11 @@ class DatastreamDataManager:
             long.columns = ["real_date", "ticker", "field", "currency", "value"]
         else:
             logger.warning(
-                "process_timeseries_data: unexpected column count %d after stack.", n_cols
+                "process_timeseries_data: unexpected column count %d after stack.",
+                n_cols,
             )
             long.columns = (
-                ["real_date"]
-                + [f"level_{i}" for i in range(n_cols - 2)]
-                + ["value"]
+                ["real_date"] + [f"level_{i}" for i in range(n_cols - 2)] + ["value"]
             )
             return {"unknown": long}
 
@@ -586,9 +589,7 @@ class DatastreamDataManager:
         if isinstance(value, (list, tuple)):
             result: List[str] = []
             for item in value:
-                result.extend(
-                    v.strip() for v in str(item).split(",") if v.strip()
-                )
+                result.extend(v.strip() for v in str(item).split(",") if v.strip())
             return result
         raise TypeError(
             f"_normalize_to_list expects str, list, or tuple; got {type(value).__name__}."
@@ -753,11 +754,9 @@ class DatastreamDataManager:
         )
 
         ticker_chunks = [
-            tickers[i: i + t_size] for i in range(0, len(tickers), t_size)
+            tickers[i : i + t_size] for i in range(0, len(tickers), t_size)
         ]
-        field_chunks = [
-            fields[i: i + f_size] for i in range(0, len(fields), f_size)
-        ]
+        field_chunks = [fields[i : i + f_size] for i in range(0, len(fields), f_size)]
         return ticker_chunks, field_chunks
 
     # ------------------------------------------------------------------
@@ -765,7 +764,30 @@ class DatastreamDataManager:
     # ------------------------------------------------------------------
 
     def __repr__(self) -> str:
-        return (
-            f"DatastreamDataManager("
-            f"connection={self._connection!r})"
-        )
+        return f"DatastreamDataManager(" f"connection={self._connection!r})"
+
+
+def parse_list_name(ln: str):
+    """
+    Parse a constituent-list name and return the last calendar day of its encoded month.
+
+    List names are expected to end with a four-character suffix ``MMYY`` where ``MM``
+    is a two-digit month and ``YY`` is a two-digit year.  The century is inferred from
+    the leading digit of ``YY``: ``'8'`` or ``'9'`` maps to 1900s; anything else maps
+    to 2000s.
+
+    Parameters
+    ----------
+    ln : str
+        List name string whose last four characters encode month (positions -4:-2) and
+        year (positions -2:), e.g. ``"DOW30_list_0124"`` → January 2024.
+
+    Returns
+    -------
+    datetime.date
+        Last calendar day of the encoded month, e.g. ``date(2024, 1, 31)`` for
+        ``"...0124"``.
+    """
+    mm = int(ln[-4:-2])
+    yy = int(ln[-2:]) + 1900 if ln[-2] in (["9", "8"]) else int(ln[-2:]) + 2000
+    return (datetime(yy + mm // 12, mm % 12 + 1, 1) - timedelta(days=1)).date()
