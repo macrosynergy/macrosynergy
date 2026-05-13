@@ -84,6 +84,7 @@ def view_availability(
             )
 
     df = qdf_to_ticker_df(df, value_column="value").sort_index()
+    df.columns = [c.rstrip("_") for c in df.columns]
 
     # Sort columns: descending by last date traded, then by count traded, then alphabetically.
     last_date = df.apply(lambda s: s[s > 0].index.max() if s.any() else pd.NaT)
