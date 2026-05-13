@@ -5,6 +5,7 @@ Utility functions for working with DataFrames.
 from macrosynergy.management.types import QuantamentalDataFrame
 from macrosynergy.management.constants import FREQUENCY_MAP, FFILL_LIMITS, DAYS_PER_FREQ
 
+import logging
 import warnings
 from typing import Iterable, List, Optional, Union, Dict
 import re
@@ -22,6 +23,8 @@ from macrosynergy.management.utils.core import (
 )
 from macrosynergy.compat import RESAMPLE_NUMERIC_ONLY, PD_OLD_RESAMPLE
 import functools
+
+logger = logging.getLogger(__name__)
 
 IDX_COLS_SORT_ORDER = ["cid", "xcat", "real_date"]
 
@@ -1725,17 +1728,24 @@ def _long_to_wide(df: pd.DataFrame, value_col: str) -> pd.DataFrame:
     Parameters
     ----------
     df : pd.DataFrame or QuantamentalDataFrame
-        Long-format DataFrame with at least ``"real_date"``, ``"cid"``, and
-        ``value_col`` columns.
+        Long-format DataFrame with at least "real_date", "cid", and
+        "value_col" columns.
     value_col : str
         Name of the column to use as cell values.
 
     Returns
     -------
     pd.DataFrame
-        Wide-format DataFrame indexed by ``"real_date"`` with one column per
-        unique ``"cid"``.
+        Wide-format DataFrame indexed by "real_date" with one column per
+        unique "cid".
     """
+    required_cols = {"real_date", "cid", value_col}
+    missing = required_cols - set(df.columns)
+    if missing:
+        raise ValueError(
+            f"_long_to_wide: DataFrame is missing required columns: {sorted(missing)}"
+        )
+
     wide = df.pivot(index="real_date", columns="cid", values=value_col)
     return wide
 
@@ -1747,17 +1757,20 @@ def _wide_to_long(df: pd.DataFrame, value_name: str = "value") -> pd.DataFrame:
     Parameters
     ----------
     df : pd.DataFrame
-        Wide-format DataFrame with a ``"real_date"``-named index and one column
+        Wide-format DataFrame with a "real_date"-named index and one column
         per cid.
-    value_name : str, default ``"value"``
+    value_name : str, default "value"
         Name for the melted value column in the output.
 
     Returns
     -------
     pd.DataFrame
-        Long-format DataFrame with columns ``["real_date", "cid", value_name]``,
-        sorted by ``(cid, real_date)`` with NaN rows dropped.
+        Long-format DataFrame with columns "real_date", "cid", and value_name,
+        sorted by cid then real_date, with NaN rows dropped.
     """
+    if df.columns.empty:
+        raise ValueError("_wide_to_long: DataFrame has no columns (expected one per cid).")
+
     long = (
         df.rename_axis("real_date")
         .reset_index()
@@ -1780,49 +1793,81 @@ def rotate_cid_xcat(
 
     Two directions are supported:
 
-    - ``"to_xcats"``: for each row, replaces ``cid`` with a per-stock xcat derived
-      from ``xcat_template`` (substituting the cid value into the ``"{cid}"``
-      placeholder) and sets ``cid`` to ``fixed_value``.
-    - ``"to_cids"``: the inverse — extracts the stock identifier from ``xcat``
-      using the template as a regex, writes it into ``cid``, and replaces ``xcat``
-      with ``fixed_value``.
+    - "to_xcats": for each row, replaces "cid" with a per-stock xcat derived
+      from xcat_template (substituting the cid value into the "{cid}"
+      placeholder) and sets "cid" to fixed_value.
+    - "to_cids": the inverse — extracts the stock identifier from "xcat"
+      using the template as a regex, writes it into "cid", and replaces "xcat"
+      with fixed_value.
 
     Parameters
     ----------
     df : pd.DataFrame or QuantamentalDataFrame
-        Panel DataFrame with at least ``"cid"`` and ``"xcat"`` columns.
+        Panel DataFrame with at least "cid" and "xcat" columns.
     direction : str
-        Transformation direction: ``"to_xcats"`` or ``"to_cids"``.
+        Transformation direction: "to_xcats" or "to_cids".
     xcat_template : str
-        Template string containing the placeholder ``"{cid}"`` that maps between
-        a stock identifier and an xcat name, e.g. ``"EQXR_{cid}_NSA"``.
+        Template string containing the placeholder "{cid}" that maps between
+        a stock identifier and an xcat name, e.g. "EQXR_{cid}_NSA".
     fixed_value : str
-        Value assigned to the column being collapsed.  When
-        ``direction="to_xcats"``, all rows will have ``cid = fixed_value``; when
-        ``direction="to_cids"``, all rows will have ``xcat = fixed_value``.
+        Value assigned to the column being collapsed. When direction is
+        "to_xcats", all rows will have cid set to fixed_value; when direction
+        is "to_cids", all rows will have xcat set to fixed_value.
 
     Returns
     -------
     pd.DataFrame
-        A copy of ``df`` with ``"cid"`` and ``"xcat"`` updated according to
-        ``direction``.
+        A copy of df with "cid" and "xcat" updated according to direction.
 
     Raises
     ------
     ValueError
-        If ``direction`` is not ``"to_xcats"`` or ``"to_cids"``.
+        If direction is not "to_xcats" or "to_cids".
     """
+    if direction not in ("to_xcats", "to_cids"):
+        raise ValueError(
+            f"direction must be 'to_xcats' or 'to_cids', got {direction!r}"
+        )
+
+    if "{cid}" not in xcat_template:
+        raise ValueError(
+            f"xcat_template must contain the '{{cid}}' placeholder, got {xcat_template!r}"
+        )
+
+    n_cids = df["cid"].nunique()
+    n_xcats = df["xcat"].nunique()
+    logger.debug(
+        "rotate_cid_xcat called with direction=%r, n_cids=%d, n_xcats=%d",
+        direction,
+        n_cids,
+        n_xcats,
+    )
+
+    if min(n_cids, n_xcats) > 1:
+        raise ValueError(
+            f"Cannot rotate a panel with multiple cids ({n_cids}) and multiple "
+            f"xcats ({n_xcats}). Exactly one of the two must be unique."
+        )
+
     dfa = df.copy()
     if direction == "to_xcats":
         dfa["xcat"] = dfa["cid"].apply(lambda x: xcat_template.replace("{cid}", x))
         dfa["cid"] = fixed_value
-    elif direction == "to_cids":
+        logger.debug(
+            "Rotated %d cids to xcats using template %r; cid set to %r.",
+            n_cids,
+            xcat_template,
+            fixed_value,
+        )
+    else:
         pattern = "^" + re.escape(xcat_template).replace(r"\{cid\}", "(.+)") + "$"
         dfa["cid"] = dfa["xcat"].str.extract(pattern)[0]
         dfa["xcat"] = fixed_value
-    else:
-        raise ValueError(
-            f"direction must be 'to_xcats' or 'to_cids', got {direction!r}"
+        logger.debug(
+            "Rotated %d xcats to cids using template %r; xcat set to %r.",
+            n_xcats,
+            xcat_template,
+            fixed_value,
         )
     return dfa
 
