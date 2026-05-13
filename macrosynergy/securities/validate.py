@@ -25,7 +25,7 @@ def _validate_frequency(freq: str, param_name: str) -> None:
     Raises
     ------
     ValueError
-        If ``freq`` is not one of ``{"B", "W", "M", "Q", "Y"}``.
+        If "freq" is not one of {"B", "W", "M", "Q", "Y"}.
     """
 
     VALID_FREQUENCIES = {"B", "W", "M", "Q", "Y"}
@@ -42,15 +42,15 @@ def _validate_constituents(df: pd.DataFrame) -> None:
     Parameters
     ----------
     df : pd.DataFrame or QuantamentalDataFrame
-        DataFrame expected to have columns ``"cid"``, ``"real_date"``, and
-        ``"membership"`` with binary (0/1) values and no duplicate
-        ``(cid, real_date)`` pairs.
+        DataFrame expected to have columns "cid", "real_date", and
+        "membership" with binary (0/1) values and no duplicate
+        (cid, real_date) pairs.
 
     Raises
     ------
     AssertionError
-        If any required column is missing, ``"membership"`` contains values other
-        than 0 or 1, or there are duplicate ``(cid, real_date)`` pairs.
+        If any required column is missing, "membership" contains values other
+        than 0 or 1, or there are duplicate (cid, real_date) pairs.
     """
     required = {"cid", "real_date", "membership"}
     missing = required - set(df.columns)
@@ -75,14 +75,14 @@ def _validate_returns(df: pd.DataFrame) -> None:
     Parameters
     ----------
     df : pd.DataFrame or QuantamentalDataFrame
-        DataFrame expected to have columns ``"cid"``, ``"real_date"``, ``"xcat"``,
-        and ``"value"`` with no duplicate ``(cid, real_date)`` pairs.  Callers should
+        DataFrame expected to have columns "cid", "real_date", "xcat",
+        and "value" with no duplicate (cid, real_date) pairs.  Callers should
         filter to a single xcat before passing.
 
     Raises
     ------
     AssertionError
-        If any required column is missing or there are duplicate ``(cid, real_date)``
+        If any required column is missing or there are duplicate (cid, real_date)
         pairs.
     """
     required = {"cid", "real_date", "xcat", "value"}
@@ -104,13 +104,13 @@ def _validate_index_returns(df: pd.DataFrame) -> None:
     Parameters
     ----------
     df : pd.DataFrame or QuantamentalDataFrame
-        DataFrame expected to have columns ``"real_date"`` and ``"value"`` with no
-        duplicate ``real_date`` entries.
+        DataFrame expected to have columns "real_date" and "value" with no
+        duplicate "real_date" entries.
 
     Raises
     ------
     AssertionError
-        If any required column is missing or ``"real_date"`` contains duplicates.
+        If any required column is missing or "real_date" contains duplicates.
     """
     required = {"real_date", "value"}
     missing = required - set(df.columns)

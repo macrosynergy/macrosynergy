@@ -27,15 +27,15 @@ def _resolve_reconstitution_freq(
     Parameters
     ----------
     rebalance_freq : str
-        Base rebalancing frequency used when ``reconstitution_freq`` is ``None``.
+        Base rebalancing frequency used when "reconstitution_freq" is None.
     reconstitution_freq : str or None
-        Explicit reconstitution frequency, or ``None`` to inherit from
-        ``rebalance_freq``.
+        Explicit reconstitution frequency, or None to inherit from
+        "rebalance_freq".
 
     Returns
     -------
     str
-        ``reconstitution_freq`` if not ``None``; otherwise ``rebalance_freq``.
+        "reconstitution_freq" if not None; otherwise "rebalance_freq".
     """
     return reconstitution_freq if reconstitution_freq is not None else rebalance_freq
 
@@ -49,7 +49,7 @@ def _assign_period_labels(dates: pd.DatetimeIndex, freq: str) -> pd.PeriodIndex:
     dates : pd.DatetimeIndex
         Dates to label.
     freq : str
-        Pandas period frequency alias, e.g. ``"M"`` for month-end periods.
+        Pandas period frequency alias, e.g. "M" for month-end periods.
 
     Returns
     -------
@@ -77,7 +77,7 @@ def _build_reconstitution_membership(
         and one column per security (cid).
     recon_freq : str
         Pandas period frequency alias defining the reconstitution cadence,
-        e.g. ``"M"`` for monthly snapshots.
+        e.g. "M" for monthly snapshots.
 
     Returns
     -------
@@ -113,7 +113,7 @@ def _apply_er_formula(
         Benchmark return series aligned to the same date index as ``stock_returns``,
         expressed as decimal fractions.
     method : str
-        Excess-return formula: ``"ratio"``, ``"log"``, or ``"diff"``.
+        Excess-return formula: "ratio", "log", or "diff".
 
     Returns
     -------
@@ -148,28 +148,28 @@ def compute_daily_weights(
     Parameters
     ----------
     constituents : pd.DataFrame or QuantamentalDataFrame
-        Long-format DataFrame with columns ``"cid"``, ``"real_date"``, and
-        ``"membership"`` (binary 0/1).  Each row records whether a security was a
+        Long-format DataFrame with columns "cid", "real_date", and
+        "membership" (binary 0/1).  Each row records whether a security was a
         constituent on a given date.
     returns : pd.DataFrame or QuantamentalDataFrame
-        Long-format DataFrame with columns ``"cid"``, ``"real_date"``, ``"xcat"``,
-        and ``"value"`` (daily return in percentage points).  Must be filtered to a
+        Long-format DataFrame with columns "cid", "real_date", "xcat",
+        and "value" (daily return in percentage points).  Must be filtered to a
         single xcat before passing.
-    rebalance_freq : str, default ``"M"``
+    rebalance_freq : str, default "M"
         Pandas period alias controlling how often the portfolio is reset to equal
-        weights.  Must be one of ``{"B", "W", "M", "Q", "Y"}``.
-    reconstitution_freq : str or None, default ``None``
+        weights.  Must be one of {"B", "W", "M", "Q", "Y"}.
+    reconstitution_freq : str or None, default None
         Pandas period alias controlling how often membership changes take effect.
-        If ``None``, defaults to ``rebalance_freq``.
-    blacklist : dict or None, default ``None``
-        Mapping of ``cid`` → ``(start, end)`` :class:`pd.Timestamp` pairs
+        If None, defaults to "rebalance_freq".
+    blacklist : dict or None, default None
+        Mapping of "cid" to (start, end) pd.Timestamp pairs
         identifying securities to exclude.  Exclusions are snapped to rebalance
         period starts, matching the weight-reset cadence.
 
     Returns
     -------
     pd.DataFrame
-        Long-format DataFrame with columns ``["real_date", "cid", "value"]``
+        Long-format DataFrame with columns ["real_date", "cid", "value"]
         containing the daily portfolio weight for each constituent, with
         zero-weight rows dropped.
     """
@@ -311,28 +311,28 @@ def compute_index_returns(
     Parameters
     ----------
     constituents : pd.DataFrame or QuantamentalDataFrame
-        Long-format DataFrame with columns ``"cid"``, ``"real_date"``, and
-        ``"membership"`` (binary 0/1).
+        Long-format DataFrame with columns "cid", "real_date", and
+        "membership" (binary 0/1).
     returns : pd.DataFrame or QuantamentalDataFrame
-        Long-format DataFrame with columns ``"cid"``, ``"real_date"``, ``"xcat"``,
-        and ``"value"`` (daily return in percentage points).  Must be filtered to a
+        Long-format DataFrame with columns "cid", "real_date", "xcat",
+        and "value" (daily return in percentage points).  Must be filtered to a
         single xcat before passing.
-    rebalance_freq : str, default ``"M"``
-        Portfolio rebalancing frequency.  Must be one of ``{"B", "W", "M", "Q", "Y"}``.
-    reconstitution_freq : str or None, default ``None``
-        Membership reconstitution frequency.  Defaults to ``rebalance_freq`` when
-        ``None``.
-    blacklist : dict or None, default ``None``
-        Mapping of ``cid`` → ``(start, end)`` :class:`pd.Timestamp` pairs for
+    rebalance_freq : str, default "M"
+        Portfolio rebalancing frequency.  Must be one of {"B", "W", "M", "Q", "Y"}.
+    reconstitution_freq : str or None, default None
+        Membership reconstitution frequency.  Defaults to "rebalance_freq" when
+        None.
+    blacklist : dict or None, default None
+        Mapping of "cid" to (start, end) pd.Timestamp pairs for
         securities to exclude.
 
     Returns
     -------
     daily_index : pd.DataFrame
-        DataFrame with columns ``["real_date", "value"]`` containing the daily
+        DataFrame with columns ["real_date", "value"] containing the daily
         index return in percentage points.
     weights_long : pd.DataFrame
-        Long-format weight DataFrame as returned by :func:`compute_daily_weights`.
+        Long-format weight DataFrame as returned by "compute_daily_weights".
     """
     weights_long = compute_daily_weights(
         constituents, returns, rebalance_freq, reconstitution_freq, blacklist
@@ -375,9 +375,9 @@ def compute_excess_returns(
 
     Three excess-return formulations are supported:
 
-    - ``"ratio"`` : ``(1 + r_stock) / (1 + r_bench) - 1``
-    - ``"log"``   : ``log(1 + r_stock) - log(1 + r_bench)``
-    - ``"diff"``  : ``r_stock - r_bench``
+    - "ratio" : (1 + r_stock) / (1 + r_bench) - 1
+    - "log"   : log(1 + r_stock) - log(1 + r_bench)
+    - "diff"  : r_stock - r_bench
 
     Optionally compounds daily returns to a lower frequency before computing the
     excess return.
@@ -385,25 +385,25 @@ def compute_excess_returns(
     Parameters
     ----------
     returns : pd.DataFrame or QuantamentalDataFrame
-        Long-format DataFrame with columns ``"cid"``, ``"real_date"``, ``"xcat"``,
-        and ``"value"`` (daily return in percentage points).
+        Long-format DataFrame with columns "cid", "real_date", "xcat",
+        and "value" (daily return in percentage points).
     index_returns : pd.DataFrame or QuantamentalDataFrame
-        DataFrame with columns ``"real_date"`` and ``"value"`` (daily index return
+        DataFrame with columns "real_date" and "value" (daily index return
         in percentage points).  Must contain one row per date (no duplicates).
-    method : str, default ``"ratio"``
-        Excess-return formula.  One of ``{"ratio", "log", "diff"}``.
-    output_freq : str or None, default ``None``
+    method : str, default "ratio"
+        Excess-return formula.  One of {"ratio", "log", "diff"}.
+    output_freq : str or None, default None
         If provided, daily returns are compounded to this frequency before the
         excess-return formula is applied.  Must be one of
-        ``{"B", "W", "M", "Q", "Y"}``.  When ``None``, excess returns are
+        {"B", "W", "M", "Q", "Y"}.  When None, excess returns are
         computed at daily frequency.
 
     Returns
     -------
     pd.DataFrame
-        Long-format DataFrame with columns ``["real_date", "cid", "value"]``
+        Long-format DataFrame with columns ["real_date", "cid", "value"]
         containing excess returns in percentage points.  Dates correspond to
-        period-end timestamps when ``output_freq`` is set.
+        period-end timestamps when "output_freq" is set.
     """
     _validate_returns(returns)
     _validate_index_returns(index_returns)
