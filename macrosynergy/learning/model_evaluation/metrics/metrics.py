@@ -8,6 +8,7 @@ import pandas as pd
 import scipy.stats as stats
 
 from macrosynergy.learning.random_effects import RandomEffects
+from macrosynergy.pnl import sharpe_stability_ratio
 
 from sklearn.metrics import accuracy_score, balanced_accuracy_score, matthews_corrcoef
 
@@ -603,6 +604,69 @@ def sortino_ratio(
             sortino_ratios.append(sortino_ratio)
 
         return np.mean(sortino_ratios)
+
+
+def sharpe_stability_ratio_scorer(
+    y_true,
+    y_pred,
+    window=12,
+    annualization_factor=12,
+):
+    """
+    Sharpe Stability Ratio of a binary directional strategy on a panel.
+
+    Parameters
+    ----------
+    y_true : pd.Series of shape (n_samples,)
+        True regression labels, multi-indexed by cross-section and real date.
+    y_pred : array-like of shape (n_samples,)
+        Predicted regression labels.
+    window : int, default=12
+        Rolling window length used by :func:`sharpe_stability_ratio`. Defaults
+        assume a monthly return series.
+    annualization_factor : int, default=12
+        Periods per year for annualizing the rolling Sharpe. Must match the
+        frequency implied by ``window``.
+
+    Returns
+    -------
+    ssr : float
+        The Sharpe Stability Ratio of the strategy. Returns 0.0 when the
+        underlying SSR estimate is not finite (e.g. when the cross-sectional
+        mean return series is too short or has zero variance).
+
+    Notes
+    -----
+    The strategy goes long by a single unit when ``y_pred`` is positive and
+    short by a single unit otherwise. Per-period portfolio returns are
+    averaged across cross-sections to produce a univariate time series,
+    which is then passed to :func:`macrosynergy.pnl.sharpe_stability_ratio`.
+
+    Only ``type="panel"`` is supported: the SSR requires a univariate return
+    series, so cross-sectional or time-period decompositions are not
+    meaningful here.
+    """
+    # Checks
+    _check_metric_params(y_true, y_pred, "panel")
+
+    if not isinstance(y_pred, pd.Series):
+        y_pred = pd.Series(y_pred, index=y_true.index)
+
+    portfolio_returns = pd.Series(
+        np.where(y_pred.values > 0, y_true.values, -y_true.values),
+        index=y_true.index,
+    )
+    ts = portfolio_returns.groupby(level=1).mean().sort_index().dropna()
+
+    val = sharpe_stability_ratio(
+        ts,
+        window=window,
+        annualization_factor=annualization_factor,
+        min_periods=window,
+    )
+    if not np.isfinite(val):
+        return 0.0
+    return float(val)
 
 
 def correlation_coefficient(

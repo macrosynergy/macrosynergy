@@ -15,6 +15,7 @@ from macrosynergy.learning import (
     regression_accuracy,
     regression_balanced_accuracy,
     sharpe_ratio,
+    sharpe_stability_ratio_scorer,
     sortino_ratio,
     correlation_coefficient,
     create_panel_metric,
@@ -1206,6 +1207,108 @@ class TestMetrics(unittest.TestCase):
             expected_result,
             "create_panel_metric should return the same value as the metric function passed as argument, when applied over time periods",
         )
+
+
+class TestSharpeStabilityRatioScorer(unittest.TestCase):
+    def setUp(self):
+        cids = ["AUD", "CAD", "GBP", "USD"]
+        # 60 months of monthly observations per cross-section so that the
+        # default window=12 SSR can be computed (needs >= 2*window + 2).
+        dates = pd.date_range("2010-01-31", periods=60, freq="ME")
+        index = pd.MultiIndex.from_product(
+            [cids, dates], names=["cid", "real_date"]
+        )
+
+        rng = np.random.default_rng(42)
+        self.y_true = pd.Series(
+            rng.normal(0.01, 0.05, size=len(index)), index=index
+        ).sort_index()
+        self.y_pred = pd.Series(
+            rng.normal(0.0, 1.0, size=len(index)), index=index
+        ).sort_index()
+
+        # A short panel that should trigger the insufficient-data fallback.
+        short_dates = pd.date_range("2010-01-31", periods=10, freq="ME")
+        short_index = pd.MultiIndex.from_product(
+            [cids, short_dates], names=["cid", "real_date"]
+        )
+        self.y_true_short = pd.Series(
+            rng.normal(0.01, 0.05, size=len(short_index)), index=short_index
+        ).sort_index()
+        self.y_pred_short = pd.Series(
+            rng.normal(0.0, 1.0, size=len(short_index)), index=short_index
+        ).sort_index()
+
+    def test_types(self):
+        # y_true must be a multi-indexed pd.Series
+        with self.assertRaises(TypeError):
+            sharpe_stability_ratio_scorer("hello", self.y_pred)
+        with self.assertRaises(TypeError):
+            sharpe_stability_ratio_scorer(
+                np.zeros(len(self.y_pred)), self.y_pred
+            )
+        with self.assertRaises(ValueError):
+            sharpe_stability_ratio_scorer(
+                self.y_true.reset_index(drop=True), self.y_pred
+            )
+
+        # y_pred must be array-like and matching length
+        with self.assertRaises(TypeError):
+            sharpe_stability_ratio_scorer(self.y_true, "hello")
+        with self.assertRaises(ValueError):
+            sharpe_stability_ratio_scorer(self.y_true, self.y_pred.head(5))
+
+    def test_returns_float(self):
+        result = sharpe_stability_ratio_scorer(self.y_true, self.y_pred)
+        self.assertIsInstance(result, float)
+        self.assertTrue(np.isfinite(result))
+
+    def test_accepts_ndarray_y_pred(self):
+        result_series = sharpe_stability_ratio_scorer(self.y_true, self.y_pred)
+        result_array = sharpe_stability_ratio_scorer(
+            self.y_true, self.y_pred.values
+        )
+        self.assertAlmostEqual(result_series, result_array)
+
+    def test_insufficient_data_returns_zero(self):
+        # Underlying sharpe_stability_ratio returns NaN when the cross-sectional
+        # mean time series is too short; the scorer should map that to 0.0.
+        result = sharpe_stability_ratio_scorer(
+            self.y_true_short, self.y_pred_short
+        )
+        self.assertEqual(result, 0.0)
+
+    def test_matches_underlying_function(self):
+        from macrosynergy.pnl import sharpe_stability_ratio
+
+        pr = pd.Series(
+            np.where(
+                self.y_pred.values > 0, self.y_true.values, -self.y_true.values
+            ),
+            index=self.y_true.index,
+        )
+        ts = pr.groupby(level=1).mean().sort_index().dropna()
+        expected = sharpe_stability_ratio(
+            ts, window=12, annualization_factor=12, min_periods=12
+        )
+
+        result = sharpe_stability_ratio_scorer(
+            self.y_true, self.y_pred, window=12, annualization_factor=12
+        )
+        self.assertAlmostEqual(result, float(expected))
+
+    def test_sign_flips_with_inverted_predictions(self):
+        ssr_pos = sharpe_stability_ratio_scorer(self.y_true, self.y_pred)
+        ssr_neg = sharpe_stability_ratio_scorer(self.y_true, -self.y_pred)
+        # Flipping the sign of every prediction flips the per-period return
+        # sign, which flips the mean rolling Sharpe and therefore the SSR.
+        self.assertAlmostEqual(ssr_pos, -ssr_neg)
+
+    def test_usable_as_sklearn_scorer(self):
+        from sklearn.metrics import make_scorer
+
+        scorer = make_scorer(sharpe_stability_ratio_scorer)
+        self.assertTrue(callable(scorer))
 
 
 if __name__ == "__main__":
