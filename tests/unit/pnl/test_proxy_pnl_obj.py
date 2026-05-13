@@ -207,8 +207,16 @@ class TestProxyPNLObject(unittest.TestCase):
 
         proxy_pnl_df = proxy_pnl_obj.proxy_pnl_calc(**self.get_proxy_pnl_calc_args())
 
+        # Align the date window with what ProxyPnL.proxy_pnl_calc uses internally
+        # (its self.start / self.end captured at __init__ from the original df),
+        # otherwise the functional path infers a different range from dfx because
+        # notional_df extends one business day past the original df due to slip.
         expected_proxy_pnl_df = proxy_pnl_calc(
-            df=dfx, transaction_costs_object=tco, **self.get_proxy_pnl_calc_args()
+            df=dfx,
+            transaction_costs_object=tco,
+            start=proxy_pnl_obj.start,
+            end=proxy_pnl_obj.end,
+            **self.get_proxy_pnl_calc_args(),
         )
 
         pd.testing.assert_frame_equal(proxy_pnl_df, expected_proxy_pnl_df)
@@ -268,9 +276,14 @@ class TestProxyPNLObject(unittest.TestCase):
         proxy_pnl_df = proxy_pnl_obj.proxy_pnl_calc(**self.get_proxy_pnl_calc_args())
 
         dfx = pd.concat([df, cs_df, notional_df], axis=0)
+        # See test_flow for the start/end alignment rationale: the functional
+        # path otherwise infers a wider window from dfx than ProxyPnL uses
+        # internally.
         expected_proxy_pnl_df = proxy_pnl_calc(
             df=dfx,
             transaction_costs_object=adapter,
+            start=proxy_pnl_obj.start,
+            end=proxy_pnl_obj.end,
             **self.get_proxy_pnl_calc_args(),
         )
         pd.testing.assert_frame_equal(proxy_pnl_df, expected_proxy_pnl_df)
