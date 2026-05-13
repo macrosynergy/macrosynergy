@@ -904,6 +904,174 @@ class TestCalculations(unittest.TestCase):
                 df_wide, spos, rstring, adapter, "TC", roll_freq="M"
             )
 
+    def test_proxy_pnl_calc_matches_hand_calc_via_public_api(self):
+        # Public-API parity with the bid-offer and roll-cost hand-calc
+        # tables, run end-to-end through proxy_pnl_calc instead of the
+        # private cost path. The shared _hand_calc_setup fixture exercises
+        # opens, closes, sign flips, held longs, held shorts and negative-
+        # magnitude transitions across four contracts.
+        #
+        # Edge cases covered in a single test:
+        #   - exact bid-offer value per (rebal, contract) under "M"
+        #   - exact roll-cost value per (rebal, contract) under "M"
+        #   - zero bid-offer and zero roll-cost on every non-rebal day
+        #     (positions are flat between rebals, so no charge can book)
+        #   - pure sign flip (Y_FID, rebal[2]: 5 -> -5) books bid-offer
+        #     on size 10 and zero roll-cost
+        #   - held short (X_FID, rebal[5]: -5 -> -5) books roll-cost on
+        #     size 5 and zero bid-offer
+        #   - close (Z_FID, rebal[5]: 4 -> 0) books bid-offer on size 4
+        #     and zero roll-cost
+        #   - bid-offer is invariant under roll_freq (it depends on
+        #     position changes, not on the roll schedule)
+        #   - roll-cost is strictly reduced when roll_freq tightens from
+        #     "M" to "Q" (fewer roll dates means fewer charging dates)
+        df_wide, spos, rstring, adapter, rebal, contracts = self._hand_calc_setup()
+        # _pnl_excl_costs drops all-zero pnl rows, which empties the panel
+        # if every return is zero. Inject a small constant return on every
+        # business day so the public-API path produces a non-empty PnL.
+        # Costs are independent of returns, so the bid-offer and roll-cost
+        # tables checked below are unchanged by this.
+        ret_cols = [c for c in df_wide.columns if c.endswith(rstring)]
+        df_wide.loc[:, ret_cols] = 0.01
+        qdf = ticker_df_to_qdf(df_wide)
+
+        common_kwargs = dict(
+            df=qdf,
+            spos=spos,
+            rstring=rstring,
+            transaction_costs_object=adapter,
+            return_pnl_excl_costs=True,
+            return_costs=True,
+            concat_dfs=False,
+        )
+
+        _, _, tc_qdf_m = proxy_pnl_calc(roll_freq="M", **common_kwargs)
+        tc_wide_m = qdf_to_ticker_df(tc_qdf_m)
+
+        expected_bidoffer = (
+            pd.DataFrame(
+                [
+                    [10, 0, 4, 5],
+                    [2, 5, 0, 2],
+                    [4, 10, 8, 4],
+                    [8, 0, 0, 0],
+                    [5, 8, 0, 5],
+                    [0, 0, 4, 0],
+                ],
+                index=rebal,
+                columns=contracts,
+                dtype=float,
+            )
+            / 100
+        )
+        expected_rollcost = (
+            pd.DataFrame(
+                [
+                    [0, 0, 0, 0],
+                    [10, 0, 4, 5],
+                    [8, 0, 0, 3],
+                    [0, 5, 4, 3],
+                    [0, 0, 4, 3],
+                    [5, 3, 0, 8],
+                ],
+                index=rebal,
+                columns=contracts,
+                dtype=float,
+            )
+            / 100
+        )
+
+        bo_cols = [f"{c}_{spos}_TCOST_BIDOFFER" for c in contracts]
+        rc_cols = [f"{c}_{spos}_TCOST_ROLLCOST" for c in contracts]
+
+        for col, bo_col, rc_col in zip(contracts, bo_cols, rc_cols):
+            bo_actual = tc_wide_m.reindex(rebal)[bo_col].fillna(0.0)
+            rc_actual = tc_wide_m.reindex(rebal)[rc_col].fillna(0.0)
+            pd.testing.assert_series_equal(
+                bo_actual,
+                expected_bidoffer[col].rename(bo_actual.name),
+                check_exact=False,
+            )
+            pd.testing.assert_series_equal(
+                rc_actual,
+                expected_rollcost[col].rename(rc_actual.name),
+                check_exact=False,
+            )
+
+        # Off-schedule charges must be zero. Bid-offer can only book on a
+        # rebal date (positions are constant in between); roll-cost can
+        # only book on a roll date (the cost path's roll schedule). Both
+        # sets are derived directly from the panel rather than hard-coded.
+        full_roll_dates = _generate_roll_dates(df_wide.index, "M")
+        non_rebal = tc_wide_m.index.difference(pd.DatetimeIndex(rebal))
+        non_roll = tc_wide_m.index.difference(pd.DatetimeIndex(full_roll_dates))
+        bo_off = tc_wide_m.loc[non_rebal, bo_cols].fillna(0.0)
+        rc_off = tc_wide_m.loc[non_roll, rc_cols].fillna(0.0)
+        self.assertTrue((bo_off.to_numpy() == 0.0).all())
+        self.assertTrue((rc_off.to_numpy() == 0.0).all())
+
+        # A roll date past the last rebal (Jul 31 here) still books
+        # roll-cost on whatever was held coming out of the prior rebal,
+        # because the position is carried unchanged across the roll. This
+        # exercises the "held across a roll with no trade" regime.
+        extra_roll_dates = [
+            d for d in full_roll_dates if d not in pd.DatetimeIndex(rebal)
+        ]
+        self.assertEqual(len(extra_roll_dates), 1)
+        last_roll = extra_roll_dates[0]
+        expected_held_after_last_rebal = {
+            "X_FID": 5,  # -5 held short
+            "Y_FID": 3,  # 3 held long
+            "Z_FID": 0,  # closed at rebal[5]
+            "S_FID": 8,  # -8 held short
+        }
+        for fid, expected in expected_held_after_last_rebal.items():
+            self.assertAlmostEqual(
+                tc_wide_m.loc[last_roll, f"{fid}_{spos}_TCOST_ROLLCOST"],
+                expected / 100,
+            )
+            # No trade happens on this roll date, so bid-offer must be zero.
+            self.assertAlmostEqual(
+                tc_wide_m.loc[last_roll, f"{fid}_{spos}_TCOST_BIDOFFER"], 0.0
+            )
+
+        # Regime-boundary spot checks pulled out of the tables above so
+        # a regression in any one regime fails with an obvious message.
+        self.assertAlmostEqual(
+            tc_wide_m.loc[rebal[2], f"Y_FID_{spos}_TCOST_ROLLCOST"], 0.0
+        )
+        self.assertAlmostEqual(
+            tc_wide_m.loc[rebal[2], f"Y_FID_{spos}_TCOST_BIDOFFER"], 10 / 100
+        )
+        self.assertAlmostEqual(
+            tc_wide_m.loc[rebal[5], f"X_FID_{spos}_TCOST_BIDOFFER"], 0.0
+        )
+        self.assertAlmostEqual(
+            tc_wide_m.loc[rebal[5], f"X_FID_{spos}_TCOST_ROLLCOST"], 5 / 100
+        )
+        self.assertAlmostEqual(
+            tc_wide_m.loc[rebal[5], f"Z_FID_{spos}_TCOST_ROLLCOST"], 0.0
+        )
+        self.assertAlmostEqual(
+            tc_wide_m.loc[rebal[5], f"Z_FID_{spos}_TCOST_BIDOFFER"], 4 / 100
+        )
+
+        # Re-run with quarterly rolls. Bid-offer is driven by position
+        # changes and must be identical on every rebal date; roll-cost
+        # is driven by the roll schedule and must shrink strictly in
+        # total when the schedule sparsens.
+        _, _, tc_qdf_q = proxy_pnl_calc(roll_freq="Q", **common_kwargs)
+        tc_wide_q = qdf_to_ticker_df(tc_qdf_q)
+
+        bo_m_on_rebal = tc_wide_m.reindex(rebal)[bo_cols].fillna(0.0)
+        bo_q_on_rebal = tc_wide_q.reindex(rebal)[bo_cols].fillna(0.0)
+        pd.testing.assert_frame_equal(bo_m_on_rebal, bo_q_on_rebal, check_exact=False)
+        rc_total_m = tc_wide_m[rc_cols].abs().sum().sum()
+        rc_total_q = tc_wide_q[rc_cols].abs().sum().sum()
+        self.assertGreater(rc_total_m, rc_total_q)
+        self.assertGreater(rc_total_q, 0.0)
+
 
 class TestProxyPNLCalc(unittest.TestCase):
 
@@ -946,7 +1114,7 @@ class TestProxyPNLCalc(unittest.TestCase):
             "spos": self.spos,
             "rstring": self.rstring,
             "transaction_costs_object": self.tc,
-            "roll_freqs": None,
+            "roll_freq": None,
             "start": None,
             "end": None,
             "blacklist": None,
@@ -1078,6 +1246,82 @@ class TestProxyPNLCalc(unittest.TestCase):
                         drop=True
                     )
                 )
+            )
+
+    def test_proxy_pnl_calc_accepts_str_roll_freq(self):
+        # proxy_pnl_calc must accept a frequency string for `roll_freq` other
+        # than the default and propagate it into the cost path. Quarterly's
+        # schedule is strictly sparser than monthly's, so on the same input
+        # the M run must book more roll-cost charges than the Q run -- if
+        # the kwarg were ignored, the two totals would match.
+        #
+        # A small inline fixture is used (2 contracts, 1 year, flat-cost
+        # adapter) so the test stays cheap relative to TestProxyPNLCalc.setUp.
+        cids = ["USD", "EUR"]
+        spos, rstring = "SNAME_POS", "XR"
+        idx = pd.bdate_range("2020-01-01", "2020-12-31")
+        rebal = _generate_roll_dates(idx, roll_freq="M")
+        pos_tickers = [f"{cid}_FX_{spos}" for cid in cids]
+        ret_tickers = [f"{cid}_FX{rstring}" for cid in cids]
+        pos_panel = pd.DataFrame(np.nan, index=idx, columns=pos_tickers)
+        pos_panel.loc[rebal] = np.random.randn(len(rebal), len(pos_tickers))
+        pos_panel = pos_panel.ffill().bfill()
+        ret_panel = pd.DataFrame(0.0, index=idx, columns=ret_tickers)
+        df_wide = pd.concat([pos_panel, ret_panel], axis=1)
+        df_wide.index.name = "real_date"
+        qdf = ticker_df_to_qdf(df_wide)
+
+        fids = [f"{cid}_FX" for cid in cids]
+        adapter = TransactionCostsDictAdapter(
+            cost_dict={
+                fid: dict(
+                    median_cost=1.0, median_size=1.0, pct90_cost=1.0, pct90_size=10.0
+                )
+                for fid in fids
+            },
+            fids=fids,
+        )
+
+        base = dict(
+            df=qdf,
+            spos=spos,
+            rstring=rstring,
+            transaction_costs_object=adapter,
+            return_pnl_excl_costs=True,
+            return_costs=True,
+            concat_dfs=False,
+        )
+
+        _, _, tc_m = proxy_pnl_calc(roll_freq="M", **base)
+        _, _, tc_q = proxy_pnl_calc(roll_freq="Q", **base)
+
+        rc_m = tc_m[tc_m.xcat.str.endswith("_ROLLCOST")]
+        rc_q = tc_q[tc_q.xcat.str.endswith("_ROLLCOST")]
+        self.assertGreater(len(rc_m), len(rc_q))
+        self.assertGreater(rc_m.value.abs().sum(), rc_q.value.abs().sum())
+
+    def test_proxy_pnl_calc_rejects_dict_roll_freq(self):
+        # Per-fid dict form of `roll_freq` is reserved for a future release;
+        # passing a dict must raise NotImplementedError so callers know to
+        # pass a single frequency string (or None) for now. The rejection
+        # happens before any data processing, so a one-row QDF is enough.
+        qdf = QuantamentalDataFrame(
+            pd.DataFrame(
+                {
+                    "cid": ["USD"],
+                    "xcat": ["FX_SNAME_POS"],
+                    "real_date": [pd.Timestamp("2020-01-01")],
+                    "value": [1.0],
+                }
+            )
+        )
+        with self.assertRaises(NotImplementedError):
+            proxy_pnl_calc(
+                df=qdf,
+                spos="SNAME_POS",
+                rstring="XR",
+                transaction_costs_object=None,
+                roll_freq={"FX": "M"},
             )
 
     def test_plot_pnl(self):
