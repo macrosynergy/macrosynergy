@@ -12,6 +12,7 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler, MinMaxScaler, FunctionTransformer
 from sklearn.utils.validation import check_is_fitted
 
+from macrosynergy import PYTHON_3_9_OR_LATER
 from macrosynergy.learning.forecasting.meta_estimators.dataframe_transformer import DataFrameTransformer
 
 class TestDataFrameTransformer(unittest.TestCase):
@@ -232,6 +233,11 @@ class TestDataFrameTransformer(unittest.TestCase):
         self.assertEqual(transformed_data.index.names, ["cid", "real_date"])
         self.assertEqual(transformed_data.columns.tolist(), ["Scaled1", "Scaled2", "Scaled3"])
 
+    @unittest.skipIf(
+        condition=not PYTHON_3_9_OR_LATER,
+        reason="Transformers don't have get_feature_names_out attributes "
+               "in old scikit-learn versions"
+    )
     def test_get_feature_names_out(self):
         """
         Test that get_feature_names_out returns the correct names, matching the
