@@ -1,32 +1,45 @@
 import unittest
 import pandas as pd
 import numpy as np
-from typing import Dict, Any
+from typing import Dict, Any, Tuple
 import matplotlib
 import matplotlib.pyplot as plt
 from unittest.mock import patch
 
-from macrosynergy.visuals.table import view_availability
+from macrosynergy.visuals.view_availability import view_availability
 
 
-def _make_binary_df(
+def _make_binary_qdf(
     start: str = "2020-01-01",
     end: str = "2022-12-31",
-    columns: Dict[str, str] = None,
+    tickers: Dict[Tuple[str, str], str] = None,
 ) -> pd.DataFrame:
-    """Build a binary availability DataFrame for testing.
+    """Build a binary-availability QDF for testing.
 
-    Each entry in ``columns`` maps a column name to the date from which it is
-    available (1 from that date onward, 0 before).
+    ``tickers`` maps (cid, xcat) pairs to the date from which that ticker is
+    available (value=1 from that date onward, 0 before).
     """
     idx = pd.date_range(start, end, freq="D")
-    if columns is None:
-        columns = {"A": "2020-01-01", "B": "2021-01-01", "C": "2022-01-01"}
-    data = {
-        col: (idx >= pd.Timestamp(from_date)).astype(int)
-        for col, from_date in columns.items()
-    }
-    return pd.DataFrame(data, index=idx)
+    if tickers is None:
+        tickers = {
+            ("USD", "A"): "2020-01-01",
+            ("USD", "B"): "2021-01-01",
+            ("USD", "C"): "2022-01-01",
+        }
+    frames = []
+    for (cid, xcat), from_date in tickers.items():
+        values = (idx >= pd.Timestamp(from_date)).astype(int)
+        frames.append(
+            pd.DataFrame(
+                {
+                    "real_date": idx,
+                    "cid": cid,
+                    "xcat": xcat,
+                    "value": values,
+                }
+            )
+        )
+    return pd.concat(frames, ignore_index=True)
 
 
 class TestPlotAvailability(unittest.TestCase):
@@ -36,7 +49,7 @@ class TestPlotAvailability(unittest.TestCase):
         matplotlib.use("Agg")
         cls.mock_show = patch("matplotlib.pyplot.show").start()
 
-        cls.df = _make_binary_df()
+        cls.df = _make_binary_qdf()
 
     @classmethod
     def tearDownClass(cls) -> None:
@@ -110,79 +123,75 @@ class TestPlotAvailability(unittest.TestCase):
             self.assertLessEqual(len(ax.get_xticklabels()), n + 1)
 
     def test_column_sort_order(self):
-        # ColA available throughout; ColB available only in 2022; ColC never.
-        idx = pd.date_range("2020-01-01", "2022-12-31", freq="MS")
-        df = pd.DataFrame(
-            {
-                "ColA": np.ones(len(idx), dtype=int),
-                "ColB": (idx >= pd.Timestamp("2022-01-01")).astype(int),
-                "ColC": np.zeros(len(idx), dtype=int),
+        # A available throughout; B available only in 2022; C never.
+        df = _make_binary_qdf(
+            start="2020-01-01",
+            end="2022-12-31",
+            tickers={
+                ("USD", "A"): "2020-01-01",
+                ("USD", "B"): "2022-01-01",
+                ("USD", "C"): "2099-01-01",  # never available within range
             },
-            index=idx,
         )
         args = self.valid_args.copy()
         args["df"] = df
         args["return_fig"] = True
         fig = view_availability(**args)
         ax = fig.axes[0]
-        # y-axis labels reflect column order after sorting (heatmap transposes df)
         labels = [t.get_text() for t in ax.get_yticklabels()]
-        cola_pos = labels.index("ColA")
-        colb_pos = labels.index("ColB")
-        colc_pos = labels.index("ColC")
-        # ColA has more observations than ColB; both precede ColC (zero count)
-        self.assertLess(cola_pos, colc_pos)
-        self.assertLess(colb_pos, colc_pos)
+        a_pos = labels.index("USD_A")
+        b_pos = labels.index("USD_B")
+        c_pos = labels.index("USD_C")
+        # A has more observations than B; both precede C (zero count)
+        self.assertLess(a_pos, c_pos)
+        self.assertLess(b_pos, c_pos)
 
-    def test_single_column(self):
-        df = _make_binary_df(columns={"OnlyCol": "2020-06-01"})
+    def test_single_ticker(self):
+        df = _make_binary_qdf(tickers={("USD", "OnlyCol"): "2020-06-01"})
         try:
             view_availability(df)
         except Exception as e:
-            self.fail(f"view_availability raised {e} for single-column DataFrame")
+            self.fail(f"view_availability raised {e} for single-ticker QDF")
 
-    def test_all_zeros_column(self):
-        idx = pd.date_range("2020-01-01", "2021-12-31", freq="MS")
-        df = pd.DataFrame(
-            {
-                "Active": np.ones(len(idx), dtype=int),
-                "Inactive": np.zeros(len(idx), dtype=int),
+    def test_all_zeros_ticker(self):
+        df = _make_binary_qdf(
+            start="2020-01-01",
+            end="2021-12-31",
+            tickers={
+                ("USD", "Active"): "2020-01-01",
+                ("USD", "Inactive"): "2099-01-01",
             },
-            index=idx,
         )
         try:
             view_availability(df)
         except Exception as e:
-            self.fail(f"view_availability raised {e} for all-zeros column")
+            self.fail(f"view_availability raised {e} for all-zeros ticker")
 
     # ------------------------------------------------------------------
     # Validation — df
     # ------------------------------------------------------------------
 
-    def test_invalid_df_not_dataframe(self):
-        for bad in ["string", 42, [1, 2, 3], None]:
-            with self.assertRaises(TypeError, msg=f"Expected TypeError for df={bad!r}"):
+    def test_invalid_df_not_qdf(self):
+        for bad in ["string", 42, [1, 2, 3], None, pd.DataFrame({"x": [1, 2]})]:
+            with self.assertRaises(
+                TypeError, msg=f"Expected TypeError for df={bad!r}"
+            ):
                 view_availability(bad)
 
     def test_invalid_df_empty(self):
-        with self.assertRaises(ValueError):
+        with self.assertRaises((TypeError, ValueError)):
             view_availability(pd.DataFrame())
 
-    def test_invalid_df_non_datetime_index(self):
-        df = self.df.copy()
-        df.index = range(len(df))
-        with self.assertRaises(TypeError):
-            view_availability(df)
-
     def test_invalid_df_non_binary_values(self):
-        df = self.df.copy().astype(float)
-        df.iloc[0, 0] = 0.5
+        df = self.df.copy()
+        df.loc[0, "value"] = 0.5
         with self.assertRaises(ValueError):
             view_availability(df)
 
     def test_invalid_df_continuous_values(self):
-        idx = pd.date_range("2020-01-01", periods=50, freq="D")
-        df = pd.DataFrame({"X": np.random.randn(50)}, index=idx)
+        df = self.df.copy().astype({"value": float})
+        rng = np.random.default_rng(0)
+        df["value"] = rng.standard_normal(len(df))
         with self.assertRaises(ValueError):
             view_availability(df)
 

@@ -10,7 +10,8 @@ from .view_panel_dates import view_panel_dates
 from .correlation import view_correlation
 from .ranges import view_ranges
 from .performance import view_performance
-from .table import view_table, view_availability
+from .table import view_table
+from .view_availability import view_availability
 from .multiple_reg_scatter import multiple_reg_scatter
 from .score_visualisers import ScoreVisualisers
 from .acf import plot_acf, plot_pacf
