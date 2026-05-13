@@ -416,7 +416,7 @@ def proxy_pnl_calc(
     transaction_costs_object: Optional[
         Union[TransactionCosts, TransactionCostsDictAdapter, Dict]
     ],
-    roll_freqs: Optional[Dict] = None,
+    roll_freq: Optional[Union[str, Dict]] = None,
     start: Optional[str] = None,
     end: Optional[str] = None,
     blacklist: Optional[Dict] = None,
@@ -453,11 +453,10 @@ def proxy_pnl_calc(
         not want to use transaction costs, the function can be called with
         `transaction_costs_object=None`. Users can alternatively pass a dictionary of
         static cost parameters, which will be adapted to the TransactionCosts interface.
-    roll_freqs : dict
-        dictionary of roll frequencies for each contract type. This must use the
-        contract types as keys and frequency string ("w", "m", or "q") as values. The
-        default frequency for all contracts not in the dictionary is "m" for monthly.
-        Default is None: all contracts are rolled monthly.
+    roll_freq : str or None
+        roll frequency string ("D", "W", "M" or "Q"). `None` defaults to "M".
+        Per-fid dict form is reserved for a future release. Should be chosen
+        consistently with the `rebal_freq` passed to `notional_positions`.
     start : str
         the start date of the data. Default is None, which means that the start date is
         taken from the dataframe.
@@ -494,6 +493,19 @@ def proxy_pnl_calc(
     with the slope determined by the normal and large positions, if all relevant series
     are applied.
 
+    Bid-offer costs are charged on the absolute change in position from one
+    business day to the next, i.e. `abs(position[t] - position[t-1])`. Since
+    positions are flat between rebalance dates, non-zero deltas only occur
+    on actual rebalance dates.
+
+    Roll costs are charged only on the roll schedule and only on the held
+    portion of the position - the part that carries across the roll without
+    changing sign. Concretely, on each roll date the held size is
+    `min(abs(position_before_roll), abs(position_at_roll))` when both have
+    the same sign, and zero on opens, closures, or sign flips. The roll
+    schedule is derived from `roll_freq` via `get_eops` and intersected
+    with the position-panel index.
+
     Returns
     -------
     Union[QuantamentalDataFrame, Tuple[QuantamentalDataFrame, ...]
@@ -510,7 +522,7 @@ def proxy_pnl_calc(
             "transaction_costs",
             (TransactionCosts, TransactionCostsDictAdapter, dict, type(None)),
         ),
-        (roll_freqs, "roll_freqs", (dict, type(None))),
+        (roll_freq, "roll_freq", (str, dict, type(None))),
         (start, "start", (str, type(None))),
         (end, "end", (str, type(None))),
         (blacklist, "blacklist", (dict, type(None))),
@@ -529,10 +541,13 @@ def proxy_pnl_calc(
         concat_dfs = False
         warnings.warn(warn_str)
 
-    if roll_freqs is not None:
+    if isinstance(roll_freq, dict):
         raise NotImplementedError(
-            "Functionality to support `roll_freqs` is not yet implemented."
+            "Per-fid `roll_freq` (dict form) is not yet implemented; pass a single "
+            "frequency string or None."
         )
+    if roll_freq is None:
+        roll_freq = "M"
 
     df = QuantamentalDataFrame(df)
     _initialized_as_categorical: bool = df.InitializedAsCategorical
@@ -584,6 +599,7 @@ def proxy_pnl_calc(
             rstring=rstring,
             transaction_costs=transaction_costs_object,
             tc_name=tc_name,
+            roll_freq=roll_freq,
         )
 
         df_outs["pnl_incl_costs"] = _apply_trading_costs(
