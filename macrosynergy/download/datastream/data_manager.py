@@ -34,7 +34,7 @@ Typical usage::
 """
 
 import logging
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from typing import Dict, List, Optional, Tuple, Union
 
 import pandas as pd
@@ -767,26 +767,26 @@ class DatastreamDataManager:
         return f"DatastreamDataManager(" f"connection={self._connection!r})"
 
 
-def parse_list_name(ln: str):
+def parse_list_name(ln: str) -> date:
     """
     Parse a constituent-list name and return the last calendar day of its encoded month.
 
-    List names are expected to end with a four-character suffix ``MMYY`` where ``MM``
-    is a two-digit month and ``YY`` is a two-digit year.  The century is inferred from
-    the leading digit of ``YY``: ``'8'`` or ``'9'`` maps to 1900s; anything else maps
-    to 2000s.
+    List names are expected to end with a four-character suffix "MMYY" where "MM"
+    is a two-digit month and "YY" is a two-digit year. The century is inferred from
+    the leading digit of "YY": '8' or '9' maps to the 1900s; anything else maps
+    to the 2000s.
 
     Parameters
     ----------
     ln : str
-        List name string whose last four characters encode month (positions -4:-2) and
-        year (positions -2:), e.g. ``"DOW30_list_0124"`` → January 2024.
+        List name string ending with a four-character date suffix encoding month and
+        year, e.g. "DOW30_list_0124" for January 2024.
 
     Returns
     -------
     datetime.date
-        Last calendar day of the encoded month, e.g. ``date(2024, 1, 31)`` for
-        ``"...0124"``.
+        Last calendar day of the encoded month, e.g. date(2024, 1, 31) for
+        a suffix of "0124".
     """
     mm = int(ln[-4:-2])
     yy = int(ln[-2:]) + 1900 if ln[-2] in (["9", "8"]) else int(ln[-2:]) + 2000
