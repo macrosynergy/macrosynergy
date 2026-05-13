@@ -18,38 +18,43 @@ def view_table(
     annot: bool = True,
     fmt: str = ".2f",
     return_fig: bool = False,
-):
+) -> Optional[plt.Figure]:
     """
-    Displays a DataFrame representing a table as a heatmap.
+    Display a numeric DataFrame as an annotated colour-coded heatmap table.
 
     Parameters
     ----------
-    df : ~pandas.DataFrame
-        table to be displayed.
+    df : pd.DataFrame
+        Numeric DataFrame to display.
     title : str, optional
-        string of chart title; defaults depend on type of range plot.
+        Title displayed above the heatmap.
     title_fontsize : int, optional
-        font size of chart header. Default is 16.
+        Font size of the title. Default is 16.
     figsize : Tuple[float, float], optional
-        Tuple (w, h) of width and height of plot.
+        Width and height of the figure in inches.
     min_color : float
-        minimum value of colorbar. Default is -1.
+        Data value mapped to the bottom of the colormap. Default is -1.
     max_color : float
-        maximum value of colorbar. Default is 1.
+        Data value mapped to the top of the colormap. Default is 1.
     xlabel : str, optional
-        string of x-axis label. Default is None.
+        Label for the x-axis.
     ylabel : str, optional
-        string of y-axis label. Default is None.
+        Label for the y-axis.
     xticklabels : List[str], optional
-        list of strings to label x-axis ticks. Default is None.
+        Tick labels for the columns. Defaults to the DataFrame column names.
     yticklabels : List[str], optional
-        list of strings to label y-axis ticks. Default is None.
+        Tick labels for the rows. Defaults to the DataFrame index values.
     annot : bool
-        whether to annotate heatmap with values.
+        Whether to annotate each cell with its numeric value. Default is True.
     fmt : str
-        string format for annotations. Default is '.2f'.
+        Format string for cell annotations, for example ".2f". Default is ".2f".
     return_fig : bool
-        If True, return the Matplotlib figure object instead of displaying.
+        If True, return the Matplotlib figure instead of displaying it.
+
+    Returns
+    -------
+    plt.Figure or None
+        The figure object when "return_fig" is True, otherwise None.
     """
 
     if not isinstance(df, pd.DataFrame):
@@ -97,6 +102,7 @@ def view_table(
         return fig
     else:
         plt.show()
+
 
 if __name__ == "__main__":
     data = {
