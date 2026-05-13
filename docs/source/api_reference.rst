@@ -23,6 +23,7 @@ Subpackages
    macrosynergy.management
    macrosynergy.panel
    macrosynergy.pnl
+   macrosynergy.securities
    macrosynergy.signal
    macrosynergy.visuals
 
