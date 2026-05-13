@@ -4,6 +4,7 @@ from .jpmaqs import custom_download
 from .external_data_transformer import transform_to_qdf
 from .fusion_interface import JPMaQSFusionClient
 from .dataquery_file_api import DataQueryFileAPIClient
+from .extra import load_data, save_data
 
 __all__ = [
     "JPMaQSDownload",
@@ -12,4 +13,6 @@ __all__ = [
     "transform_to_qdf",
     "JPMaQSFusionClient",
     "DataQueryFileAPIClient",
+    "load_data",
+    "save_data",
 ]

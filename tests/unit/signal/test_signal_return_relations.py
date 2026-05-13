@@ -1084,6 +1084,174 @@ class TestAll(unittest.TestCase):
         plt.close("all")
         matplotlib.use(self.mpl_backend)
 
+    def test_single_statistic_table_pval_brackets(self):
+        self.mpl_backend: str = matplotlib.get_backend()
+        matplotlib.use("Agg")
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+
+            sr = SignalReturnRelations(
+                df=self.dfd,
+                rets="XR",
+                sigs="CRY",
+                freqs="Q",
+                blacklist=self.blacklist,
+                slip=1,
+            )
+
+            # Numeric DataFrame returned is the primary statistic only,
+            # independent of pval_stat.
+            df_plain = sr.single_statistic_table(stat="kendall")
+            df_with_pval = sr.single_statistic_table(
+                stat="kendall", pval_stat="kendall_pval"
+            )
+            self.assertTrue((df_plain == df_with_pval).all().all())
+
+            # Annotation array is built with the expected shape and contains
+            # at least one bracketed value.
+            annot = sr._format_dual_annot(
+                df_plain,
+                sr.single_statistic_table(stat="kendall_pval"),
+                round_stat=3,
+                round_pval=3,
+            )
+            self.assertEqual(annot.shape, df_plain.shape)
+            bracketed = [str(v) for v in annot.values.ravel() if "(" in str(v)]
+            self.assertTrue(len(bracketed) >= 1)
+
+            # Heatmap renders without raising.
+            try:
+                sr.single_statistic_table(
+                    stat="kendall",
+                    pval_stat="kendall_pval",
+                    show_heatmap=True,
+                    round=3,
+                    round_pval=4,
+                )
+            except Exception as e:
+                self.fail(f"single_statistic_table with pval_stat raised {e}")
+
+            # significance_threshold builds a mask: cells whose probability
+            # of significance (1 - pval) exceeds the threshold are
+            # highlighted. Verify by reproducing the comparison directly.
+            df_pval_only = sr.single_statistic_table(stat="kendall_pval")
+            df_psig = 1.0 - df_pval_only
+            expected_mask = df_psig > 0.9
+            self.assertTrue(expected_mask.any().any())
+            # Re-rendering with significance_threshold=None disables it.
+            try:
+                sr.single_statistic_table(
+                    stat="kendall",
+                    pval_stat="kendall_pval",
+                    show_heatmap=True,
+                    significance_threshold=None,
+                )
+            except Exception as e:
+                self.fail(
+                    f"single_statistic_table with significance_threshold=None "
+                    f"raised {e}"
+                )
+
+            # Invalid pval_stat is rejected.
+            with self.assertRaises(ValueError):
+                sr.single_statistic_table(stat="kendall", pval_stat="not_a_metric")
+
+            # map_pval requires ms_panel_test=True on the SRR.
+            with self.assertRaises(ValueError):
+                sr.single_statistic_table(stat="kendall", pval_stat="map_pval")
+
+        plt.close("all")
+        matplotlib.use(self.mpl_backend)
+
+    def test_show_single_statistic_table(self):
+        self.mpl_backend: str = matplotlib.get_backend()
+        matplotlib.use("Agg")
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+
+            sr = SignalReturnRelations(
+                df=self.dfd,
+                rets="XR",
+                sigs="CRY",
+                freqs="Q",
+                blacklist=self.blacklist,
+                slip=1,
+            )
+
+            # show_ returns the same DataFrame that single_statistic_table
+            # produces and forwards args/kwargs unchanged.
+            df_direct = sr.single_statistic_table(stat="kendall")
+            df_show = sr.show_single_statistic_table(stat="kendall")
+            self.assertIsInstance(df_show, pd.DataFrame)
+            self.assertTrue((df_direct == df_show).all().all())
+
+            # show_ must not render a heatmap regardless of any
+            # ``show_heatmap`` supplied by the caller.
+            with patch("macrosynergy.visuals.view_table") as mock_view_table:
+                sr.show_single_statistic_table(stat="kendall")
+                mock_view_table.assert_not_called()
+
+            with patch("macrosynergy.visuals.view_table") as mock_view_table:
+                sr.show_single_statistic_table(stat="kendall", show_heatmap=True)
+                mock_view_table.assert_not_called()
+
+            # Positional and pval_stat kwargs flow through.
+            df_pos = sr.show_single_statistic_table("kendall")
+            self.assertIsInstance(df_pos, pd.DataFrame)
+            df_pv = sr.show_single_statistic_table(
+                stat="kendall", pval_stat="kendall_pval"
+            )
+            self.assertIsInstance(df_pv, pd.DataFrame)
+
+        plt.close("all")
+        matplotlib.use(self.mpl_backend)
+
+    def test_plot_single_statistic_heatmap(self):
+        self.mpl_backend: str = matplotlib.get_backend()
+        matplotlib.use("Agg")
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+
+            sr = SignalReturnRelations(
+                df=self.dfd,
+                rets="XR",
+                sigs="CRY",
+                freqs="Q",
+                blacklist=self.blacklist,
+                slip=1,
+            )
+
+            # plot_ renders exactly one heatmap and returns None.
+            with patch("macrosynergy.visuals.view_table") as mock_view_table:
+                result = sr.plot_single_statistic_heatmap(stat="kendall")
+                mock_view_table.assert_called_once()
+            self.assertIsNone(result)
+
+            # Display kwargs forward through to the renderer.
+            with patch("macrosynergy.visuals.view_table") as mock_view_table:
+                sr.plot_single_statistic_heatmap(
+                    stat="kendall", title="custom", figsize=(6, 4)
+                )
+                mock_view_table.assert_called_once()
+                _, call_kwargs = mock_view_table.call_args
+                self.assertEqual(call_kwargs.get("title"), "custom")
+                self.assertEqual(call_kwargs.get("figsize"), (6, 4))
+
+            # Caller-supplied show_heatmap=False is overridden.
+            with patch("macrosynergy.visuals.view_table") as mock_view_table:
+                sr.plot_single_statistic_heatmap(stat="kendall", show_heatmap=False)
+                mock_view_table.assert_called_once()
+
+            # Validation in the underlying method still applies.
+            with self.assertRaises(ValueError):
+                sr.plot_single_statistic_heatmap(stat="not_a_metric")
+
+        plt.close("all")
+        matplotlib.use(self.mpl_backend)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -11,11 +11,11 @@ from .correlation import view_correlation
 from .ranges import view_ranges
 from .performance import view_performance
 from .table import view_table
+from .view_availability import view_availability
 from .multiple_reg_scatter import multiple_reg_scatter
 from .score_visualisers import ScoreVisualisers
 from .acf import plot_acf, plot_pacf
 from .lagged_corr import plot_lagged_correlation
-
 
 __all__ = [
     "view_correlation",
@@ -28,6 +28,7 @@ __all__ = [
     "view_ranges",
     "view_performance",
     "view_table",
+    "view_availability",
     "timelines",
     "view_panel_dates",
     "multiple_reg_scatter",
