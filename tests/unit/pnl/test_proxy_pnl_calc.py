@@ -1252,8 +1252,11 @@ class TestProxyPNLCalc(unittest.TestCase):
         # proxy_pnl_calc must accept a frequency string for `roll_freq` other
         # than the default and propagate it into the cost path. Quarterly's
         # schedule is strictly sparser than monthly's, so on the same input
-        # the M run must book more roll-cost charges than the Q run -- if
-        # the kwarg were ignored, the two totals would match.
+        # the M run must book non-zero roll cost on more dates and a higher
+        # total roll cost than the Q run -- if the kwarg were ignored, the
+        # two would match. (The cost QDF emits one row per cost-eligible
+        # date for each contract, so total row counts coincide; the count
+        # that varies with `roll_freq` is the count of non-zero entries.)
         #
         # A small inline fixture is used (2 contracts, 1 year, flat-cost
         # adapter) so the test stays cheap relative to TestProxyPNLCalc.setUp.
@@ -1266,7 +1269,10 @@ class TestProxyPNLCalc(unittest.TestCase):
         pos_panel = pd.DataFrame(np.nan, index=idx, columns=pos_tickers)
         pos_panel.loc[rebal] = np.random.randn(len(rebal), len(pos_tickers))
         pos_panel = pos_panel.ffill().bfill()
-        ret_panel = pd.DataFrame(0.0, index=idx, columns=ret_tickers)
+        # _pnl_excl_costs drops all-zero pnl rows; with zero returns the
+        # panel would be empty. A small constant return keeps the PnL
+        # frame populated without affecting the cost-path assertions.
+        ret_panel = pd.DataFrame(0.01, index=idx, columns=ret_tickers)
         df_wide = pd.concat([pos_panel, ret_panel], axis=1)
         df_wide.index.name = "real_date"
         qdf = ticker_df_to_qdf(df_wide)
@@ -1297,8 +1303,9 @@ class TestProxyPNLCalc(unittest.TestCase):
 
         rc_m = tc_m[tc_m.xcat.str.endswith("_ROLLCOST")]
         rc_q = tc_q[tc_q.xcat.str.endswith("_ROLLCOST")]
-        self.assertGreater(len(rc_m), len(rc_q))
+        self.assertGreater((rc_m.value != 0).sum(), (rc_q.value != 0).sum())
         self.assertGreater(rc_m.value.abs().sum(), rc_q.value.abs().sum())
+        self.assertGreater((rc_q.value != 0).sum(), 0)
 
     def test_proxy_pnl_calc_rejects_dict_roll_freq(self):
         # Per-fid dict form of `roll_freq` is reserved for a future release;
