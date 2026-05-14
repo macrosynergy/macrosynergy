@@ -15,7 +15,7 @@ from macrosynergy.learning import (
     regression_accuracy,
     regression_balanced_accuracy,
     sharpe_ratio,
-    sharpe_stability_ratio_scorer,
+    panel_sharpe_stability_ratio,
     sortino_ratio,
     correlation_coefficient,
     create_panel_metric,
@@ -1242,30 +1242,30 @@ class TestSharpeStabilityRatioScorer(unittest.TestCase):
     def test_types(self):
         # y_true must be a multi-indexed pd.Series
         with self.assertRaises(TypeError):
-            sharpe_stability_ratio_scorer("hello", self.y_pred)
+            panel_sharpe_stability_ratio("hello", self.y_pred)
         with self.assertRaises(TypeError):
-            sharpe_stability_ratio_scorer(
+            panel_sharpe_stability_ratio(
                 np.zeros(len(self.y_pred)), self.y_pred
             )
         with self.assertRaises(ValueError):
-            sharpe_stability_ratio_scorer(
+            panel_sharpe_stability_ratio(
                 self.y_true.reset_index(drop=True), self.y_pred
             )
 
         # y_pred must be array-like and matching length
         with self.assertRaises(TypeError):
-            sharpe_stability_ratio_scorer(self.y_true, "hello")
+            panel_sharpe_stability_ratio(self.y_true, "hello")
         with self.assertRaises(ValueError):
-            sharpe_stability_ratio_scorer(self.y_true, self.y_pred.head(5))
+            panel_sharpe_stability_ratio(self.y_true, self.y_pred.head(5))
 
     def test_returns_float(self):
-        result = sharpe_stability_ratio_scorer(self.y_true, self.y_pred)
+        result = panel_sharpe_stability_ratio(self.y_true, self.y_pred)
         self.assertIsInstance(result, float)
         self.assertTrue(np.isfinite(result))
 
     def test_accepts_ndarray_y_pred(self):
-        result_series = sharpe_stability_ratio_scorer(self.y_true, self.y_pred)
-        result_array = sharpe_stability_ratio_scorer(
+        result_series = panel_sharpe_stability_ratio(self.y_true, self.y_pred)
+        result_array = panel_sharpe_stability_ratio(
             self.y_true, self.y_pred.values
         )
         self.assertAlmostEqual(result_series, result_array)
@@ -1273,13 +1273,13 @@ class TestSharpeStabilityRatioScorer(unittest.TestCase):
     def test_insufficient_data_returns_zero(self):
         # Underlying sharpe_stability_ratio returns NaN when the cross-sectional
         # mean time series is too short; the scorer should map that to 0.0.
-        result = sharpe_stability_ratio_scorer(
+        result = panel_sharpe_stability_ratio(
             self.y_true_short, self.y_pred_short
         )
         self.assertEqual(result, 0.0)
 
     def test_matches_underlying_function(self):
-        from macrosynergy.pnl import sharpe_stability_ratio
+        from macrosynergy.pnl import sharpe_stability_ratio as pnl_ssr
 
         pr = pd.Series(
             np.where(
@@ -1288,18 +1288,18 @@ class TestSharpeStabilityRatioScorer(unittest.TestCase):
             index=self.y_true.index,
         )
         ts = pr.groupby(level=1).mean().sort_index().dropna()
-        expected = sharpe_stability_ratio(
+        expected = pnl_ssr(
             ts, window=12, annualization_factor=12, min_periods=12
         )
 
-        result = sharpe_stability_ratio_scorer(
+        result = panel_sharpe_stability_ratio(
             self.y_true, self.y_pred, window=12, annualization_factor=12
         )
         self.assertAlmostEqual(result, float(expected))
 
     def test_sign_flips_with_inverted_predictions(self):
-        ssr_pos = sharpe_stability_ratio_scorer(self.y_true, self.y_pred)
-        ssr_neg = sharpe_stability_ratio_scorer(self.y_true, -self.y_pred)
+        ssr_pos = panel_sharpe_stability_ratio(self.y_true, self.y_pred)
+        ssr_neg = panel_sharpe_stability_ratio(self.y_true, -self.y_pred)
         # Flipping the sign of every prediction flips the per-period return
         # sign, which flips the mean rolling Sharpe and therefore the SSR.
         self.assertAlmostEqual(ssr_pos, -ssr_neg)
@@ -1307,8 +1307,68 @@ class TestSharpeStabilityRatioScorer(unittest.TestCase):
     def test_usable_as_sklearn_scorer(self):
         from sklearn.metrics import make_scorer
 
-        scorer = make_scorer(sharpe_stability_ratio_scorer)
+        scorer = make_scorer(panel_sharpe_stability_ratio)
         self.assertTrue(callable(scorer))
+
+    def test_types_binary_and_thresh(self):
+        with self.assertRaises(TypeError):
+            panel_sharpe_stability_ratio(
+                self.y_true, self.y_pred, binary="hello"
+            )
+        with self.assertRaises(TypeError):
+            panel_sharpe_stability_ratio(
+                self.y_true, self.y_pred, thresh="hello"
+            )
+        with self.assertRaises(ValueError):
+            panel_sharpe_stability_ratio(
+                self.y_true, self.y_pred, binary=False, thresh=-1
+            )
+        with self.assertRaises(ValueError):
+            panel_sharpe_stability_ratio(
+                self.y_true, self.y_pred, binary=False, thresh=0
+            )
+
+    def test_non_binary_returns_finite_float(self):
+        result = panel_sharpe_stability_ratio(
+            self.y_true, self.y_pred, binary=False
+        )
+        self.assertIsInstance(result, float)
+        self.assertTrue(np.isfinite(result))
+
+    def test_non_binary_matches_manual_computation(self):
+        from macrosynergy.pnl import sharpe_stability_ratio as pnl_ssr
+
+        weights = self.y_pred / self.y_pred.groupby(level=1).transform("std")
+        portfolio_returns = weights * self.y_true
+        ts = portfolio_returns.groupby(level=1).mean().sort_index().dropna()
+        expected = pnl_ssr(
+            ts, window=12, annualization_factor=12, min_periods=12
+        )
+
+        result = panel_sharpe_stability_ratio(
+            self.y_true, self.y_pred, binary=False
+        )
+        self.assertAlmostEqual(result, float(expected))
+
+    def test_thresh_clips_weights(self):
+        # With a very tight thresh, every weight is clipped to ±thresh, so the
+        # result must match feeding clipped weights through the same pipeline.
+        from macrosynergy.pnl import sharpe_stability_ratio as pnl_ssr
+
+        thresh = 0.1
+        weights = (
+            self.y_pred / self.y_pred.groupby(level=1).transform("std")
+        ).clip(lower=-thresh, upper=thresh)
+        portfolio_returns = weights * self.y_true
+        ts = portfolio_returns.groupby(level=1).mean().sort_index().dropna()
+        expected = pnl_ssr(
+            ts, window=12, annualization_factor=12, min_periods=12
+        )
+
+        result = panel_sharpe_stability_ratio(
+            self.y_true, self.y_pred, binary=False, thresh=thresh
+        )
+        self.assertAlmostEqual(result, float(expected))
 
 
 if __name__ == "__main__":

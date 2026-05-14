@@ -606,14 +606,16 @@ def sortino_ratio(
         return np.mean(sortino_ratios)
 
 
-def sharpe_stability_ratio_scorer(
+def panel_sharpe_stability_ratio(
     y_true,
     y_pred,
+    binary=True,
+    thresh=None,
     window=12,
     annualization_factor=12,
 ):
     """
-    Sharpe Stability Ratio of a binary directional strategy on a panel.
+    Sharpe Stability Ratio of a directional strategy on a panel.
 
     Parameters
     ----------
@@ -621,6 +623,13 @@ def sharpe_stability_ratio_scorer(
         True regression labels, multi-indexed by cross-section and real date.
     y_pred : array-like of shape (n_samples,)
         Predicted regression labels.
+    binary : bool, default=True
+        Whether to consider only directional returns. If True, the portfolio
+        returns only consider the sign of the predictions. If False, naive
+        portfolio weights are determined. See Notes for more information on
+        their calculation.
+    thresh : float, default=None
+        The threshold for portfolio weights in the case where binary = False.
     window : int, default=12
         Rolling window length used by :func:`sharpe_stability_ratio`. Defaults
         assume a monthly return series.
@@ -637,10 +646,17 @@ def sharpe_stability_ratio_scorer(
 
     Notes
     -----
-    The strategy goes long by a single unit when ``y_pred`` is positive and
-    short by a single unit otherwise. Per-period portfolio returns are
-    averaged across cross-sections to produce a univariate time series,
-    which is then passed to :func:`macrosynergy.pnl.sharpe_stability_ratio`.
+    Per-period portfolio returns are averaged across cross-sections to produce
+    a univariate time series, which is then passed to
+    :func:`macrosynergy.pnl.sharpe_stability_ratio`.
+
+    This metric can be computed for either binary or non-binary strategies.
+    When binary = True, the strategy goes long by a single unit when
+    ``y_pred`` is positive and short by a single unit otherwise. When
+    binary = False, predictions are normalized by their standard deviation in
+    each time period; if thresh is not None, the resulting weights are clipped
+    to the range [-thresh, thresh]. The resulting portfolio returns are the
+    product of these derived weights and the true returns.
 
     Only ``type="panel"`` is supported: the SSR requires a univariate return
     series, so cross-sectional or time-period decompositions are not
@@ -649,13 +665,27 @@ def sharpe_stability_ratio_scorer(
     # Checks
     _check_metric_params(y_true, y_pred, "panel")
 
+    if not isinstance(binary, bool):
+        raise TypeError("binary must be a boolean")
+    if not isinstance(thresh, (int, float)) and thresh is not None:
+        raise TypeError("thresh must be an integer or float")
+    if thresh is not None and thresh <= 0:
+        raise ValueError("thresh must be positive")
+
     if not isinstance(y_pred, pd.Series):
         y_pred = pd.Series(y_pred, index=y_true.index)
 
-    portfolio_returns = pd.Series(
-        np.where(y_pred.values > 0, y_true.values, -y_true.values),
-        index=y_true.index,
-    )
+    if binary:
+        portfolio_returns = pd.Series(
+            np.where(y_pred.values > 0, y_true.values, -y_true.values),
+            index=y_true.index,
+        )
+    else:
+        portfolio_weights = y_pred / y_pred.groupby(level=1).transform("std")
+        if thresh is not None:
+            portfolio_weights = portfolio_weights.clip(lower=-thresh, upper=thresh)
+        portfolio_returns = portfolio_weights * y_true
+
     ts = portfolio_returns.groupby(level=1).mean().sort_index().dropna()
 
     val = sharpe_stability_ratio(
