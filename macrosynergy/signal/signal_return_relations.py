@@ -831,7 +831,7 @@ class SignalReturnRelations:
                 s_date = intersection_df.index[0]
                 e_date = intersection_df.index[-1]
 
-                final_df.loc[(cid_name, s_date) : (cid_name, e_date), signal] = (
+                final_df.loc[(cid_name, s_date):(cid_name, e_date), signal] = (
                     intersection_df.to_numpy()
                 )
                 storage.append(final_df)
@@ -1509,7 +1509,10 @@ class SignalReturnRelations:
         max_color: Optional[float] = None,
         figsize: Tuple[float, float] = (14, 8),
         annotate: bool = True,
-        round: int = 5,
+        round: int = 3,
+        pval_stat: Optional[str] = None,
+        round_pval: int = 3,
+        significance_threshold: Optional[float] = 0.9,
     ):
         """
         Creates a table which shows the specified statistic for each row and column
@@ -1564,7 +1567,26 @@ class SignalReturnRelations:
         annotate : bool
             Default is True, where the values shown in the heatmap are annotated.
         round : int
-            number of decimals to round the values to on the heatmap's annotations.
+            number of decimals to round the primary statistic to in the heatmap
+            annotations. Default is 3.
+        pval_stat : str, optional
+            name of a p-value statistic — typically ``"kendall_pval"``,
+            ``"pearson_pval"`` or ``"map_pval"`` (the Macrosynergy Panel
+            test). When set, each heatmap cell shows the **probability of
+            significance**, ``1 - pval_stat``, in brackets beneath the
+            primary statistic. Default is None. When ``pval_stat="map_pval"``
+            the SignalReturnRelations must have been constructed with
+            ``ms_panel_test=True``.
+        round_pval : int
+            number of decimals to round the bracketed probability of
+            significance to in the heatmap annotations. Default is 3.
+        significance_threshold : float, optional
+            probability-of-significance cutoff above which a cell's
+            annotation is rendered in black and bold. Compared directly
+            against the bracketed value (``1 - pval_stat``), so 0.9
+            highlights cells whose probability of significance exceeds 0.9
+            (equivalently, raw p-value below 0.1). Only takes effect when
+            ``pval_stat`` is set. Pass ``None`` to disable. Default is 0.9.
 
         Returns
         -------
@@ -1576,6 +1598,15 @@ class SignalReturnRelations:
 
         if not stat in self.metrics:
             raise ValueError(f"Stat must be one of {self.metrics}")
+
+        if pval_stat is not None:
+            if pval_stat == "map_pval" and not self.ms_panel_test:
+                raise ValueError(
+                    "pval_stat='map_pval' requires SignalReturnRelations to "
+                    "be constructed with ms_panel_test=True."
+                )
+            if pval_stat not in self.metrics:
+                raise ValueError(f"pval_stat must be one of {self.metrics}")
 
         if not isinstance(rows, list):
             raise TypeError("Rows must be a list")
@@ -1609,6 +1640,13 @@ class SignalReturnRelations:
         # sort index to prevent performance degradation: PerformanceWarning
         df_result.sort_index(inplace=True)
 
+        df_pval: Optional[pd.DataFrame] = None
+        if pval_stat is not None:
+            df_pval = pd.DataFrame(
+                columns=df_column_names, index=df_row_names, dtype=np.float64
+            )
+            df_pval.sort_index(inplace=True)
+
         loop_tuples: List[Tuple[str, str, str, str]] = [
             (ret, sig, freq, agg_sig)
             for ret in self.rets
@@ -1630,6 +1668,10 @@ class SignalReturnRelations:
             df_result.loc[row, column] = self.calculate_single_stat(
                 stat, ret, sig, type
             )
+            if pval_stat is not None:
+                df_pval.loc[row, column] = self.calculate_single_stat(
+                    pval_stat, ret, sig, type
+                )
 
             # Reset self.df and sig to original values
             self.df = self.original_df
@@ -1641,9 +1683,17 @@ class SignalReturnRelations:
                 df_result = self.reindex_multindex_df(
                     df_result, signal_name_dict.values(), "Signal"
                 )
+                if df_pval is not None:
+                    df_pval.rename(index=signal_name_dict, inplace=True)
+                    df_pval = self.reindex_multindex_df(
+                        df_pval, signal_name_dict.values(), "Signal"
+                    )
             else:
                 df_result.rename(columns=signal_name_dict, inplace=True)
                 df_result = df_result[signal_name_dict.values()]
+                if df_pval is not None:
+                    df_pval.rename(columns=signal_name_dict, inplace=True)
+                    df_pval = df_pval[signal_name_dict.values()]
 
         if return_name_dict is not None:
             # Reorder the index according to the return_name_dict
@@ -1652,9 +1702,17 @@ class SignalReturnRelations:
                 df_result = self.reindex_multindex_df(
                     df_result, return_name_dict.values(), "Return"
                 )
+                if df_pval is not None:
+                    df_pval.rename(index=return_name_dict, inplace=True)
+                    df_pval = self.reindex_multindex_df(
+                        df_pval, return_name_dict.values(), "Return"
+                    )
             else:
                 df_result.rename(columns=return_name_dict, inplace=True)
                 df_result = df_result[return_name_dict.values()]
+                if df_pval is not None:
+                    df_pval.rename(columns=return_name_dict, inplace=True)
+                    df_pval = df_pval[return_name_dict.values()]
 
         if show_heatmap:
             if not title:
@@ -1665,6 +1723,24 @@ class SignalReturnRelations:
             if max_color is None:
                 max_color = df_result.values.max()
 
+            # Convert raw p-values to probability of significance (1 - pval)
+            # so the bracketed value and the highlight threshold share the
+            # same scale.
+            df_psig = 1.0 - df_pval if df_pval is not None else None
+
+            if annotate and df_psig is not None:
+                heatmap_annot = self._format_dual_annot(
+                    df_result, df_psig, round, round_pval
+                )
+                heatmap_fmt = ""
+            else:
+                heatmap_annot = annotate
+                heatmap_fmt = f".{round}f"
+
+            highlight_mask = None
+            if df_psig is not None and significance_threshold is not None:
+                highlight_mask = df_psig > float(significance_threshold)
+
             msv.view_table(
                 df_result,
                 title=title,
@@ -1672,13 +1748,209 @@ class SignalReturnRelations:
                 min_color=min_color,
                 max_color=max_color,
                 figsize=figsize,
-                fmt=f".{round}f",
-                annot=annotate,
+                fmt=heatmap_fmt,
+                annot=heatmap_annot,
                 xticklabels=column_names,
                 yticklabels=row_names,
+                highlight_mask=highlight_mask,
             )
 
         return df_result
+
+    def show_single_statistic_table(self, *args, **kwargs) -> pd.DataFrame:
+        """
+        Return the single statistic table without rendering a heatmap.
+
+        Thin wrapper around :meth:`single_statistic_table` that forces
+        ``show_heatmap=False``.
+
+        Parameters
+        ----------
+        stat : str
+            type of statistic to be displayed (this can be any of the column names of
+            summary_table).
+        type : str
+            type of the statistic displayed. This can be based on the overall panel
+            ("panel", default), an average of annual panels (mean_years), an average of
+            cross-sectional relations ("mean_cids"), the positive ratio across
+            years("pr_years"), positive ratio across sections ("pr_cids").
+        rows : List[str]
+            row indices, which can be return categories, feature categories, frequencies
+            and/or aggregations. The choice is made through a list of one or more of "xcat",
+            "ret", "freq" and "agg_sigs". The default is ["xcat", "agg_sigs"] resulting in
+            index strings (<agg_signs>) or if only one aggregation is available.
+        columns : List[str]
+            column indices, which can be return categories, feature categories,
+            frequencies and/or aggregations. The choice is made through a list of one or
+            more of "xcat", "ret", "freq" and "agg_sigs". The default is ["ret", "freq]
+            resulting in index strings () or if only one frequency is available.
+        title : str, optional
+            plot title. Default is None in which case the default title is used.
+        title_fontsize : int
+            font size of title. Default is 16.
+        row_names : List[str]
+            specifies the labels of rows in the heatmap. Default is None, the indices of
+            the generated DataFrame are used.
+        column_names : List[str]
+            specifies the labels of columns in the heatmap. Default is None, the columns
+            of the generated DataFrame are used.
+        signal_name_dict : dict, optional
+            dictionary mapping the signal names to the desired names in the heatmap.
+            Default is None, in which case the signal names are used.
+        return_name_dict : dict, optional
+            dictionary mapping the return names to the desired names in the heatmap.
+            Default is None, in which case the return names are used.
+        min_color : float, optional
+            minimum value of the color scale. Default is None, in which case the minimum
+            value of the table is used.
+        max_color : float, optional
+            maximum value of the color scale. Default is None, in which case the maximum
+            value of the table is used.
+        figsize : Tuple[float, float]
+            Tuple (w, h) of width and height of graph. Default is (14, 8).
+        annotate : bool
+            Default is True, where the values shown in the heatmap are annotated.
+        round : int
+            number of decimals to round the primary statistic to in the heatmap
+            annotations. Default is 3.
+        pval_stat : str, optional
+            name of a p-value statistic — typically ``"kendall_pval"``,
+            ``"pearson_pval"`` or ``"map_pval"`` (the Macrosynergy Panel
+            test). When set, each heatmap cell shows the **probability of
+            significance**, ``1 - pval_stat``, in brackets beneath the
+            primary statistic. Default is None. When ``pval_stat="map_pval"``
+            the SignalReturnRelations must have been constructed with
+            ``ms_panel_test=True``.
+        round_pval : int
+            number of decimals to round the bracketed probability of
+            significance to in the heatmap annotations. Default is 3.
+        significance_threshold : float, optional
+            probability-of-significance cutoff above which a cell's
+            annotation is rendered in black and bold. Compared directly
+            against the bracketed value (``1 - pval_stat``), so 0.9
+            highlights cells whose probability of significance exceeds 0.9
+            (equivalently, raw p-value below 0.1). Only takes effect when
+            ``pval_stat`` is set. Pass ``None`` to disable. Default is 0.9.
+
+        Returns
+        -------
+        ~pandas.DataFrame
+            DataFrame with the specified statistic for each row and column.
+        """
+        kwargs["show_heatmap"] = False
+        return self.single_statistic_table(*args, **kwargs)
+
+    def plot_single_statistic_heatmap(self, *args, **kwargs) -> None:
+        """
+        Render the heatmap of the single statistic table.
+
+        Thin wrapper around :meth:`single_statistic_table` that forces
+        ``show_heatmap=True``. The computed table itself is not returned.
+
+        Parameters
+        ----------
+        stat : str
+            type of statistic to be displayed (this can be any of the column names of
+            summary_table).
+        type : str
+            type of the statistic displayed. This can be based on the overall panel
+            ("panel", default), an average of annual panels (mean_years), an average of
+            cross-sectional relations ("mean_cids"), the positive ratio across
+            years("pr_years"), positive ratio across sections ("pr_cids").
+        rows : List[str]
+            row indices, which can be return categories, feature categories, frequencies
+            and/or aggregations. The choice is made through a list of one or more of "xcat",
+            "ret", "freq" and "agg_sigs". The default is ["xcat", "agg_sigs"] resulting in
+            index strings (<agg_signs>) or if only one aggregation is available.
+        columns : List[str]
+            column indices, which can be return categories, feature categories,
+            frequencies and/or aggregations. The choice is made through a list of one or
+            more of "xcat", "ret", "freq" and "agg_sigs". The default is ["ret", "freq]
+            resulting in index strings () or if only one frequency is available.
+        show_heatmap : bool
+            not allowed; this wrapper always forces ``show_heatmap=True`` and
+            any value supplied by the caller is overridden.
+        title : str, optional
+            plot title. Default is None in which case the default title is used.
+        title_fontsize : int
+            font size of title. Default is 16.
+        row_names : List[str]
+            specifies the labels of rows in the heatmap. Default is None, the indices of
+            the generated DataFrame are used.
+        column_names : List[str]
+            specifies the labels of columns in the heatmap. Default is None, the columns
+            of the generated DataFrame are used.
+        signal_name_dict : dict, optional
+            dictionary mapping the signal names to the desired names in the heatmap.
+            Default is None, in which case the signal names are used.
+        return_name_dict : dict, optional
+            dictionary mapping the return names to the desired names in the heatmap.
+            Default is None, in which case the return names are used.
+        min_color : float, optional
+            minimum value of the color scale. Default is None, in which case the minimum
+            value of the table is used.
+        max_color : float, optional
+            maximum value of the color scale. Default is None, in which case the maximum
+            value of the table is used.
+        figsize : Tuple[float, float]
+            Tuple (w, h) of width and height of graph. Default is (14, 8).
+        annotate : bool
+            Default is True, where the values shown in the heatmap are annotated.
+        round : int
+            number of decimals to round the primary statistic to in the heatmap
+            annotations. Default is 3.
+        pval_stat : str, optional
+            name of a p-value statistic — typically ``"kendall_pval"``,
+            ``"pearson_pval"`` or ``"map_pval"`` (the Macrosynergy Panel
+            test). When set, each heatmap cell shows the **probability of
+            significance**, ``1 - pval_stat``, in brackets beneath the
+            primary statistic. Default is None. When ``pval_stat="map_pval"``
+            the SignalReturnRelations must have been constructed with
+            ``ms_panel_test=True``.
+        round_pval : int
+            number of decimals to round the bracketed probability of
+            significance to in the heatmap annotations. Default is 3.
+        significance_threshold : float, optional
+            probability-of-significance cutoff above which a cell's
+            annotation is rendered in black and bold. Compared directly
+            against the bracketed value (``1 - pval_stat``), so 0.9
+            highlights cells whose probability of significance exceeds 0.9
+            (equivalently, raw p-value below 0.1). Only takes effect when
+            ``pval_stat`` is set. Pass ``None`` to disable. Default is 0.9.
+        """
+        kwargs["show_heatmap"] = True
+        self.single_statistic_table(*args, **kwargs)
+
+    @staticmethod
+    def _format_dual_annot(
+        df_stat: pd.DataFrame,
+        df_pval: pd.DataFrame,
+        round_stat: int,
+        round_pval: int,
+    ) -> pd.DataFrame:
+        """
+        Build a string-typed DataFrame of cell annotations of the form
+        ``"<stat>\\n(<pval>)"`` aligned with ``df_stat``. NaN values render
+        as empty strings.
+        """
+
+        def _fmt(value: float, ndigits: int) -> str:
+            if value is None or (isinstance(value, float) and np.isnan(value)):
+                return ""
+            return f"{value:.{ndigits}f}"
+
+        annot = pd.DataFrame(index=df_stat.index, columns=df_stat.columns, dtype=object)
+        for row in df_stat.index:
+            for col in df_stat.columns:
+                stat_str = _fmt(df_stat.loc[row, col], round_stat)
+                pval_str = _fmt(df_pval.loc[row, col], round_pval)
+                if stat_str == "" and pval_str == "":
+                    annot.loc[row, col] = ""
+                elif pval_str == "":
+                    annot.loc[row, col] = stat_str
+                else:
+                    annot.loc[row, col] = f"{stat_str}\n({pval_str})"
+        return annot
 
     def set_df_labels(self, rows_dict: Dict, rows: List[str], columns: List[str]):
         """
