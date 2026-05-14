@@ -221,6 +221,25 @@ class TestProxyPNLObject(unittest.TestCase):
 
         pd.testing.assert_frame_equal(proxy_pnl_df, expected_proxy_pnl_df)
 
+        # The three attributes assigned on the ProxyPnL instance must line up
+        # with the functional proxy_pnl_calc return order (incl_costs, excl_costs,
+        # tc_wide). A regression here would silently swap pnl_excl_costs and
+        # txn_costs_df: the return value (self.proxy_pnl) would still be correct
+        # but downstream consumers of the other two attributes would get the
+        # wrong frame.
+        expected_incl, expected_excl, expected_tc = proxy_pnl_calc(
+            df=dfx,
+            transaction_costs_object=tco,
+            start=proxy_pnl_obj.start,
+            end=proxy_pnl_obj.end,
+            return_pnl_excl_costs=True,
+            return_costs=True,
+            **self.get_proxy_pnl_calc_args(),
+        )
+        pd.testing.assert_frame_equal(proxy_pnl_obj.proxy_pnl, expected_incl)
+        pd.testing.assert_frame_equal(proxy_pnl_obj.pnl_excl_costs, expected_excl)
+        pd.testing.assert_frame_equal(proxy_pnl_obj.txn_costs_df, expected_tc)
+
     def _build_cost_dict(self) -> dict:
         return {
             fid: {

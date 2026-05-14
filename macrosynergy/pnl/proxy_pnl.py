@@ -320,8 +320,8 @@ class ProxyPnL(object):
         assert len(outs) == 3
         assert all(map(lambda x: isinstance(x, QuantamentalDataFrame), outs))
         self.proxy_pnl: QuantamentalDataFrame = outs[0]
-        self.txn_costs_df: QuantamentalDataFrame = outs[1]
-        self.pnl_excl_costs: QuantamentalDataFrame = outs[2]
+        self.pnl_excl_costs: QuantamentalDataFrame = outs[1]
+        self.txn_costs_df: QuantamentalDataFrame = outs[2]
         outs = None
 
         return self.proxy_pnl
