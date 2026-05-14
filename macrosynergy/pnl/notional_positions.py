@@ -206,7 +206,7 @@ def _leverage_positions(
 
     _contracts: List[str] = [f"{contx}{sig_ident}" for contx in fids]
 
-    rowsums: pd.Series = df_wide.loc[:, _contracts].sum(axis=1)
+    rowsums: pd.Series = df_wide.loc[:, _contracts].abs().sum(axis=1)
     # if any of the rowsums are zero, set to NaN to avoid div by zero
     rowsums[rowsums == 0] = np.nan
 

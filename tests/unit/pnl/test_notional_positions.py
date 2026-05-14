@@ -211,6 +211,100 @@ class TestNotionalPositions(unittest.TestCase):
                     expected_result_value = _leverage * _aum / (len(fx_fids) - na_count)
                     self.assertEqual(unique_values, {expected_result_value})
 
+    def test__leverage_positions_scales_by_gross_not_net(self):
+        # Mixed-sign signals: leverage must scale by gross exposure
+        # (sum of absolute signals), not net. With net scaling, positions
+        # are too large (and can flip sign), and a market-neutral book
+        # collapses to NaN because rowsums = 0 triggers div-by-zero masking.
+        fx_fids = [f"{cid}_FX" for cid in self.cids]
+        sig_cols = [f"{fid}{self.sig_ident}" for fid in fx_fids]
+        pos_cols = [f"{fid}_{self.sname}_{self.pname}" for fid in fx_fids]
+
+        df_wide = self.mock_df_wide.copy()
+        df_wide = df_wide[sig_cols]
+        # Signals: +2, -1, +1, -2 -> gross = 6, net = 0
+        signal_row = pd.Series({c: v for c, v in zip(sig_cols, [2.0, -1.0, 1.0, -2.0])})
+        for col in sig_cols:
+            df_wide[col] = signal_row[col]
+
+        _aum, _leverage = 100.0, 1.0
+        result = _leverage_positions(
+            df_wide=df_wide.copy(),
+            sname=self.sname,
+            pname=self.pname,
+            fids=fx_fids,
+            leverage=_leverage,
+            aum=_aum,
+        )
+
+        # Expected: position[fid] = signal[fid] * aum * leverage / gross_exposure
+        gross = sum(abs(v) for v in signal_row.values)
+        self.assertEqual(gross, 6.0)
+        expected = {
+            pos: signal_row[sig] * _aum * _leverage / gross
+            for pos, sig in zip(pos_cols, sig_cols)
+        }
+        for pos_col, exp in expected.items():
+            actual_vals = result[pos_col].dropna().unique()
+            self.assertEqual(len(actual_vals), 1, msg=f"{pos_col} not flat")
+            self.assertAlmostEqual(
+                actual_vals[0],
+                exp,
+                places=10,
+                msg=(
+                    f"{pos_col}: expected {exp} (gross-exposure scaling), "
+                    f"got {actual_vals[0]}. If this test fails, "
+                    "_leverage_positions has reverted to net-sum scaling."
+                ),
+            )
+
+        # Gross-scaled signs preserve the input sign on every leg.
+        for pos_col, sig_col in zip(pos_cols, sig_cols):
+            self.assertEqual(
+                np.sign(result[pos_col].dropna().iloc[0]),
+                np.sign(signal_row[sig_col]),
+                msg=f"{pos_col} sign flipped vs input signal",
+            )
+
+    def test__leverage_positions_market_neutral_does_not_nan_out(self):
+        # Long/short cancellation: net sum = 0 but gross > 0. The old
+        # net-sum implementation NaN-ed the entire row to avoid div-by-zero;
+        # gross-scaling keeps the row populated.
+        fx_fids = [f"{cid}_FX" for cid in self.cids]
+        sig_cols = [f"{fid}{self.sig_ident}" for fid in fx_fids]
+        pos_cols = [f"{fid}_{self.sname}_{self.pname}" for fid in fx_fids]
+
+        df_wide = self.mock_df_wide.copy()[sig_cols]
+        # Two longs of +1 and two shorts of -1 -> net = 0, gross = 4
+        signal_vals = [1.0, -1.0, 1.0, -1.0]
+        for col, val in zip(sig_cols, signal_vals):
+            df_wide[col] = val
+
+        _aum, _leverage = 100.0, 1.0
+        result = _leverage_positions(
+            df_wide=df_wide.copy(),
+            sname=self.sname,
+            pname=self.pname,
+            fids=fx_fids,
+            leverage=_leverage,
+            aum=_aum,
+        )
+
+        # No row should be all NaN; every contract should have a finite position.
+        self.assertFalse(
+            result.isna().all(axis=1).any(),
+            msg=(
+                "Market-neutral row collapsed to NaN. "
+                "_leverage_positions is using net rowsums instead of gross."
+            ),
+        )
+        # Each position should be sign * aum * leverage / gross.
+        for pos_col, sig_val in zip(pos_cols, signal_vals):
+            exp = sig_val * _aum * _leverage / 4.0
+            actual_vals = result[pos_col].dropna().unique()
+            self.assertEqual(len(actual_vals), 1)
+            self.assertAlmostEqual(actual_vals[0], exp, places=10)
+
     @mock.patch(
         "macrosynergy.pnl.historic_portfolio_volatility.historic_portfolio_vol",
         side_effect=mock_historic_portfolio_vol,
