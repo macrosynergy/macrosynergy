@@ -1349,13 +1349,15 @@ class TestAll(unittest.TestCase):
         self.assertEqual(constant, [])
 
         # Mixed constant / varying levels: constant levels collapse out.
+        # The helper now tags each constant value with its level name so
+        # the caller can filter by axis_label_levels.
         mi = pd.MultiIndex.from_tuples(
             [("X", "last", "M"), ("X", "last", "Q")],
             names=["Signal", "Aggregation", "Frequency"],
         )
         display, constant = sr._collapse_constant_levels(mi)
         self.assertEqual(display, ["M", "Q"])
-        self.assertEqual(constant, ["X", "last"])
+        self.assertEqual(constant, [("Signal", "X"), ("Aggregation", "last")])
 
         # No constant levels: nothing collapses.
         mi2 = pd.MultiIndex.from_tuples(
@@ -1372,7 +1374,144 @@ class TestAll(unittest.TestCase):
         )
         display, constant = sr._collapse_constant_levels(mi3)
         self.assertIsNone(display)
-        self.assertEqual(constant, ["X", "M"])
+        self.assertEqual(constant, [("Signal", "X"), ("Frequency", "M")])
+
+    def test_single_statistic_table_axis_label_levels(self):
+        self.mpl_backend: str = matplotlib.get_backend()
+        matplotlib.use("Agg")
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+
+            sr = SignalReturnRelations(
+                df=self.dfd,
+                rets="XR",
+                sigs="CRY",
+                freqs=["M", "Q"],
+                agg_sigs="last",
+                blacklist=self.blacklist,
+                slip=1,
+            )
+
+            # axis_label_levels=["xcat"] keeps the y-tick collapse but
+            # drops the constant agg_sigs ("last") from the auto y-label.
+            with patch("macrosynergy.visuals.view_table") as mock_view_table:
+                sr.single_statistic_table(
+                    stat="kendall",
+                    rows=["xcat", "agg_sigs", "freq"],
+                    columns=["ret"],
+                    show_heatmap=True,
+                    axis_label_levels=["xcat"],
+                )
+                mock_view_table.assert_called_once()
+                _, call_kwargs = mock_view_table.call_args
+                self.assertEqual(call_kwargs.get("yticklabels"), ["M", "Q"])
+                self.assertEqual(call_kwargs.get("ylabel"), "CRY")
+
+            # Empty list suppresses the auto label entirely while
+            # leaving the tick collapse intact.
+            with patch("macrosynergy.visuals.view_table") as mock_view_table:
+                sr.single_statistic_table(
+                    stat="kendall",
+                    rows=["xcat", "agg_sigs", "freq"],
+                    columns=["ret"],
+                    show_heatmap=True,
+                    axis_label_levels=[],
+                )
+                mock_view_table.assert_called_once()
+                _, call_kwargs = mock_view_table.call_args
+                self.assertEqual(call_kwargs.get("yticklabels"), ["M", "Q"])
+                self.assertIsNone(call_kwargs.get("ylabel"))
+
+            # Invalid level keys are rejected.
+            with self.assertRaises(ValueError):
+                sr.single_statistic_table(
+                    stat="kendall",
+                    rows=["xcat", "agg_sigs", "freq"],
+                    columns=["ret"],
+                    show_heatmap=True,
+                    axis_label_levels=["not_a_level"],
+                )
+
+        plt.close("all")
+        matplotlib.use(self.mpl_backend)
+
+    def test_single_statistic_table_xcat_labels(self):
+        self.mpl_backend: str = matplotlib.get_backend()
+        matplotlib.use("Agg")
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+
+            sr = SignalReturnRelations(
+                df=self.dfd,
+                rets=["XR", "GROWTH"],
+                sigs="CRY",
+                freqs=["M", "Q"],
+                agg_sigs="last",
+                blacklist=self.blacklist,
+                slip=1,
+            )
+
+            # Unified rename dict applied to both signals and returns;
+            # renamed values flow through to the auto y-label.
+            xcat_labels = {
+                "CRY": "Carry score",
+                "XR": "Spot return",
+                "GROWTH": "Growth score",
+            }
+            with patch("macrosynergy.visuals.view_table") as mock_view_table:
+                sr.single_statistic_table(
+                    stat="kendall",
+                    rows=["xcat", "agg_sigs", "freq"],
+                    columns=["ret"],
+                    show_heatmap=True,
+                    xcat_labels=xcat_labels,
+                    axis_label_levels=["xcat"],
+                )
+                mock_view_table.assert_called_once()
+                call_args, call_kwargs = mock_view_table.call_args
+                df_passed = call_args[0]
+                # Signal rename propagates to the y-label.
+                self.assertEqual(call_kwargs.get("ylabel"), "Carry score")
+                # Return rename appears on the DataFrame columns (a plain
+                # Index with two entries, so view_table picks them up
+                # directly when xticklabels is left at None).
+                self.assertEqual(
+                    sorted(df_passed.columns.tolist()),
+                    sorted(["Spot return", "Growth score"]),
+                )
+
+            # Partial dict: unlisted xcats are kept verbatim, not dropped.
+            with patch("macrosynergy.visuals.view_table") as mock_view_table:
+                sr.single_statistic_table(
+                    stat="kendall",
+                    rows=["xcat", "agg_sigs", "freq"],
+                    columns=["ret"],
+                    show_heatmap=True,
+                    xcat_labels={"CRY": "Carry score"},
+                )
+                mock_view_table.assert_called_once()
+                call_args, _ = mock_view_table.call_args
+                df_passed = call_args[0]
+                self.assertEqual(
+                    sorted(df_passed.columns.tolist()),
+                    sorted(["XR", "GROWTH"]),
+                )
+
+            # Combining xcat_labels with the legacy kwargs is rejected.
+            with self.assertRaises(ValueError):
+                sr.single_statistic_table(
+                    stat="kendall",
+                    rows=["xcat", "agg_sigs", "freq"],
+                    columns=["ret"],
+                    show_heatmap=True,
+                    xcat_labels={"CRY": "Carry score"},
+                    signal_name_dict={"CRY": "Carry"},
+                )
+
+        plt.close("all")
+        matplotlib.use(self.mpl_backend)
 
     def test_plot_single_statistic_heatmap(self):
         self.mpl_backend: str = matplotlib.get_backend()

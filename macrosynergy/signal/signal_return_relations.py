@@ -1505,6 +1505,7 @@ class SignalReturnRelations:
         column_names: Optional[List[str]] = None,
         signal_name_dict: Optional[Dict[str, str]] = None,
         return_name_dict: Optional[Dict[str, str]] = None,
+        xcat_labels: Optional[Dict[str, str]] = None,
         min_color: Optional[float] = None,
         max_color: Optional[float] = None,
         figsize: Tuple[float, float] = (14, 8),
@@ -1515,6 +1516,7 @@ class SignalReturnRelations:
         significance_threshold: Optional[float] = 0.9,
         xlabel: Optional[str] = None,
         ylabel: Optional[str] = None,
+        axis_label_levels: Optional[List[str]] = None,
         footnote: Optional[str] = None,
         footnote_fontsize: int = 10,
     ):
@@ -1556,10 +1558,22 @@ class SignalReturnRelations:
             of the generated DataFrame are used.
         signal_name_dict : dict, optional
             dictionary mapping the signal names to the desired names in the heatmap.
-            Default is None, in which case the signal names are used.
+            Default is None, in which case the signal names are used. Renamed
+            values flow through to the auto axis label produced by the
+            constant-level collapse described under ``ylabel``.
         return_name_dict : dict, optional
             dictionary mapping the return names to the desired names in the heatmap.
-            Default is None, in which case the return names are used.
+            Default is None, in which case the return names are used. Renamed
+            values flow through to the auto axis label produced by the
+            constant-level collapse described under ``xlabel``.
+        xcat_labels : dict, optional
+            Unified rename dictionary covering both signal and return
+            ``xcat``\s. Internally split by membership in ``self.sigs`` /
+            ``self.rets`` and routed through ``signal_name_dict`` /
+            ``return_name_dict``; xcats not listed in the dict are kept
+            verbatim. Mutually exclusive with the two legacy kwargs — pass
+            either ``xcat_labels`` or ``signal_name_dict`` /
+            ``return_name_dict``, not both. Default is None (no rename).
         min_color : float, optional
             minimum value of the color scale. Default is None, in which case the minimum
             value of the table is used.
@@ -1596,7 +1610,8 @@ class SignalReturnRelations:
             the target return (e.g. ``"Forward return (target)"``).
             Default is None, in which case any column-index levels whose
             values are constant across the table are auto-collapsed into
-            this label (joined by ``" · "``).
+            this label (joined by ``" · "``). See ``axis_label_levels``
+            to restrict which constant levels feed into the label.
         ylabel : str, optional
             Label drawn beside the heatmap rows, useful for naming the
             feature (e.g. ``"Factor (feature)"``). Default is None, in
@@ -1605,7 +1620,18 @@ class SignalReturnRelations:
             by ``" · "``). For instance, a table whose rows iterate over
             one signal, one aggregation, and several frequencies will
             display only the frequencies as y-tick labels and place
-            ``"<signal> · <aggregation>"`` on the y-axis label.
+            ``"<signal> · <aggregation>"`` on the y-axis label. See
+            ``axis_label_levels`` to restrict which constant levels
+            feed into the label.
+        axis_label_levels : List[str], optional
+            Subset of ``["xcat", "ret", "freq", "agg_sigs"]`` naming the
+            level keys eligible for promotion into the auto x/y-axis
+            label. Constant levels not in this list still collapse from
+            the tick labels but do not appear in the axis label. Default
+            is None, which promotes every collapsed level into the label
+            (the original behaviour). Pass e.g. ``["xcat", "ret"]`` to
+            keep the auto-label limited to the signal/return identity
+            and drop the aggregation/frequency suffix.
         footnote : str, optional
             Free-text caption rendered below the heatmap. Useful for
             recording the significance test, panel scope, or annotation
@@ -1651,6 +1677,24 @@ class SignalReturnRelations:
 
         if not all([x in rows_values for x in columns]):
             raise ValueError(f"Columns must only contain {rows_values}")
+
+        if axis_label_levels is not None:
+            if not all(x in rows_values for x in axis_label_levels):
+                raise ValueError(
+                    f"axis_label_levels must only contain {rows_values}"
+                )
+
+        if xcat_labels is not None:
+            if signal_name_dict is not None or return_name_dict is not None:
+                raise ValueError(
+                    "Pass either xcat_labels or "
+                    "signal_name_dict/return_name_dict, not both."
+                )
+            # Build identity-filled rename dicts so existing keys preserve
+            # their position and unrenamed xcats are not dropped by the
+            # downstream reorder.
+            signal_name_dict = {s: xcat_labels.get(s, s) for s in self.sigs}
+            return_name_dict = {r: xcat_labels.get(r, r) for r in self.rets}
 
         rows_dict = {
             "xcat": self.sigs,
@@ -1786,12 +1830,28 @@ class SignalReturnRelations:
                 column_names if column_names is not None else display_xticks
             )
 
+            # Filter which collapsed levels feed into the auto axis label.
+            # ``axis_label_levels`` is expressed in the same vocabulary as
+            # ``rows`` / ``columns`` (``"xcat"``, ``"ret"``, ``"freq"``,
+            # ``"agg_sigs"``); translate to the display level names used in
+            # the MultiIndex.
+            label_dict = {
+                "xcat": "Signal",
+                "ret": "Return",
+                "freq": "Frequency",
+                "agg_sigs": "Aggregation",
+            }
+            if axis_label_levels is not None:
+                allowed = {label_dict[k] for k in axis_label_levels}
+                constant_y = [(n, v) for n, v in constant_y if n in allowed]
+                constant_x = [(n, v) for n, v in constant_x if n in allowed]
+
             ylabel_to_pass = ylabel
             if ylabel_to_pass is None and constant_y:
-                ylabel_to_pass = " · ".join(constant_y)
+                ylabel_to_pass = " · ".join(v for _, v in constant_y)
             xlabel_to_pass = xlabel
             if xlabel_to_pass is None and constant_x:
-                xlabel_to_pass = " · ".join(constant_x)
+                xlabel_to_pass = " · ".join(v for _, v in constant_x)
 
             msv.view_table(
                 df_result,
@@ -1852,10 +1912,22 @@ class SignalReturnRelations:
             of the generated DataFrame are used.
         signal_name_dict : dict, optional
             dictionary mapping the signal names to the desired names in the heatmap.
-            Default is None, in which case the signal names are used.
+            Default is None, in which case the signal names are used. Renamed
+            values flow through to the auto axis label produced by the
+            constant-level collapse described under ``ylabel``.
         return_name_dict : dict, optional
             dictionary mapping the return names to the desired names in the heatmap.
-            Default is None, in which case the return names are used.
+            Default is None, in which case the return names are used. Renamed
+            values flow through to the auto axis label produced by the
+            constant-level collapse described under ``xlabel``.
+        xcat_labels : dict, optional
+            Unified rename dictionary covering both signal and return
+            ``xcat``\s. Internally split by membership in ``self.sigs`` /
+            ``self.rets`` and routed through ``signal_name_dict`` /
+            ``return_name_dict``; xcats not listed in the dict are kept
+            verbatim. Mutually exclusive with the two legacy kwargs — pass
+            either ``xcat_labels`` or ``signal_name_dict`` /
+            ``return_name_dict``, not both. Default is None (no rename).
         min_color : float, optional
             minimum value of the color scale. Default is None, in which case the minimum
             value of the table is used.
@@ -1942,10 +2014,22 @@ class SignalReturnRelations:
             of the generated DataFrame are used.
         signal_name_dict : dict, optional
             dictionary mapping the signal names to the desired names in the heatmap.
-            Default is None, in which case the signal names are used.
+            Default is None, in which case the signal names are used. Renamed
+            values flow through to the auto axis label produced by the
+            constant-level collapse described under ``ylabel``.
         return_name_dict : dict, optional
             dictionary mapping the return names to the desired names in the heatmap.
-            Default is None, in which case the return names are used.
+            Default is None, in which case the return names are used. Renamed
+            values flow through to the auto axis label produced by the
+            constant-level collapse described under ``xlabel``.
+        xcat_labels : dict, optional
+            Unified rename dictionary covering both signal and return
+            ``xcat``\s. Internally split by membership in ``self.sigs`` /
+            ``self.rets`` and routed through ``signal_name_dict`` /
+            ``return_name_dict``; xcats not listed in the dict are kept
+            verbatim. Mutually exclusive with the two legacy kwargs — pass
+            either ``xcat_labels`` or ``signal_name_dict`` /
+            ``return_name_dict``, not both. Default is None (no rename).
         min_color : float, optional
             minimum value of the color scale. Default is None, in which case the minimum
             value of the table is used.
@@ -2024,7 +2108,7 @@ class SignalReturnRelations:
 
     def _collapse_constant_levels(
         self, idx: pd.Index
-    ) -> Tuple[Optional[List[str]], List[str]]:
+    ) -> Tuple[Optional[List[str]], List[Tuple[str, str]]]:
         """
         Strip levels of a MultiIndex whose values are constant across the
         index and surface those values for axis-label use.
@@ -2037,33 +2121,36 @@ class SignalReturnRelations:
 
         Returns
         -------
-        Tuple[Optional[List[str]], List[str]]
-            ``(display_labels, constant_values)``.
+        Tuple[Optional[List[str]], List[Tuple[str, str]]]
+            ``(display_labels, constant_pairs)``.
             ``display_labels`` is a list of tick labels with constant levels
             removed, joined by ``" · "`` when more than one level survives.
             It is ``None`` when no collapse applies (plain ``Index``, single
             level, no constant levels, or all levels constant — in which
-            case the existing tick labels are kept). ``constant_values`` is
-            the ordered list of the collapsed level values, suitable for
-            building an auto axis label.
+            case the existing tick labels are kept). ``constant_pairs`` is
+            an ordered list of ``(level_name, value)`` for each collapsed
+            level, suitable for filtering and joining into an auto axis
+            label.
         """
         if not isinstance(idx, pd.MultiIndex) or idx.nlevels < 2:
             return None, []
 
         constant_level_nos: List[int] = []
-        constant_values: List[str] = []
+        constant_pairs: List[Tuple[str, str]] = []
         for level_no in range(idx.nlevels):
             uniq = idx.get_level_values(level_no).unique()
             if len(uniq) == 1:
                 constant_level_nos.append(level_no)
-                constant_values.append(str(uniq[0]))
+                constant_pairs.append(
+                    (str(idx.names[level_no]), str(uniq[0]))
+                )
 
         if not constant_level_nos:
             return None, []
         if len(constant_level_nos) == idx.nlevels:
             # Every level is constant (single-row/column table): leave the
             # tick labels alone but still expose the values for the axis.
-            return None, constant_values
+            return None, constant_pairs
 
         remaining = idx.droplevel(constant_level_nos)
         if isinstance(remaining, pd.MultiIndex):
@@ -2072,7 +2159,7 @@ class SignalReturnRelations:
             ]
         else:
             display = [str(v) for v in remaining.tolist()]
-        return display, constant_values
+        return display, constant_pairs
 
     def set_df_labels(self, rows_dict: Dict, rows: List[str], columns: List[str]):
         """
