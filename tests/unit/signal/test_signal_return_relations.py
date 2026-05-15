@@ -1218,7 +1218,7 @@ class TestAll(unittest.TestCase):
             # Single signal + single aggregation, multiple frequencies:
             # both ``xcat`` and ``agg_sigs`` are constant across the rows,
             # so they should collapse out of the tick labels and into the
-            # auto y-label.
+            # auto y-label when the caller opts in.
             sr = SignalReturnRelations(
                 df=self.dfd,
                 rets="XR",
@@ -1235,6 +1235,7 @@ class TestAll(unittest.TestCase):
                     rows=["xcat", "agg_sigs", "freq"],
                     columns=["ret"],
                     show_heatmap=True,
+                    collapse_constant_levels=True,
                 )
                 mock_view_table.assert_called_once()
                 _, call_kwargs = mock_view_table.call_args
@@ -1248,6 +1249,21 @@ class TestAll(unittest.TestCase):
                     call_kwargs.get("ylabel"), "CRY · last"
                 )
 
+            # Default (collapse_constant_levels=False): byte-identical
+            # to the historical rendering — no auto y-label, no tick
+            # collapse passed to ``view_table``.
+            with patch("macrosynergy.visuals.view_table") as mock_view_table:
+                sr.single_statistic_table(
+                    stat="kendall",
+                    rows=["xcat", "agg_sigs", "freq"],
+                    columns=["ret"],
+                    show_heatmap=True,
+                )
+                mock_view_table.assert_called_once()
+                _, call_kwargs = mock_view_table.call_args
+                self.assertIsNone(call_kwargs.get("ylabel"))
+                self.assertIsNone(call_kwargs.get("yticklabels"))
+
             # Explicit ylabel/yticklabels must be respected even when a
             # collapse would otherwise have applied.
             with patch("macrosynergy.visuals.view_table") as mock_view_table:
@@ -1256,6 +1272,7 @@ class TestAll(unittest.TestCase):
                     rows=["xcat", "agg_sigs", "freq"],
                     columns=["ret"],
                     show_heatmap=True,
+                    collapse_constant_levels=True,
                     ylabel="Custom y-label",
                     row_names=["row1", "row2"],
                 )
@@ -1287,6 +1304,7 @@ class TestAll(unittest.TestCase):
                     rows=["xcat", "agg_sigs", "freq"],
                     columns=["ret"],
                     show_heatmap=True,
+                    collapse_constant_levels=True,
                 )
                 mock_view_table.assert_called_once()
                 _, call_kwargs = mock_view_table.call_args
@@ -1313,6 +1331,7 @@ class TestAll(unittest.TestCase):
                     rows=["xcat", "agg_sigs", "freq"],
                     columns=["ret"],
                     show_heatmap=True,
+                    collapse_constant_levels=True,
                 )
                 mock_view_table.assert_called_once()
                 _, call_kwargs = mock_view_table.call_args
@@ -1325,6 +1344,7 @@ class TestAll(unittest.TestCase):
                 stat="kendall",
                 rows=["xcat", "agg_sigs", "freq"],
                 columns=["ret"],
+                collapse_constant_levels=True,
             )
             self.assertIsInstance(df_returned.index, pd.MultiIndex)
             self.assertEqual(df_returned.index.nlevels, 3)
@@ -1401,6 +1421,7 @@ class TestAll(unittest.TestCase):
                     rows=["xcat", "agg_sigs", "freq"],
                     columns=["ret"],
                     show_heatmap=True,
+                    collapse_constant_levels=True,
                     axis_label_levels=["xcat"],
                 )
                 mock_view_table.assert_called_once()
@@ -1416,6 +1437,7 @@ class TestAll(unittest.TestCase):
                     rows=["xcat", "agg_sigs", "freq"],
                     columns=["ret"],
                     show_heatmap=True,
+                    collapse_constant_levels=True,
                     axis_label_levels=[],
                 )
                 mock_view_table.assert_called_once()
@@ -1430,7 +1452,18 @@ class TestAll(unittest.TestCase):
                     rows=["xcat", "agg_sigs", "freq"],
                     columns=["ret"],
                     show_heatmap=True,
+                    collapse_constant_levels=True,
                     axis_label_levels=["not_a_level"],
+                )
+
+            # axis_label_levels without the collapse gate is rejected.
+            with self.assertRaises(ValueError):
+                sr.single_statistic_table(
+                    stat="kendall",
+                    rows=["xcat", "agg_sigs", "freq"],
+                    columns=["ret"],
+                    show_heatmap=True,
+                    axis_label_levels=["xcat"],
                 )
 
         plt.close("all")
@@ -1467,6 +1500,7 @@ class TestAll(unittest.TestCase):
                     columns=["ret"],
                     show_heatmap=True,
                     xcat_labels=xcat_labels,
+                    collapse_constant_levels=True,
                     axis_label_levels=["xcat"],
                 )
                 mock_view_table.assert_called_once()

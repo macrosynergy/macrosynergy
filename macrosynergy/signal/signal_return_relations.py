@@ -1516,6 +1516,7 @@ class SignalReturnRelations:
         significance_threshold: Optional[float] = 0.9,
         xlabel: Optional[str] = None,
         ylabel: Optional[str] = None,
+        collapse_constant_levels: bool = False,
         axis_label_levels: Optional[List[str]] = None,
         footnote: Optional[str] = None,
         footnote_fontsize: int = 10,
@@ -1608,30 +1609,44 @@ class SignalReturnRelations:
         xlabel : str, optional
             Label drawn beneath the heatmap columns, useful for naming
             the target return (e.g. ``"Forward return (target)"``).
-            Default is None, in which case any column-index levels whose
+            Default is None. When ``collapse_constant_levels=True`` and
+            the caller leaves this None, any column-index levels whose
             values are constant across the table are auto-collapsed into
             this label (joined by ``" · "``). See ``axis_label_levels``
             to restrict which constant levels feed into the label.
         ylabel : str, optional
             Label drawn beside the heatmap rows, useful for naming the
-            feature (e.g. ``"Factor (feature)"``). Default is None, in
-            which case any row-index levels whose values are constant
-            across the table are auto-collapsed into this label (joined
-            by ``" · "``). For instance, a table whose rows iterate over
+            feature (e.g. ``"Factor (feature)"``). Default is None. When
+            ``collapse_constant_levels=True`` and the caller leaves this
+            None, any row-index levels whose values are constant across
+            the table are auto-collapsed into this label (joined by
+            ``" · "``). For instance, a table whose rows iterate over
             one signal, one aggregation, and several frequencies will
             display only the frequencies as y-tick labels and place
             ``"<signal> · <aggregation>"`` on the y-axis label. See
             ``axis_label_levels`` to restrict which constant levels
             feed into the label.
+        collapse_constant_levels : bool, optional
+            When True, row/column index levels whose values are constant
+            across the table are stripped from the tick labels and
+            promoted to the corresponding axis label (joined by
+            ``" · "``) when the caller did not pass ``xlabel``/``ylabel``
+            (or ``row_names``/``column_names``) explicitly. The returned
+            DataFrame is unchanged in every case. Default is False (raw
+            MultiIndex tuples appear as tick labels, matching the
+            historical rendering). Required to be True before passing
+            ``axis_label_levels``.
         axis_label_levels : List[str], optional
             Subset of ``["xcat", "ret", "freq", "agg_sigs"]`` naming the
             level keys eligible for promotion into the auto x/y-axis
             label. Constant levels not in this list still collapse from
-            the tick labels but do not appear in the axis label. Default
-            is None, which promotes every collapsed level into the label
-            (the original behaviour). Pass e.g. ``["xcat", "ret"]`` to
-            keep the auto-label limited to the signal/return identity
-            and drop the aggregation/frequency suffix.
+            the tick labels but do not appear in the axis label. Only
+            takes effect when ``collapse_constant_levels=True``; raises
+            ``ValueError`` otherwise. Default is None, which promotes
+            every collapsed level into the label. Pass e.g.
+            ``["xcat", "ret"]`` to keep the auto-label limited to the
+            signal/return identity and drop the aggregation/frequency
+            suffix.
         footnote : str, optional
             Free-text caption rendered below the heatmap. Useful for
             recording the significance test, panel scope, or annotation
@@ -1679,6 +1694,10 @@ class SignalReturnRelations:
             raise ValueError(f"Columns must only contain {rows_values}")
 
         if axis_label_levels is not None:
+            if not collapse_constant_levels:
+                raise ValueError(
+                    "axis_label_levels requires collapse_constant_levels=True."
+                )
             if not all(x in rows_values for x in axis_label_levels):
                 raise ValueError(
                     f"axis_label_levels must only contain {rows_values}"
@@ -1812,46 +1831,49 @@ class SignalReturnRelations:
             if df_psig is not None and significance_threshold is not None:
                 highlight_mask = df_psig > float(significance_threshold)
 
-            # Collapse row/column index levels whose values are constant so
-            # they don't clutter the tick labels. The collapsed values are
-            # promoted to the corresponding axis label when the caller did
-            # not provide one. ``df_result`` itself is left untouched.
-            display_yticks, constant_y = self._collapse_constant_levels(
-                df_result.index
-            )
-            display_xticks, constant_x = self._collapse_constant_levels(
-                df_result.columns
-            )
-
-            yticklabels_to_pass = (
-                row_names if row_names is not None else display_yticks
-            )
-            xticklabels_to_pass = (
-                column_names if column_names is not None else display_xticks
-            )
-
-            # Filter which collapsed levels feed into the auto axis label.
-            # ``axis_label_levels`` is expressed in the same vocabulary as
-            # ``rows`` / ``columns`` (``"xcat"``, ``"ret"``, ``"freq"``,
-            # ``"agg_sigs"``); translate to the display level names used in
-            # the MultiIndex.
-            label_dict = {
-                "xcat": "Signal",
-                "ret": "Return",
-                "freq": "Frequency",
-                "agg_sigs": "Aggregation",
-            }
-            if axis_label_levels is not None:
-                allowed = {label_dict[k] for k in axis_label_levels}
-                constant_y = [(n, v) for n, v in constant_y if n in allowed]
-                constant_x = [(n, v) for n, v in constant_x if n in allowed]
-
+            yticklabels_to_pass = row_names
+            xticklabels_to_pass = column_names
             ylabel_to_pass = ylabel
-            if ylabel_to_pass is None and constant_y:
-                ylabel_to_pass = " · ".join(v for _, v in constant_y)
             xlabel_to_pass = xlabel
-            if xlabel_to_pass is None and constant_x:
-                xlabel_to_pass = " · ".join(v for _, v in constant_x)
+
+            if collapse_constant_levels:
+                # Strip row/column index levels whose values are constant
+                # so they don't clutter the tick labels. The collapsed
+                # values are promoted to the corresponding axis label
+                # when the caller did not provide one. ``df_result``
+                # itself is left untouched.
+                display_yticks, constant_y = self._collapse_constant_levels(
+                    df_result.index
+                )
+                display_xticks, constant_x = self._collapse_constant_levels(
+                    df_result.columns
+                )
+
+                if yticklabels_to_pass is None:
+                    yticklabels_to_pass = display_yticks
+                if xticklabels_to_pass is None:
+                    xticklabels_to_pass = display_xticks
+
+                # Filter which collapsed levels feed into the auto axis
+                # label. ``axis_label_levels`` is expressed in the same
+                # vocabulary as ``rows`` / ``columns`` (``"xcat"``,
+                # ``"ret"``, ``"freq"``, ``"agg_sigs"``); translate to
+                # the display level names used in the MultiIndex.
+                label_dict = {
+                    "xcat": "Signal",
+                    "ret": "Return",
+                    "freq": "Frequency",
+                    "agg_sigs": "Aggregation",
+                }
+                if axis_label_levels is not None:
+                    allowed = {label_dict[k] for k in axis_label_levels}
+                    constant_y = [(n, v) for n, v in constant_y if n in allowed]
+                    constant_x = [(n, v) for n, v in constant_x if n in allowed]
+
+                if ylabel_to_pass is None and constant_y:
+                    ylabel_to_pass = " · ".join(v for _, v in constant_y)
+                if xlabel_to_pass is None and constant_x:
+                    xlabel_to_pass = " · ".join(v for _, v in constant_x)
 
             msv.view_table(
                 df_result,
