@@ -1513,6 +1513,10 @@ class SignalReturnRelations:
         pval_stat: Optional[str] = None,
         round_pval: int = 3,
         significance_threshold: Optional[float] = 0.9,
+        xlabel: Optional[str] = None,
+        ylabel: Optional[str] = None,
+        footnote: Optional[str] = None,
+        footnote_fontsize: int = 10,
     ):
         """
         Creates a table which shows the specified statistic for each row and column
@@ -1587,6 +1591,21 @@ class SignalReturnRelations:
             highlights cells whose probability of significance exceeds 0.9
             (equivalently, raw p-value below 0.1). Only takes effect when
             ``pval_stat`` is set. Pass ``None`` to disable. Default is 0.9.
+        xlabel : str, optional
+            Label drawn beneath the heatmap columns, useful for naming
+            the target return (e.g. ``"Forward return (target)"``).
+            Default is None.
+        ylabel : str, optional
+            Label drawn beside the heatmap rows, useful for naming the
+            feature (e.g. ``"Factor (feature)"``). Default is None.
+        footnote : str, optional
+            Free-text caption rendered below the heatmap. Useful for
+            recording the significance test, panel scope, or annotation
+            legend (e.g. ``"Significance computed with the Macrosynergy
+            panel test."``). Multi-line strings are supported. Default
+            is None (no footnote).
+        footnote_fontsize : int, optional
+            Font size for the footnote text. Default is 10.
 
         Returns
         -------
@@ -1750,9 +1769,13 @@ class SignalReturnRelations:
                 figsize=figsize,
                 fmt=heatmap_fmt,
                 annot=heatmap_annot,
+                xlabel=xlabel,
+                ylabel=ylabel,
                 xticklabels=column_names,
                 yticklabels=row_names,
                 highlight_mask=highlight_mask,
+                footnote=footnote,
+                footnote_fontsize=footnote_fontsize,
             )
 
         return df_result
@@ -1831,6 +1854,10 @@ class SignalReturnRelations:
             highlights cells whose probability of significance exceeds 0.9
             (equivalently, raw p-value below 0.1). Only takes effect when
             ``pval_stat`` is set. Pass ``None`` to disable. Default is 0.9.
+        xlabel, ylabel, footnote, footnote_fontsize
+            Forwarded to :meth:`single_statistic_table` and only affect
+            the heatmap; accepted here for API symmetry even though this
+            wrapper renders no heatmap.
 
         Returns
         -------
@@ -1917,6 +1944,16 @@ class SignalReturnRelations:
             highlights cells whose probability of significance exceeds 0.9
             (equivalently, raw p-value below 0.1). Only takes effect when
             ``pval_stat`` is set. Pass ``None`` to disable. Default is 0.9.
+        xlabel : str, optional
+            Label drawn beneath the heatmap columns. Default is None.
+        ylabel : str, optional
+            Label drawn beside the heatmap rows. Default is None.
+        footnote : str, optional
+            Free-text caption rendered below the heatmap. Useful for
+            recording the significance test, panel scope, or annotation
+            legend. Multi-line strings are supported. Default is None.
+        footnote_fontsize : int, optional
+            Font size for the footnote text. Default is 10.
         """
         kwargs["show_heatmap"] = True
         self.single_statistic_table(*args, **kwargs)
