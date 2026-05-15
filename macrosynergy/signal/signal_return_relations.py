@@ -1594,10 +1594,18 @@ class SignalReturnRelations:
         xlabel : str, optional
             Label drawn beneath the heatmap columns, useful for naming
             the target return (e.g. ``"Forward return (target)"``).
-            Default is None.
+            Default is None, in which case any column-index levels whose
+            values are constant across the table are auto-collapsed into
+            this label (joined by ``" · "``).
         ylabel : str, optional
             Label drawn beside the heatmap rows, useful for naming the
-            feature (e.g. ``"Factor (feature)"``). Default is None.
+            feature (e.g. ``"Factor (feature)"``). Default is None, in
+            which case any row-index levels whose values are constant
+            across the table are auto-collapsed into this label (joined
+            by ``" · "``). For instance, a table whose rows iterate over
+            one signal, one aggregation, and several frequencies will
+            display only the frequencies as y-tick labels and place
+            ``"<signal> · <aggregation>"`` on the y-axis label.
         footnote : str, optional
             Free-text caption rendered below the heatmap. Useful for
             recording the significance test, panel scope, or annotation
@@ -1760,6 +1768,31 @@ class SignalReturnRelations:
             if df_psig is not None and significance_threshold is not None:
                 highlight_mask = df_psig > float(significance_threshold)
 
+            # Collapse row/column index levels whose values are constant so
+            # they don't clutter the tick labels. The collapsed values are
+            # promoted to the corresponding axis label when the caller did
+            # not provide one. ``df_result`` itself is left untouched.
+            display_yticks, constant_y = self._collapse_constant_levels(
+                df_result.index
+            )
+            display_xticks, constant_x = self._collapse_constant_levels(
+                df_result.columns
+            )
+
+            yticklabels_to_pass = (
+                row_names if row_names is not None else display_yticks
+            )
+            xticklabels_to_pass = (
+                column_names if column_names is not None else display_xticks
+            )
+
+            ylabel_to_pass = ylabel
+            if ylabel_to_pass is None and constant_y:
+                ylabel_to_pass = " · ".join(constant_y)
+            xlabel_to_pass = xlabel
+            if xlabel_to_pass is None and constant_x:
+                xlabel_to_pass = " · ".join(constant_x)
+
             msv.view_table(
                 df_result,
                 title=title,
@@ -1769,10 +1802,10 @@ class SignalReturnRelations:
                 figsize=figsize,
                 fmt=heatmap_fmt,
                 annot=heatmap_annot,
-                xlabel=xlabel,
-                ylabel=ylabel,
-                xticklabels=column_names,
-                yticklabels=row_names,
+                xlabel=xlabel_to_pass,
+                ylabel=ylabel_to_pass,
+                xticklabels=xticklabels_to_pass,
+                yticklabels=yticklabels_to_pass,
                 highlight_mask=highlight_mask,
                 footnote=footnote,
                 footnote_fontsize=footnote_fontsize,
@@ -1988,6 +2021,58 @@ class SignalReturnRelations:
                 else:
                     annot.loc[row, col] = f"{stat_str}\n({pval_str})"
         return annot
+
+    def _collapse_constant_levels(
+        self, idx: pd.Index
+    ) -> Tuple[Optional[List[str]], List[str]]:
+        """
+        Strip levels of a MultiIndex whose values are constant across the
+        index and surface those values for axis-label use.
+
+        Parameters
+        ----------
+        idx : pd.Index
+            Row or column index of the assembled statistic table. May be a
+            plain :class:`~pandas.Index` or a :class:`~pandas.MultiIndex`.
+
+        Returns
+        -------
+        Tuple[Optional[List[str]], List[str]]
+            ``(display_labels, constant_values)``.
+            ``display_labels`` is a list of tick labels with constant levels
+            removed, joined by ``" · "`` when more than one level survives.
+            It is ``None`` when no collapse applies (plain ``Index``, single
+            level, no constant levels, or all levels constant — in which
+            case the existing tick labels are kept). ``constant_values`` is
+            the ordered list of the collapsed level values, suitable for
+            building an auto axis label.
+        """
+        if not isinstance(idx, pd.MultiIndex) or idx.nlevels < 2:
+            return None, []
+
+        constant_level_nos: List[int] = []
+        constant_values: List[str] = []
+        for level_no in range(idx.nlevels):
+            uniq = idx.get_level_values(level_no).unique()
+            if len(uniq) == 1:
+                constant_level_nos.append(level_no)
+                constant_values.append(str(uniq[0]))
+
+        if not constant_level_nos:
+            return None, []
+        if len(constant_level_nos) == idx.nlevels:
+            # Every level is constant (single-row/column table): leave the
+            # tick labels alone but still expose the values for the axis.
+            return None, constant_values
+
+        remaining = idx.droplevel(constant_level_nos)
+        if isinstance(remaining, pd.MultiIndex):
+            display = [
+                " · ".join(str(part) for part in tup) for tup in remaining.tolist()
+            ]
+        else:
+            display = [str(v) for v in remaining.tolist()]
+        return display, constant_values
 
     def set_df_labels(self, rows_dict: Dict, rows: List[str], columns: List[str]):
         """

@@ -1208,6 +1208,172 @@ class TestAll(unittest.TestCase):
         plt.close("all")
         matplotlib.use(self.mpl_backend)
 
+    def test_single_statistic_table_collapse_constant_levels(self):
+        self.mpl_backend: str = matplotlib.get_backend()
+        matplotlib.use("Agg")
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+
+            # Single signal + single aggregation, multiple frequencies:
+            # both ``xcat`` and ``agg_sigs`` are constant across the rows,
+            # so they should collapse out of the tick labels and into the
+            # auto y-label.
+            sr = SignalReturnRelations(
+                df=self.dfd,
+                rets="XR",
+                sigs="CRY",
+                freqs=["M", "Q"],
+                agg_sigs="last",
+                blacklist=self.blacklist,
+                slip=1,
+            )
+
+            with patch("macrosynergy.visuals.view_table") as mock_view_table:
+                sr.single_statistic_table(
+                    stat="kendall",
+                    rows=["xcat", "agg_sigs", "freq"],
+                    columns=["ret"],
+                    show_heatmap=True,
+                )
+                mock_view_table.assert_called_once()
+                _, call_kwargs = mock_view_table.call_args
+
+                # Constant xcat/agg_sigs collapse into the y-label,
+                # only the varying frequency remains on the y-axis.
+                self.assertEqual(
+                    call_kwargs.get("yticklabels"), ["M", "Q"]
+                )
+                self.assertEqual(
+                    call_kwargs.get("ylabel"), "CRY · last"
+                )
+
+            # Explicit ylabel/yticklabels must be respected even when a
+            # collapse would otherwise have applied.
+            with patch("macrosynergy.visuals.view_table") as mock_view_table:
+                sr.single_statistic_table(
+                    stat="kendall",
+                    rows=["xcat", "agg_sigs", "freq"],
+                    columns=["ret"],
+                    show_heatmap=True,
+                    ylabel="Custom y-label",
+                    row_names=["row1", "row2"],
+                )
+                mock_view_table.assert_called_once()
+                _, call_kwargs = mock_view_table.call_args
+                self.assertEqual(
+                    call_kwargs.get("yticklabels"), ["row1", "row2"]
+                )
+                self.assertEqual(
+                    call_kwargs.get("ylabel"), "Custom y-label"
+                )
+
+            # Multiple signals: xcat is no longer constant, so only the
+            # still-constant ``agg_sigs`` level collapses. The remaining
+            # ``xcat``/``freq`` pair survives in the tick labels.
+            sr2 = SignalReturnRelations(
+                df=self.dfd,
+                rets="XR",
+                sigs=["CRY", "GROWTH"],
+                freqs=["M", "Q"],
+                agg_sigs="last",
+                blacklist=self.blacklist,
+                slip=1,
+            )
+
+            with patch("macrosynergy.visuals.view_table") as mock_view_table:
+                sr2.single_statistic_table(
+                    stat="kendall",
+                    rows=["xcat", "agg_sigs", "freq"],
+                    columns=["ret"],
+                    show_heatmap=True,
+                )
+                mock_view_table.assert_called_once()
+                _, call_kwargs = mock_view_table.call_args
+                self.assertEqual(call_kwargs.get("ylabel"), "last")
+                self.assertEqual(
+                    sorted(call_kwargs.get("yticklabels")),
+                    sorted(["CRY · M", "CRY · Q", "GROWTH · M", "GROWTH · Q"]),
+                )
+
+            # All row levels varying: nothing collapses and the renderer
+            # falls back to the DataFrame's own MultiIndex tick labels.
+            sr3 = SignalReturnRelations(
+                df=self.dfd,
+                rets="XR",
+                sigs=["CRY", "GROWTH"],
+                freqs=["M", "Q"],
+                agg_sigs=["last", "mean"],
+                blacklist=self.blacklist,
+                slip=1,
+            )
+            with patch("macrosynergy.visuals.view_table") as mock_view_table:
+                sr3.single_statistic_table(
+                    stat="kendall",
+                    rows=["xcat", "agg_sigs", "freq"],
+                    columns=["ret"],
+                    show_heatmap=True,
+                )
+                mock_view_table.assert_called_once()
+                _, call_kwargs = mock_view_table.call_args
+                self.assertIsNone(call_kwargs.get("ylabel"))
+                self.assertIsNone(call_kwargs.get("yticklabels"))
+
+            # The returned DataFrame keeps its original MultiIndex — the
+            # collapse is display-only.
+            df_returned = sr.single_statistic_table(
+                stat="kendall",
+                rows=["xcat", "agg_sigs", "freq"],
+                columns=["ret"],
+            )
+            self.assertIsInstance(df_returned.index, pd.MultiIndex)
+            self.assertEqual(df_returned.index.nlevels, 3)
+
+        plt.close("all")
+        matplotlib.use(self.mpl_backend)
+
+    def test_collapse_constant_levels_helper(self):
+        sr = SignalReturnRelations(
+            df=self.dfd,
+            rets="XR",
+            sigs="CRY",
+            freqs="Q",
+            blacklist=self.blacklist,
+            slip=1,
+        )
+
+        # Plain index: no collapse.
+        plain = pd.Index(["a", "b", "c"])
+        display, constant = sr._collapse_constant_levels(plain)
+        self.assertIsNone(display)
+        self.assertEqual(constant, [])
+
+        # Mixed constant / varying levels: constant levels collapse out.
+        mi = pd.MultiIndex.from_tuples(
+            [("X", "last", "M"), ("X", "last", "Q")],
+            names=["Signal", "Aggregation", "Frequency"],
+        )
+        display, constant = sr._collapse_constant_levels(mi)
+        self.assertEqual(display, ["M", "Q"])
+        self.assertEqual(constant, ["X", "last"])
+
+        # No constant levels: nothing collapses.
+        mi2 = pd.MultiIndex.from_tuples(
+            [("X", "M"), ("Y", "Q")], names=["Signal", "Frequency"]
+        )
+        display, constant = sr._collapse_constant_levels(mi2)
+        self.assertIsNone(display)
+        self.assertEqual(constant, [])
+
+        # Every level constant: tick labels left alone, but the
+        # constant values are still surfaced for the axis label.
+        mi3 = pd.MultiIndex.from_tuples(
+            [("X", "M")], names=["Signal", "Frequency"]
+        )
+        display, constant = sr._collapse_constant_levels(mi3)
+        self.assertIsNone(display)
+        self.assertEqual(constant, ["X", "M"])
+
     def test_plot_single_statistic_heatmap(self):
         self.mpl_backend: str = matplotlib.get_backend()
         matplotlib.use("Agg")
