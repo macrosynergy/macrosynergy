@@ -16,6 +16,7 @@ from macrosynergy.download.transaction_costs import (
     AVAILABLE_STATS,
     AVAILABLE_CTYPES,
     AVAILABLE_CATS,
+    download_transaction_costs,
 )
 from macrosynergy.pnl.transaction_costs import (
     get_fids,
@@ -455,6 +456,96 @@ class TestTransactionCosts(unittest.TestCase):
             _plot_costs_func(tco=tc, **good_args)
         matplotlib.pyplot.close("all")
         matplotlib.use(curr_backend)
+
+
+class TestDownloadTransactionCosts(unittest.TestCase):
+    def setUp(self):
+        self.cids = ["USD", "EUR"]
+        self.tiks = [f"{c}_{k}" for c in self.cids for k in AVAILABLE_CATS]
+        self.qdf = make_tx_cost_df(tickers=self.tiks)
+        # Source-shape frame the downloader expects: ticker/real_date/value
+        self.source_df = self.qdf.assign(
+            ticker=self.qdf["cid"] + "_" + self.qdf["xcat"]
+        )[["real_date", "ticker", "value"]].reset_index(drop=True)
+        self.csv_text = self.source_df.to_csv(index=False)
+
+    def _assert_matches_source(self, dfd: pd.DataFrame):
+        self.assertIsInstance(dfd, QuantamentalDataFrame)
+        self.assertEqual(
+            set(dfd.columns), set(QuantamentalDataFrame.IndexCols + ["value"])
+        )
+        self.assertEqual(len(dfd), len(self.source_df))
+
+    def test_invalid_file_url(self):
+        with self.assertRaises(ValueError):
+            download_transaction_costs(file_url=None)
+        with self.assertRaises(ValueError):
+            download_transaction_costs(file_url=123)
+
+    def test_download_csv_auto_extension(self):
+        with unittest.mock.patch(
+            "macrosynergy.download.transaction_costs._request_wrapper",
+            return_value=self.csv_text,
+        ) as mock_req:
+            dfd = download_transaction_costs(file_url="http://example.com/data.csv")
+        mock_req.assert_called_once()
+        self._assert_matches_source(dfd)
+
+    def test_download_csv_explicit_format(self):
+        # URL extension does not match; explicit file_format forces CSV path
+        with unittest.mock.patch(
+            "macrosynergy.download.transaction_costs._request_wrapper",
+            return_value=self.csv_text,
+        ) as mock_req:
+            dfd = download_transaction_costs(
+                file_url="http://example.com/data", file_format="csv"
+            )
+        mock_req.assert_called_once()
+        self._assert_matches_source(dfd)
+
+    def test_download_parquet_auto_extension(self):
+        with unittest.mock.patch(
+            "macrosynergy.download.transaction_costs.pd.read_parquet",
+            return_value=self.source_df.copy(),
+        ) as mock_pq:
+            dfd = download_transaction_costs(file_url="http://example.com/data.parquet")
+        mock_pq.assert_called_once_with("http://example.com/data.parquet")
+        self._assert_matches_source(dfd)
+
+    def test_download_parquet_explicit_format(self):
+        with unittest.mock.patch(
+            "macrosynergy.download.transaction_costs.pd.read_parquet",
+            return_value=self.source_df.copy(),
+        ) as mock_pq:
+            dfd = download_transaction_costs(
+                file_url="http://example.com/data", file_format="parquet"
+            )
+        mock_pq.assert_called_once()
+        self._assert_matches_source(dfd)
+
+    def test_unsupported_file_format(self):
+        # auto + unrecognised extension should raise
+        with self.assertRaises(ValueError):
+            download_transaction_costs(file_url="http://example.com/data.json")
+        # explicit unsupported format should raise
+        with self.assertRaises(ValueError):
+            download_transaction_costs(
+                file_url="http://example.com/data.csv", file_format="json"
+            )
+
+    def test_kwargs_forwarded_to_request(self):
+        with unittest.mock.patch(
+            "macrosynergy.download.transaction_costs._request_wrapper",
+            return_value=self.csv_text,
+        ) as mock_req:
+            download_transaction_costs(
+                file_url="http://example.com/data.csv",
+                verify=False,
+                headers={"X-Test": "1"},
+            )
+        _, kwargs = mock_req.call_args
+        self.assertEqual(kwargs.get("verify"), False)
+        self.assertEqual(kwargs.get("headers"), {"X-Test": "1"})
 
 
 class TestTransactionCostsDictAdapter(unittest.TestCase):
