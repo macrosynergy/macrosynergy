@@ -798,7 +798,13 @@ class TestMLPRegressor(unittest.TestCase):
                 self.assertTrue(torch.equal(param9, param10))
 
     def test_types_predict(self):
-        pass 
+        model = MLPRegressor().fit(self.X, self.y)
+        # Test type of 'X' parameter
+        self.assertRaises(TypeError, model.predict, X=1)
+        self.assertRaises(TypeError, model.predict, X="X")
+        self.assertRaises(TypeError, model.predict, X=self.X.values)
+        self.assertRaises(ValueError, model.predict, X=self.X_nan)
+        self.assertRaises(ValueError, model.predict, X=self.X.reset_index())
 
     def test_valid_predict(self):
         pass
