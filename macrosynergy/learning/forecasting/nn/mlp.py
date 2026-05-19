@@ -319,6 +319,9 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         self.random_states = [self.random_state] if not isinstance(self.random_state, list) else self.random_state
 
     def fit(self, X, y, sample_weight=None):
+        # Fit checks 
+        self._check_fit_params(X, y, sample_weight)
+
         # Copy data and initialize empty list of models to be trained
         X = X.copy()
         y = y.copy()
@@ -956,11 +959,42 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
             raise ValueError("min_samples must be at least 1.")
         
     def _check_fit_params(self, X, y, sample_weight):
-        # TODO: X and y checks 
+        # X 
+        if not isinstance(X, pd.DataFrame):
+            raise TypeError("X must be a pandas DataFrame.")
+        if not isinstance(X.index, pd.MultiIndex):
+            raise ValueError("X must be multi-indexed.")
+        if not X.index.get_level_values(0).dtype == "object":
+            raise TypeError("The outer index of X must be strings.")
+        if not X.index.get_level_values(1).dtype == "datetime64[ns]":
+            raise TypeError("The inner index of X must be datetime.date.")
+        if not X.apply(lambda x: pd.api.types.is_numeric_dtype(x)).all():
+            raise TypeError("All columns in X must be numeric.")
+        if X.isnull().values.any():
+            raise ValueError("X must not contain missing values.")
+        
+        # y 
+        if not (isinstance(y, pd.Series) or isinstance(y, pd.DataFrame)):
+            raise TypeError(
+                "y must be a pandas Series or DataFrame."
+            )
+        if not isinstance(y.index, pd.MultiIndex):
+            raise ValueError("y must be multi-indexed.")
+        if not y.index.get_level_values(0).dtype == "object":
+            raise TypeError("The outer index of y must be strings.")
+        if not y.index.get_level_values(1).dtype == "datetime64[ns]":
+            raise TypeError("The inner index of y must be datetime.date.")
+        if not X.index.equals(y.index):
+            raise ValueError("X and y must have the same multi-index.")
+        
         # sample_weight 
         if sample_weight is not None:
             if not isinstance(sample_weight, np.ndarray):
                 raise TypeError("sample_weight must be a numpy array or None.")
+            if not all(isinstance(x, numbers.Real) for x in sample_weight):
+                raise TypeError("All elements in sample_weight must be real numbers.")
+            if not all(x >= 0 for x in sample_weight):
+                raise ValueError("All elements in sample_weight must be non-negative.")
             if sample_weight.ndim != 1:
                 raise ValueError("sample_weight must be a 1D array.")
             if len(sample_weight) != len(X):
