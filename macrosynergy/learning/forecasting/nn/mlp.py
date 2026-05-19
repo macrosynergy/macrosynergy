@@ -813,7 +813,7 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
             # dropout_p
             if not isinstance(dropout_p, numbers.Real):
                 raise TypeError("dropout_p must be a real number.")
-            if not (0 <= dropout_p <= 0.5):
+            if not (0 <= dropout_p < 0.5):
                 raise ValueError("dropout_p must be between 0 and 0.5.")
         
         # torch_model
@@ -827,12 +827,16 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
                     "on model hyperparameters in a `scikit-learn` framework."
                 )
             # it needs a forward method
-            if not hasattr(torch_model, "forward"):
+            if type(torch_model).forward is nn.Module.forward:
                 raise ValueError("torch_model must have a forward method.")
 
         # loss_func
         if not isinstance(loss_func, nn.Module):
             raise TypeError("loss_func must inherit from nn.Module.")
+        try:
+            test_loss = loss_func(torch.rand(16,1), torch.rand(16,1))
+        except Exception as e:
+            raise ValueError(f"loss_func must be callable with signature loss_func(preds, targets). Error encountered when testing random preds and targets of batch size 16 and single outputs: {e}")
         
         # optimizer
         if not isinstance(optimizer, str):
