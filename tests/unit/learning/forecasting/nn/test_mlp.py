@@ -844,3 +844,18 @@ class TestMLPRegressor(unittest.TestCase):
         self.assertEqual(preds_insufficient.shape[0], self.y.shape[0])
         self.assertIn("XR", preds_insufficient.columns)
         self.assertNotIn("XR2", preds_insufficient.columns)
+
+    def test_valid_create_train_test_splits(self):
+        # Test that there is no leakage between train and validation sets in the time split and that the split is done according to the specified train_pct
+        model = MLPRegressor()
+        X_tr, X_va, y_tr, y_va = model.create_train_valid_splits(self.X, self.y, train_pct=0.6)
+
+        dates = sorted(self.X.index.get_level_values(1).unique())
+        cut = int(0.6 * len(dates))
+        train_dates = set(dates[:cut])
+        val_dates = set(dates[cut:])
+
+        self.assertEqual(set(X_tr.index.get_level_values("real_date").unique()), train_dates)
+        self.assertEqual(set(X_va.index.get_level_values("real_date").unique()), val_dates)
+        self.assertEqual(set(y_tr.index.get_level_values("real_date").unique()), train_dates)
+        self.assertEqual(set(y_va.index.get_level_values("real_date").unique()), val_dates)
