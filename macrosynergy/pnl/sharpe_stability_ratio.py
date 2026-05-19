@@ -88,12 +88,11 @@ def sharpe_stability_ratio(
     # Set bandwidth to window; acovf requires nlag < nobs - 1
     L = window
     if N <= L + 1:
-        min_obs = 2 * window + 2
+        min_obs = 2 * window + 1
         warnings.warn(
             f"Insufficient data: need at least {min_obs} observations "
             f"(~{min_obs / annualization_factor:.1f} years); returning NaN.",
             UserWarning,
-            stacklevel=2,
         )
         return float("nan")
 
