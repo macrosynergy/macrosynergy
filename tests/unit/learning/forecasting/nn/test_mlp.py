@@ -655,6 +655,8 @@ class TestMLPRegressor(unittest.TestCase):
             encoder_activation=None,
             head_activation=None,
             dropout_p=None,
+            epochs = 5,
+            patience = 2,
         ).fit(self.X, self.y)
 
         model5 = MLPRegressor(
@@ -665,6 +667,8 @@ class TestMLPRegressor(unittest.TestCase):
             encoder_activation=None,
             head_activation=None,
             dropout_p=None,
+            epochs = 5,
+            patience = 2,
         ).fit(self.X, self.y)
 
         model6 = MLPRegressor(
@@ -674,6 +678,9 @@ class TestMLPRegressor(unittest.TestCase):
             encoder_activation=None,
             head_activation=None,
             dropout_p=None,
+            n_latent=None,
+            epochs = 5,
+            patience = 2,
             random_state=123,
         ).fit(self.X, self.y)
 
@@ -701,6 +708,8 @@ class TestMLPRegressor(unittest.TestCase):
             dropout_p=0.2,
             torch_model = None,
             loss_func=nn.MSELoss(),
+            epochs = 5,
+            patience = 2,
             optimizer=["AdamW", "SGD+mom"],
             random_state=[42, 43],
         ).fit(self.X, self.y)
@@ -723,6 +732,8 @@ class TestMLPRegressor(unittest.TestCase):
             dropout_p=0.2,
             torch_model = None,
             loss_func=nn.MSELoss(),
+            epochs = 5,
+            patience = 2,
             optimizer=["AdamW", "SGD+mom"],
             random_state=[42, 43],
         ).fit(self.X, self.y)
@@ -739,6 +750,9 @@ class TestMLPRegressor(unittest.TestCase):
             encoder_activation=None,
             head_activation=None,
             dropout_p=None,
+            n_latent=None,
+            epochs = 5,
+            patience = 2,
             optimizer=["AdamW", "SGD+mom"],
             random_state=[42, 43],
         ).fit(self.X, self.y)
@@ -750,6 +764,9 @@ class TestMLPRegressor(unittest.TestCase):
             encoder_activation=None,
             head_activation=None,
             dropout_p=None,
+            epochs = 5,
+            patience = 2,
+            n_latent = None,
             optimizer=["AdamW", "SGD+mom"],
             random_state=[42, 43],
         ).fit(self.X, self.y)
