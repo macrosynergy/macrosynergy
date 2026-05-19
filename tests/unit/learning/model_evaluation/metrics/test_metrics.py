@@ -1214,7 +1214,9 @@ class TestSharpeStabilityRatioScorer(unittest.TestCase):
         cids = ["AUD", "CAD", "GBP", "USD"]
         # 60 months of monthly observations per cross-section so that the
         # default window=12 SSR can be computed (needs >= 2*window + 2).
-        dates = pd.date_range("2010-01-31", periods=60, freq="ME")
+        dates = pd.date_range(
+            "2010-01-31", periods=60, freq=pd.offsets.MonthEnd()
+        )
         index = pd.MultiIndex.from_product(
             [cids, dates], names=["cid", "real_date"]
         )
@@ -1228,7 +1230,9 @@ class TestSharpeStabilityRatioScorer(unittest.TestCase):
         ).sort_index()
 
         # A short panel that should trigger the insufficient-data fallback.
-        short_dates = pd.date_range("2010-01-31", periods=10, freq="ME")
+        short_dates = pd.date_range(
+            "2010-01-31", periods=10, freq=pd.offsets.MonthEnd()
+        )
         short_index = pd.MultiIndex.from_product(
             [cids, short_dates], names=["cid", "real_date"]
         )
