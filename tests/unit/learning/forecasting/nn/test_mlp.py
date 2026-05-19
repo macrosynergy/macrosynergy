@@ -807,4 +807,40 @@ class TestMLPRegressor(unittest.TestCase):
         self.assertRaises(ValueError, model.predict, X=self.X.reset_index())
 
     def test_valid_predict(self):
-        pass
+        # Test that predictions are returned in the expected format
+        model = MLPRegressor(epochs = 5, patience = 2)
+        model.fit(self.X, self.y)
+        preds = model.predict(self.X)
+
+        self.assertIsInstance(preds, pd.DataFrame)
+        self.assertEqual(preds.shape, self.y.shape)
+        self.assertFalse(preds.isna().any().any())
+        self.assertFalse(np.isinf(preds.values).any())
+
+        pd.testing.assert_index_equal(preds.index, self.y.index)
+        pd.testing.assert_index_equal(preds.columns, self.y.columns)
+
+        # Check that running fit again doesn't change the predictions if random state is the same
+        model.fit(self.X, self.y)
+        preds2 = model.predict(self.X)
+        pd.testing.assert_frame_equal(preds, preds2)
+
+        # Check that predictions from different seeds are different
+        model_diff_seed = MLPRegressor(epochs = 5, patience = 2, random_state=43).fit(self.X, self.y)
+        preds_diff_seed = model_diff_seed.predict(self.X)
+        with self.assertRaises(AssertionError):
+            pd.testing.assert_frame_equal(preds, preds_diff_seed)
+
+        # Now check that when a target has insufficient data, predictions are only
+        # produced for the target with sufficient data
+        # suppose the second column only has 10 samples, which is less than the
+        # min_samples of 36, while the first column has all samples
+        y_insufficient = self.y.copy()
+        y_insufficient.iloc[10:, 1] = np.nan
+        model_insufficient = MLPRegressor(epochs = 5, patience = 2, min_samples=36).fit(self.X, y_insufficient)
+        preds_insufficient = model_insufficient.predict(self.X)
+        self.assertIsInstance(preds_insufficient, pd.DataFrame)
+        self.assertEqual(preds_insufficient.shape[1], 1)
+        self.assertEqual(preds_insufficient.shape[0], self.y.shape[0])
+        self.assertIn("XR", preds_insufficient.columns)
+        self.assertNotIn("XR2", preds_insufficient.columns)
