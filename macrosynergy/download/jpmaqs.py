@@ -482,19 +482,22 @@ def validate_downloaded_df(
     # check if all dates are present in the df
     # NOTE : Hardcoded max start date to 1990-01-01. This is because the JPMAQS
     # database does not have data before this date.
-    if datetime.datetime.strptime(start_date, "%Y-%m-%d") < datetime.datetime.strptime(
-        "1990-01-01", "%Y-%m-%d"
-    ):
-        start_date = "1950-01-01"
+    if start_date is not None and end_date is not None:
+        if datetime.datetime.strptime(
+            start_date, "%Y-%m-%d"
+        ) < datetime.datetime.strptime("1990-01-01", "%Y-%m-%d"):
+            start_date = "1950-01-01"
 
-    dates_expected = pd.bdate_range(start=start_date, end=end_date)
-    found_dates = (
-        data_df["real_date"].unique()
-        if isinstance(data_df, QuantamentalDataFrame)
-        else data_df.index.unique()
-    )
+        dates_expected = pd.bdate_range(start=start_date, end=end_date)
+        found_dates = (
+            data_df["real_date"].unique()
+            if isinstance(data_df, QuantamentalDataFrame)
+            else data_df.index.unique()
+        )
 
-    dates_missing = list(set(dates_expected) - set(pd.to_datetime(found_dates)))
+        dates_missing = list(set(dates_expected) - set(pd.to_datetime(found_dates)))
+    else:
+        dates_missing = []
     log_str = (
         "The expressions in the downloaded data are not a subset of the expected expressions."
         " Missing expressions: {missing_exprs}"
@@ -907,6 +910,8 @@ class JPMaQSDownload(DataQueryInterface):
             (start_date, "start_date"),
             (end_date, "end_date"),
         ]:
+            if var is None:
+                continue
             if not is_valid_iso_date(var):  # type check covered by `is_valid_iso_date`
                 raise ValueError(
                     f"`{name}` must be a valid date in the format YYYY-MM-DD."
@@ -1318,7 +1323,7 @@ class JPMaQSDownload(DataQueryInterface):
         cids: Optional[List[str]] = None,
         xcats: Optional[List[str]] = None,
         metrics: List[str] = ["value"],
-        start_date: str = "2000-01-01",
+        start_date: Optional[str] = None,
         end_date: Optional[str] = None,
         expressions: Optional[List[str]] = None,
         get_catalogue: bool = False,
@@ -1435,7 +1440,9 @@ class JPMaQSDownload(DataQueryInterface):
             report_time_taken=report_time_taken,
         ):
             raise ValueError("Invalid arguments passed to download().")
-        if pd.to_datetime(start_date) > pd.to_datetime(end_date):
+        if start_date is not None and (
+            pd.to_datetime(start_date) > pd.to_datetime(end_date)
+        ):
             warnings.warn(
                 message=(
                     f"`start_date` ({start_date}) is after `end_date` ({end_date}). "
@@ -1584,19 +1591,18 @@ def custom_download(
 if __name__ == "__main__":
     cids = ["AUD", "BRL", "CAD", "CHF", "CNY", "CZK", "EUR", "GBP", "USD"]
     xcats = ["RIR_NSA", "FXXR_NSA", "FXXR_VT10", "DU05YXR_NSA", "DU05YXR_VT10"]
-    start_date: str = "2024-01-07"
+    # start_date: str = "2024-01-07"
     end_date: str = "2024-02-09"
 
     with JPMaQSDownload(
-        client_id=os.getenv("DQ_CLIENT_ID"),
-        client_secret=os.getenv("DQ_CLIENT_SECRET")
+        client_id=os.getenv("DQ_CLIENT_ID"), client_secret=os.getenv("DQ_CLIENT_SECRET")
     ) as jpmaqs:
         data = jpmaqs.download(
             xcats=xcats,
             cids=cids,
             metrics="all",
-            start_date=start_date,
-            end_date=end_date,
+            # start_date=start_date,
+            # end_date=end_date,
             show_progress=True,
             report_time_taken=True,
         )
