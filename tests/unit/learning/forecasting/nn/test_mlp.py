@@ -133,7 +133,7 @@ class TestMLPRegressor(unittest.TestCase):
         # torch_model needs to be None
         with self.assertRaises(TypeError):
             model = MLPRegressor(fit_encoder_intercept="not a bool")
-        with self.assertRaises(TypeError):
+        with self.assertRaises(ValueError):
             model = MLPRegressor(fit_encoder_intercept=True, torch_model="not None")
 
         """ fit_head_intercept """
@@ -141,7 +141,7 @@ class TestMLPRegressor(unittest.TestCase):
         # torch_model needs to be None
         with self.assertRaises(TypeError):
             model = MLPRegressor(fit_head_intercept="not a bool")
-        with self.assertRaises(TypeError):
+        with self.assertRaises(ValueError):
             model = MLPRegressor(fit_head_intercept=True, torch_model="not None")
 
         """ encoder_activation """
@@ -151,7 +151,7 @@ class TestMLPRegressor(unittest.TestCase):
             model = MLPRegressor(encoder_activation=123)
         with self.assertRaises(ValueError):
             model = MLPRegressor(encoder_activation="not an activation")
-        with self.assertRaises(TypeError):
+        with self.assertRaises(ValueError):
             model = MLPRegressor(encoder_activation="relu", torch_model="not None")
 
         """ head_activation """
@@ -161,7 +161,7 @@ class TestMLPRegressor(unittest.TestCase):
             model = MLPRegressor(head_activation=123)
         with self.assertRaises(ValueError):
             model = MLPRegressor(head_activation="not an activation")
-        with self.assertRaises(TypeError):
+        with self.assertRaises(ValueError):
             model = MLPRegressor(head_activation="relu", torch_model="not None")
 
         """ dropout_p """
@@ -172,15 +172,13 @@ class TestMLPRegressor(unittest.TestCase):
         with self.assertRaises(ValueError):
             model = MLPRegressor(dropout_p=-0.1)
         with self.assertRaises(ValueError):
-            model = MLPRegressor(dropout_p=0)
-        with self.assertRaises(ValueError):
             model = MLPRegressor(dropout_p=0.5)
         with self.assertRaises(ValueError):
             model = MLPRegressor(dropout_p=0.6)
         with self.assertRaises(ValueError):
             model = MLPRegressor(dropout_p=1.234)
 
-        with self.assertRaises(TypeError):
+        with self.assertRaises(ValueError):
             model = MLPRegressor(torch_model="not None", dropout_p=0.2)
 
         """ torch_model """
@@ -194,6 +192,7 @@ class TestMLPRegressor(unittest.TestCase):
                 encoder_activation=None,
                 head_activation=None,
                 dropout_p=None,
+                n_latent=None,
             )
         with self.assertRaises(TypeError):
             model = MLPRegressor(
@@ -203,6 +202,7 @@ class TestMLPRegressor(unittest.TestCase):
                 encoder_activation=None,
                 head_activation=None,
                 dropout_p=None,
+                n_latent=None,
             )
         with self.assertRaises(TypeError):
             model = MLPRegressor(
@@ -212,6 +212,7 @@ class TestMLPRegressor(unittest.TestCase):
                 encoder_activation=None,
                 head_activation=None,
                 dropout_p=None,
+                n_latent=None,
             )
         with self.assertRaises(ValueError):
             model = MLPRegressor(
@@ -221,10 +222,11 @@ class TestMLPRegressor(unittest.TestCase):
                 encoder_activation=None,
                 head_activation=None,
                 dropout_p=None,
+                n_latent=None,
             )
 
         # Check errors are raised when incompatible parameters are provided together
-        with self.assertRaises(TypeError):
+        with self.assertRaises(ValueError):
             model = MLPRegressor(
                 torch_model=ValidModel(),
                 fit_encoder_intercept=True,
@@ -232,8 +234,9 @@ class TestMLPRegressor(unittest.TestCase):
                 encoder_activation=None,
                 head_activation=None,
                 dropout_p=None,
+                n_latent=None,
             )
-        with self.assertRaises(TypeError):
+        with self.assertRaises(ValueError):
             model = MLPRegressor(
                 torch_model=ValidModel(),
                 fit_encoder_intercept=None,
@@ -241,8 +244,9 @@ class TestMLPRegressor(unittest.TestCase):
                 encoder_activation=None,
                 head_activation=None,
                 dropout_p=None,
+                n_latent=None,
             )
-        with self.assertRaises(TypeError):
+        with self.assertRaises(ValueError):
             model = MLPRegressor(
                 torch_model=ValidModel(),
                 fit_encoder_intercept=None,
@@ -250,8 +254,9 @@ class TestMLPRegressor(unittest.TestCase):
                 encoder_activation="relu",
                 head_activation=None,
                 dropout_p=None,
+                n_latent=None,
             )
-        with self.assertRaises(TypeError):
+        with self.assertRaises(ValueError):
             model = MLPRegressor(
                 torch_model=ValidModel(),
                 fit_encoder_intercept=None,
@@ -259,8 +264,9 @@ class TestMLPRegressor(unittest.TestCase):
                 encoder_activation=None,
                 head_activation="relu",
                 dropout_p=None,
+                n_latent=None,
             )
-        with self.assertRaises(TypeError):
+        with self.assertRaises(ValueError):
             model = MLPRegressor(
                 torch_model=ValidModel(),
                 fit_encoder_intercept=None,
@@ -268,6 +274,17 @@ class TestMLPRegressor(unittest.TestCase):
                 encoder_activation=None,
                 head_activation=None,
                 dropout_p=0.2,
+                n_latent=None,
+            )
+        with self.assertRaises(ValueError):
+            model = MLPRegressor(
+                torch_model=ValidModel(),
+                fit_encoder_intercept=None,
+                fit_head_intercept=None,
+                encoder_activation=None,
+                head_activation=None,
+                dropout_p=None,
+                n_latent=4,
             )
 
         """ Loss function """
@@ -632,6 +649,7 @@ class TestMLPRegressor(unittest.TestCase):
         # Test on custom torch_model as expected 
         model4 = MLPRegressor(
             torch_model=ValidModel(n_latent=16),
+            n_latent = None,
             fit_encoder_intercept=None,
             fit_head_intercept=None,
             encoder_activation=None,
@@ -641,6 +659,7 @@ class TestMLPRegressor(unittest.TestCase):
 
         model5 = MLPRegressor(
             torch_model=ValidModel(n_latent=16),
+            n_latent = None,
             fit_encoder_intercept=None,
             fit_head_intercept=None,
             encoder_activation=None,
