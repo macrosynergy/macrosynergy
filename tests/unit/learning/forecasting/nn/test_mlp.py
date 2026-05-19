@@ -2,6 +2,7 @@ import unittest
 import numpy as np
 import pandas as pd
 
+from parameterized import parameterized
 import torch
 import torch.nn as nn
 
@@ -859,3 +860,38 @@ class TestMLPRegressor(unittest.TestCase):
         self.assertEqual(set(X_va.index.get_level_values("real_date").unique()), val_dates)
         self.assertEqual(set(y_tr.index.get_level_values("real_date").unique()), train_dates)
         self.assertEqual(set(y_va.index.get_level_values("real_date").unique()), val_dates)
+
+    def test_valid_scale_data(self):
+        # Test that the data is scaled correctly when both scalers are provided
+        model = MLPRegressor()
+        X_tr, X_va, y_tr, y_va = model.create_train_valid_splits(self.X, self.y, train_pct=0.6)
+        X_tr_scaled, X_va_scaled, y_tr_scaled, y_va_scaled = model.scale_data(X_tr, X_va, y_tr, y_va, x_scaler=StandardScaler(with_mean=True), y_scaler=StandardScaler(with_mean=True))
+
+        self.assertIsInstance(X_tr_scaled, np.ndarray)
+        self.assertIsInstance(X_va_scaled, np.ndarray)
+        self.assertIsInstance(y_tr_scaled, np.ndarray)
+        self.assertIsInstance(y_va_scaled, np.ndarray)
+
+        self.assertAlmostEqual(X_tr_scaled.mean(), 0, places=5)
+        self.assertAlmostEqual(y_tr_scaled.mean(), 0, places=5)
+        self.assertAlmostEqual(X_tr_scaled.std(), 1, places=5)
+        self.assertAlmostEqual(y_tr_scaled.std(), 1, places=5)
+
+        # Repeat for the case where the means are not removed (a common use case)
+        X_tr_scaled, X_va_scaled, y_tr_scaled, y_va_scaled = model.scale_data(X_tr, X_va, y_tr, y_va, x_scaler=StandardScaler(with_mean=False), y_scaler=StandardScaler(with_mean=False))
+        self.assertIsInstance(X_tr_scaled, np.ndarray)
+        self.assertIsInstance(X_va_scaled, np.ndarray)
+        self.assertIsInstance(y_tr_scaled, np.ndarray)
+        self.assertIsInstance(y_va_scaled, np.ndarray)
+
+        # Repeat for the case where X is scaled but y is not
+        X_tr_scaled, X_va_scaled, y_tr_scaled, y_va_scaled = model.scale_data(X_tr, X_va, y_tr, y_va, x_scaler=StandardScaler(with_mean=False), y_scaler=None)
+        self.assertIsInstance(X_tr_scaled, np.ndarray)
+        self.assertIsInstance(X_va_scaled, np.ndarray)
+        self.assertIsInstance(y_tr_scaled, np.ndarray)
+        self.assertIsInstance(y_va_scaled, np.ndarray)
+
+        self.assertAlmostEqual(y_tr_scaled.mean(), y_tr.values.mean(), places=5)
+        self.assertAlmostEqual(y_va_scaled.mean(), y_va.values.mean(), places=5)
+        self.assertAlmostEqual(y_tr_scaled.std(), y_tr.values.std(), places=5)
+        self.assertAlmostEqual(y_va_scaled.std(), y_va.values.std(), places=5)
