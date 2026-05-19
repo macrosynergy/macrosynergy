@@ -9,6 +9,7 @@ import torch.nn as nn
 from sklearn.base import BaseEstimator, RegressorMixin
 from sklearn.preprocessing import StandardScaler
 
+from macrosynergy.learning.forecasting.torch.models.mlps import MultiLayerPerceptron
 from macrosynergy.learning.forecasting.nn import MLPRegressor
 
 # Set up invalid torch_models for testing
@@ -895,3 +896,49 @@ class TestMLPRegressor(unittest.TestCase):
         self.assertAlmostEqual(y_va_scaled.mean(), y_va.values.mean(), places=5)
         self.assertAlmostEqual(y_tr_scaled.std(), y_tr.values.std(), places=5)
         self.assertAlmostEqual(y_va_scaled.std(), y_va.values.std(), places=5)
+
+    def test_valid_fit_one_batch(self):
+        """
+        Pass data through one training step and check that the model parameters have updated
+        """
+        torch_model = MultiLayerPerceptron(
+            n_inputs=self.X.shape[1],
+            n_latent=8,
+            n_outputs=self.y.shape[1],
+        )
+        optimizer = torch.optim.Adam(torch_model.parameters(), lr=3e-4, weight_decay=1e-4)
+        scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, max_lr=3e-4, total_steps=10)
+        before = {k: v.detach().clone() for k, v in torch_model.state_dict().items()}
+
+        sklearn_model = MLPRegressor()
+        X_tr, X_va, y_tr, y_va = sklearn_model.create_train_valid_splits(self.X, self.y, train_pct=0.6)
+        X_tr_scaled, X_va_scaled, y_tr_scaled, y_va_scaled = sklearn_model.scale_data(X_tr, X_va, y_tr, y_va, x_scaler=StandardScaler(with_mean=True), y_scaler=StandardScaler(with_mean=True))
+
+        torch_model = sklearn_model._fit_one_batch(
+            torch_model,
+            torch.Tensor(X_tr_scaled[:8]),
+            torch.Tensor(y_tr_scaled[:8]),
+            optimizer=optimizer,
+            scheduler = None,
+            loss_func = nn.MSELoss(),
+            sample_weight = None,
+            sample_weight_strategy = None,
+        )
+        after = {k: v.detach().clone() for k, v in torch_model.state_dict().items()}
+        changed = any(not torch.equal(before[k], after[k]) for k in before.keys())
+        self.assertTrue(changed)
+
+        # Repeat with a scheduler 
+        torch_model = sklearn_model._fit_one_batch(
+            torch_model,
+            torch.Tensor(X_tr_scaled[8:16]),
+            torch.Tensor(y_tr_scaled[8:16]),
+            optimizer=optimizer,
+            scheduler = scheduler,
+            loss_func = nn.MSELoss(),
+            sample_weight = None,
+            sample_weight_strategy = None,
+        )
+        after2 = {k: v.detach().clone() for k, v in torch_model.state_dict().items()}
+        changed2 = any(not torch.equal(after[k], after2[k]) for k in after.keys())
+        self.assertTrue(changed2)
