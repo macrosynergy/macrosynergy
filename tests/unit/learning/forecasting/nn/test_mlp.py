@@ -535,7 +535,29 @@ class TestMLPRegressor(unittest.TestCase):
         self.assertEqual(model.random_states, [42,43])
 
     def test_types_fit(self):
-        pass 
+        """
+        Test inputs of the fit method are checked for correctness.
+        """
+        model = MLPRegressor()
+        # Test type of 'X' parameter
+        self.assertRaises(TypeError, model.fit, X=1, y=self.y)
+        self.assertRaises(TypeError, model.fit, X="X", y=self.y)
+        self.assertRaises(TypeError, model.fit, X=self.X.values, y=self.y)
+        self.assertRaises(ValueError, model.fit, X=self.X_nan, y=self.y)
+        self.assertRaises(ValueError, model.fit, X=self.X.reset_index(), y=self.y)
+        # Test type of 'y' parameter
+        self.assertRaises(TypeError, model.fit, X=self.X, y=1)
+        self.assertRaises(TypeError, model.fit, X=self.X, y="y")
+        self.assertRaises(TypeError, model.fit, X=self.X, y=self.y.values)
+        self.assertRaises(ValueError, model.fit, X=self.X, y=self.y.reset_index())
+        # Test type of sample_weight
+        self.assertRaises(TypeError, model.fit, X=self.X, y=self.y, sample_weight="weight")
+        self.assertRaises(TypeError, model.fit, X=self.X, y=self.y, sample_weight=np.array(["weight"] * len(self.X)))
+        self.assertRaises(ValueError, model.fit, X=self.X, y=self.y, sample_weight=np.array([1.0, 2.0]))
+        self.assertRaises(TypeError, model.fit, X=self.X, y=self.y, sample_weight=np.array([1.0, "two", 3.0] * (len(self.X)//3)))
+        self.assertRaises(ValueError, model.fit, X=self.X, y=self.y, sample_weight=np.array([1.0, -2.0, 3.0] * (len(self.X)//3)))
+
+        self.assertRaises(ValueError, model.fit, X=self.X, y=self.y, sample_weight=np.array([1.0, 2.0, 3.0] * (len(self.X)//3)))
 
     def test_valid_fit(self):
         """ 
