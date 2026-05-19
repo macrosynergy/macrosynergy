@@ -50,7 +50,8 @@ def sharpe_stability_ratio(
     annualization_factor : int, default 252
         Periods per year. Must match input frequency.
     min_periods : int or None, default None
-        Minimum non-NaN observations per window. Defaults to ``window``.
+        Minimum non-NaN observations per window. Defaults to ``window``. Must
+        be an integer in ``[2, window]``.
 
     Returns
     -------
@@ -62,6 +63,10 @@ def sharpe_stability_ratio(
         raise ValueError("window must be an integer >= 2")
     if not isinstance(annualization_factor, int) or annualization_factor <= 0:
         raise ValueError("annualization_factor must be a positive integer")
+    if min_periods is not None and (
+        not isinstance(min_periods, int) or min_periods < 2 or min_periods > window
+    ):
+        raise ValueError("min_periods must be an integer in [2, window]")
 
     # Coerce to numpy, drop NaN
     if isinstance(returns, pd.Series):
@@ -70,12 +75,13 @@ def sharpe_stability_ratio(
         ret = np.asarray(returns, dtype=float)
         ret = ret[~np.isnan(ret)]
 
-    if len(ret) < window + 2:
+    _min_p = min_periods if min_periods is not None else window
+
+    if len(ret) < _min_p:
         return float("nan")
 
     # Rolling Sharpe series (annualized)
     ret_s = pd.Series(ret)
-    _min_p = min_periods if min_periods is not None else window
     roll = ret_s.rolling(window=window, min_periods=_min_p)
     z_series = (roll.mean() / roll.std()) * np.sqrt(annualization_factor)
     z = z_series.values.astype(float)
@@ -85,14 +91,13 @@ def sharpe_stability_ratio(
     if N < 3:
         return float("nan")
 
-    # Set bandwidth to window; acovf requires nlag < nobs - 1
     L = window
-    if N <= L + 1:
-        min_obs = 2 * window + 1
+    if N < L + 1:
+        min_obs = _min_p + L
         warnings.warn(
             f"Insufficient data: need at least {min_obs} observations "
             f"(~{min_obs / annualization_factor:.1f} years); returning NaN.",
-            UserWarning,
+            RuntimeWarning,
         )
         return float("nan")
 
