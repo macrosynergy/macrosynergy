@@ -20,6 +20,8 @@ def view_table(
     fmt: str = ".2f",
     return_fig: bool = False,
     highlight_mask: Optional[Union[np.ndarray, pd.DataFrame]] = None,
+    footnote: Optional[str] = None,
+    footnote_fontsize: int = 10,
 ) -> Optional[plt.Figure]:
     """
     Display a numeric DataFrame as an annotated colour-coded heatmap table.
@@ -59,6 +61,12 @@ def view_table(
         DataFrame or 2D array of the same shape as ``df``. Cells where the
         mask is True have their annotation text rendered in black and bold.
         Has no effect when ``annot`` is False.
+    footnote : str, optional
+        Free-text caption rendered below the heatmap, useful for noting the
+        statistical test, the panel scope, or how to read the annotations.
+        Multi-line strings are supported. Default is None (no footnote).
+    footnote_fontsize : int, optional
+        Font size for the footnote text. Default is 10.
     """
 
     if not isinstance(df, pd.DataFrame):
@@ -128,6 +136,24 @@ def view_table(
     ax.set(xlabel=xlabel, ylabel=ylabel)
     ax.set_title(title, fontsize=title_fontsize)
     plt.tight_layout()
+
+    if footnote:
+        n_lines = footnote.count("\n") + 1
+        # Reserve bottom margin for the heatmap + tick labels + optional xlabel + footnote.
+        # Figure-relative units: tick labels ~0.06, xlabel ~0.04 if present, then footnote.
+        xlabel_pad = 0.04 if ax.get_xlabel() else 0.0
+        footnote_block = 0.04 * n_lines
+        fig.subplots_adjust(bottom=0.10 + xlabel_pad + footnote_block)
+        fig.text(
+            0.5,
+            0.02,
+            footnote,
+            ha="center",
+            va="bottom",
+            fontsize=footnote_fontsize,
+            style="italic",
+            wrap=True,
+        )
 
     if return_fig:
         return fig
