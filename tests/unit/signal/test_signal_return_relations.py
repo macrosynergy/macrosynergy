@@ -1547,6 +1547,158 @@ class TestAll(unittest.TestCase):
         plt.close("all")
         matplotlib.use(self.mpl_backend)
 
+    def test_single_statistic_table_freq_agg_labels(self):
+        self.mpl_backend: str = matplotlib.get_backend()
+        matplotlib.use("Agg")
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+
+            sr = SignalReturnRelations(
+                df=self.dfd,
+                rets="XR",
+                sigs="CRY",
+                freqs=["M", "Q"],
+                agg_sigs=["last", "mean"],
+                blacklist=self.blacklist,
+                slip=1,
+            )
+
+            # 1. Backward compatibility: default (None) leaves the
+            # DataFrame index/columns identical to the pre-feature output.
+            df_default = sr.single_statistic_table(
+                stat="kendall",
+                rows=["xcat", "agg_sigs", "freq"],
+                columns=["ret"],
+            )
+            freq_levels = df_default.index.get_level_values("Frequency").unique()
+            agg_levels = df_default.index.get_level_values("Aggregation").unique()
+            self.assertEqual(sorted(freq_levels.tolist()), ["M", "Q"])
+            self.assertEqual(sorted(agg_levels.tolist()), ["last", "mean"])
+
+            # 2. Full mapping for both freq and agg_sigs renames the
+            # row index in place; tick labels in the heatmap pick the
+            # renamed values up automatically.
+            df_full = sr.single_statistic_table(
+                stat="kendall",
+                rows=["xcat", "agg_sigs", "freq"],
+                columns=["ret"],
+                freq_labels={"M": "Monthly", "Q": "Quarterly"},
+                agg_sigs_labels={"last": "Last", "mean": "Mean"},
+            )
+            self.assertEqual(
+                sorted(df_full.index.get_level_values("Frequency").unique().tolist()),
+                ["Monthly", "Quarterly"],
+            )
+            self.assertEqual(
+                sorted(df_full.index.get_level_values("Aggregation").unique().tolist()),
+                ["Last", "Mean"],
+            )
+            # Values are unchanged — only the labels move.
+            np.testing.assert_array_equal(
+                np.sort(df_default.values.ravel()),
+                np.sort(df_full.values.ravel()),
+            )
+
+            # 3. Partial mapping keeps unlisted codes verbatim instead of
+            # dropping them from the renamed axis.
+            df_partial = sr.single_statistic_table(
+                stat="kendall",
+                rows=["xcat", "agg_sigs", "freq"],
+                columns=["ret"],
+                freq_labels={"M": "Monthly"},
+            )
+            self.assertEqual(
+                sorted(df_partial.index.get_level_values("Frequency").unique().tolist()),
+                ["Monthly", "Q"],
+            )
+
+            # 4. Renamed values flow through to the auto y-label produced
+            # by the constant-level collapse when freq is the only varying
+            # row level.
+            with patch("macrosynergy.visuals.view_table") as mock_view_table:
+                sr_one_agg = SignalReturnRelations(
+                    df=self.dfd,
+                    rets="XR",
+                    sigs="CRY",
+                    freqs=["M", "Q"],
+                    agg_sigs="last",
+                    blacklist=self.blacklist,
+                    slip=1,
+                )
+                sr_one_agg.single_statistic_table(
+                    stat="kendall",
+                    rows=["xcat", "agg_sigs", "freq"],
+                    columns=["ret"],
+                    show_heatmap=True,
+                    freq_labels={"M": "Monthly", "Q": "Quarterly"},
+                    agg_sigs_labels={"last": "Last value"},
+                    collapse_constant_levels=True,
+                )
+                mock_view_table.assert_called_once()
+                _, call_kwargs = mock_view_table.call_args
+                yticks = list(call_kwargs.get("yticklabels"))
+                self.assertEqual(yticks, ["Monthly", "Quarterly"])
+                # Constant agg_sigs collapses into the auto y-label using
+                # the renamed value.
+                self.assertIn("Last value", call_kwargs.get("ylabel", ""))
+
+            # 5. freq in columns: column index is renamed instead of rows.
+            df_col = sr.single_statistic_table(
+                stat="kendall",
+                rows=["xcat", "agg_sigs"],
+                columns=["ret", "freq"],
+                freq_labels={"M": "Monthly", "Q": "Quarterly"},
+            )
+            self.assertEqual(
+                sorted(df_col.columns.get_level_values("Frequency").unique().tolist()),
+                ["Monthly", "Quarterly"],
+            )
+
+            # 6. Combined with xcat_labels: independent rename channels
+            # both apply.
+            df_combined = sr.single_statistic_table(
+                stat="kendall",
+                rows=["xcat", "agg_sigs", "freq"],
+                columns=["ret"],
+                xcat_labels={"CRY": "Carry score", "XR": "Spot return"},
+                freq_labels={"M": "Monthly", "Q": "Quarterly"},
+                agg_sigs_labels={"last": "Last", "mean": "Mean"},
+            )
+            self.assertEqual(df_combined.columns.tolist(), ["Spot return"])
+            self.assertEqual(
+                df_combined.index.get_level_values("Signal").unique().tolist(),
+                ["Carry score"],
+            )
+            self.assertEqual(
+                sorted(df_combined.index.get_level_values("Frequency").unique().tolist()),
+                ["Monthly", "Quarterly"],
+            )
+
+            # 7. pval_stat: the bracketed p-value table inherits the same
+            # renamed index so significance highlighting stays aligned.
+            with patch("macrosynergy.visuals.view_table") as mock_view_table:
+                sr.single_statistic_table(
+                    stat="kendall",
+                    rows=["xcat", "agg_sigs", "freq"],
+                    columns=["ret"],
+                    show_heatmap=True,
+                    pval_stat="kendall_pval",
+                    freq_labels={"M": "Monthly", "Q": "Quarterly"},
+                )
+                mock_view_table.assert_called_once()
+                call_args, _ = mock_view_table.call_args
+                df_passed = call_args[0]
+                self.assertEqual(
+                    sorted(
+                        df_passed.index.get_level_values("Frequency").unique().tolist()
+                    ),
+                    ["Monthly", "Quarterly"],
+                )
+
+        plt.close("all")
+        matplotlib.use(self.mpl_backend)
+
     def test_plot_single_statistic_heatmap(self):
         self.mpl_backend: str = matplotlib.get_backend()
         matplotlib.use("Agg")

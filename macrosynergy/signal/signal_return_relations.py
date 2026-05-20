@@ -1506,6 +1506,8 @@ class SignalReturnRelations:
         signal_name_dict: Optional[Dict[str, str]] = None,
         return_name_dict: Optional[Dict[str, str]] = None,
         xcat_labels: Optional[Dict[str, str]] = None,
+        freq_labels: Optional[Dict[str, str]] = None,
+        agg_sigs_labels: Optional[Dict[str, str]] = None,
         min_color: Optional[float] = None,
         max_color: Optional[float] = None,
         figsize: Tuple[float, float] = (14, 8),
@@ -1575,6 +1577,18 @@ class SignalReturnRelations:
             verbatim. Mutually exclusive with the two legacy kwargs — pass
             either ``xcat_labels`` or ``signal_name_dict`` /
             ``return_name_dict``, not both. Default is None (no rename).
+        freq_labels : dict, optional
+            Mapping from frequency code (``"M"``, ``"Q"``, …) to the
+            display label used on the heatmap and in the auto axis label
+            produced by the constant-level collapse. Frequencies not
+            listed in the dict are kept verbatim. Default is None
+            (raw codes are shown).
+        agg_sigs_labels : dict, optional
+            Mapping from aggregation code (``"last"``, ``"mean"``, …) to
+            the display label used on the heatmap and in the auto axis
+            label produced by the constant-level collapse. Aggregations
+            not listed in the dict are kept verbatim. Default is None
+            (raw codes are shown).
         min_color : float, optional
             minimum value of the color scale. Default is None, in which case the minimum
             value of the table is used.
@@ -1804,6 +1818,48 @@ class SignalReturnRelations:
                     df_pval.rename(columns=return_name_dict, inplace=True)
                     df_pval = df_pval[return_name_dict.values()]
 
+        # Frequency / aggregation display renames. Identity-fill so that
+        # frequencies (or aggregations) not listed in the user dict keep
+        # their slot in the renamed axis instead of being dropped by the
+        # downstream reorder, mirroring the xcat_labels pattern above.
+        # The renamed values flow into both the heatmap tick labels and
+        # the auto axis label produced by ``collapse_constant_levels``.
+        if freq_labels is not None:
+            freq_labels_full = {f: freq_labels.get(f, f) for f in self.freqs}
+            if "freq" in rows:
+                df_result.rename(index=freq_labels_full, inplace=True)
+                df_result = self.reindex_multindex_df(
+                    df_result, list(freq_labels_full.values()), "Frequency"
+                )
+                if df_pval is not None:
+                    df_pval.rename(index=freq_labels_full, inplace=True)
+                    df_pval = self.reindex_multindex_df(
+                        df_pval, list(freq_labels_full.values()), "Frequency"
+                    )
+            elif "freq" in columns:
+                df_result.rename(columns=freq_labels_full, inplace=True)
+                if df_pval is not None:
+                    df_pval.rename(columns=freq_labels_full, inplace=True)
+
+        if agg_sigs_labels is not None:
+            agg_sigs_labels_full = {
+                a: agg_sigs_labels.get(a, a) for a in self.agg_sigs
+            }
+            if "agg_sigs" in rows:
+                df_result.rename(index=agg_sigs_labels_full, inplace=True)
+                df_result = self.reindex_multindex_df(
+                    df_result, list(agg_sigs_labels_full.values()), "Aggregation"
+                )
+                if df_pval is not None:
+                    df_pval.rename(index=agg_sigs_labels_full, inplace=True)
+                    df_pval = self.reindex_multindex_df(
+                        df_pval, list(agg_sigs_labels_full.values()), "Aggregation"
+                    )
+            elif "agg_sigs" in columns:
+                df_result.rename(columns=agg_sigs_labels_full, inplace=True)
+                if df_pval is not None:
+                    df_pval.rename(columns=agg_sigs_labels_full, inplace=True)
+
         if show_heatmap:
             if not title:
                 title = f"{stat}"
@@ -1950,6 +2006,14 @@ class SignalReturnRelations:
             verbatim. Mutually exclusive with the two legacy kwargs — pass
             either ``xcat_labels`` or ``signal_name_dict`` /
             ``return_name_dict``, not both. Default is None (no rename).
+        freq_labels : dict, optional
+            Mapping from frequency code (``"M"``, ``"Q"``, …) to its
+            display label. Frequencies not listed in the dict are kept
+            verbatim. Default is None.
+        agg_sigs_labels : dict, optional
+            Mapping from aggregation code (``"last"``, ``"mean"``, …) to
+            its display label. Aggregations not listed in the dict are
+            kept verbatim. Default is None.
         min_color : float, optional
             minimum value of the color scale. Default is None, in which case the minimum
             value of the table is used.
@@ -2052,6 +2116,14 @@ class SignalReturnRelations:
             verbatim. Mutually exclusive with the two legacy kwargs — pass
             either ``xcat_labels`` or ``signal_name_dict`` /
             ``return_name_dict``, not both. Default is None (no rename).
+        freq_labels : dict, optional
+            Mapping from frequency code (``"M"``, ``"Q"``, …) to its
+            display label. Frequencies not listed in the dict are kept
+            verbatim. Default is None.
+        agg_sigs_labels : dict, optional
+            Mapping from aggregation code (``"last"``, ``"mean"``, …) to
+            its display label. Aggregations not listed in the dict are
+            kept verbatim. Default is None.
         min_color : float, optional
             minimum value of the color scale. Default is None, in which case the minimum
             value of the table is used.
