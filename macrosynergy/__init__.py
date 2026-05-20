@@ -17,7 +17,7 @@ PYTHON_VERSION = sys.version_info
 PYTHON_3_8_OR_LATER = PYTHON_VERSION >= (3, 8)
 PYTHON_3_9_OR_LATER = PYTHON_VERSION >= (3, 9)
 
-from . import visuals, download, panel, pnl, management, signal, learning
+from . import visuals, download, panel, pnl, management, signal, learning, securities
 
 from .management.utils import check_package_version
 
@@ -29,6 +29,7 @@ __all__ = [
     "management",
     "signal",
     "learning",
+    "securities",
     "check_package_version",
     "PYTHON_3_8_OR_LATER",
     "PYTHON_3_9_OR_LATER",

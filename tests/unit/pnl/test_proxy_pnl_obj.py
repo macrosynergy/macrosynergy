@@ -9,7 +9,11 @@ from macrosynergy.pnl import (
     proxy_pnl_calc,
     ProxyPnL,
 )
-from macrosynergy.pnl.transaction_costs import TransactionCosts, get_fids
+from macrosynergy.pnl.transaction_costs import (
+    TransactionCosts,
+    TransactionCostsDictAdapter,
+    get_fids,
+)
 from macrosynergy.download.transaction_costs import AVAILABLE_CATS, AVAILABLE_CTYPES
 from macrosynergy.management.types import QuantamentalDataFrame
 from macrosynergy.management.simulate import make_test_df, simulate_returns_and_signals
@@ -207,6 +211,68 @@ class TestProxyPNLObject(unittest.TestCase):
             df=dfx, transaction_costs_object=tco, **self.get_proxy_pnl_calc_args()
         )
 
+        pd.testing.assert_frame_equal(proxy_pnl_df, expected_proxy_pnl_df)
+
+    def _build_cost_dict(self) -> dict:
+        return {
+            fid: {
+                "median_cost": 0.1,
+                "median_size": 50.0,
+                "pct90_cost": 0.5,
+                "pct90_size": 200.0,
+            }
+            for fid in self.fids
+        }
+
+    def test_init_with_dict_adapter(self):
+        adapter = TransactionCostsDictAdapter(
+            cost_dict=self._build_cost_dict(), fids=self.fids
+        )
+        proxy_pnl = ProxyPnL(
+            df=self.df,
+            transaction_costs_object=adapter,
+            sname=self.sname,
+            pname=self.pname,
+            rstring=self.rstring,
+            portfolio_name=self.portfolio_name,
+        )
+        self.assertIs(proxy_pnl.transaction_costs_object, adapter)
+
+    def test_proxy_pnl_calc_with_dict_adapter(self):
+        cost_dict = self._build_cost_dict()
+        adapter = TransactionCostsDictAdapter(cost_dict=cost_dict, fids=self.fids)
+
+        cs_args = self.get_contract_signals_args()
+        xcats = cs_args["xcats"].copy()
+        xcats += [f"{xc}XR" for xc in xcats]
+        xcats += [cs_args["sig"], cs_args["hedge_xcat"]]
+        df = make_test_df(
+            cids=cs_args["cids"],
+            xcats=xcats,
+            start=self.df["real_date"].min().strftime("%Y-%m-%d"),
+            end=self.df["real_date"].max().strftime("%Y-%m-%d"),
+        )
+
+        proxy_pnl_obj = ProxyPnL(
+            df=df,
+            transaction_costs_object=adapter,
+            sname=self.sname,
+            pname=self.pname,
+            rstring=self.rstring,
+            portfolio_name=self.portfolio_name,
+        )
+        cs_df = proxy_pnl_obj.contract_signals(**cs_args)
+        notional_df = proxy_pnl_obj.notional_positions(
+            **self.get_notional_positions_args()
+        )
+        proxy_pnl_df = proxy_pnl_obj.proxy_pnl_calc(**self.get_proxy_pnl_calc_args())
+
+        dfx = pd.concat([df, cs_df, notional_df], axis=0)
+        expected_proxy_pnl_df = proxy_pnl_calc(
+            df=dfx,
+            transaction_costs_object=adapter,
+            **self.get_proxy_pnl_calc_args(),
+        )
         pd.testing.assert_frame_equal(proxy_pnl_df, expected_proxy_pnl_df)
 
 

@@ -32,7 +32,9 @@ from macrosynergy.management.utils import (
     merge_categories,
     estimate_release_frequency,
     Timer,
+    rotate_cid_xcat,
 )
+from macrosynergy.management.utils.df_utils import _long_to_wide, _wide_to_long
 from macrosynergy.management.constants import FREQUENCY_MAP
 from macrosynergy.management.utils.math import expanding_mean_with_nan
 from macrosynergy.compat import PD_NEW_DATE_FREQ
@@ -1196,7 +1198,6 @@ class TestFunctions(unittest.TestCase):
                 metrics=[1],
             )
 
-
     def test_merge_categories(self):
         cids: List[str] = ["AUD", "CAD", "GBP", "NZD", "JPY", "CHF"]
         xcats: List[str] = ["XR", "CRY", "GROWTH", "INFL"]
@@ -1615,8 +1616,7 @@ class TestMergeCategoriesHierarchy(unittest.TestCase):
 
         for cid in cids:
             backfilled = result_df.loc[
-                (result_df["cid"] == cid)
-                & (result_df["real_date"] < first_valid_date),
+                (result_df["cid"] == cid) & (result_df["real_date"] < first_valid_date),
                 "value",
             ]
             self.assertFalse(
@@ -1778,6 +1778,198 @@ class TestEstimateReleaseFrequency(unittest.TestCase):
             timeseries=self.timeseries_monthly, rtol=0.01
         )
         self.assertEqual(result, "M")
+
+
+class TestLongToWide(unittest.TestCase):
+    def _make_long_df(self, cids=None, dates=None):
+        cids = cids or ["AUD", "USD", "GBP"]
+        dates = dates or pd.bdate_range("2020-01-01", periods=5)
+        rows = [
+            {"real_date": d, "cid": c, "value": float(i + j)}
+            for j, c in enumerate(cids)
+            for i, d in enumerate(dates)
+        ]
+        return pd.DataFrame(rows)
+
+    def test_normal_case(self):
+        df = self._make_long_df()
+        wide = _long_to_wide(df, value_col="value")
+        self.assertIsInstance(wide, pd.DataFrame)
+        self.assertEqual(wide.index.name, "real_date")
+        self.assertEqual(set(wide.columns), {"AUD", "USD", "GBP"})
+        self.assertEqual(len(wide), 5)
+
+    def test_roundtrip_with_wide_to_long(self):
+        df = self._make_long_df()
+        wide = _long_to_wide(df, value_col="value")
+        long = _wide_to_long(wide, value_name="value")
+        self.assertEqual(set(long.columns), {"real_date", "cid", "value"})
+        self.assertEqual(len(long), len(df))
+
+    def test_missing_value_col_raises(self):
+        df = self._make_long_df()
+        with self.assertRaises(ValueError):
+            _long_to_wide(df, value_col="nonexistent")
+
+    def test_missing_real_date_raises(self):
+        df = self._make_long_df().rename(columns={"real_date": "date"})
+        with self.assertRaises(ValueError):
+            _long_to_wide(df, value_col="value")
+
+    def test_missing_cid_raises(self):
+        df = self._make_long_df().rename(columns={"cid": "ticker"})
+        with self.assertRaises(ValueError):
+            _long_to_wide(df, value_col="value")
+
+    def test_error_message_lists_missing_columns(self):
+        df = self._make_long_df().drop(columns=["cid", "value"])
+        with self.assertRaises(ValueError) as ctx:
+            _long_to_wide(df, value_col="value")
+        self.assertIn("cid", str(ctx.exception))
+        self.assertIn("value", str(ctx.exception))
+
+    def test_single_cid(self):
+        df = self._make_long_df(cids=["AUD"])
+        wide = _long_to_wide(df, value_col="value")
+        self.assertEqual(list(wide.columns), ["AUD"])
+
+    def test_custom_value_col(self):
+        df = self._make_long_df()
+        df = df.rename(columns={"value": "grading"})
+        wide = _long_to_wide(df, value_col="grading")
+        self.assertIsInstance(wide, pd.DataFrame)
+        self.assertEqual(set(wide.columns), {"AUD", "USD", "GBP"})
+
+
+class TestWideToLong(unittest.TestCase):
+    def _make_wide_df(self, cids=None, periods=5):
+        cids = cids or ["AUD", "USD", "GBP"]
+        dates = pd.bdate_range("2020-01-01", periods=periods)
+        data = {c: range(periods) for c in cids}
+        df = pd.DataFrame(data, index=dates)
+        df.index.name = "real_date"
+        return df
+
+    def test_normal_case(self):
+        wide = self._make_wide_df()
+        long = _wide_to_long(wide, value_name="value")
+        self.assertIsInstance(long, pd.DataFrame)
+        self.assertEqual(set(long.columns), {"real_date", "cid", "value"})
+        self.assertEqual(set(long["cid"].unique()), {"AUD", "USD", "GBP"})
+        self.assertEqual(len(long), 5 * 3)
+
+    def test_custom_value_name(self):
+        wide = self._make_wide_df()
+        long = _wide_to_long(wide, value_name="grading")
+        self.assertIn("grading", long.columns)
+        self.assertNotIn("value", long.columns)
+
+    def test_nan_rows_dropped(self):
+        wide = self._make_wide_df()
+        wide.iloc[0, 0] = float("nan")
+        long = _wide_to_long(wide, value_name="value")
+        self.assertEqual(len(long), 5 * 3 - 1)
+        self.assertFalse(long["value"].isna().any())
+
+    def test_sorted_by_cid_then_date(self):
+        wide = self._make_wide_df()
+        long = _wide_to_long(wide, value_name="value")
+        cids_order = long["cid"].tolist()
+        self.assertEqual(cids_order, sorted(cids_order))
+        for cid in long["cid"].unique():
+            dates = long.loc[long["cid"] == cid, "real_date"].tolist()
+            self.assertEqual(dates, sorted(dates))
+
+    def test_empty_columns_raises(self):
+        empty = pd.DataFrame(index=pd.bdate_range("2020-01-01", periods=3))
+        with self.assertRaises(ValueError):
+            _wide_to_long(empty)
+
+    def test_single_cid(self):
+        wide = self._make_wide_df(cids=["AUD"])
+        long = _wide_to_long(wide, value_name="value")
+        self.assertEqual(list(long["cid"].unique()), ["AUD"])
+        self.assertEqual(len(long), 5)
+
+
+class TestRotateCidXcat(unittest.TestCase):
+    def _make_df(self, cids, xcats, periods=3):
+        dates = pd.bdate_range("2020-01-01", periods=periods)
+        rows = [
+            {"real_date": d, "cid": c, "xcat": x, "value": float(i)}
+            for c in cids
+            for x in xcats
+            for i, d in enumerate(dates)
+        ]
+        return pd.DataFrame(rows)
+
+    # --- direction validation ---
+
+    def test_invalid_direction_raises(self):
+        df = self._make_df(["AUD"], ["EQXR_AUD_NSA"])
+        with self.assertRaises(ValueError):
+            rotate_cid_xcat(df, "sideways", "EQXR_{cid}_NSA", "EQ")
+
+    # --- xcat_template validation ---
+
+    def test_template_without_placeholder_raises(self):
+        df = self._make_df(["AUD"], ["EQXR_AUD_NSA"])
+        with self.assertRaises(ValueError):
+            rotate_cid_xcat(df, "to_xcats", "EQXR_NSA", "EQ")
+
+    # --- panel shape validation ---
+
+    def test_multiple_cids_and_xcats_raises(self):
+        df = self._make_df(["AUD", "USD"], ["EQXR_AUD_NSA", "EQXR_USD_NSA"])
+        with self.assertRaises(ValueError):
+            rotate_cid_xcat(df, "to_xcats", "EQXR_{cid}_NSA", "EQ")
+
+    # --- to_xcats direction ---
+
+    def test_to_xcats_sets_cid_to_fixed_value(self):
+        df = self._make_df(["AUD", "USD", "GBP"], ["EQXR_NSA"])
+        result = rotate_cid_xcat(df, "to_xcats", "EQXR_{cid}_NSA", "EQ")
+        self.assertTrue((result["cid"] == "EQ").all())
+
+    def test_to_xcats_derives_xcat_from_template(self):
+        df = self._make_df(["AUD", "USD"], ["EQXR_NSA"])
+        result = rotate_cid_xcat(df, "to_xcats", "EQXR_{cid}_NSA", "EQ")
+        self.assertEqual(set(result["xcat"].unique()), {"EQXR_AUD_NSA", "EQXR_USD_NSA"})
+
+    def test_to_xcats_does_not_mutate_input(self):
+        df = self._make_df(["AUD", "USD"], ["EQXR_NSA"])
+        original_cids = set(df["cid"].unique())
+        rotate_cid_xcat(df, "to_xcats", "EQXR_{cid}_NSA", "EQ")
+        self.assertEqual(set(df["cid"].unique()), original_cids)
+
+    # --- to_cids direction ---
+
+    def test_to_cids_extracts_cid_from_xcat(self):
+        df = self._make_df(["EQ"], ["EQXR_AUD_NSA", "EQXR_USD_NSA", "EQXR_GBP_NSA"])
+        result = rotate_cid_xcat(df, "to_cids", "EQXR_{cid}_NSA", "EQXR_NSA")
+        self.assertEqual(set(result["cid"].unique()), {"AUD", "USD", "GBP"})
+
+    def test_to_cids_sets_xcat_to_fixed_value(self):
+        df = self._make_df(["EQ"], ["EQXR_AUD_NSA", "EQXR_USD_NSA"])
+        result = rotate_cid_xcat(df, "to_cids", "EQXR_{cid}_NSA", "EQXR_NSA")
+        self.assertTrue((result["xcat"] == "EQXR_NSA").all())
+
+    def test_to_cids_does_not_mutate_input(self):
+        df = self._make_df(["EQ"], ["EQXR_AUD_NSA", "EQXR_USD_NSA"])
+        original_xcats = set(df["xcat"].unique())
+        rotate_cid_xcat(df, "to_cids", "EQXR_{cid}_NSA", "EQXR_NSA")
+        self.assertEqual(set(df["xcat"].unique()), original_xcats)
+
+    # --- roundtrip ---
+
+    def test_to_xcats_then_to_cids_roundtrip(self):
+        cids = ["AUD", "USD", "GBP"]
+        df = self._make_df(cids, ["EQXR_NSA"])
+        template = "EQXR_{cid}_NSA"
+        rotated = rotate_cid_xcat(df, "to_xcats", template, "EQ")
+        restored = rotate_cid_xcat(rotated, "to_cids", template, "EQXR_NSA")
+        self.assertEqual(set(restored["cid"].unique()), set(cids))
+        self.assertTrue((restored["xcat"] == "EQXR_NSA").all())
 
 
 if __name__ == "__main__":
