@@ -55,15 +55,15 @@ class NaiveRegressor(BaseEstimator, RegressorMixin):
             )
 
         # No learning needed since priors are fully trusted
-        self.n = len(X)
+        self.n_ = len(X)
         if isinstance(X, pd.Series):
-            self.p = 1
+            self.p_ = 1
         elif isinstance(X, np.ndarray):
-            self.p = X.shape[1] if X.ndim == 2 else 1
+            self.p_ = X.shape[1] if X.ndim == 2 else 1
         else:
-            self.p = X.shape[1]
+            self.p_ = X.shape[1]
 
-        self.X_type = type(X)
+        self.X_type_ = type(X)
 
         return self
 
@@ -85,7 +85,7 @@ class NaiveRegressor(BaseEstimator, RegressorMixin):
             raise ValueError(
                 "When X is a numpy array, it must have either 1 or 2 dimensions."
             )
-        if not isinstance(X, self.X_type):
+        if not isinstance(X, self.X_type_):
             raise ValueError(
                 "X must be of the same type as the input matrix to the fit() method."
             )
@@ -96,7 +96,7 @@ class NaiveRegressor(BaseEstimator, RegressorMixin):
             p = 1
         else:
             p = X.shape[1]
-        if p != self.p:
+        if p != self.p_:
             raise ValueError(
                 "X must have the same number of columns as the input matrix to the "
                 "fit() method."

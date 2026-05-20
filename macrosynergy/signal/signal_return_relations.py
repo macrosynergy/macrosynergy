@@ -831,7 +831,7 @@ class SignalReturnRelations:
                 s_date = intersection_df.index[0]
                 e_date = intersection_df.index[-1]
 
-                final_df.loc[(cid_name, s_date) : (cid_name, e_date), signal] = (
+                final_df.loc[(cid_name, s_date):(cid_name, e_date), signal] = (
                     intersection_df.to_numpy()
                 )
                 storage.append(final_df)
@@ -1505,11 +1505,23 @@ class SignalReturnRelations:
         column_names: Optional[List[str]] = None,
         signal_name_dict: Optional[Dict[str, str]] = None,
         return_name_dict: Optional[Dict[str, str]] = None,
+        xcat_labels: Optional[Dict[str, str]] = None,
+        freq_labels: Optional[Dict[str, str]] = None,
+        agg_sigs_labels: Optional[Dict[str, str]] = None,
         min_color: Optional[float] = None,
         max_color: Optional[float] = None,
         figsize: Tuple[float, float] = (14, 8),
         annotate: bool = True,
-        round: int = 5,
+        round: int = 3,
+        pval_stat: Optional[str] = None,
+        round_pval: int = 3,
+        significance_threshold: Optional[float] = 0.9,
+        xlabel: Optional[str] = None,
+        ylabel: Optional[str] = None,
+        collapse_constant_levels: bool = False,
+        axis_label_levels: Optional[List[str]] = None,
+        footnote: Optional[str] = None,
+        footnote_fontsize: int = 10,
     ):
         """
         Creates a table which shows the specified statistic for each row and column
@@ -1549,10 +1561,34 @@ class SignalReturnRelations:
             of the generated DataFrame are used.
         signal_name_dict : dict, optional
             dictionary mapping the signal names to the desired names in the heatmap.
-            Default is None, in which case the signal names are used.
+            Default is None, in which case the signal names are used. Renamed
+            values flow through to the auto axis label produced by the
+            constant-level collapse described under ``ylabel``.
         return_name_dict : dict, optional
             dictionary mapping the return names to the desired names in the heatmap.
-            Default is None, in which case the return names are used.
+            Default is None, in which case the return names are used. Renamed
+            values flow through to the auto axis label produced by the
+            constant-level collapse described under ``xlabel``.
+        xcat_labels : dict, optional
+            Unified rename dictionary covering both signal and return
+            ``xcat``\s. Internally split by membership in ``self.sigs`` /
+            ``self.rets`` and routed through ``signal_name_dict`` /
+            ``return_name_dict``; xcats not listed in the dict are kept
+            verbatim. Mutually exclusive with the two legacy kwargs — pass
+            either ``xcat_labels`` or ``signal_name_dict`` /
+            ``return_name_dict``, not both. Default is None (no rename).
+        freq_labels : dict, optional
+            Mapping from frequency code (``"M"``, ``"Q"``, …) to the
+            display label used on the heatmap and in the auto axis label
+            produced by the constant-level collapse. Frequencies not
+            listed in the dict are kept verbatim. Default is None
+            (raw codes are shown).
+        agg_sigs_labels : dict, optional
+            Mapping from aggregation code (``"last"``, ``"mean"``, …) to
+            the display label used on the heatmap and in the auto axis
+            label produced by the constant-level collapse. Aggregations
+            not listed in the dict are kept verbatim. Default is None
+            (raw codes are shown).
         min_color : float, optional
             minimum value of the color scale. Default is None, in which case the minimum
             value of the table is used.
@@ -1564,7 +1600,75 @@ class SignalReturnRelations:
         annotate : bool
             Default is True, where the values shown in the heatmap are annotated.
         round : int
-            number of decimals to round the values to on the heatmap's annotations.
+            number of decimals to round the primary statistic to in the heatmap
+            annotations. Default is 3.
+        pval_stat : str, optional
+            name of a p-value statistic — typically ``"kendall_pval"``,
+            ``"pearson_pval"`` or ``"map_pval"`` (the Macrosynergy Panel
+            test). When set, each heatmap cell shows the **probability of
+            significance**, ``1 - pval_stat``, in brackets beneath the
+            primary statistic. Default is None. When ``pval_stat="map_pval"``
+            the SignalReturnRelations must have been constructed with
+            ``ms_panel_test=True``.
+        round_pval : int
+            number of decimals to round the bracketed probability of
+            significance to in the heatmap annotations. Default is 3.
+        significance_threshold : float, optional
+            probability-of-significance cutoff above which a cell's
+            annotation is rendered in black and bold. Compared directly
+            against the bracketed value (``1 - pval_stat``), so 0.9
+            highlights cells whose probability of significance exceeds 0.9
+            (equivalently, raw p-value below 0.1). Only takes effect when
+            ``pval_stat`` is set. Pass ``None`` to disable. Default is 0.9.
+        xlabel : str, optional
+            Label drawn beneath the heatmap columns, useful for naming
+            the target return (e.g. ``"Forward return (target)"``).
+            Default is None. When ``collapse_constant_levels=True`` and
+            the caller leaves this None, any column-index levels whose
+            values are constant across the table are auto-collapsed into
+            this label (joined by ``" · "``). See ``axis_label_levels``
+            to restrict which constant levels feed into the label.
+        ylabel : str, optional
+            Label drawn beside the heatmap rows, useful for naming the
+            feature (e.g. ``"Factor (feature)"``). Default is None. When
+            ``collapse_constant_levels=True`` and the caller leaves this
+            None, any row-index levels whose values are constant across
+            the table are auto-collapsed into this label (joined by
+            ``" · "``). For instance, a table whose rows iterate over
+            one signal, one aggregation, and several frequencies will
+            display only the frequencies as y-tick labels and place
+            ``"<signal> · <aggregation>"`` on the y-axis label. See
+            ``axis_label_levels`` to restrict which constant levels
+            feed into the label.
+        collapse_constant_levels : bool, optional
+            When True, row/column index levels whose values are constant
+            across the table are stripped from the tick labels and
+            promoted to the corresponding axis label (joined by
+            ``" · "``) when the caller did not pass ``xlabel``/``ylabel``
+            (or ``row_names``/``column_names``) explicitly. The returned
+            DataFrame is unchanged in every case. Default is False (raw
+            MultiIndex tuples appear as tick labels, matching the
+            historical rendering). Required to be True before passing
+            ``axis_label_levels``.
+        axis_label_levels : List[str], optional
+            Subset of ``["xcat", "ret", "freq", "agg_sigs"]`` naming the
+            level keys eligible for promotion into the auto x/y-axis
+            label. Constant levels not in this list still collapse from
+            the tick labels but do not appear in the axis label. Only
+            takes effect when ``collapse_constant_levels=True``; raises
+            ``ValueError`` otherwise. Default is None, which promotes
+            every collapsed level into the label. Pass e.g.
+            ``["xcat", "ret"]`` to keep the auto-label limited to the
+            signal/return identity and drop the aggregation/frequency
+            suffix.
+        footnote : str, optional
+            Free-text caption rendered below the heatmap. Useful for
+            recording the significance test, panel scope, or annotation
+            legend (e.g. ``"Significance computed with the Macrosynergy
+            panel test."``). Multi-line strings are supported. Default
+            is None (no footnote).
+        footnote_fontsize : int, optional
+            Font size for the footnote text. Default is 10.
 
         Returns
         -------
@@ -1576,6 +1680,15 @@ class SignalReturnRelations:
 
         if not stat in self.metrics:
             raise ValueError(f"Stat must be one of {self.metrics}")
+
+        if pval_stat is not None:
+            if pval_stat == "map_pval" and not self.ms_panel_test:
+                raise ValueError(
+                    "pval_stat='map_pval' requires SignalReturnRelations to "
+                    "be constructed with ms_panel_test=True."
+                )
+            if pval_stat not in self.metrics:
+                raise ValueError(f"pval_stat must be one of {self.metrics}")
 
         if not isinstance(rows, list):
             raise TypeError("Rows must be a list")
@@ -1594,6 +1707,28 @@ class SignalReturnRelations:
         if not all([x in rows_values for x in columns]):
             raise ValueError(f"Columns must only contain {rows_values}")
 
+        if axis_label_levels is not None:
+            if not collapse_constant_levels:
+                raise ValueError(
+                    "axis_label_levels requires collapse_constant_levels=True."
+                )
+            if not all(x in rows_values for x in axis_label_levels):
+                raise ValueError(
+                    f"axis_label_levels must only contain {rows_values}"
+                )
+
+        if xcat_labels is not None:
+            if signal_name_dict is not None or return_name_dict is not None:
+                raise ValueError(
+                    "Pass either xcat_labels or "
+                    "signal_name_dict/return_name_dict, not both."
+                )
+            # Build identity-filled rename dicts so existing keys preserve
+            # their position and unrenamed xcats are not dropped by the
+            # downstream reorder.
+            signal_name_dict = {s: xcat_labels.get(s, s) for s in self.sigs}
+            return_name_dict = {r: xcat_labels.get(r, r) for r in self.rets}
+
         rows_dict = {
             "xcat": self.sigs,
             "ret": self.rets,
@@ -1608,6 +1743,13 @@ class SignalReturnRelations:
         )
         # sort index to prevent performance degradation: PerformanceWarning
         df_result.sort_index(inplace=True)
+
+        df_pval: Optional[pd.DataFrame] = None
+        if pval_stat is not None:
+            df_pval = pd.DataFrame(
+                columns=df_column_names, index=df_row_names, dtype=np.float64
+            )
+            df_pval.sort_index(inplace=True)
 
         loop_tuples: List[Tuple[str, str, str, str]] = [
             (ret, sig, freq, agg_sig)
@@ -1630,6 +1772,10 @@ class SignalReturnRelations:
             df_result.loc[row, column] = self.calculate_single_stat(
                 stat, ret, sig, type
             )
+            if pval_stat is not None:
+                df_pval.loc[row, column] = self.calculate_single_stat(
+                    pval_stat, ret, sig, type
+                )
 
             # Reset self.df and sig to original values
             self.df = self.original_df
@@ -1641,9 +1787,17 @@ class SignalReturnRelations:
                 df_result = self.reindex_multindex_df(
                     df_result, signal_name_dict.values(), "Signal"
                 )
+                if df_pval is not None:
+                    df_pval.rename(index=signal_name_dict, inplace=True)
+                    df_pval = self.reindex_multindex_df(
+                        df_pval, signal_name_dict.values(), "Signal"
+                    )
             else:
                 df_result.rename(columns=signal_name_dict, inplace=True)
                 df_result = df_result[signal_name_dict.values()]
+                if df_pval is not None:
+                    df_pval.rename(columns=signal_name_dict, inplace=True)
+                    df_pval = df_pval[signal_name_dict.values()]
 
         if return_name_dict is not None:
             # Reorder the index according to the return_name_dict
@@ -1652,9 +1806,59 @@ class SignalReturnRelations:
                 df_result = self.reindex_multindex_df(
                     df_result, return_name_dict.values(), "Return"
                 )
+                if df_pval is not None:
+                    df_pval.rename(index=return_name_dict, inplace=True)
+                    df_pval = self.reindex_multindex_df(
+                        df_pval, return_name_dict.values(), "Return"
+                    )
             else:
                 df_result.rename(columns=return_name_dict, inplace=True)
                 df_result = df_result[return_name_dict.values()]
+                if df_pval is not None:
+                    df_pval.rename(columns=return_name_dict, inplace=True)
+                    df_pval = df_pval[return_name_dict.values()]
+
+        # Frequency / aggregation display renames. Identity-fill so that
+        # frequencies (or aggregations) not listed in the user dict keep
+        # their slot in the renamed axis instead of being dropped by the
+        # downstream reorder, mirroring the xcat_labels pattern above.
+        # The renamed values flow into both the heatmap tick labels and
+        # the auto axis label produced by ``collapse_constant_levels``.
+        if freq_labels is not None:
+            freq_labels_full = {f: freq_labels.get(f, f) for f in self.freqs}
+            if "freq" in rows:
+                df_result.rename(index=freq_labels_full, inplace=True)
+                df_result = self.reindex_multindex_df(
+                    df_result, list(freq_labels_full.values()), "Frequency"
+                )
+                if df_pval is not None:
+                    df_pval.rename(index=freq_labels_full, inplace=True)
+                    df_pval = self.reindex_multindex_df(
+                        df_pval, list(freq_labels_full.values()), "Frequency"
+                    )
+            elif "freq" in columns:
+                df_result.rename(columns=freq_labels_full, inplace=True)
+                if df_pval is not None:
+                    df_pval.rename(columns=freq_labels_full, inplace=True)
+
+        if agg_sigs_labels is not None:
+            agg_sigs_labels_full = {
+                a: agg_sigs_labels.get(a, a) for a in self.agg_sigs
+            }
+            if "agg_sigs" in rows:
+                df_result.rename(index=agg_sigs_labels_full, inplace=True)
+                df_result = self.reindex_multindex_df(
+                    df_result, list(agg_sigs_labels_full.values()), "Aggregation"
+                )
+                if df_pval is not None:
+                    df_pval.rename(index=agg_sigs_labels_full, inplace=True)
+                    df_pval = self.reindex_multindex_df(
+                        df_pval, list(agg_sigs_labels_full.values()), "Aggregation"
+                    )
+            elif "agg_sigs" in columns:
+                df_result.rename(columns=agg_sigs_labels_full, inplace=True)
+                if df_pval is not None:
+                    df_pval.rename(columns=agg_sigs_labels_full, inplace=True)
 
         if show_heatmap:
             if not title:
@@ -1665,6 +1869,68 @@ class SignalReturnRelations:
             if max_color is None:
                 max_color = df_result.values.max()
 
+            # Convert raw p-values to probability of significance (1 - pval)
+            # so the bracketed value and the highlight threshold share the
+            # same scale.
+            df_psig = 1.0 - df_pval if df_pval is not None else None
+
+            if annotate and df_psig is not None:
+                heatmap_annot = self._format_dual_annot(
+                    df_result, df_psig, round, round_pval
+                )
+                heatmap_fmt = ""
+            else:
+                heatmap_annot = annotate
+                heatmap_fmt = f".{round}f"
+
+            highlight_mask = None
+            if df_psig is not None and significance_threshold is not None:
+                highlight_mask = df_psig > float(significance_threshold)
+
+            yticklabels_to_pass = row_names
+            xticklabels_to_pass = column_names
+            ylabel_to_pass = ylabel
+            xlabel_to_pass = xlabel
+
+            if collapse_constant_levels:
+                # Strip row/column index levels whose values are constant
+                # so they don't clutter the tick labels. The collapsed
+                # values are promoted to the corresponding axis label
+                # when the caller did not provide one. ``df_result``
+                # itself is left untouched.
+                display_yticks, constant_y = self._collapse_constant_levels(
+                    df_result.index
+                )
+                display_xticks, constant_x = self._collapse_constant_levels(
+                    df_result.columns
+                )
+
+                if yticklabels_to_pass is None:
+                    yticklabels_to_pass = display_yticks
+                if xticklabels_to_pass is None:
+                    xticklabels_to_pass = display_xticks
+
+                # Filter which collapsed levels feed into the auto axis
+                # label. ``axis_label_levels`` is expressed in the same
+                # vocabulary as ``rows`` / ``columns`` (``"xcat"``,
+                # ``"ret"``, ``"freq"``, ``"agg_sigs"``); translate to
+                # the display level names used in the MultiIndex.
+                label_dict = {
+                    "xcat": "Signal",
+                    "ret": "Return",
+                    "freq": "Frequency",
+                    "agg_sigs": "Aggregation",
+                }
+                if axis_label_levels is not None:
+                    allowed = {label_dict[k] for k in axis_label_levels}
+                    constant_y = [(n, v) for n, v in constant_y if n in allowed]
+                    constant_x = [(n, v) for n, v in constant_x if n in allowed]
+
+                if ylabel_to_pass is None and constant_y:
+                    ylabel_to_pass = " · ".join(v for _, v in constant_y)
+                if xlabel_to_pass is None and constant_x:
+                    xlabel_to_pass = " · ".join(v for _, v in constant_x)
+
             msv.view_table(
                 df_result,
                 title=title,
@@ -1672,13 +1938,322 @@ class SignalReturnRelations:
                 min_color=min_color,
                 max_color=max_color,
                 figsize=figsize,
-                fmt=f".{round}f",
-                annot=annotate,
-                xticklabels=column_names,
-                yticklabels=row_names,
+                fmt=heatmap_fmt,
+                annot=heatmap_annot,
+                xlabel=xlabel_to_pass,
+                ylabel=ylabel_to_pass,
+                xticklabels=xticklabels_to_pass,
+                yticklabels=yticklabels_to_pass,
+                highlight_mask=highlight_mask,
+                footnote=footnote,
+                footnote_fontsize=footnote_fontsize,
             )
 
         return df_result
+
+    def show_single_statistic_table(self, *args, **kwargs) -> pd.DataFrame:
+        """
+        Return the single statistic table without rendering a heatmap.
+
+        Thin wrapper around :meth:`single_statistic_table` that forces
+        ``show_heatmap=False``.
+
+        Parameters
+        ----------
+        stat : str
+            type of statistic to be displayed (this can be any of the column names of
+            summary_table).
+        type : str
+            type of the statistic displayed. This can be based on the overall panel
+            ("panel", default), an average of annual panels (mean_years), an average of
+            cross-sectional relations ("mean_cids"), the positive ratio across
+            years("pr_years"), positive ratio across sections ("pr_cids").
+        rows : List[str]
+            row indices, which can be return categories, feature categories, frequencies
+            and/or aggregations. The choice is made through a list of one or more of "xcat",
+            "ret", "freq" and "agg_sigs". The default is ["xcat", "agg_sigs"] resulting in
+            index strings (<agg_signs>) or if only one aggregation is available.
+        columns : List[str]
+            column indices, which can be return categories, feature categories,
+            frequencies and/or aggregations. The choice is made through a list of one or
+            more of "xcat", "ret", "freq" and "agg_sigs". The default is ["ret", "freq]
+            resulting in index strings () or if only one frequency is available.
+        title : str, optional
+            plot title. Default is None in which case the default title is used.
+        title_fontsize : int
+            font size of title. Default is 16.
+        row_names : List[str]
+            specifies the labels of rows in the heatmap. Default is None, the indices of
+            the generated DataFrame are used.
+        column_names : List[str]
+            specifies the labels of columns in the heatmap. Default is None, the columns
+            of the generated DataFrame are used.
+        signal_name_dict : dict, optional
+            dictionary mapping the signal names to the desired names in the heatmap.
+            Default is None, in which case the signal names are used. Renamed
+            values flow through to the auto axis label produced by the
+            constant-level collapse described under ``ylabel``.
+        return_name_dict : dict, optional
+            dictionary mapping the return names to the desired names in the heatmap.
+            Default is None, in which case the return names are used. Renamed
+            values flow through to the auto axis label produced by the
+            constant-level collapse described under ``xlabel``.
+        xcat_labels : dict, optional
+            Unified rename dictionary covering both signal and return
+            ``xcat``\s. Internally split by membership in ``self.sigs`` /
+            ``self.rets`` and routed through ``signal_name_dict`` /
+            ``return_name_dict``; xcats not listed in the dict are kept
+            verbatim. Mutually exclusive with the two legacy kwargs — pass
+            either ``xcat_labels`` or ``signal_name_dict`` /
+            ``return_name_dict``, not both. Default is None (no rename).
+        freq_labels : dict, optional
+            Mapping from frequency code (``"M"``, ``"Q"``, …) to its
+            display label. Frequencies not listed in the dict are kept
+            verbatim. Default is None.
+        agg_sigs_labels : dict, optional
+            Mapping from aggregation code (``"last"``, ``"mean"``, …) to
+            its display label. Aggregations not listed in the dict are
+            kept verbatim. Default is None.
+        min_color : float, optional
+            minimum value of the color scale. Default is None, in which case the minimum
+            value of the table is used.
+        max_color : float, optional
+            maximum value of the color scale. Default is None, in which case the maximum
+            value of the table is used.
+        figsize : Tuple[float, float]
+            Tuple (w, h) of width and height of graph. Default is (14, 8).
+        annotate : bool
+            Default is True, where the values shown in the heatmap are annotated.
+        round : int
+            number of decimals to round the primary statistic to in the heatmap
+            annotations. Default is 3.
+        pval_stat : str, optional
+            name of a p-value statistic — typically ``"kendall_pval"``,
+            ``"pearson_pval"`` or ``"map_pval"`` (the Macrosynergy Panel
+            test). When set, each heatmap cell shows the **probability of
+            significance**, ``1 - pval_stat``, in brackets beneath the
+            primary statistic. Default is None. When ``pval_stat="map_pval"``
+            the SignalReturnRelations must have been constructed with
+            ``ms_panel_test=True``.
+        round_pval : int
+            number of decimals to round the bracketed probability of
+            significance to in the heatmap annotations. Default is 3.
+        significance_threshold : float, optional
+            probability-of-significance cutoff above which a cell's
+            annotation is rendered in black and bold. Compared directly
+            against the bracketed value (``1 - pval_stat``), so 0.9
+            highlights cells whose probability of significance exceeds 0.9
+            (equivalently, raw p-value below 0.1). Only takes effect when
+            ``pval_stat`` is set. Pass ``None`` to disable. Default is 0.9.
+        xlabel, ylabel, footnote, footnote_fontsize
+            Forwarded to :meth:`single_statistic_table` and only affect
+            the heatmap; accepted here for API symmetry even though this
+            wrapper renders no heatmap.
+
+        Returns
+        -------
+        ~pandas.DataFrame
+            DataFrame with the specified statistic for each row and column.
+        """
+        kwargs["show_heatmap"] = False
+        return self.single_statistic_table(*args, **kwargs)
+
+    def plot_single_statistic_heatmap(self, *args, **kwargs) -> None:
+        """
+        Render the heatmap of the single statistic table.
+
+        Thin wrapper around :meth:`single_statistic_table` that forces
+        ``show_heatmap=True``. The computed table itself is not returned.
+
+        Parameters
+        ----------
+        stat : str
+            type of statistic to be displayed (this can be any of the column names of
+            summary_table).
+        type : str
+            type of the statistic displayed. This can be based on the overall panel
+            ("panel", default), an average of annual panels (mean_years), an average of
+            cross-sectional relations ("mean_cids"), the positive ratio across
+            years("pr_years"), positive ratio across sections ("pr_cids").
+        rows : List[str]
+            row indices, which can be return categories, feature categories, frequencies
+            and/or aggregations. The choice is made through a list of one or more of "xcat",
+            "ret", "freq" and "agg_sigs". The default is ["xcat", "agg_sigs"] resulting in
+            index strings (<agg_signs>) or if only one aggregation is available.
+        columns : List[str]
+            column indices, which can be return categories, feature categories,
+            frequencies and/or aggregations. The choice is made through a list of one or
+            more of "xcat", "ret", "freq" and "agg_sigs". The default is ["ret", "freq]
+            resulting in index strings () or if only one frequency is available.
+        show_heatmap : bool
+            not allowed; this wrapper always forces ``show_heatmap=True`` and
+            any value supplied by the caller is overridden.
+        title : str, optional
+            plot title. Default is None in which case the default title is used.
+        title_fontsize : int
+            font size of title. Default is 16.
+        row_names : List[str]
+            specifies the labels of rows in the heatmap. Default is None, the indices of
+            the generated DataFrame are used.
+        column_names : List[str]
+            specifies the labels of columns in the heatmap. Default is None, the columns
+            of the generated DataFrame are used.
+        signal_name_dict : dict, optional
+            dictionary mapping the signal names to the desired names in the heatmap.
+            Default is None, in which case the signal names are used. Renamed
+            values flow through to the auto axis label produced by the
+            constant-level collapse described under ``ylabel``.
+        return_name_dict : dict, optional
+            dictionary mapping the return names to the desired names in the heatmap.
+            Default is None, in which case the return names are used. Renamed
+            values flow through to the auto axis label produced by the
+            constant-level collapse described under ``xlabel``.
+        xcat_labels : dict, optional
+            Unified rename dictionary covering both signal and return
+            ``xcat``\s. Internally split by membership in ``self.sigs`` /
+            ``self.rets`` and routed through ``signal_name_dict`` /
+            ``return_name_dict``; xcats not listed in the dict are kept
+            verbatim. Mutually exclusive with the two legacy kwargs — pass
+            either ``xcat_labels`` or ``signal_name_dict`` /
+            ``return_name_dict``, not both. Default is None (no rename).
+        freq_labels : dict, optional
+            Mapping from frequency code (``"M"``, ``"Q"``, …) to its
+            display label. Frequencies not listed in the dict are kept
+            verbatim. Default is None.
+        agg_sigs_labels : dict, optional
+            Mapping from aggregation code (``"last"``, ``"mean"``, …) to
+            its display label. Aggregations not listed in the dict are
+            kept verbatim. Default is None.
+        min_color : float, optional
+            minimum value of the color scale. Default is None, in which case the minimum
+            value of the table is used.
+        max_color : float, optional
+            maximum value of the color scale. Default is None, in which case the maximum
+            value of the table is used.
+        figsize : Tuple[float, float]
+            Tuple (w, h) of width and height of graph. Default is (14, 8).
+        annotate : bool
+            Default is True, where the values shown in the heatmap are annotated.
+        round : int
+            number of decimals to round the primary statistic to in the heatmap
+            annotations. Default is 3.
+        pval_stat : str, optional
+            name of a p-value statistic — typically ``"kendall_pval"``,
+            ``"pearson_pval"`` or ``"map_pval"`` (the Macrosynergy Panel
+            test). When set, each heatmap cell shows the **probability of
+            significance**, ``1 - pval_stat``, in brackets beneath the
+            primary statistic. Default is None. When ``pval_stat="map_pval"``
+            the SignalReturnRelations must have been constructed with
+            ``ms_panel_test=True``.
+        round_pval : int
+            number of decimals to round the bracketed probability of
+            significance to in the heatmap annotations. Default is 3.
+        significance_threshold : float, optional
+            probability-of-significance cutoff above which a cell's
+            annotation is rendered in black and bold. Compared directly
+            against the bracketed value (``1 - pval_stat``), so 0.9
+            highlights cells whose probability of significance exceeds 0.9
+            (equivalently, raw p-value below 0.1). Only takes effect when
+            ``pval_stat`` is set. Pass ``None`` to disable. Default is 0.9.
+        xlabel : str, optional
+            Label drawn beneath the heatmap columns. Default is None.
+        ylabel : str, optional
+            Label drawn beside the heatmap rows. Default is None.
+        footnote : str, optional
+            Free-text caption rendered below the heatmap. Useful for
+            recording the significance test, panel scope, or annotation
+            legend. Multi-line strings are supported. Default is None.
+        footnote_fontsize : int, optional
+            Font size for the footnote text. Default is 10.
+        """
+        kwargs["show_heatmap"] = True
+        self.single_statistic_table(*args, **kwargs)
+
+    @staticmethod
+    def _format_dual_annot(
+        df_stat: pd.DataFrame,
+        df_pval: pd.DataFrame,
+        round_stat: int,
+        round_pval: int,
+    ) -> pd.DataFrame:
+        """
+        Build a string-typed DataFrame of cell annotations of the form
+        ``"<stat>\\n(<pval>)"`` aligned with ``df_stat``. NaN values render
+        as empty strings.
+        """
+
+        def _fmt(value: float, ndigits: int) -> str:
+            if value is None or (isinstance(value, float) and np.isnan(value)):
+                return ""
+            return f"{value:.{ndigits}f}"
+
+        annot = pd.DataFrame(index=df_stat.index, columns=df_stat.columns, dtype=object)
+        for row in df_stat.index:
+            for col in df_stat.columns:
+                stat_str = _fmt(df_stat.loc[row, col], round_stat)
+                pval_str = _fmt(df_pval.loc[row, col], round_pval)
+                if stat_str == "" and pval_str == "":
+                    annot.loc[row, col] = ""
+                elif pval_str == "":
+                    annot.loc[row, col] = stat_str
+                else:
+                    annot.loc[row, col] = f"{stat_str}\n({pval_str})"
+        return annot
+
+    def _collapse_constant_levels(
+        self, idx: pd.Index
+    ) -> Tuple[Optional[List[str]], List[Tuple[str, str]]]:
+        """
+        Strip levels of a MultiIndex whose values are constant across the
+        index and surface those values for axis-label use.
+
+        Parameters
+        ----------
+        idx : pd.Index
+            Row or column index of the assembled statistic table. May be a
+            plain :class:`~pandas.Index` or a :class:`~pandas.MultiIndex`.
+
+        Returns
+        -------
+        Tuple[Optional[List[str]], List[Tuple[str, str]]]
+            ``(display_labels, constant_pairs)``.
+            ``display_labels`` is a list of tick labels with constant levels
+            removed, joined by ``" · "`` when more than one level survives.
+            It is ``None`` when no collapse applies (plain ``Index``, single
+            level, no constant levels, or all levels constant — in which
+            case the existing tick labels are kept). ``constant_pairs`` is
+            an ordered list of ``(level_name, value)`` for each collapsed
+            level, suitable for filtering and joining into an auto axis
+            label.
+        """
+        if not isinstance(idx, pd.MultiIndex) or idx.nlevels < 2:
+            return None, []
+
+        constant_level_nos: List[int] = []
+        constant_pairs: List[Tuple[str, str]] = []
+        for level_no in range(idx.nlevels):
+            uniq = idx.get_level_values(level_no).unique()
+            if len(uniq) == 1:
+                constant_level_nos.append(level_no)
+                constant_pairs.append(
+                    (str(idx.names[level_no]), str(uniq[0]))
+                )
+
+        if not constant_level_nos:
+            return None, []
+        if len(constant_level_nos) == idx.nlevels:
+            # Every level is constant (single-row/column table): leave the
+            # tick labels alone but still expose the values for the axis.
+            return None, constant_pairs
+
+        remaining = idx.droplevel(constant_level_nos)
+        if isinstance(remaining, pd.MultiIndex):
+            display = [
+                " · ".join(str(part) for part in tup) for tup in remaining.tolist()
+            ]
+        else:
+            display = [str(v) for v in remaining.tolist()]
+        return display, constant_pairs
 
     def set_df_labels(self, rows_dict: Dict, rows: List[str], columns: List[str]):
         """
