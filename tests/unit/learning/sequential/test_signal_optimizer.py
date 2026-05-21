@@ -315,6 +315,52 @@ class TestAll(unittest.TestCase):
                 }
             ),
         )
+        pd.testing.assert_frame_equal(
+            so.split_diagnostics,
+            pd.DataFrame(
+                columns=[
+                    "real_date",
+                    "name",
+                    "model_type",
+                    "hparams",
+                    "split_type",
+                    "splitter",
+                    "fold",
+                    "train_size",
+                    "test_size",
+                    "train_periods",
+                    "test_periods",
+                    "train_cids",
+                    "test_cids",
+                    "train_dates",
+                    "test_dates",
+                    "score_name",
+                    "score_set",
+                    "score",
+                ]
+            ).astype(
+                {
+                    "real_date": "datetime64[ns]",
+                    "name": "category",
+                    "model_type": "category",
+                    "hparams": "object",
+                    "split_type": "category",
+                    "splitter": "category",
+                    "fold": "float32",
+                    "train_size": "int64",
+                    "test_size": "int64",
+                    "train_periods": "int64",
+                    "test_periods": "int64",
+                    "train_cids": "int64",
+                    "test_cids": "int64",
+                    "train_dates": "object",
+                    "test_dates": "object",
+                    "score_name": "category",
+                    "score_set": "category",
+                    "score": "float32",
+                }
+            ),
+        )
 
         min_date = min(so.unique_date_levels)
         max_date = max(so.unique_date_levels)
@@ -2703,6 +2749,93 @@ class TestAll(unittest.TestCase):
             self.assertEqual(selected_ftrs.columns[i], self.X.columns[i - 2])
         assert selected_ftrs["XR"].eq(1).all()
         assert selected_ftrs["CPI"].eq(0).all()
+
+    def test_types_get_split_diagnostics(self):
+        so = self.so_with_calculated_preds
+        with self.assertRaises(ValueError):
+            so.get_split_diagnostics(name="test2")
+        with self.assertRaises(ValueError):
+            so.get_split_diagnostics(name=["test", "test2"])
+        with self.assertRaises(TypeError):
+            so.get_split_diagnostics(name=1)
+        with self.assertRaises(TypeError):
+            so.get_split_diagnostics(name={})
+
+    def test_valid_get_split_diagnostics(self):
+        so = self.so_with_calculated_preds
+        diagnostics = so.get_split_diagnostics(name="test")
+
+        self.assertIsInstance(diagnostics, pd.DataFrame)
+        self.assertTrue(len(diagnostics) != 0)
+        self.assertEqual(diagnostics.name.unique()[0], "test")
+        self.assertSetEqual(set(diagnostics.split_type.unique()), {"inner", "outer"})
+        self.assertSetEqual(
+            set(diagnostics.score_name.dropna().unique()), set(self.scorers.keys())
+        )
+        self.assertTrue((diagnostics.train_size > 0).all())
+        self.assertTrue((diagnostics.test_size > 0).all())
+        self.assertTrue(diagnostics.train_dates.map(lambda x: isinstance(x, tuple)).all())
+        self.assertTrue(diagnostics.test_dates.map(lambda x: isinstance(x, tuple)).all())
+
+        outer_diagnostics = diagnostics[diagnostics.split_type == "outer"].sort_values(
+            "real_date"
+        )
+        expected_outer_splits = list(ExpandingIncrementPanelSplit().split(so.X, so.y))
+        expected_train_idx, expected_test_idx = expected_outer_splits[0]
+        self.assertEqual(outer_diagnostics.iloc[0].train_size, len(expected_train_idx))
+        self.assertEqual(outer_diagnostics.iloc[0].test_size, len(expected_test_idx))
+        self.assertEqual(
+            outer_diagnostics.iloc[0].train_dates,
+            tuple(so.X.iloc[expected_train_idx].index.get_level_values(1).unique().sort_values().tolist()),
+        )
+        self.assertEqual(
+            outer_diagnostics.iloc[0].test_dates,
+            tuple(so.X.iloc[expected_test_idx].index.get_level_values(1).unique().sort_values().tolist()),
+        )
+        self.assertEqual(outer_diagnostics.iloc[0].train_start, outer_diagnostics.iloc[0].train_dates[0])
+        self.assertEqual(outer_diagnostics.iloc[0].train_end, outer_diagnostics.iloc[0].train_dates[-1])
+        self.assertEqual(outer_diagnostics.iloc[0].test_start, outer_diagnostics.iloc[0].test_dates[0])
+        self.assertEqual(outer_diagnostics.iloc[0].test_end, outer_diagnostics.iloc[0].test_dates[-1])
+        query_outer = diagnostics.query("split_type == 'outer'")[
+            ["real_date", "train_size", "test_size", "score_name", "score"]
+        ]
+        self.assertTrue(len(query_outer) != 0)
+        query_inner = diagnostics.query(
+            "split_type == 'inner' and score_name == 'r2'"
+        )[
+            [
+                "real_date",
+                "splitter",
+                "fold",
+                "train_size",
+                "test_size",
+                "score_set",
+                "score",
+            ]
+        ]
+        self.assertTrue(len(query_inner) != 0)
+
+    def test_valid_split_diagnostics_timeplot(self):
+        so = self.so_with_calculated_preds
+        try:
+            so.split_diagnostics_timeplot(
+                name="test",
+                metric="score",
+                split_type="outer",
+            )
+            so.split_diagnostics_timeplot(
+                name="test",
+                metric="score",
+                split_type="inner",
+                score_name="r2",
+            )
+            so.split_diagnostics_timeplot(
+                name="test",
+                metric="train_size",
+                split_type="inner",
+            )
+        except Exception as e:
+            self.fail(f"split_diagnostics_timeplot raised an exception: {e}")
 
 
 

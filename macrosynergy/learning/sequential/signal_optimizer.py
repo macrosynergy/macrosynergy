@@ -199,6 +199,49 @@ class SignalOptimizer(BasePanelLearner):
                 "pearson": "float",
             }
         )
+        self.split_diagnostics = pd.DataFrame(
+            columns=[
+                "real_date",
+                "name",
+                "model_type",
+                "hparams",
+                "split_type",
+                "splitter",
+                "fold",
+                "train_size",
+                "test_size",
+                "train_periods",
+                "test_periods",
+                "train_cids",
+                "test_cids",
+                "train_dates",
+                "test_dates",
+                "score_name",
+                "score_set",
+                "score",
+            ]
+        ).astype(
+            {
+                "real_date": "datetime64[ns]",
+                "name": "category",
+                "model_type": "category",
+                "hparams": "object",
+                "split_type": "category",
+                "splitter": "category",
+                "fold": "float32",
+                "train_size": "int64",
+                "test_size": "int64",
+                "train_periods": "int64",
+                "test_periods": "int64",
+                "train_cids": "int64",
+                "test_cids": "int64",
+                "train_dates": "object",
+                "test_dates": "object",
+                "score_name": "category",
+                "score_set": "category",
+                "score": "float32",
+            }
+        )
 
     def calculate_predictions(
         self,
@@ -358,6 +401,7 @@ class SignalOptimizer(BasePanelLearner):
         intercept_data = []
         ftr_selection_data = []
         ftr_corr_data = []
+        split_diagnostic_data = []
 
         for split_result in results:
             prediction_data.append(split_result["predictions"])
@@ -366,6 +410,7 @@ class SignalOptimizer(BasePanelLearner):
             intercept_data.append(split_result["intercepts"])
             ftr_selection_data.append(split_result["selected_ftrs"])
             ftr_corr_data.extend(split_result["ftr_corr"])
+            split_diagnostic_data.extend(split_result["split_diagnostics"])
 
         # First create pandas dataframes to store the forecasts
         if self.n_targets == 1:
@@ -458,6 +503,36 @@ class SignalOptimizer(BasePanelLearner):
             ftr_corr_df_long,
         )
 
+        split_diagnostic_df_long = pd.DataFrame(
+            columns=self.split_diagnostics.columns, data=split_diagnostic_data
+        ).astype(
+            {
+                "real_date": "datetime64[ns]",
+                "name": "category",
+                "model_type": "category",
+                "hparams": "object",
+                "split_type": "category",
+                "splitter": "category",
+                "fold": "float32",
+                "train_size": "int64",
+                "test_size": "int64",
+                "train_periods": "int64",
+                "test_periods": "int64",
+                "train_cids": "int64",
+                "test_cids": "int64",
+                "train_dates": "object",
+                "test_dates": "object",
+                "score_name": "category",
+                "score_set": "category",
+                "score": "float32",
+            }
+        )
+
+        self.split_diagnostics = concat_categorical(
+            self.split_diagnostics,
+            split_diagnostic_df_long,
+        )
+
     def _check_duplicate_results(self, name):
         conditions = [
             ("preds", "xcat", name),
@@ -466,6 +541,7 @@ class SignalOptimizer(BasePanelLearner):
             ("selected_ftrs", "name", name),
             ("ftr_corr", "name", name),
             ("chosen_models", "name", name),
+            ("split_diagnostics", "name", name),
         ]
         self._remove_results(conditions)
 
@@ -878,6 +954,224 @@ class SignalOptimizer(BasePanelLearner):
                         """
                     )
             return self.ftr_corr[self.ftr_corr.name.isin(name)]
+
+    def get_split_diagnostics(self, name=None):
+        """
+        Returns split sizes and fold scores for one or more processes.
+
+        Parameters
+        ----------
+        name : str or list, optional
+            Label(s) of signal optimization process(es). Default is all stored in the
+            class instance.
+
+        Returns
+        -------
+        pd.DataFrame
+            Long-form dataframe containing outer split sizes, inner fold sizes, and
+            fold-level scores for the selected model at each retraining date.
+
+        Notes
+        -----
+        A copy is returned with label-like columns converted to plain Python strings
+        so that downstream filtering via ``query()`` behaves naturally.
+        """
+        if name is None:
+            diagnostics = self.split_diagnostics
+        else:
+            if isinstance(name, str):
+                name = [name]
+            elif not isinstance(name, list):
+                raise TypeError(
+                    "The process name must be a string or a list of strings."
+                )
+
+            for n in name:
+                if n not in self.split_diagnostics.name.unique():
+                    raise ValueError(
+                        f"""The process name '{n}' is not in the list of already-run
+                        pipelines. Please check the name carefully. If correct, please run
+                        calculate_predictions() first.
+                        """
+                    )
+            diagnostics = self.split_diagnostics[
+                self.split_diagnostics.name.isin(name)
+            ]
+
+        diagnostics = diagnostics.sort_values(
+            by=["real_date", "split_type", "splitter", "fold", "score_set", "score_name"]
+        )
+
+        diagnostics = diagnostics.copy()
+        string_cols = [
+            "name",
+            "model_type",
+            "split_type",
+            "splitter",
+            "score_name",
+            "score_set",
+        ]
+        for col in string_cols:
+            diagnostics[col] = diagnostics[col].astype("string")
+
+        if not diagnostics.empty:
+            diagnostics["train_start"] = pd.to_datetime(
+                diagnostics["train_dates"].map(
+                    lambda x: x[0] if isinstance(x, tuple) and len(x) > 0 else pd.NaT
+                )
+            )
+            diagnostics["train_end"] = pd.to_datetime(
+                diagnostics["train_dates"].map(
+                    lambda x: x[-1] if isinstance(x, tuple) and len(x) > 0 else pd.NaT
+                )
+            )
+            diagnostics["test_start"] = pd.to_datetime(
+                diagnostics["test_dates"].map(
+                    lambda x: x[0] if isinstance(x, tuple) and len(x) > 0 else pd.NaT
+                )
+            )
+            diagnostics["test_end"] = pd.to_datetime(
+                diagnostics["test_dates"].map(
+                    lambda x: x[-1] if isinstance(x, tuple) and len(x) > 0 else pd.NaT
+                )
+            )
+
+        return diagnostics
+
+    def split_diagnostics_timeplot(
+        self,
+        name,
+        metric="score",
+        split_type="outer",
+        score_name=None,
+        score_set="test",
+        splitter=None,
+        title=None,
+        figsize=(10, 6),
+        title_fontsize=None,
+        label_fontsize=None,
+        tick_fontsize=None,
+    ):
+        """
+        Plot split sizes or fold scores over time for a previously run process.
+
+        Parameters
+        ----------
+        name : str
+            Name of the previously run signal optimization process.
+        metric : str, optional
+            Column to plot. Default is "score". Other supported values are
+            "train_size", "test_size", "train_periods", "test_periods", "train_cids",
+            and "test_cids".
+        split_type : str, optional
+            Which split level to visualize. Options are "outer" and "inner".
+            Default is "outer".
+        score_name : str, optional
+            Name of the scorer to plot when `metric="score"`. If omitted for outer
+            scores, all scorers are shown. For inner scores with multiple scorers,
+            this must be provided.
+        score_set : str, optional
+            Score subset to plot for inner CV diagnostics. Options are "test" and
+            "train". Default is "test".
+        splitter : str, optional
+            Specific inner splitter to plot. Default is None, which includes all.
+        title : str, optional
+            Title of the plot. Default is None.
+        figsize : tuple, optional
+            Tuple denoting the figure size. Default is (10, 6).
+        title_fontsize : int, optional
+            Font size for the title. Default is None.
+        label_fontsize : int, optional
+            Font size for the axis labels. Default is None.
+        tick_fontsize : int, optional
+            Font size for the axis ticks. Default is None.
+        """
+        valid_metrics = {
+            "score",
+            "train_size",
+            "test_size",
+            "train_periods",
+            "test_periods",
+            "train_cids",
+            "test_cids",
+        }
+        if metric not in valid_metrics:
+            raise ValueError(f"metric must be one of {sorted(valid_metrics)}.")
+        if split_type not in {"outer", "inner"}:
+            raise ValueError("split_type must be either 'outer' or 'inner'.")
+
+        diagnostics = self.get_split_diagnostics(name=name)
+        diagnostics = diagnostics[diagnostics["split_type"] == split_type].copy()
+
+        if splitter is not None:
+            diagnostics = diagnostics[diagnostics["splitter"] == splitter]
+
+        if diagnostics.empty:
+            raise ValueError("No split diagnostics are available for the requested view.")
+
+        if metric == "score":
+            diagnostics = diagnostics[diagnostics["score_set"] == score_set]
+            if split_type == "inner" and score_name is None:
+                score_names = diagnostics["score_name"].dropna().unique()
+                if len(score_names) > 1:
+                    raise ValueError(
+                        "Please provide score_name when plotting inner split scores with multiple scorers."
+                    )
+                if len(score_names) == 1:
+                    score_name = score_names[0]
+            if score_name is not None:
+                diagnostics = diagnostics[diagnostics["score_name"] == score_name]
+
+            if diagnostics.empty:
+                raise ValueError("No score diagnostics are available for the requested filters.")
+
+        sns.set_style("darkgrid")
+
+        fig, ax = plt.subplots()
+
+        if split_type == "outer":
+            if metric == "score" and score_name is None:
+                plot_df = diagnostics.pivot_table(
+                    index="real_date",
+                    columns="score_name",
+                    values="score",
+                    aggfunc="first",
+                )
+            else:
+                value_col = "score" if metric == "score" else metric
+                plot_df = diagnostics.pivot_table(
+                    index="real_date",
+                    values=value_col,
+                    aggfunc="first",
+                )
+                label = score_name if metric == "score" and score_name is not None else value_col
+                plot_df.columns = [label]
+        else:
+            value_col = "score" if metric == "score" else metric
+            diagnostics["series"] = diagnostics["splitter"].astype(str) + "_fold_" + (
+                diagnostics["fold"].astype(int).astype(str)
+            )
+            plot_df = diagnostics.pivot_table(
+                index="real_date",
+                columns="series",
+                values=value_col,
+                aggfunc="first",
+            )
+
+        plot_df.sort_index().plot(ax=ax, figsize=figsize)
+
+        if title is None:
+            pretty_metric = metric.replace("_", " ")
+            title = f"{pretty_metric.title()} across {split_type} splits for {name}"
+        plt.title(title, fontsize=title_fontsize)
+
+        ax.set_xlabel(ax.get_xlabel(), fontsize=label_fontsize)
+        ax.set_ylabel(metric.replace("_", " "), fontsize=label_fontsize)
+        ax.tick_params(axis="x", labelsize=tick_fontsize)
+        ax.tick_params(axis="y", labelsize=tick_fontsize)
+
+        plt.tight_layout()
+        plt.show()
 
     def feature_selection_heatmap(
         self,

@@ -6,7 +6,7 @@ except ImportError as e:
         "Install it with: pip install macrosynergy[torch]"
     ) from e
 
-from .models import MultiLayerPerceptron
+from .models import MultiLayerPerceptron, MacroAttentionNet
 from .samplers import TimeSeriesSampler
 from .losses import (
     MultiOutputSharpe,
@@ -17,6 +17,7 @@ from .trainer import MLPTrainer
 __all__ = [
     # models
     "MultiLayerPerceptron",
+    "MacroAttentionNet",
     # samplers
     "TimeSeriesSampler",
     # losses

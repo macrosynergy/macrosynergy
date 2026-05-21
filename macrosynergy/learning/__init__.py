@@ -74,10 +74,12 @@ from .random_effects import RandomEffects
 def __getattr__(name):
     _torch_names = {
         "MultiLayerPerceptron",
+        "MacroAttentionNet",
         "TimeSeriesSampler",
         "MultiOutputSharpe",
         "MultiOutputMCR",
         "MLPRegressor",
+        "AttentionRegressor",
     }
     if name in _torch_names:
         from .forecasting import __getattr__ as _fget
@@ -148,6 +150,7 @@ __all__ = [
     "TimeWeightedWrapper",
     "LinearMultiTargetRegression",
     "MLPRegressor",
+    "AttentionRegressor",
     # market beta estimation
     "BetaEstimator",
     # regression system
@@ -164,6 +167,7 @@ __all__ = [
     "CountryByCountryRegression",
     # torch
     "MultiLayerPerceptron",
+    "MacroAttentionNet",
     "TimeSeriesSampler",
     "MultiOutputSharpe",
     "MultiOutputMCR",

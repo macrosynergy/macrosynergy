@@ -512,7 +512,14 @@ class BasePanelLearner(ABC):
             else:
                 inner_splitters_adj = inner_splitters
 
-            optim_name, optim_model, optim_score, optim_params, optim_additional_data = self._model_search(
+            (
+                optim_name,
+                optim_model,
+                optim_score,
+                optim_params,
+                optim_additional_data,
+                optim_split_diagnostics,
+            ) = self._model_search(
                 X_train=X_train,
                 y_train=y_train,
                 inner_splitters=inner_splitters_adj,
@@ -540,6 +547,11 @@ class BasePanelLearner(ABC):
             else:
                 optim_additional_data = {}
             inner_splitters_adj = None
+            optim_split_diagnostics = []
+
+        current_timestamp = (
+            adj_test_date_levels.min() if timestamp is None else timestamp
+        )
 
         split_results = self._get_split_results(
             pipeline_name=name,
@@ -553,8 +565,27 @@ class BasePanelLearner(ABC):
             y_train=y_train,
             X_test=X_test,
             y_test=y_test,
-            timestamp=adj_test_date_levels.min() if timestamp is None else timestamp,
+            timestamp=current_timestamp,
             adjusted_test_index=test_index,
+        )
+
+        outer_split_diagnostics = self._get_outer_split_diagnostics(
+            pipeline_name=name,
+            timestamp=current_timestamp,
+            model_name=optim_name,
+            model_params=optim_params,
+            model=optim_model,
+            scorers=scorers,
+            X_train=X_train,
+            y_train=y_train,
+            X_test=X_test,
+            y_test=y_test,
+        )
+        for split_diagnostic in optim_split_diagnostics:
+            split_diagnostic["real_date"] = current_timestamp
+            split_diagnostic["name"] = name
+        split_results["split_diagnostics"] = (
+            outer_split_diagnostics + optim_split_diagnostics
         )
 
         return split_results
@@ -621,11 +652,11 @@ class BasePanelLearner(ABC):
         optim_score = np.float32("-inf")
         optim_params = {}
         optim_additional_data = {}
+        optim_split_diagnostics = []
 
-        cv_splits = []
-
-        for splitter in inner_splitters.values():
-            cv_splits.extend(list(splitter.split(X=X_train, y=y_train)))
+        cv_splits, cv_split_metadata = self._get_cv_splits_and_metadata(
+            X_train=X_train, y_train=y_train, inner_splitters=inner_splitters
+        )
         # TODO: instead of picking one model, the best hyperparameters could be selected
         # for each model and then "final" prediction would be the average of the individual
         # predictions. This would be a simple ensemble method.
@@ -684,13 +715,158 @@ class BasePanelLearner(ABC):
                 optim_model = search_object.best_estimator_
                 optim_score = score
                 optim_params = search_object.best_params_
+                optim_split_diagnostics = self._get_inner_split_diagnostics(
+                    cv_results=search_object.cv_results_,
+                    best_index=search_object.best_index_,
+                    cv_split_metadata=cv_split_metadata,
+                    model_name=model_name,
+                    model_params=search_object.best_params_,
+                )
                 if store_additional_data is not None:
                     for attr in store_additional_data:
                         optim_additional_data[attr] = getattr(
                             optim_model, attr, None
                         )
 
-        return optim_name, optim_model, optim_score, optim_params, optim_additional_data
+        return (
+            optim_name,
+            optim_model,
+            optim_score,
+            optim_params,
+            optim_additional_data,
+            optim_split_diagnostics,
+        )
+
+    def _get_cv_splits_and_metadata(self, X_train, y_train, inner_splitters):
+        """Build CV splits and associated fold size metadata."""
+        cv_splits = []
+        cv_split_metadata = []
+
+        for splitter_name, splitter in inner_splitters.items():
+            for fold_number, (train_idx, test_idx) in enumerate(
+                splitter.split(X=X_train, y=y_train)
+            ):
+                cv_splits.append((train_idx, test_idx))
+                cv_split_metadata.append(
+                    {
+                        "split_type": "inner",
+                        "splitter": splitter_name,
+                        "fold": fold_number,
+                        **self._describe_panel_split(
+                            X_train.iloc[train_idx], X_train.iloc[test_idx]
+                        ),
+                    }
+                )
+
+        return cv_splits, cv_split_metadata
+
+    def _get_inner_split_diagnostics(
+        self, cv_results, best_index, cv_split_metadata, model_name, model_params
+    ):
+        """Extract fold-level CV scores for the selected model and hyperparameters."""
+        split_diagnostics = []
+        cv_results = pd.DataFrame(cv_results)
+
+        for col in cv_results.columns:
+            if not col.startswith("split"):
+                continue
+            split_number, score_set, score_name = col.split("_", maxsplit=2)
+            fold_idx = int(split_number.replace("split", ""))
+            if fold_idx >= len(cv_split_metadata):
+                continue
+
+            split_diagnostics.append(
+                {
+                    "model_type": model_name,
+                    "hparams": model_params,
+                    "score_name": score_name,
+                    "score_set": score_set,
+                    "score": cv_results.loc[best_index, col],
+                    **cv_split_metadata[fold_idx],
+                }
+            )
+
+        return split_diagnostics
+
+    def _get_outer_split_diagnostics(
+        self,
+        pipeline_name,
+        timestamp,
+        model_name,
+        model_params,
+        model,
+        scorers,
+        X_train,
+        y_train,
+        X_test,
+        y_test,
+    ):
+        """Store sample sizes for the outer split and optional outer test scores."""
+        outer_split_info = self._describe_panel_split(X_train, X_test)
+        outer_split_diagnostics = []
+
+        if scorers is None:
+            scorer_items = [(np.nan, np.nan)]
+        else:
+            scorer_items = [
+                (score_name, self._score_outer_split(scorer, model, X_test, y_test))
+                for score_name, scorer in scorers.items()
+            ]
+
+        for score_name, score in scorer_items:
+            outer_split_diagnostics.append(
+                {
+                    "real_date": timestamp,
+                    "name": pipeline_name,
+                    "model_type": model_name,
+                    "hparams": model_params,
+                    "split_type": "outer",
+                    "splitter": "outer",
+                    "fold": np.nan,
+                    "score_name": score_name,
+                    "score_set": "test",
+                    "score": score,
+                    **outer_split_info,
+                }
+            )
+
+        return outer_split_diagnostics
+
+    def _describe_panel_split(self, train_data, test_data):
+        """Summarize train and test panel sizes for a single split."""
+        train_dates = train_data.index.get_level_values(1).unique().sort_values()
+        test_dates = test_data.index.get_level_values(1).unique().sort_values()
+        return {
+            "train_size": len(train_data),
+            "test_size": len(test_data),
+            "train_periods": train_data.index.get_level_values(1).nunique(),
+            "test_periods": test_data.index.get_level_values(1).nunique(),
+            "train_cids": train_data.index.get_level_values(0).nunique(),
+            "test_cids": test_data.index.get_level_values(0).nunique(),
+            "train_dates": tuple(train_dates.tolist()),
+            "test_dates": tuple(test_dates.tolist()),
+        }
+
+    def _score_outer_split(self, scorer, model, X_test, y_test):
+        """Evaluate the chosen model on the outer test set using a scorer."""
+        if model is None:
+            return np.nan
+
+        try:
+            return scorer(model, X_test, y_test)
+        except TypeError:
+            pass
+        except Exception:
+            return np.nan
+
+        try:
+            if hasattr(model, "create_signal") and callable(getattr(model, "create_signal")):
+                preds = model.create_signal(X_test)
+            else:
+                preds = model.predict(X_test)
+            return scorer(y_test, preds)
+        except Exception:
+            return np.nan
 
     def _model_selection(
         self, cv_results, cv_summary, scorers, normalize_fold_results, return_index=True

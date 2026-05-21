@@ -38,24 +38,27 @@ from .factor_models import (
 def __getattr__(name):
     _torch_names = {
         "MultiLayerPerceptron",
+        "MacroAttentionNet",
         "TimeSeriesSampler",
         "MultiOutputSharpe",
         "MultiOutputMCR",
     }
     _nn_names = {
         "MLPRegressor",
+        "AttentionRegressor",
     }
     if name in _torch_names:
         from .torch import (
             MultiLayerPerceptron,
+            MacroAttentionNet,
             TimeSeriesSampler,
             MultiOutputSharpe,
             MultiOutputMCR,
         )
         return locals()[name]
     if name in _nn_names:
-        from .nn import MLPRegressor
-        return MLPRegressor
+        from .nn import MLPRegressor, AttentionRegressor
+        return locals()[name]
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 __all__ = [
@@ -84,8 +87,10 @@ __all__ = [
     "PLSTransformer",
     "LinearMultiTargetRegression",
     "MultiLayerPerceptron",
+    "MacroAttentionNet",
     "TimeSeriesSampler",
     "MultiOutputSharpe",
     "MultiOutputMCR",
     "MLPRegressor",
+    "AttentionRegressor",
 ]

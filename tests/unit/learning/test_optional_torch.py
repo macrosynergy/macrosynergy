@@ -18,10 +18,12 @@ NON_TORCH_NAMES = [
 # Names that require torch
 TORCH_NAMES = [
     "MultiLayerPerceptron",
+    "MacroAttentionNet",
     "TimeSeriesSampler",
     "MultiOutputSharpe",
     "MultiOutputMCR",
     "MLPRegressor",
+    "AttentionRegressor",
 ]
 
 
@@ -32,6 +34,7 @@ def _reload_learning_modules():
         for k in sys.modules
         if k.startswith("macrosynergy.learning.forecasting.torch")
         or k == "macrosynergy.learning.forecasting.nn.regressors"
+        or k == "macrosynergy.learning.forecasting.nn.attention"
     ]
     for k in to_remove:
         del sys.modules[k]
