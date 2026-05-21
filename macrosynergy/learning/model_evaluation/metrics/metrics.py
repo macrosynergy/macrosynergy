@@ -695,7 +695,7 @@ def panel_sharpe_stability_ratio(
         min_periods=window,
     )
     if not np.isfinite(val):
-        return 0.0
+        return val
     return float(val)
 
 
