@@ -364,6 +364,7 @@ class BasePanelLearner(ABC):
                 ) from e
             
             # Reinitialize the model to ensure the actual learning process is not affected by this check
+            # TODO: this or sklearn clone?
             params = models[key].get_params(deep=False)
             models[key] = type(model)(**params)
 
@@ -801,6 +802,7 @@ class BasePanelLearner(ABC):
                 )
 
         # Now scale the summary scores for each scorer
+        # TODO: should this be a min max scaler?
         scaler = StandardScaler()
 
         summary_cols = [f"{scorer}_summary" for scorer in scorers.keys()]
@@ -817,7 +819,7 @@ class BasePanelLearner(ABC):
         optim_params = cv_results.loc[optim_idx, "params"]
         optim_score = cv_results.loc[optim_idx, "final_score"]
         
-        return optim_name, optim_params, optim_score
+        return optim_name, optim_score, optim_params
 
     def _get_split_results(
         self,

@@ -2013,6 +2013,7 @@ if __name__ == "__main__":
             "ExpandingKFold": ExpandingKFoldPanelSplit(n_splits=5),
             "SecondSplit": ExpandingKFoldPanelSplit(n_splits=10),
         },
+        model_averaging=True,
         #search_type="prior",
         #n_iter=6,
         cv_summary="mean-std-ge",
@@ -2037,40 +2038,40 @@ if __name__ == "__main__":
     so.feature_selection_heatmap("LR", tick_fontsize=20)
 
     # Test a random forest
-    from sklearn.ensemble import RandomForestRegressor
+    # from sklearn.ensemble import RandomForestRegressor
 
-    so = SignalOptimizer(
-        df=dfd,
-        xcats=["CRY", "GROWTH", "INFL", "XR"],
-        cids=cids,
-        blacklist=black,
-    )
+    # so = SignalOptimizer(
+    #     df=dfd,
+    #     xcats=["CRY", "GROWTH", "INFL", "XR"],
+    #     cids=cids,
+    #     blacklist=black,
+    # )
 
-    so.calculate_predictions(
-        name="RF",
-        models={
-            "RF": RandomForestRegressor(
-                n_estimators=100,
-                min_samples_leaf=5,
-                max_features="sqrt",
-                max_samples=0.1,
-            ),
-        },
-        hyperparameters={
-            "RF": {},
-        },
-        scorers={
-            "r2": make_scorer(r2_score),
-            "mae": make_scorer(mean_absolute_error, greater_is_better=False),
-        },
-        inner_splitters={
-            "ExpandingKFold": ExpandingKFoldPanelSplit(n_splits=2),
-            "SecondSplit": ExpandingKFoldPanelSplit(n_splits=3),
-        },
-        search_type="grid",
-        cv_summary="mean-std",
-        n_jobs_outer=-1,
-        n_jobs_inner=1,
-    )
+    # so.calculate_predictions(
+    #     name="RF",
+    #     models={
+    #         "RF": RandomForestRegressor(
+    #             n_estimators=100,
+    #             min_samples_leaf=5,
+    #             max_features="sqrt",
+    #             max_samples=0.1,
+    #         ),
+    #     },
+    #     hyperparameters={
+    #         "RF": {},
+    #     },
+    #     scorers={
+    #         "r2": make_scorer(r2_score),
+    #         "mae": make_scorer(mean_absolute_error, greater_is_better=False),
+    #     },
+    #     inner_splitters={
+    #         "ExpandingKFold": ExpandingKFoldPanelSplit(n_splits=2),
+    #         "SecondSplit": ExpandingKFoldPanelSplit(n_splits=3),
+    #     },
+    #     search_type="grid",
+    #     cv_summary="mean-std",
+    #     n_jobs_outer=-1,
+    #     n_jobs_inner=1,
+    # )
 
-    so.feature_importance_timeplot("RF")
+    # so.feature_importance_timeplot("RF")
