@@ -691,6 +691,7 @@ class BasePanelLearner(ABC):
                 pd.DataFrame(search_object.cv_results_).assign(model=model_name)
             )
 
+        # TODO: handle model averaging case. 
         optim_name, optim_score, optim_params = self._model_selection(
             model_cv_summaries,
             cv_summary,
