@@ -129,6 +129,29 @@ class TestExpandingKFold(unittest.TestCase):
             self.assertEqual(test_set[0], i + 1)
             self.assertEqual(test_set[1], i + periods1 + 1)
 
+    def test_valid_split_with_nans(self):
+        # Test functionality on a simple DataFrame
+        periods1 = 6
+        periods2 = 6
+        n_splits = 5
+
+        X, y = make_simple_df(periods1=periods1, periods2=periods2)
+        X["xcat3"] = X["xcat1"]
+        X.iloc[0:2, 1] = None
+
+        splitter = ExpandingKFoldPanelSplit(n_splits=n_splits)
+        splits = list(splitter.split(X=X, y=y))
+
+        assert len(splits) == n_splits
+        for i, (train_set, test_set) in enumerate(splits):
+            # Training sets for each cid
+            self.assertEqual(train_set[i], i)
+            self.assertEqual(train_set[i * 2 + 1], i + periods1)
+
+            # Test sets for each cid
+            self.assertEqual(test_set[0], i + 1)
+            self.assertEqual(test_set[1], i + periods1 + 1)
+
     def test_types_visualise_splits(self):
         splitter = ExpandingKFoldPanelSplit(n_splits=5)
         with self.assertRaises(TypeError):
@@ -147,6 +170,7 @@ class TestExpandingKFold(unittest.TestCase):
             splitter.visualise_splits(X=self.X, y=self.y)
         except Exception as e:
             self.fail(f"Unexpected exception: {e}")
+
 
 class TestRollingKFold(unittest.TestCase):
     @classmethod
@@ -272,6 +296,45 @@ class TestRollingKFold(unittest.TestCase):
                 )
             )
 
+    def test_valid_split_with_nans(self):
+        # Test functionality on a simple DataFrame
+        periods1 = 6
+        periods2 = 6
+        n_splits = 5
+        X, y = make_simple_df(periods1=periods1, periods2=periods2)
+        X["xcat3"] = X["xcat1"]
+        X.iloc[0:2, 1] = None
+
+        true_test_set_dates = np.array_split(
+            y.index.get_level_values(1).unique().sort_values(), 5
+        )
+        splitter = RollingKFoldPanelSplit(n_splits=n_splits)
+        splits = list(splitter.split(X, y))
+
+        assert len(splits) == n_splits
+        for i, (train_set, test_set) in enumerate(splits):
+            empirical_test_set_dates = (
+                y.index
+                .get_level_values(1)[test_set]
+                .unique()
+                .sort_values()
+            )
+            self.assertTrue(np.all(empirical_test_set_dates == true_test_set_dates[i]))
+            # Check the training dates aren't in the test set
+            self.assertTrue(
+                np.all(
+                    np.logical_not(
+                        np.isin(
+                            y.index
+                            .get_level_values(1)[train_set]
+                            .unique()
+                            .sort_values(),
+                            empirical_test_set_dates,
+                        )
+                    )
+                )
+            )
+
     def test_types_visualise_splits(self):
         splitter = RollingKFoldPanelSplit(n_splits=5)
         with self.assertRaises(TypeError):
@@ -290,6 +353,7 @@ class TestRollingKFold(unittest.TestCase):
             splitter.visualise_splits(X=self.X, y=self.y)
         except Exception as e:
             self.fail(f"Unexpected exception: {e}")
+
 
 class TestRecencyKFold(unittest.TestCase):
     @classmethod
@@ -423,6 +487,46 @@ class TestRecencyKFold(unittest.TestCase):
                 )
             )
 
+    def test_valid_split_with_nans(self):
+        # Test functionality on a simple DataFrame
+        periods1 = 6
+        periods2 = 6
+        n_splits = 3
+        X, y = make_simple_df(periods1=periods1, periods2=periods2)
+        X["xcat3"] = X["xcat1"]
+        X.iloc[0:2, 1] = None
+
+        true_test_set_dates = [
+            [date]
+            for date in y.index.get_level_values(1).unique().sort_values()[3:]
+        ]
+        splitter = RecencyKFoldPanelSplit(n_splits=n_splits, n_periods=1)
+        splits = list(splitter.split(X, y))
+
+        assert len(splits) == n_splits
+        for i, (train_set, test_set) in enumerate(splits):
+            empirical_test_set_dates = (
+                y.index
+                .get_level_values(1)[test_set]
+                .unique()
+                .sort_values()
+            )
+            self.assertTrue(np.all(empirical_test_set_dates == true_test_set_dates[i]))
+            # Check the training dates aren't in the test set
+            self.assertTrue(
+                np.all(
+                    np.logical_not(
+                        np.isin(
+                            y.index
+                            .get_level_values(1)[train_set]
+                            .unique()
+                            .sort_values(),
+                            empirical_test_set_dates,
+                        )
+                    )
+                )
+            )
+
     def test_types_visualise_splits(self):
         splitter = RecencyKFoldPanelSplit(n_splits=5, n_periods = 1)
         with self.assertRaises(TypeError):
@@ -447,6 +551,7 @@ class TestRecencyKFold(unittest.TestCase):
             splitter.visualise_splits(X=self.X, y=self.y)
         except Exception as e:
             self.fail(f"Unexpected exception: {e}")
+
 
 def make_simple_df(
     start1="2020-01-01",

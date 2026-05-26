@@ -25,6 +25,8 @@ def view_ranges(
     xcat_labels: Optional[List[str]] = None,
     legend_loc: str = None,
     legend_bbox_to_anchor: Tuple[float] = None,
+    footnote: Optional[str] = None,
+    footnote_fontsize: int = 9,
 ):
     """
     Plots averages and various ranges across sections for one or more categories.
@@ -66,6 +68,10 @@ def view_ranges(
         center'.
     legend_bbox_to_anchor : Tuple[float]
         passed to matplotlib.pyplot.legend(). Default is (0.5, -0.15).
+    footnote : str
+        Optional text shown at the bottom-left of the figure canvas.
+    footnote_fontsize : int
+        Font size of the footnote. Default is 9.
     """
 
     if legend_bbox_to_anchor is None and legend_loc is None:
@@ -94,6 +100,8 @@ def view_ranges(
         xcat_labels=xcat_labels,
         legend_loc=legend_loc,
         legend_bbox_to_anchor=legend_bbox_to_anchor,
+        footnote=footnote,
+        footnote_fontsize=footnote_fontsize,
     )
 
 
@@ -126,6 +134,7 @@ if __name__ == "__main__":
         start="2012-01-01",
         end="2018-01-01",
         sort_cids_by="std",
+        footnote="JPMaQS data",
     )
 
     filter_1 = (dfd["xcat"] == "XR") & (dfd["cid"] == "AUD")

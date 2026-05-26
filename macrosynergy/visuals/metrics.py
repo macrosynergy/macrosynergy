@@ -28,6 +28,8 @@ def view_metrics(
     metric: str = "eop_lag",
     title: Optional[str] = None,
     figsize: Optional[Tuple[float]] = (14, None),
+    footnote: Optional[str] = None,
+    footnote_fontsize: int = 9,
     return_fig: bool = False,
 ) -> None:
     """
@@ -60,6 +62,10 @@ def view_metrics(
     figsize : Tuple[float]
         Tuple (w, h) of width and height of graph. Default is None, meaning it is set in
         accordance with df.
+    footnote : str
+        Optional text shown at the bottom-left of the figure canvas.
+    footnote_fontsize : int
+        Font size of the footnote. Default is 9.
 
     Raises
     ------
@@ -111,7 +117,10 @@ def view_metrics(
         y_axis_label="Cross Sections",
         cmap=sns.color_palette("light:red", as_cmap=True),
         rotate_xticks=90,
-        return_fig=return_fig,
+        footnote=footnote,
+        footnote_fontsize=footnote_fontsize,
+        show=not return_fig,
+        return_figure=return_fig,
     )
 
     if return_fig:

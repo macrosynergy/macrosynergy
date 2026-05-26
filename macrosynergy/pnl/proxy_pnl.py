@@ -12,11 +12,11 @@ from macrosynergy.management.utils import (
 )
 from macrosynergy.management.types import QuantamentalDataFrame, NoneType
 import macrosynergy.visuals as msv
-from macrosynergy.pnl import (
-    notional_positions,
-    contract_signals,
-    proxy_pnl_calc,
+from macrosynergy.pnl import notional_positions, contract_signals, proxy_pnl_calc
+
+from macrosynergy.pnl.transaction_costs import (
     TransactionCosts,
+    TransactionCostsDictAdapter,
 )
 
 
@@ -39,7 +39,7 @@ class ProxyPnL(object):
     df : QuantamentalDataFrame
         DataFrame containing the data to be used in the PnL estimation. Initially, this
         DataFrame should contain the data used to contract signals (i.e. raw signals).
-    transaction_costs_object : TransactionCosts
+    transaction_costs_object : Optional[Union[TransactionCosts, TransactionCostsDictAdapter]]
         Object containing the transaction costs data.
     start : str, optional
         Start date for the PnL estimation. If not provided, the minimum date in the
@@ -64,7 +64,9 @@ class ProxyPnL(object):
     def __init__(
         self,
         df: QuantamentalDataFrame,
-        transaction_costs_object: Optional[TransactionCosts],
+        transaction_costs_object: Optional[
+            Union[TransactionCosts, TransactionCostsDictAdapter]
+        ] = None,
         start: Optional[str] = None,
         end: Optional[str] = None,
         blacklist: Optional[dict] = None,
@@ -92,9 +94,15 @@ class ProxyPnL(object):
         elif isinstance(transaction_costs_object, TransactionCosts):
             transaction_costs_object.check_init()
             self.transaction_costs_object: TransactionCosts = transaction_costs_object
+        elif isinstance(transaction_costs_object, TransactionCostsDictAdapter):
+            transaction_costs_object.check_init()
+            self.transaction_costs_object: TransactionCostsDictAdapter = (
+                transaction_costs_object
+            )
         else:
             raise ValueError(
-                "Invalid type for `transaction_costs_object`. Expected `TransactionCosts` object."
+                "Invalid type for `transaction_costs_object`."
+                " Expected `TransactionCosts` or `TransactionCostsDictAdapter` object."
             )
 
         assert hasattr(
@@ -108,9 +116,9 @@ class ProxyPnL(object):
         ctypes: List[str],
         cscales: Optional[List[Union[Number, str]]] = None,
         csigns: Optional[List[int]] = None,
-        hbasket: Optional[List[str]] = None,
-        hscales: Optional[List[Union[Number, str]]] = None,
-        hratios: Optional[str] = None,
+        basket_contracts: Optional[List[str]] = None,
+        basket_weights: Optional[List[Union[Number, str]]] = None,
+        hedge_xcat: Optional[str] = None,
         blacklist: Optional[dict] = None,
         *args,
         **kwargs,
@@ -136,9 +144,9 @@ class ProxyPnL(object):
             ctypes=ctypes,
             cscales=cscales,
             csigns=csigns,
-            hbasket=hbasket,
-            hscales=hscales,
-            hratios=hratios,
+            basket_contracts=basket_contracts,
+            basket_weights=basket_weights,
+            hedge_xcat=hedge_xcat,
             start=self.start,
             end=self.end,
             blacklist=blacklist or self.blacklist,
@@ -362,9 +370,9 @@ if __name__ == "__main__":
         ctypes=["FX"],
         cscales=["FXXRxLEV10_NSA"],
         relative_value=False,
-        hbasket=["EUR_FX"],  # TODO invert asset class or returns?
-        hscales=["FXXRxLEV10_NSA"],
-        hratios="FXEURBETA",
+        basket_contracts=["EUR_FX"],  # TODO invert asset class or returns?
+        basket_weights=["FXXRxLEV10_NSA"],
+        hedge_xcat="FXEURBETA",
     )
     p.notional_positions(
         aum=100,

@@ -311,7 +311,7 @@ def _plot_acf(
 
         kwargs["ncols"] = min(ncol, len(fp.cids))
 
-        fp.cids = sorted(fp.cids)
+        fp.cids = [c for c in cids if c in fp.cids]
 
         fig = fp.lineplot(
             plot_func=plot_func,

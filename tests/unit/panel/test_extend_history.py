@@ -246,6 +246,58 @@ class TestExtendHistory(unittest.TestCase):
 
         self._check_result_df(result_df, new_xcat, ["GBP", "CAD"], start)
 
+    def test_extend_history_backfill_skips_leading_nans(self):
+        df = self.df.copy()
+        cids = ["GBP", "CAD"]
+        hierarchy = ["INFL1"]
+        new_xcat = "NEW_XCAT"
+        start = "1995-01-02"
+
+        expected_value = int(hierarchy[0][-1])
+        leading_dates = sorted(df.loc[df["xcat"] == hierarchy[0], "real_date"].unique())[:5]
+        df.loc[
+            (df["xcat"] == hierarchy[0]) & (df["real_date"].isin(leading_dates)),
+            "value",
+        ] = np.nan
+        first_valid_date = df.loc[
+            (df["xcat"] == hierarchy[0]) & df["value"].notna(), "real_date"
+        ].min()
+
+        result_df = extend_history(
+            df, new_xcat, cids, hierarchy, backfill=True, start=start
+        )
+
+        self._check_result_df(result_df, new_xcat, cids, start)
+
+        for cid in cids:
+            backfilled = result_df.loc[
+                (result_df["cid"] == cid)
+                & (result_df["real_date"] < first_valid_date),
+                "value",
+            ]
+            self.assertFalse(
+                backfilled.isna().any(),
+                f"Backfilled region for cid {cid} contains NaNs.",
+            )
+            self.assertTrue(
+                (backfilled == expected_value).all(),
+                f"Backfilled values for cid {cid} do not equal first valid observation.",
+            )
+            self.assertFalse(
+                (
+                    (result_df["cid"] == cid)
+                    & (result_df["real_date"].isin(leading_dates))
+                ).any()
+                and result_df.loc[
+                    (result_df["cid"] == cid)
+                    & (result_df["real_date"].isin(leading_dates)),
+                    "value",
+                ]
+                .isna()
+                .any(),
+                f"Leading-NaN rows for cid {cid} were not superseded by backfill.",
+            )
+
     def _check_result_df(self, result_df, new_xcat, cids, start):
         expected_columns = {"real_date", "xcat", "cid", "value"}
         self.assertTrue(

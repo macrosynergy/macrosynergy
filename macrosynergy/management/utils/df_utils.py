@@ -5,9 +5,10 @@ Utility functions for working with DataFrames.
 from macrosynergy.management.types import QuantamentalDataFrame
 from macrosynergy.management.constants import FREQUENCY_MAP, FFILL_LIMITS, DAYS_PER_FREQ
 
+import logging
 import warnings
 from typing import Iterable, List, Optional, Union, Dict
-
+import re
 from numbers import Number
 
 import numpy as np
@@ -22,6 +23,8 @@ from macrosynergy.management.utils.core import (
 )
 from macrosynergy.compat import RESAMPLE_NUMERIC_ONLY, PD_OLD_RESAMPLE
 import functools
+
+logger = logging.getLogger(__name__)
 
 IDX_COLS_SORT_ORDER = ["cid", "xcat", "real_date"]
 
@@ -49,9 +52,7 @@ def is_categorical_qdf(df: pd.DataFrame) -> bool:
     return all([df[col].dtype.name == "category" for col in ["cid", "xcat"]])
 
 
-def standardise_dataframe(
-    df: pd.DataFrame
-) -> QuantamentalDataFrame:
+def standardise_dataframe(df: pd.DataFrame) -> QuantamentalDataFrame:
     """
     Applies the standard JPMaQS Quantamental DataFrame format to a DataFrame.
 
@@ -477,7 +478,6 @@ def apply_slip(
 
         df = df.sort_values(by=["cid", "xcat", "real_date"])
 
-    
     for col in metrics:
         tks_isin = df["ticker"].isin(sel_tickers)
         df.loc[tks_isin, col] = df.groupby("ticker", observed=True)[col].shift(slip)
@@ -745,6 +745,11 @@ def reduce_df(
     if xcats is not None:
         if isinstance(xcats, str):
             xcats = [xcats]
+        df = df[df["xcat"].isin(xcats)]
+
+    if cids is not None:
+        cids = [cids] if isinstance(cids, str) else cids
+        df = df[df["cid"].isin(cids)]
 
     if start:
         df = df[df["real_date"] >= pd.to_datetime(start)]
@@ -768,8 +773,6 @@ def reduce_df(
         xcats_in_df = df["xcat"].unique()
         xcats = [xcat for xcat in xcats if xcat in xcats_in_df]
 
-    df = df[df["xcat"].isin(xcats)]
-
     if intersect:
         cids_in_df = set.intersection(
             *(set(df[df["xcat"] == xcat]["cid"].unique()) for xcat in xcats)
@@ -780,7 +783,6 @@ def reduce_df(
     if cids is None:
         cids = sorted(cids_in_df)
     else:
-        cids = [cids] if isinstance(cids, str) else cids
         cids = [cid for cid in cids if cid in cids_in_df]
 
     df = df[df["cid"].isin(cids)]
@@ -995,8 +997,7 @@ def categories_df(
     Returns
     -------
     pd.DataFrame
-        custom DataFrame with category columns. All rows that contain NaNs will be
-        excluded.  N.B.: The number of explanatory categories that can be included is not
+        custom DataFrame with category columns. N.B.: The number of explanatory categories that can be included is not
         restricted and will be appended column-wise to the returned DataFrame. The order of
         the DataFrame's columns will reflect the order of the categories list.
     """
@@ -1169,7 +1170,7 @@ def estimate_release_frequency(
     Estimates the release frequency of a timeseries, by inferring the frequency of the
     timeseries index. Before calling `pd.infer_freq`, the function drops NaNs, and rounds
     values as specified by the tolerance parameters to allow dropping of "duplicate" values.
-    
+
     Parameters
     ----------
     timeseries : pd.Series, optional
@@ -1275,6 +1276,7 @@ def _determine_freq(dates: List[str]) -> str:
         lambda x: min(frequencies, key=lambda freq: abs(x - frequencies[freq]))
     )
     return closest_freq.value_counts().idxmax()
+
 
 def years_btwn_dates(start_date: pd.Timestamp, end_date: pd.Timestamp) -> int:
     """Returns the number of years between two dates."""
@@ -1424,7 +1426,13 @@ def get_eops(
 
 
 def merge_categories(
-    df: pd.DataFrame, xcats: List[str], new_xcat: str, cids: List[str] = None
+    df: pd.DataFrame,
+    xcats: Optional[List[str]] = None,
+    new_xcat: Optional[str] = None,
+    cids: Optional[List[str]] = None,
+    hierarchy: Optional[List[str]] = None,
+    backfill: bool = False,
+    start: Optional[str] = None,
 ):
     """
     Merges categories into a new category, given a list of categories to be merged. The
@@ -1435,14 +1443,24 @@ def merge_categories(
     Parameters
     ----------
     df : pd.DataFrame
-        standardized JPMaQS DataFrame with the necessary columns 'cid', 'xcat',
-        'real_date' and at least one column with values of interest.
+        standardized JPMaQS DataFrame with the columns 'cid', 'xcat', 'real_date' and
+        'value'.
     xcats : List[str]
-        extended categories to be merged.
-    cids : List[str]
-        cross sections to be included. Default is all in the DataFrame.
+        extended categories to be merged, in preferred order. Alias for `hierarchy`;
+        provide one or the other.
     new_xcat : str
-        name of the new category to be created. Default is None.
+        name of the new category to be created.
+    cids : List[str], optional
+        cross sections to be included. Default is all in the DataFrame.
+    hierarchy : List[str], optional
+        alias for `xcats`. Provided for parity with the previous `extend_history` API.
+    backfill : bool, optional
+        If True, the new xcat is backfilled with its first valid value to the date
+        specified by `start`. Default is False.
+    start : str, optional
+        ISO date. If `backfill` is True, the first valid value is propagated back to
+        this date. If `backfill` is False and `start` is provided, the output is
+        trimmed to dates >= start.
 
     Returns
     -------
@@ -1452,60 +1470,101 @@ def merge_categories(
 
     if not isinstance(df, pd.DataFrame):
         raise TypeError("The DataFrame must be a pandas DataFrame.")
+
+    if hierarchy is not None and xcats is not None:
+        raise ValueError("Provide either `xcats` or `hierarchy`, not both.")
+    if hierarchy is not None:
+        xcats = hierarchy
+    if xcats is None:
+        raise ValueError("`xcats` (or `hierarchy`) must be provided.")
+
     if not isinstance(xcats, list):
         raise TypeError("The categories must be a list of strings.")
     if not all(isinstance(xcat, str) for xcat in xcats):
         raise TypeError("The categories must be a list of strings.")
-    if not isinstance(df, QuantamentalDataFrame):
-        raise TypeError("The DataFrame must be a Quantamental DataFrame.")
+
+    if new_xcat is None:
+        raise ValueError("`new_xcat` must be provided.")
     if not isinstance(new_xcat, str):
         raise TypeError("The new category must be a string.")
-    if not set(xcats).issubset(df["xcat"].unique()):
+    if not isinstance(backfill, bool):
+        raise TypeError("`backfill` must be a boolean.")
+    if start is not None and not isinstance(start, str):
+        raise TypeError("`start` must be a string.")
+    if backfill and start is None:
+        raise ValueError("`start` must be provided if `backfill` is True.")
+
+    if not isinstance(df, QuantamentalDataFrame):
+        raise TypeError("The DataFrame must be a Quantamental DataFrame.")
+    qdf = QuantamentalDataFrame(df)
+    result_as_categorical = qdf.InitializedAsCategorical
+
+    if not set(xcats).issubset(qdf["xcat"].unique()):
         raise ValueError("The categories must be present in the DataFrame.")
     if cids is None:
-        cids = list(df["cid"].unique())
+        cids = list(qdf["cid"].unique())
     if not isinstance(cids, list):
         raise TypeError("The cross sections must be a list of strings.")
     if not all(isinstance(cid, str) for cid in cids):
         raise TypeError("The cross sections must be a list of strings.")
-    if not set(cids).issubset(df["cid"].unique()):
+    if not set(cids).issubset(qdf["cid"].unique()):
         raise ValueError("The cross sections must be present in the DataFrame.")
 
-    unique_dates = df["real_date"].unique()
-    real_dates = [pd.Timestamp(date) for date in unique_dates]
+    start_ts = pd.to_datetime(start) if start is not None else None
 
-    def _get_values_for_xcat(real_dates, xcat_index, cid):
-        values = df[
-            (df["real_date"].isin(real_dates))
-            & (df["xcat"] == xcats[xcat_index])
-            & (df["cid"] == cid)
-        ]
-        if not real_dates == list(values["real_date"].unique()):
-            if xcat_index + 1 >= len(xcats):
-                return values
-            values = update_df(
-                values,
-                _get_values_for_xcat(
-                    list(set(real_dates) - set(values["real_date"].unique())),
-                    xcat_index + 1,
-                    cid,
-                ),
-            )
-
-        values.loc[:, "xcat"] = new_xcat
-        return values
-
-    result_df = None
+    merged_results = []
 
     for cid in cids:
-        if result_df is None:
-            result_df = _get_values_for_xcat(real_dates, 0, cid)
-        else:
-            result_df = update_df(
-                result_df, _get_values_for_xcat(real_dates, xcat_index=0, cid=cid)
-            )
+        cid_df = qdf[qdf["cid"] == cid]
+        merged_series = pd.DataFrame()
 
-    return result_df.sort_values(by=IDX_COLS_SORT_ORDER).reset_index(drop=True)
+        for category in xcats:
+            cat_df = cid_df[cid_df["xcat"] == category].sort_values("real_date")
+            if merged_series.empty:
+                merged_series = cat_df.copy()
+            else:
+                inferior_values = cat_df[
+                    ~cat_df["real_date"].isin(merged_series["real_date"])
+                ]
+                merged_series = pd.concat([merged_series, inferior_values])
+
+        merged_series = merged_series.sort_values("real_date")
+        merged_series["xcat"] = new_xcat
+        merged_series["cid"] = cid
+
+        if backfill:
+            valid = merged_series.dropna(subset=["value"])
+            if not valid.empty:
+                first_valid_date = valid["real_date"].min()
+                first_valid_value = valid.loc[
+                    valid["real_date"] == first_valid_date, "value"
+                ].iloc[0]
+                if first_valid_date > start_ts:
+                    backfilled_data = pd.DataFrame(
+                        {
+                            "real_date": pd.bdate_range(
+                                start=start_ts,
+                                end=first_valid_date - pd.Timedelta(days=1),
+                            ),
+                            "value": first_valid_value,
+                            "cid": cid,
+                            "xcat": new_xcat,
+                        }
+                    )
+                    merged_series = merged_series[
+                        merged_series["real_date"] >= first_valid_date
+                    ]
+                    merged_series = pd.concat([backfilled_data, merged_series])
+        elif start_ts is not None:
+            merged_series = merged_series[merged_series["real_date"] >= start_ts]
+
+        merged_results.append(merged_series)
+
+    result_df = pd.concat(merged_results, ignore_index=True).sort_values(
+        by=IDX_COLS_SORT_ORDER
+    )
+
+    return QuantamentalDataFrame(result_df, categorical=result_as_categorical)
 
 
 def get_sops(
@@ -1617,7 +1676,7 @@ def forward_fill_wide_df(df, blacklist=None, n=1):
     """
     Forward fills NaN values in a wide DataFrame using the last valid value in each column.
     It will not forward fill gaps in the data, only the next `n` periods after the last valid value.
-    
+
     Parameters
     ----------
     df : pd.DataFrame
@@ -1637,7 +1696,7 @@ def forward_fill_wide_df(df, blacklist=None, n=1):
         raise TypeError("df must be a pandas DataFrame.")
     if not isinstance(n, int):
         raise ValueError("Parameter 'n' must be an integer.")
-    
+
     for col in df.columns:
         series = df[col]
 
@@ -1660,6 +1719,157 @@ def forward_fill_wide_df(df, blacklist=None, n=1):
         to_fill = mask & series.isna()
         df.loc[to_fill, col] = series.iloc[last_pos]
     return df
+
+
+def _long_to_wide(df: pd.DataFrame, value_col: str) -> pd.DataFrame:
+    """
+    Pivot a long-format panel to wide format (dates × cids).
+
+    Parameters
+    ----------
+    df : pd.DataFrame or QuantamentalDataFrame
+        Long-format DataFrame with at least "real_date", "cid", and
+        "value_col" columns.
+    value_col : str
+        Name of the column to use as cell values.
+
+    Returns
+    -------
+    pd.DataFrame
+        Wide-format DataFrame indexed by "real_date" with one column per
+        unique "cid".
+    """
+    required_cols = {"real_date", "cid", value_col}
+    missing = required_cols - set(df.columns)
+    if missing:
+        raise ValueError(
+            f"_long_to_wide: DataFrame is missing required columns: {sorted(missing)}"
+        )
+
+    wide = df.pivot(index="real_date", columns="cid", values=value_col)
+    return wide
+
+
+def _wide_to_long(df: pd.DataFrame, value_name: str = "value") -> pd.DataFrame:
+    """
+    Melt a wide-format panel back to long format, dropping NaN rows.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Wide-format DataFrame with a "real_date"-named index and one column
+        per cid.
+    value_name : str, default "value"
+        Name for the melted value column in the output.
+
+    Returns
+    -------
+    pd.DataFrame
+        Long-format DataFrame with columns "real_date", "cid", and value_name,
+        sorted by cid then real_date, with NaN rows dropped.
+    """
+    if df.columns.empty:
+        raise ValueError("_wide_to_long: DataFrame has no columns (expected one per cid).")
+
+    long = (
+        df.rename_axis("real_date")
+        .reset_index()
+        .melt(id_vars="real_date", var_name="cid", value_name=value_name)
+        .dropna(subset=[value_name])
+        .sort_values(["cid", "real_date"])
+        .reset_index(drop=True)
+    )
+    return long
+
+
+def rotate_cid_xcat(
+    df: pd.DataFrame,
+    direction: str,
+    xcat_template: str,
+    fixed_value: str,
+) -> pd.DataFrame:
+    """
+    Rotate a panel DataFrame between cid-per-row and xcat-per-row representations.
+
+    Two directions are supported:
+
+    - "to_xcats": for each row, replaces "cid" with a per-stock xcat derived
+      from xcat_template (substituting the cid value into the "{cid}"
+      placeholder) and sets "cid" to fixed_value.
+    - "to_cids": the inverse — extracts the stock identifier from "xcat"
+      using the template as a regex, writes it into "cid", and replaces "xcat"
+      with fixed_value.
+
+    Parameters
+    ----------
+    df : pd.DataFrame or QuantamentalDataFrame
+        Panel DataFrame with at least "cid" and "xcat" columns.
+    direction : str
+        Transformation direction: "to_xcats" or "to_cids".
+    xcat_template : str
+        Template string containing the placeholder "{cid}" that maps between
+        a stock identifier and an xcat name, e.g. "EQXR_{cid}_NSA".
+    fixed_value : str
+        Value assigned to the column being collapsed. When direction is
+        "to_xcats", all rows will have cid set to fixed_value; when direction
+        is "to_cids", all rows will have xcat set to fixed_value.
+
+    Returns
+    -------
+    pd.DataFrame
+        A copy of df with "cid" and "xcat" updated according to direction.
+
+    Raises
+    ------
+    ValueError
+        If direction is not "to_xcats" or "to_cids".
+    """
+    if direction not in ("to_xcats", "to_cids"):
+        raise ValueError(
+            f"direction must be 'to_xcats' or 'to_cids', got {direction!r}"
+        )
+
+    if "{cid}" not in xcat_template:
+        raise ValueError(
+            f"xcat_template must contain the '{{cid}}' placeholder, got {xcat_template!r}"
+        )
+
+    n_cids = df["cid"].nunique()
+    n_xcats = df["xcat"].nunique()
+    logger.debug(
+        "rotate_cid_xcat called with direction=%r, n_cids=%d, n_xcats=%d",
+        direction,
+        n_cids,
+        n_xcats,
+    )
+
+    if min(n_cids, n_xcats) > 1:
+        raise ValueError(
+            f"Cannot rotate a panel with multiple cids ({n_cids}) and multiple "
+            f"xcats ({n_xcats}). Exactly one of the two must be unique."
+        )
+
+    dfa = df.copy()
+    if direction == "to_xcats":
+        dfa["xcat"] = dfa["cid"].apply(lambda x: xcat_template.replace("{cid}", x))
+        dfa["cid"] = fixed_value
+        logger.debug(
+            "Rotated %d cids to xcats using template %r; cid set to %r.",
+            n_cids,
+            xcat_template,
+            fixed_value,
+        )
+    else:
+        pattern = "^" + re.escape(xcat_template).replace(r"\{cid\}", "(.+)") + "$"
+        dfa["cid"] = dfa["xcat"].str.extract(pattern)[0]
+        dfa["xcat"] = fixed_value
+        logger.debug(
+            "Rotated %d xcats to cids using template %r; xcat set to %r.",
+            n_xcats,
+            xcat_template,
+            fixed_value,
+        )
+    return dfa
 
 
 if __name__ == "__main__":

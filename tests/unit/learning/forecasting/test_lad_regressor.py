@@ -37,8 +37,9 @@ class TestLADRegressor(unittest.TestCase):
                 tuples.append((cid, work_day))
 
         n_samples = len(tuples)
-        ftrs = np.random.normal(loc=0, scale=1, size=(n_samples, 3))
-        labels = np.matmul(ftrs, [1, 2, -1]) + np.random.normal(0, 0.5, len(ftrs))
+        rng = np.random.default_rng(42)
+        ftrs = rng.normal(loc=0, scale=1, size=(n_samples, 3))
+        labels = np.matmul(ftrs, [1, 2, -1]) + rng.normal(0, 0.5, len(ftrs))
         df = pd.DataFrame(
             data=np.concatenate((np.reshape(labels, (-1, 1)), ftrs), axis=1),
             index=pd.MultiIndex.from_tuples(tuples, names=["cid", "real_date"]),

@@ -12,6 +12,7 @@ from packaging import version
 from macrosynergy.management.simulate import make_qdf
 from macrosynergy.management.utils import reduce_df
 from macrosynergy.management.types import QuantamentalDataFrame
+from macrosynergy.visuals.plotter import add_figure_footnote
 
 
 def view_ranges(
@@ -34,6 +35,8 @@ def view_ranges(
     ncols: int = None,
     nrows: int = None,
     drop_cid_labels: bool = False,
+    footnote: Optional[str] = None,
+    footnote_fontsize: int = 9,
     return_fig: bool = False,
 ):
     """
@@ -91,6 +94,10 @@ def view_ranges(
         If True, the x-axis labels for cids will be dropped when plotting a facet. 
         Default is False. This is useful when there are many cids and the labels would 
         overlap.
+    footnote : str
+        Optional text shown at the bottom-left of the figure canvas.
+    footnote_fontsize : int
+        Font size of the footnote. Default is 9.
     return_fig : bool
         If True, return the Matplotlib figure object instead of displaying.
     """
@@ -239,6 +246,7 @@ def view_ranges(
             fig.delaxes(axes[j])
         fig.suptitle(title, fontsize=16)
         plt.tight_layout(rect=[0, 0, 1, 0.97])
+        add_figure_footnote(fig, footnote=footnote, fontsize=footnote_fontsize)
     else:
         fig, ax = plt.subplots(figsize=size)
         if kind == "bar":
@@ -262,6 +270,7 @@ def view_ranges(
                 bbox_to_anchor=legend_bbox_to_anchor,
             )
         plt.tight_layout()
+        add_figure_footnote(fig, footnote=footnote, fontsize=footnote_fontsize)
 
     if return_fig:
         return fig
