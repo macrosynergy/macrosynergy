@@ -32,7 +32,7 @@ def _generate_roll_dates(
     # Each roll date is anchored to a trading day on which an actual position is observed.
     # If a calendar period-end falls on a weekend or holiday and is not in the data,
     # the roll for that period is booked on the prior available trading day.
-    return eops.intersection(index)
+    return sorted(eops.intersection(index))
 
 
 def _preprocess_positions_for_costs(pivot_pos: pd.DataFrame) -> pd.DataFrame:
@@ -175,7 +175,6 @@ def _prep_dfs_for_pnl_calcs(
     spos: str,
     rstring: str,
 ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, List[pd.Timestamp]]:
-
     # Split the returns and positions dataframes
     pivot_returns, pivot_pos = _split_returns_positions_df(
         df_wide=df_wide, spos=spos, rstring=rstring
@@ -218,7 +217,6 @@ def _prep_dfs_for_pnl_calcs(
 def _pnl_excl_costs(
     df_wide: pd.DataFrame, spos: str, rstring: str, pnle_name: str
 ) -> pd.DataFrame:
-
     pnl_df, pivot_pos, pivot_returns, rebal_dates = _prep_dfs_for_pnl_calcs(
         df_wide=df_wide, spos=spos, rstring=rstring
     )
@@ -267,6 +265,7 @@ def _calculate_trading_costs(
     )
     roll_dates = _generate_roll_dates(pivot_pos.index, roll_freq)
     pivot_pos = _preprocess_positions_for_costs(pivot_pos)
+    pivot_pos = pivot_pos.sort_index()
 
     tickers = pivot_pos.columns.tolist()
     tc_cols = [
@@ -292,13 +291,13 @@ def _calculate_trading_costs(
             )
             tc_df.loc[date, bo_col] = trade_size * bo_pct / 100
 
-    # Step 2: Roll cost on the held position carried across each roll date.
-    # A position only carries through a roll if its direction is unchanged from
-    # one roll date to the next: a long that stayed long, or a short that
-    # stayed short. The residual that survived is then min(abs(prev), abs(curr)).
-    # Opens, closes and sign flips carry nothing and book no roll cost.
+    # Step 2: Roll cost on the position held across each roll date.
+    # Charge min(abs(prev), abs(curr)) when the sign is unchanged from
+    # the previous trading day, else zero. shift(1) takes the prior
+    # business day's position.
     pos_at_roll = pivot_pos.loc[roll_dates]
-    pos_before_roll = pos_at_roll.shift(1)
+    pos_before_roll = pivot_pos.shift(1).loc[roll_dates]
+
     held_long = (pos_before_roll > 0) & (pos_at_roll > 0)
     held_short = (pos_before_roll < 0) & (pos_at_roll < 0)
     held_position = np.minimum(pos_at_roll.abs(), pos_before_roll.abs()).where(
@@ -730,7 +729,6 @@ def plot_pnl(
 
 if __name__ == "__main__":
     import os
-
     import pickle
 
     cids_dmca = ["AUD", "CAD", "CHF", "EUR", "GBP", "JPY", "NOK", "NZD", "SEK", "USD"]
