@@ -52,6 +52,33 @@ def random_string(length: int = 10) -> str:
     return "".join(random.choices(string.ascii_uppercase, k=length))
 
 
+def make_cost_entry(bid_offer, rollcost, size):
+    """Build a TransactionCostsDictAdapter cost entry in the nested schema.
+
+    `bid_offer`, `rollcost` and `size` are each (median, pct90) tuples for the
+    respective cost-type cost / size anchors. The size anchors are shared by
+    both cost types.
+    """
+
+    def anchors(pair):
+        return {"median": pair[0], "pct90": pair[1]}
+
+    return {
+        "bid_offer": {"size": anchors(size), "cost": anchors(bid_offer)},
+        "rollcost": {"size": anchors(size), "cost": anchors(rollcost)},
+    }
+
+
+def flat_cost_entry(unit_cost=1.0, size_median=1.0, size_pct90=10.0):
+    """Cost entry with a flat per-unit cost (median == pct90) for both cost
+    types, so extrapolate_cost returns `unit_cost` for any trade size."""
+    return make_cost_entry(
+        bid_offer=(unit_cost, unit_cost),
+        rollcost=(unit_cost, unit_cost),
+        size=(size_median, size_pct90),
+    )
+
+
 KNOWN_FID_ENDINGS = [f"{t}_{s}" for t in AVAIALBLE_COSTS for s in AVAILABLE_STATS]
 
 
@@ -713,7 +740,8 @@ class TestCalculations(unittest.TestCase):
     def _hand_calc_setup(self):
         # 4-contract, 6 rebal-date fixture; rebal == roll == "M".
         #
-        # Cost adapter: each fid has median_cost == pct90_cost == 1.0, so
+        # Cost adapter: flat_cost_entry() gives each fid a flat per-unit cost
+        # of 1.0 (median == pct90) for both bid-offer and roll cost, so
         # extrapolate_cost returns 1.0 for any trade size (a flat per-unit
         # cost in percentage points). The production cost path computes
         # `dollar_cost = trade_size * pct / 100`, so a trade of size N here
@@ -756,10 +784,7 @@ class TestCalculations(unittest.TestCase):
         df_wide = pd.concat([pos_df, ret_df], axis=1)
         df_wide.index.name = "real_date"
 
-        cost_dict = {
-            fid: dict(median_cost=1.0, median_size=1.0, pct90_cost=1.0, pct90_size=10.0)
-            for fid in contracts
-        }
+        cost_dict = {fid: flat_cost_entry() for fid in contracts}
         adapter = TransactionCostsDictAdapter(cost_dict=cost_dict, fids=contracts)
 
         return df_wide, spos, rstring, adapter, rebal, contracts
@@ -878,11 +903,7 @@ class TestCalculations(unittest.TestCase):
         df_wide = pd.concat([pos_df, ret_df], axis=1)
         df_wide.index.name = "real_date"
 
-        cost_dict = {
-            "F_FID": dict(
-                median_cost=1.0, median_size=1.0, pct90_cost=1.0, pct90_size=10.0
-            )
-        }
+        cost_dict = {"F_FID": flat_cost_entry()}
         adapter = TransactionCostsDictAdapter(cost_dict=cost_dict, fids=contracts)
 
         tc_df = _calculate_trading_costs(
@@ -942,14 +963,7 @@ class TestCalculations(unittest.TestCase):
         df_wide.index.name = "real_date"
 
         adapter = TransactionCostsDictAdapter(
-            cost_dict={
-                "T_FID": dict(
-                    median_cost=1.0,
-                    median_size=1.0,
-                    pct90_cost=1.0,
-                    pct90_size=10.0,
-                )
-            },
+            cost_dict={"T_FID": flat_cost_entry()},
             fids=contracts,
         )
         tc_df = _calculate_trading_costs(
@@ -1282,22 +1296,25 @@ class TestProxyPNLCalc(unittest.TestCase):
         pos_tickers = [tk for tk in self.tickers if tk.endswith(f"_{self.spos}")]
         fids = sorted({tk.replace(f"_{self.spos}", "") for tk in pos_tickers})
 
-        cost_template = {
-            "median_cost": 0.2,
-            "median_size": 35,
-            "pct90_cost": 0.4,
-            "pct90_size": 90,
+        # Distinct bid-offer and roll-cost anchors to confirm the adapter
+        # routes each cost type independently (matching the panel-backed
+        # TransactionCosts object built below).
+        bo_cost = (0.2, 0.4)  # (median, pct90)
+        ro_cost = (0.1, 0.3)
+        size = (35, 90)
+        cost_dict = {
+            fid: make_cost_entry(bid_offer=bo_cost, rollcost=ro_cost, size=size)
+            for fid in fids
         }
-        cost_dict = {fid: dict(cost_template) for fid in fids}
 
         df_const = pd.DataFrame(index=self.df_wide.index)
         for fid in fids:
-            df_const[f"{fid}BIDOFFER_MEDIAN"] = cost_template["median_cost"]
-            df_const[f"{fid}BIDOFFER_90PCTL"] = cost_template["pct90_cost"]
-            df_const[f"{fid}ROLLCOST_MEDIAN"] = cost_template["median_cost"]
-            df_const[f"{fid}ROLLCOST_90PCTL"] = cost_template["pct90_cost"]
-            df_const[f"{fid}SIZE_MEDIAN"] = cost_template["median_size"]
-            df_const[f"{fid}SIZE_90PCTL"] = cost_template["pct90_size"]
+            df_const[f"{fid}BIDOFFER_MEDIAN"] = bo_cost[0]
+            df_const[f"{fid}BIDOFFER_90PCTL"] = bo_cost[1]
+            df_const[f"{fid}ROLLCOST_MEDIAN"] = ro_cost[0]
+            df_const[f"{fid}ROLLCOST_90PCTL"] = ro_cost[1]
+            df_const[f"{fid}SIZE_MEDIAN"] = size[0]
+            df_const[f"{fid}SIZE_90PCTL"] = size[1]
         df_const.index.name = "real_date"
 
         tc_qdf = QuantamentalDataFrame.from_wide(df_const)
@@ -1353,12 +1370,7 @@ class TestProxyPNLCalc(unittest.TestCase):
 
         fids = [f"{cid}_FX" for cid in cids]
         adapter = TransactionCostsDictAdapter(
-            cost_dict={
-                fid: dict(
-                    median_cost=1.0, median_size=1.0, pct90_cost=1.0, pct90_size=10.0
-                )
-                for fid in fids
-            },
+            cost_dict={fid: flat_cost_entry() for fid in fids},
             fids=fids,
         )
 

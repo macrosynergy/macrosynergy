@@ -241,12 +241,21 @@ class TestProxyPNLObject(unittest.TestCase):
         pd.testing.assert_frame_equal(proxy_pnl_obj.txn_costs_df, expected_tc)
 
     def _build_cost_dict(self) -> dict:
+        # Nested TransactionCostsDictAdapter schema: per fid, one entry per
+        # cost type, each with size and cost anchors at median / pct90.
+        def anchors(median, pct90):
+            return {"median": median, "pct90": pct90}
+
         return {
             fid: {
-                "median_cost": 0.1,
-                "median_size": 50.0,
-                "pct90_cost": 0.5,
-                "pct90_size": 200.0,
+                "bid_offer": {
+                    "size": anchors(50.0, 200.0),
+                    "cost": anchors(0.1, 0.5),
+                },
+                "rollcost": {
+                    "size": anchors(50.0, 200.0),
+                    "cost": anchors(0.05, 0.25),
+                },
             }
             for fid in self.fids
         }
