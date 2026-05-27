@@ -4,11 +4,15 @@ import pandas as pd
 import unittest
 
 from parameterized import parameterized
+from sklearn.compose import ColumnTransformer
 
 from sklearn.decomposition import PCA
+from sklearn.exceptions import NotFittedError
 from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import StandardScaler, MinMaxScaler, FunctionTransformer
+from sklearn.utils.validation import check_is_fitted
 
+from macrosynergy import PYTHON_3_9_OR_LATER
 from macrosynergy.learning.forecasting.meta_estimators.dataframe_transformer import DataFrameTransformer
 
 class TestDataFrameTransformer(unittest.TestCase):
@@ -228,3 +232,81 @@ class TestDataFrameTransformer(unittest.TestCase):
         self.assertIsInstance(transformed_data.index, pd.MultiIndex)
         self.assertEqual(transformed_data.index.names, ["cid", "real_date"])
         self.assertEqual(transformed_data.columns.tolist(), ["Scaled1", "Scaled2", "Scaled3"])
+
+    @unittest.skipIf(
+        condition=not PYTHON_3_9_OR_LATER,
+        reason="Transformers don't have get_feature_names_out attributes "
+               "in old scikit-learn versions"
+    )
+    def test_get_feature_names_out(self):
+        """
+        Test that get_feature_names_out returns the correct names, matching the
+        columns produced by transform, for both default and user-provided naming.
+        """
+        # PCA without column names -> defaults sized to output width
+        dt = DataFrameTransformer(transformer=PCA(n_components=2)).fit(X=self.X, y=self.y)
+        names = dt.get_feature_names_out()
+        self.assertIsInstance(names, np.ndarray)
+        self.assertEqual(list(names), ["Factor_0", "Factor_1"])
+        self.assertEqual(list(names), dt.transform(self.X).columns.tolist())
+
+        # PCA with column names longer than output width -> sliced to output width
+        dt = DataFrameTransformer(
+            transformer=PCA(n_components=2),
+            column_names=["PCA1", "PCA2", "PCA3"],
+        ).fit(X=self.X, y=self.y)
+        names = dt.get_feature_names_out()
+        self.assertIsInstance(names, np.ndarray)
+        self.assertEqual(list(names), ["PCA1", "PCA2"])
+        self.assertEqual(list(names), dt.transform(self.X).columns.tolist())
+
+        # StandardScaler without column names -> one default per input feature
+        dt = DataFrameTransformer(transformer=StandardScaler()).fit(X=self.X, y=self.y)
+        names = dt.get_feature_names_out()
+        self.assertIsInstance(names, np.ndarray)
+        self.assertEqual(list(names), ["Factor_0", "Factor_1", "Factor_2"])
+        self.assertEqual(list(names), dt.transform(self.X).columns.tolist())
+
+        # StandardScaler with column names -> user names returned verbatim
+        dt = DataFrameTransformer(
+            transformer=StandardScaler(),
+            column_names=["Scaled1", "Scaled2", "Scaled3"],
+        ).fit(X=self.X, y=self.y)
+        names = dt.get_feature_names_out()
+        self.assertIsInstance(names, np.ndarray)
+        self.assertEqual(list(names), ["Scaled1", "Scaled2", "Scaled3"])
+        self.assertEqual(list(names), dt.transform(self.X).columns.tolist())
+
+        # ColumnTransformer
+        dt = DataFrameTransformer(
+            transformer=ColumnTransformer(
+                transformers=[
+                    ("scaler1", StandardScaler(), ["CPI", "GROWTH"]),
+                    ("scaler2", MinMaxScaler(), ["RIR"]),
+                ]
+            ),
+            column_names=["CPI_scaled", "GROWTH_scaled", "RIR_scaled"],
+        ).fit(X=self.X, y=self.y)
+        names = dt.get_feature_names_out()
+        self.assertIsInstance(names, np.ndarray)
+        self.assertEqual(list(names), ["CPI_scaled", "GROWTH_scaled", "RIR_scaled"])
+        self.assertEqual(list(names), dt.transform(self.X).columns.tolist())
+
+        # Transformer doesn't support get_feature_names_out
+        dt = DataFrameTransformer(
+            transformer=FunctionTransformer(np.log1p, feature_names_out=None),
+        ).fit(X=self.X, y=self.y)
+        with self.assertRaisesRegex(
+            AttributeError,
+            expected_regex=r"has no attribute 'get_feature_names_out'"
+        ):
+            dt.get_feature_names_out()
+
+    def test_is_fitted(self):
+        dt = DataFrameTransformer(transformer=PCA(n_components=2))
+
+        with self.assertRaises(NotFittedError):
+            check_is_fitted(dt)
+
+        dt.fit(self.X, self.y)
+        assert check_is_fitted(dt) is None
