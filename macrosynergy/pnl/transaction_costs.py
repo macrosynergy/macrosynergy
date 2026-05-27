@@ -92,63 +92,6 @@ def extrapolate_cost(
     return cost
 
 
-def extrapolate_cost_from_dict(
-    cost_dict: Optional[Mapping[str, Mapping[str, Number]]],
-    fid: str,
-    trade_size: Number,
-    fids: Optional[List[str]] = None,
-) -> Number:
-    """
-    Compute transaction costs from a static cost dictionary.
-
-    Parameters
-    ----------
-    cost_dict : Optional[Mapping[str, Mapping[str, Number]]]
-        Mapping of fid to extrapolate_cost arguments. If None, returns NaN.
-    fid : str
-        Financial contract identifier to query in cost_dict.
-    trade_size : Number
-        Trade size in USD mn.
-    fids : Optional[List[str]]
-        Optional list of traded fids to validate cost_dict coverage.
-    """
-    if cost_dict is None:
-        return np.nan
-    if not isinstance(cost_dict, Mapping):
-        raise TypeError("`cost_dict` must be a mapping or None.")
-    if not isinstance(fid, str):
-        raise TypeError("`fid` must be a string.")
-    if fids is not None:
-        if not isinstance(fids, list) or not all(isinstance(x, str) for x in fids):
-            raise TypeError("`fids` must be a list of strings.")
-        missing = set(fids) - set(cost_dict.keys())
-        if missing:
-            raise ValueError(
-                "`cost_dict` is missing the following fids: "
-                + ", ".join(sorted(missing))
-            )
-    if fid not in cost_dict:
-        raise ValueError(f"`cost_dict` does not contain an entry for fid '{fid}'.")
-    args = cost_dict[fid]
-    if not isinstance(args, Mapping):
-        raise TypeError("`cost_dict[fid]` must be a mapping of cost arguments.")
-
-    required_keys = ("median_cost", "median_size", "pct90_cost", "pct90_size")
-    missing_keys = [k for k in required_keys if k not in args]
-    if missing_keys:
-        raise ValueError(
-            f"`cost_dict[{fid}]` is missing keys: " + ", ".join(missing_keys)
-        )
-
-    return extrapolate_cost(
-        trade_size=trade_size,
-        median_size=args["median_size"],
-        median_cost=args["median_cost"],
-        pct90_size=args["pct90_size"],
-        pct90_cost=args["pct90_cost"],
-    )
-
-
 def _plot_costs_func(
     tco: "TransactionCosts",
     fids: Optional[List[str]],
@@ -459,14 +402,39 @@ class TransactionCosts(object):
 
 class TransactionCostsDictAdapter:
     """
-    Adapter that exposes TransactionCosts-style methods using a static cost dictionary.
+    Adapter that exposes the TransactionCosts cost methods (``bidoffer`` and
+    ``rollcost``) from a static, nested cost dictionary.
+
+    The dictionary is keyed by financial contract identifier (fid). Each fid
+    carries one entry per cost type - ``bid_offer`` and ``rollcost`` - and each
+    cost type records two properties, ``size`` and ``cost``, at two anchors,
+    ``median`` and ``pct90``::
+
+        {
+            "EUR_FX": {
+                "bid_offer": {
+                    "size": {"median": 35,  "pct90": 90},
+                    "cost": {"median": 0.2, "pct90": 0.4},
+                },
+                "rollcost": {
+                    "size": {"median": 35,  "pct90": 90},
+                    "cost": {"median": 0.1, "pct90": 0.2},
+                },
+            },
+        }
+
+    The size and cost anchors feed ``TransactionCosts.extrapolate_cost`` exactly
+    as the panel-backed ``TransactionCosts`` object does, so the two are
+    interchangeable wherever a cost object is expected.
     """
 
-    _REQUIRED_KEYS = ("median_cost", "median_size", "pct90_cost", "pct90_size")
+    COST_TYPES = ("bid_offer", "rollcost")
+    PROPERTIES = ("size", "cost")
+    ANCHORS = ("median", "pct90")
 
     def __init__(
         self,
-        cost_dict: Mapping[str, Mapping[str, Number]],
+        cost_dict: Mapping[str, Mapping],
         fids: Optional[List[str]] = None,
     ) -> None:
         if not isinstance(cost_dict, Mapping):
@@ -495,33 +463,56 @@ class TransactionCostsDictAdapter:
         return True
 
     @classmethod
-    def _validate_cost_entry(cls, fid: str, entry: Mapping[str, Number]) -> None:
+    def _validate_cost_entry(cls, fid: str, entry: Mapping) -> None:
         if not isinstance(entry, Mapping):
-            raise TypeError(f"`cost_dict[{fid}]` must be a mapping.")
-        missing = [k for k in cls._REQUIRED_KEYS if k not in entry]
-        if missing:
-            raise ValueError(
-                f"`cost_dict[{fid}]` is missing keys: " + ", ".join(missing)
-            )
+            raise TypeError(f"`cost_dict[{fid!r}]` must be a mapping.")
+        for cost_type in cls.COST_TYPES:
+            if cost_type not in entry:
+                raise ValueError(
+                    f"`cost_dict[{fid!r}]` is missing cost type {cost_type!r}."
+                )
+            ct_entry = entry[cost_type]
+            if not isinstance(ct_entry, Mapping):
+                raise TypeError(
+                    f"`cost_dict[{fid!r}][{cost_type!r}]` must be a mapping."
+                )
+            for prop in cls.PROPERTIES:
+                if prop not in ct_entry:
+                    raise ValueError(
+                        f"`cost_dict[{fid!r}][{cost_type!r}]` is missing "
+                        f"property {prop!r}."
+                    )
+                anchors = ct_entry[prop]
+                if not isinstance(anchors, Mapping):
+                    raise TypeError(
+                        f"`cost_dict[{fid!r}][{cost_type!r}][{prop!r}]` must be a mapping."
+                    )
+                missing = [a for a in cls.ANCHORS if a not in anchors]
+                if missing:
+                    raise ValueError(
+                        f"`cost_dict[{fid!r}][{cost_type!r}][{prop!r}]` is missing "
+                        "anchors: " + ", ".join(missing)
+                    )
 
-    def _cost(self, fid: str, trade_size: Number) -> Number:
-        args = self.cost_dict.get(fid)
-        if args is None:
+    def _cost(self, fid: str, cost_type: str, trade_size: Number) -> Number:
+        entry = self.cost_dict.get(fid)
+        if entry is None:
             raise ValueError(f"`cost_dict` does not contain an entry for fid '{fid}'.")
-        self._validate_cost_entry(fid, args)
+        self._validate_cost_entry(fid, entry)
+        ct_entry = entry[cost_type]
         return TransactionCosts.extrapolate_cost(
             trade_size=trade_size,
-            median_size=args["median_size"],
-            median_cost=args["median_cost"],
-            pct90_size=args["pct90_size"],
-            pct90_cost=args["pct90_cost"],
+            median_size=ct_entry["size"]["median"],
+            median_cost=ct_entry["cost"]["median"],
+            pct90_size=ct_entry["size"]["pct90"],
+            pct90_cost=ct_entry["cost"]["pct90"],
         )
 
     def bidoffer(self, fid: str, trade_size: Number, real_date: str) -> Number:
-        return self._cost(fid=fid, trade_size=trade_size)
+        return self._cost(fid=fid, cost_type="bid_offer", trade_size=trade_size)
 
     def rollcost(self, fid: str, trade_size: Number, real_date: str) -> Number:
-        return self._cost(fid=fid, trade_size=trade_size)
+        return self._cost(fid=fid, cost_type="rollcost", trade_size=trade_size)
 
 
 class ExampleAdapter(TransactionCosts):  # pragma: no cover
@@ -577,13 +568,23 @@ if __name__ == "__main__":
     for k, v in test_dict.items():
         assert np.isclose(found_costs[k], v)
 
-    # Example: dict-based transaction costs adapter
+    # Example: dict-based transaction costs adapter (nested schema)
     cost_dict = {
         "GBP_FX": {
-            "median_cost": 0.02247071536967229,
-            "median_size": 50.0,
-            "pct90_cost": 0.04494143073934458,
-            "pct90_size": 200.0,
+            "bid_offer": {
+                "size": {"median": 50.0, "pct90": 200.0},
+                "cost": {
+                    "median": 0.02247071536967229,
+                    "pct90": 0.04494143073934458,
+                },
+            },
+            "rollcost": {
+                "size": {"median": 50.0, "pct90": 200.0},
+                "cost": {
+                    "median": 0.0022470715369672,
+                    "pct90": 0.0044941430739345,
+                },
+            },
         }
     }
     dict_adapter = TransactionCostsDictAdapter(cost_dict=cost_dict, fids=["GBP_FX"])

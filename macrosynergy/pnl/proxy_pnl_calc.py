@@ -773,11 +773,25 @@ if __name__ == "__main__":
         row = tx.get_costs(fid=fid, real_date=cost_date)
         if row is None:
             raise ValueError(f"Missing transaction costs for {fid}")
+        size = {
+            "median": row[f"{fid}SIZE_MEDIAN"],
+            "pct90": row[f"{fid}SIZE_90PCTL"],
+        }
         cost_dict[fid] = {
-            "median_cost": row[f"{fid}BIDOFFER_MEDIAN"],
-            "median_size": row[f"{fid}SIZE_MEDIAN"],
-            "pct90_cost": row[f"{fid}BIDOFFER_90PCTL"],
-            "pct90_size": row[f"{fid}SIZE_90PCTL"],
+            "bid_offer": {
+                "size": dict(size),
+                "cost": {
+                    "median": row[f"{fid}BIDOFFER_MEDIAN"],
+                    "pct90": row[f"{fid}BIDOFFER_90PCTL"],
+                },
+            },
+            "rollcost": {
+                "size": dict(size),
+                "cost": {
+                    "median": row[f"{fid}ROLLCOST_MEDIAN"],
+                    "pct90": row[f"{fid}ROLLCOST_90PCTL"],
+                },
+            },
         }
 
     df_all_dict = proxy_pnl_calc(
