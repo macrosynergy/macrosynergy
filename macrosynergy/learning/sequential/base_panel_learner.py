@@ -353,6 +353,10 @@ class BasePanelLearner(ABC):
                     f"target, or preprocessing configuration. "
                     f"Original error: {e}"
                 ) from e
+            
+            # Reinitialize the model to ensure the actual learning process is not affected by this check
+            params = models[key].get_params(deep=False)
+            models[key] = type(model)(**params)
 
         if inner_splitters is not None:
             base_splits = self._get_base_splits(inner_splitters)
