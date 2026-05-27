@@ -406,7 +406,6 @@ class TestHelperFunctions(unittest.TestCase):
 def mock_pnl_excl_costs(
     df_wide: pd.DataFrame, spos: str, rstring: str, pnle_name: str
 ) -> pd.DataFrame:
-
     pnl_df, pivot_pos, pivot_returns, rebal_dates = _prep_dfs_for_pnl_calcs(
         df_wide=df_wide, spos=spos, rstring=rstring
     )
@@ -465,9 +464,15 @@ def mock_calculate_trading_costs(
                 bo = transaction_costs.bidoffer(trade_size=d, fid=fid, real_date=dt)
                 tc_df.loc[dt, col_bo] = d * bo / 100
 
-        for i, dt in enumerate(roll_list[1:], start=1):
+        prev_bday = pivot_pos[ticker].shift(1)
+        for dt in roll_list:
+            # Compare the position on each roll date with the position on the
+            # immediately-prior row of the position panel. The zero anchor
+            # prepended by _preprocess_positions_for_costs gives the first
+            # observed date a well-defined predecessor of 0, so an opening
+            # trade books no roll cost.
             curr_pos = pivot_pos[ticker].loc[dt]
-            prev_pos = pivot_pos[ticker].loc[roll_list[i - 1]]
+            prev_pos = prev_bday.loc[dt]
             held_long = curr_pos > 0 and prev_pos > 0
             held_short = curr_pos < 0 and prev_pos < 0
             if held_long or held_short:
@@ -545,7 +550,6 @@ class TestCalculations(unittest.TestCase):
             _test_eq(argsx)
 
     def test_calculate_trading_costs(self):
-
         df_wide = self.df_wide.copy()
         df_wide = df_wide.abs()
         spos = self.spos
@@ -627,7 +631,6 @@ class TestCalculations(unittest.TestCase):
         pd.testing.assert_frame_equal(output_df, expc_output)
 
     def test_portfolio_sums(self):
-
         pnl_name, tc_name, pnle_name = "PNL", "TC", "PNLE"
         bidoffer_name, rollcost_name = "BIDOFFER", "ROLLCOST"
         portfolio_name = "PORTFOLIO"
@@ -796,10 +799,10 @@ class TestCalculations(unittest.TestCase):
 
     def test_calculate_trading_costs_rollcost_matches_hand_calc(self):
         # Roll cost is charged on the size that survives the roll with its
-        # direction unchanged: min(abs(prev), abs(curr)) when both have the
-        # same sign, and zero on opens, closes and sign flips. S_FID covers
-        # the negative-magnitude case: a held short of size 3 carries 3,
-        # a short shrinking from 7 to 3 carries 3 (the part that survived),
+        # direction unchanged: min(abs(prev_bday), abs(curr)) when both have
+        # the same sign, and zero on opens, closes and sign flips. S_FID
+        # covers the negative-magnitude case: a held short of size 3 carries
+        # 3, a short shrinking from 7 to 3 carries 3 (the part that survived),
         # and a short growing from 3 to 8 also carries 3 (the prior size).
         df_wide, spos, rstring, adapter, rebal, contracts = self._hand_calc_setup()
         tc_df = _calculate_trading_costs(
@@ -846,12 +849,13 @@ class TestCalculations(unittest.TestCase):
 
     def test_calculate_trading_costs_alternating_signs_book_no_rollcost(self):
         # Single-contract panel that flips sign at every rebal date
-        # (+5, -5, +5, -5, +5, -5). No held position ever survives a sign
-        # flip, so the roll-cost column must be exactly zero on every
-        # rebal. Bid-offer must be strictly positive on every rebal: the
-        # opening trade of size 5, then a close-and-reopen of size 10 at
-        # each flip. Stresses the sign check in the roll cost path under
-        # repeated alternation.
+        # (+5, -5, +5, -5, +5, -5). Under the prev-bday charge basis the
+        # position one row before each rebal carries the prior rebal's
+        # opposite sign, so the sign check fails and no held position
+        # survives any flip - roll cost is exactly zero on every rebal.
+        # Bid-offer is strictly positive on every rebal: the opening
+        # trade of size 5, then a close-and-reopen of size 10 at each
+        # subsequent flip.
         spos, rstring = "SNAME_POS", "RETURNS"
         contracts = ["F_FID"]
         idx = pd.bdate_range("2020-01-01", "2020-07-31", name="real_date")
@@ -888,6 +892,74 @@ class TestCalculations(unittest.TestCase):
         bo = tc_df.reindex(rebal)[f"F_FID_{spos}_TC_BIDOFFER"].fillna(0.0)
         self.assertTrue((rc == 0.0).all())
         self.assertTrue((bo > 0.0).all())
+
+    def test_calculate_trading_costs_rollcost_uses_prev_bday_not_prev_roll(self):
+        # Spec ref: macrosynergy/academy#2132 comment 4461473326. Roll cost
+        # compares the position on the roll date to the position on the
+        # immediately-previous trading day, not to the position on the
+        # previous roll date. Build a four-monthly-roll panel where the
+        # position changes between consecutive rolls so the two semantics
+        # disagree:
+        #
+        #   anchor (Dec 31 2019): 0   (zero-anchor prepended by preprocessing)
+        #   Jan 02 - Jan 31: +20  -> roll[0] = Jan 31 (Fri)
+        #   Feb 03 - Feb 28: +50  -> roll[1] = Feb 28 (Fri); intra-period grow
+        #   Mar 02 - Mar 30: +50
+        #   Mar 31:          +10  -> roll[2] = Mar 31 (Tue); same-day shrink
+        #   Apr 01 - Apr 29: +10
+        #   Apr 30:          -7   -> roll[3] = Apr 30 (Thu); same-day sign flip
+        #
+        # Cost adapter: flat 1 % cost per USD, so dollar charge = size / 100.
+        # Per-roll expected ROLLCOST (with the prev-roll-date semantic shown
+        # in parentheses for contrast):
+        #
+        #   roll[0]: prev_bday=Jan 30=+20, curr=+20 -> min=20 -> 0.20
+        #            (prev_roll semantic: no prev roll -> 0.00)
+        #   roll[1]: prev_bday=Feb 27=+50, curr=+50 -> min=50 -> 0.50
+        #            (prev_roll semantic: min(20, 50)=20  -> 0.20)
+        #   roll[2]: prev_bday=Mar 30=+50, curr=+10 -> min=10 -> 0.10
+        #            (prev_roll semantic: min(50, 10)=10 -> 0.10, same)
+        #   roll[3]: prev_bday=Apr 29=+10, curr=-7  -> sign flip -> 0.00
+        #            (prev_roll semantic: sign flip   -> 0.00, same)
+        spos, rstring = "SNAME_POS", "RETURNS"
+        contracts = ["T_FID"]
+        idx = pd.bdate_range("2020-01-01", "2020-04-30", name="real_date")
+        rolls = _generate_roll_dates(idx, roll_freq="M")
+        self.assertEqual(len(rolls), 4)
+
+        pos = pd.Series(20.0, index=idx, name=f"T_FID_{spos}")
+        pos.iloc[idx.get_loc(rolls[0]) + 1 :] = 50.0
+        pos.iloc[idx.get_loc(rolls[2]) :] = 10.0
+        pos.iloc[idx.get_loc(rolls[3]) :] = -7.0
+
+        df_wide = pd.concat(
+            [
+                pos.to_frame(),
+                pd.DataFrame(0.0, index=idx, columns=[f"T_FID{rstring}"]),
+            ],
+            axis=1,
+        )
+        df_wide.index.name = "real_date"
+
+        adapter = TransactionCostsDictAdapter(
+            cost_dict={
+                "T_FID": dict(
+                    median_cost=1.0,
+                    median_size=1.0,
+                    pct90_cost=1.0,
+                    pct90_size=10.0,
+                )
+            },
+            fids=contracts,
+        )
+        tc_df = _calculate_trading_costs(
+            df_wide, spos, rstring, adapter, "TC", roll_freq="M"
+        )
+        rc = tc_df.reindex(rolls)[f"T_FID_{spos}_TC_ROLLCOST"].fillna(0.0)
+        self.assertAlmostEqual(rc.iloc[0], 0.20, places=12)
+        self.assertAlmostEqual(rc.iloc[1], 0.50, places=12)
+        self.assertAlmostEqual(rc.iloc[2], 0.10, places=12)
+        self.assertAlmostEqual(rc.iloc[3], 0.00, places=12)
 
     def test_calculate_trading_costs_rejects_bad_last_row(self):
         # An all-zero (or all-NaN) latest position row leaves the cost
@@ -949,6 +1021,10 @@ class TestCalculations(unittest.TestCase):
         _, _, tc_qdf_m = proxy_pnl_calc(roll_freq="M", **common_kwargs)
         tc_wide_m = qdf_to_ticker_df(tc_qdf_m)
 
+        # _generate_roll_dates returns a sorted python list, so the expected
+        # tables need an explicit DatetimeIndex name to match the "real_date"
+        # name carried through tc_wide_m from qdf_to_ticker_df.
+        rebal_index = pd.DatetimeIndex(rebal, name="real_date")
         expected_bidoffer = (
             pd.DataFrame(
                 [
@@ -959,7 +1035,7 @@ class TestCalculations(unittest.TestCase):
                     [5, 8, 0, 5],
                     [0, 0, 4, 0],
                 ],
-                index=rebal,
+                index=rebal_index,
                 columns=contracts,
                 dtype=float,
             )
@@ -975,7 +1051,7 @@ class TestCalculations(unittest.TestCase):
                     [0, 0, 4, 3],
                     [5, 3, 0, 8],
                 ],
-                index=rebal,
+                index=rebal_index,
                 columns=contracts,
                 dtype=float,
             )
@@ -1074,7 +1150,6 @@ class TestCalculations(unittest.TestCase):
 
 
 class TestProxyPNLCalc(unittest.TestCase):
-
     def setUp(self):
         self.cids = ["USD", "EUR", "JPY", "GBP"]
         self.xcats = ["FX", "EQ", "IRS", "CDS"]
@@ -1129,7 +1204,6 @@ class TestProxyPNLCalc(unittest.TestCase):
         }
 
     def test_proxy_pnl_calc(self):
-
         full_result = proxy_pnl_calc(**self.good_args)
 
         self.assertIsInstance(full_result, tuple)
