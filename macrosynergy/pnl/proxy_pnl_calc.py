@@ -128,6 +128,18 @@ def _split_returns_positions_df(
     pivot_returns: pd.DataFrame = df_wide.loc[:, returns_tickers]
     pivot_pos: pd.DataFrame = df_wide.loc[:, positions_tickers]
 
+    # A return series with no data anywhere on its index carries no PnL
+    # signal at all - that is almost always a data-prep mistake. Flag it
+    # here rather than letting it propagate silently into the cost path.
+    empty_returns = sorted(
+        c for c in pivot_returns.columns if pivot_returns[c].isna().all()
+    )
+    if empty_returns:
+        raise ValueError(
+            "The following return series are entirely NaN and carry no "
+            "data: " + ", ".join(empty_returns)
+        )
+
     assert set(_replace_strs(pivot_returns.columns, rstring)) == set(
         _replace_strs(pivot_pos.columns, f"_{spos}")
     )
@@ -260,9 +272,19 @@ def _calculate_trading_costs(
     bidoffer_name: str = "BIDOFFER",
     rollcost_name: str = "ROLLCOST",
 ) -> pd.DataFrame:
-    _, pivot_pos = _split_returns_positions_df(
+    pivot_returns, pivot_pos = _split_returns_positions_df(
         df_wide=df_wide, spos=spos, rstring=rstring
     )
+    # Per-contract first valid return date - no PnL can be earned before
+    # this, so no trading cost should book either. The pos-ticker keys are
+    # built from the returns-ticker columns via _replace_strs to mirror
+    # the rest of the module's suffix-swap convention. An entirely-NaN
+    # return series is rejected upstream in _split_returns_positions_df.
+    pos_keys = _replace_strs(pivot_returns.columns, rstring, f"_{spos}")
+    first_return = {
+        key: pivot_returns[col].first_valid_index()
+        for key, col in zip(pos_keys, pivot_returns.columns)
+    }
     roll_dates = _generate_roll_dates(pivot_pos.index, roll_freq)
     pivot_pos = _preprocess_positions_for_costs(pivot_pos)
     pivot_pos = pivot_pos.sort_index()
@@ -312,6 +334,16 @@ def _calculate_trading_costs(
                 trade_size=roll_size, fid=fid, real_date=date
             )
             tc_df.loc[date, rc_col] = roll_size * rc_pct / 100
+
+    # NaN-out per-contract costs before the first valid return date - no PnL
+    # is earned in that window, so no trading cost is applicable. Rows that
+    # end up all-NaN are dropped by the row-sum filter below.
+    for ticker in tickers:
+        cols = [
+            f"{ticker}_{tc_name}_{bidoffer_name}",
+            f"{ticker}_{tc_name}_{rollcost_name}",
+        ]
+        tc_df.loc[tc_df.index < first_return[ticker], cols] = np.nan
 
     # Sum TICKER_TCOST_BIDOFFER and TICKER_TCOST_ROLLCOST into TICKER_TCOST
     for ticker in tickers:
@@ -395,13 +427,13 @@ def _portfolio_sums(
     # Sum the trading costs
     glb_tcosts = df_outs["tc_wide"].loc[:, tcs_list].sum(axis=1, skipna=True)
 
-    df_outs["pnl_incl_costs"].loc[
-        :, f"{portfolio_name}_{spos}_{pnl_name}"
-    ] = glb_pnl_incl_costs
+    df_outs["pnl_incl_costs"].loc[:, f"{portfolio_name}_{spos}_{pnl_name}"] = (
+        glb_pnl_incl_costs
+    )
 
-    df_outs["pnl_excl_costs"].loc[
-        :, f"{portfolio_name}_{spos}_{pnle_name}"
-    ] = glb_pnl_excl_costs
+    df_outs["pnl_excl_costs"].loc[:, f"{portfolio_name}_{spos}_{pnle_name}"] = (
+        glb_pnl_excl_costs
+    )
 
     df_outs["tc_wide"].loc[:, f"{portfolio_name}_{spos}_{tc_name}"] = glb_tcosts
 
