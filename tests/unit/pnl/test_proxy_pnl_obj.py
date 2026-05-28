@@ -317,5 +317,278 @@ class TestProxyPNLObject(unittest.TestCase):
         pd.testing.assert_frame_equal(proxy_pnl_df, expected_proxy_pnl_df)
 
 
+class TestEvaluatePnL(unittest.TestCase):
+    """Tests for ProxyPnL.evaluate_pnl."""
+
+    portfolio_name = "GLB"
+    sname = "STRAT"
+    pname = "POS"
+    rstring = "XR"
+
+    def _make_obj(self) -> ProxyPnL:
+        init_df = make_test_df(
+            cids=[self.portfolio_name],
+            xcats=["DUMMY"],
+            start="2018-01-01",
+            end="2024-12-31",
+        )
+        return ProxyPnL(
+            df=init_df,
+            sname=self.sname,
+            pname=self.pname,
+            rstring=self.rstring,
+            portfolio_name=self.portfolio_name,
+        )
+
+    def _make_pnl_qdf(
+        self,
+        xcat: str,
+        values: np.ndarray,
+        cid: str = None,
+        start: str = "2020-01-01",
+    ) -> QuantamentalDataFrame:
+        cid = cid or self.portfolio_name
+        dates = pd.bdate_range(start=start, periods=len(values))
+        return QuantamentalDataFrame(
+            pd.DataFrame(
+                {
+                    "real_date": dates,
+                    "cid": cid,
+                    "xcat": xcat,
+                    "value": np.asarray(values, dtype=float),
+                }
+            )
+        )
+
+    def test_invalid_argument_types(self):
+        obj = self._make_obj()
+        with self.assertRaisesRegex(TypeError, "Argument aum"):
+            obj.evaluate_pnl(aum="100")
+
+        with self.assertRaisesRegex(TypeError, "Argument include_pnle"):
+            obj.evaluate_pnl(aum=100, include_pnle="True")
+
+        with self.assertRaisesRegex(TypeError, "Argument include_tcosts"):
+            obj.evaluate_pnl(aum=100, include_tcosts="False")
+
+        with self.assertRaisesRegex(TypeError, "Argument label_dict"):
+            obj.evaluate_pnl(aum=100, label_dict=[])
+
+        with self.assertRaisesRegex(TypeError, "Argument start"):
+            obj.evaluate_pnl(aum=100, start=123)
+
+        with self.assertRaisesRegex(TypeError, "Argument end"):
+            obj.evaluate_pnl(aum=100, end=567)
+
+        with self.assertRaisesRegex(TypeError, "Argument benchmark_data"):
+            obj.evaluate_pnl(aum=100, benchmark_data=np.ndarray([]))
+
+    def test_raises_when_proxy_pnl_missing(self):
+        obj = self._make_obj()
+        with self.assertRaisesRegex(ValueError, "self.proxy_pnl is missing"):
+            obj.evaluate_pnl(aum=100)
+
+    def test_raises_when_pnle_required_but_missing(self):
+        obj = self._make_obj()
+        obj.proxy_pnl = self._make_pnl_qdf("PNL", np.ones(252))
+        with self.assertRaisesRegex(ValueError, "self.pnl_excl_costs is missing"):
+            obj.evaluate_pnl(aum=100, include_pnle=True)
+
+    def test_raises_when_tcosts_required_but_missing(self):
+        obj = self._make_obj()
+        obj.proxy_pnl = self._make_pnl_qdf("PNL", np.ones(252))
+        with self.assertRaisesRegex(ValueError, "self.txn_costs_df is missing"):
+            obj.evaluate_pnl(aum=100, include_tcosts=True)
+
+    def test_output_columns_match_input_xcat(self):
+        obj = self._make_obj()
+        obj.proxy_pnl = self._make_pnl_qdf("PNL", np.arange(252, dtype=float))
+        out = obj.evaluate_pnl(aum=100)
+        self.assertEqual(list(out.columns), ["PNL"])
+
+    def test_output_index_has_expected_summary_rows(self):
+        obj = self._make_obj()
+        obj.proxy_pnl = self._make_pnl_qdf("PNL", np.arange(252, dtype=float))
+        out = obj.evaluate_pnl(aum=100)
+        expected_rows = {
+            "Return %",
+            "St. Dev. %",
+            "Sharpe Ratio",
+            "Sortino Ratio",
+            "Sharpe Stability",
+            "Max 21-Day Draw %",
+            "Max 6-Month Draw %",
+            "Peak to Trough Draw %",
+            "Top 5% Monthly PnL Share",
+            "Traded Months",
+        }
+        self.assertTrue(expected_rows.issubset(set(out.index)))
+
+    def test_aum_scales_return_inversely(self):
+        n_days = 252
+        obj = self._make_obj()
+        obj.proxy_pnl = self._make_pnl_qdf("PNL", 0.01 * np.ones(n_days))
+
+        out_100 = obj.evaluate_pnl(aum=100)
+        out_200 = obj.evaluate_pnl(aum=200)
+
+        self.assertAlmostEqual(out_100.loc["Return %", "PNL"], 2.52)
+        self.assertAlmostEqual(out_200.loc["Return %", "PNL"], 2.52 / 2)
+        self.assertAlmostEqual(out_100.loc["St. Dev. %", "PNL"], 0.0)
+        self.assertAlmostEqual(out_200.loc["St. Dev. %", "PNL"], 0.0)
+
+    def test_mean_zero_alternating_series(self):
+        # Alternating +/-1 PnL with aum=100 => daily returns +/-1%.
+        # daily mean = 0, sample std = 1 * sqrt(n / (n - 1)).
+        n_days = 600
+        values = np.tile([1.0, -1.0], n_days // 2)
+        obj = self._make_obj()
+        obj.proxy_pnl = self._make_pnl_qdf("PNL", values)
+
+        out = obj.evaluate_pnl(aum=100)
+
+        self.assertAlmostEqual(out.loc["Return %", "PNL"], 0.0)
+        expected_std = 1 * np.sqrt(n_days / (n_days - 1)) * np.sqrt(252)
+        self.assertAlmostEqual(out.loc["St. Dev. %", "PNL"], expected_std)
+        self.assertAlmostEqual(out.loc["Sharpe Ratio", "PNL"], 0.0)
+
+
+    def test_include_pnle_adds_pnle_column(self):
+        obj = self._make_obj()
+        obj.proxy_pnl = self._make_pnl_qdf("PNL", 0.01 * np.ones(252))
+        obj.pnl_excl_costs = self._make_pnl_qdf("PNLe", np.full(252, 0.02))
+
+        out = obj.evaluate_pnl(aum=100, include_pnle=True)
+
+        self.assertEqual(sorted(out.columns.tolist()), ["PNL", "PNLe"])
+        self.assertAlmostEqual(out.loc["Return %", "PNL"], 2.52)
+        self.assertAlmostEqual(out.loc["Return %", "PNLe"], 2.52 * 2)
+
+
+    def test_include_tcosts_adds_transaction_cost_row(self):
+        obj = self._make_obj()
+        obj.proxy_pnl = self._make_pnl_qdf("PNL", np.ones(252))
+        obj.txn_costs_df = self._make_pnl_qdf("TCOST", np.full(252, 0.5))
+
+        out = obj.evaluate_pnl(aum=100, include_tcosts=True)
+
+        self.assertIn("Transaction Cost", out.index)
+        self.assertAlmostEqual(out.loc["Transaction Cost", "PNL"], 252 * 0.5)
+
+    def test_include_tcosts_zero_for_pnle_column(self):
+        obj = self._make_obj()
+        obj.proxy_pnl = self._make_pnl_qdf("PNL", np.ones(252))
+        obj.pnl_excl_costs = self._make_pnl_qdf("PNLe", np.full(252, 2.0))
+        obj.txn_costs_df = self._make_pnl_qdf("TCOST", np.full(252, 0.5))
+
+        out = obj.evaluate_pnl(aum=100, include_pnle=True, include_tcosts=True)
+
+        self.assertAlmostEqual(out.loc["Transaction Cost", "PNL"], 252 * 0.5)
+        self.assertAlmostEqual(out.loc["Transaction Cost", "PNLe"], 0.0)
+
+    def test_label_dict_renames_columns(self):
+        obj = self._make_obj()
+        obj.proxy_pnl = self._make_pnl_qdf("PNL", np.ones(252))
+        out = obj.evaluate_pnl(aum=100, label_dict={"PNL": "Strategy A"})
+        self.assertEqual(list(out.columns), ["Strategy A"])
+
+    def test_end_filters_dates(self):
+        n_days = 252
+        obj = self._make_obj()
+        obj.proxy_pnl = self._make_pnl_qdf(
+            "PNL", np.arange(n_days, dtype=float), start="2020-01-01"
+        )
+
+        end_short = pd.bdate_range("2020-01-01", periods=21)[-1].strftime("%Y-%m-%d")
+
+        full = obj.evaluate_pnl(aum=100)
+        clipped = obj.evaluate_pnl(aum=100, end=end_short)
+
+        self.assertGreater(
+            full.loc["Traded Months", "PNL"],
+            clipped.loc["Traded Months", "PNL"],
+        )
+
+    def test_benchmark_data_adds_correlation_row(self):
+        n_days = 252
+        values = np.arange(n_days, dtype=float)
+        obj = self._make_obj()
+        obj.proxy_pnl = self._make_pnl_qdf("PNL", values)
+
+        bm = pd.DataFrame(
+            {
+                "real_date": pd.bdate_range("2020-01-01", periods=n_days),
+                "cid": "USD",
+                "xcat": "EQ",
+                "value": values,
+            }
+        )
+
+        out = obj.evaluate_pnl(aum=100, benchmark_data=bm)
+
+        self.assertIn("USD_EQ correl", out.index)
+        self.assertAlmostEqual(out.loc["USD_EQ correl", "PNL"], 1.0)
+
+    def test_benchmark_data_not_mutated(self):
+        n_days = 100
+        obj = self._make_obj()
+        obj.proxy_pnl = self._make_pnl_qdf("PNL", np.arange(n_days, dtype=float))
+
+        bm = pd.DataFrame(
+            {
+                "real_date": pd.bdate_range("2020-01-01", periods=n_days),
+                "cid": "USD",
+                "xcat": "EQ",
+                "value": np.arange(n_days, dtype=float),
+            }
+        )
+        original_cols = list(bm.columns)
+
+        obj.evaluate_pnl(aum=100, benchmark_data=bm)
+
+        self.assertEqual(list(bm.columns), original_cols)
+
+    def test_end_to_end(self):
+        cids = ["USD", "EUR", "JPY", "GBP"]
+        ctypes = ["FX"]
+        fids = [f"{c}_{x}" for c in cids for x in ctypes]
+        xcats = ctypes + [f"{xc}XR" for xc in ctypes] + ["SIG"]
+
+        df = make_test_df(
+            cids=cids,
+            xcats=xcats,
+            start="2018-01-01",
+            end="2023-12-31",
+        )
+
+        cost_dict = {
+            fid: {
+                "bid_offer": {"size": {"median": 50, "pct90": 200}, "cost": {"median": 0.1, "pct90": 0.3}},
+                "rollcost": {"size": {"median": 50, "pct90": 200}, "cost": {"median": 0.1, "pct90": 0.3}},
+            }
+            for fid in fids
+        }
+        adapter = TransactionCostsDictAdapter(cost_dict=cost_dict, fids=fids)
+
+        obj = ProxyPnL(
+            df=df,
+            transaction_costs_object=adapter,
+            sname=self.sname,
+            pname=self.pname,
+            rstring="XR",
+            portfolio_name=self.portfolio_name,
+        )
+        obj.contract_signals(sig="SIG", cids=cids, ctypes=ctypes)
+        obj.notional_positions(fids=fids, aum=1000, leverage=1.0, lback_meth="xma")
+        obj.proxy_pnl_calc()
+
+        out = obj.evaluate_pnl(aum=1000, include_pnle=True, include_tcosts=True)
+
+        self.assertIn("Return %", out.index)
+        self.assertIn("Transaction Cost", out.index)
+        self.assertGreaterEqual(len(out.columns), 2)
+        self.assertFalse(out.isna().all().any())
+
+
 if __name__ == "__main__":
     unittest.main()
