@@ -764,6 +764,30 @@ class TestInformationStateChanges(unittest.TestCase):
 
         self.assertTrue(isc_min == new_isc)
 
+    def test_to_qdf_ffill_value(self):
+        qdf = get_long_format_data(
+            end="2012-01-01", cids=["USD"], xcats=["GDP"], num_freqs=1
+        )
+        mask = qdf["eop"] != qdf["eop"].shift(1)
+        qdf.loc[mask, "grading"] = np.random.rand(mask.sum())
+        qdf["grading"] = qdf["grading"].ffill().abs()
+        qdf["grading"] = (qdf["grading"] / qdf["grading"].max()) * 3
+        qdf["grading"] = qdf["grading"].round(1)
+
+        qdf["grading"] = np.random.randint(11, 31, size=len(qdf))
+        qdf["grading"] = (qdf["grading"] / 10).round(1)
+        df: pd.DataFrame = InformationStateChanges.from_qdf(qdf, norm=False).to_qdf(
+            ffill_value_column="ffill"
+        )
+        df["eop_lag"] = df["eop_lag"].astype(float)
+        self.assertEqual(set(df.columns), set(qdf.columns))
+        cols = sorted(df.columns)
+        df = QuantamentalDataFrame(df).sort_values(by=cols).reset_index(drop=True)
+        qdf = QuantamentalDataFrame(qdf).sort_values(by=cols).reset_index(drop=True)
+
+        for col in cols:
+            self.assertTrue(df[col].equals(qdf[col]), f"Column {col} does not match")
+
     def test_return_dtypes(self):
         # test return type - regular df
         qdf = get_long_format_data(end="2012-01-01")
