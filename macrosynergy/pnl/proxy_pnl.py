@@ -1,18 +1,20 @@
 """
 Implementation of the ProxyPnL class.
 """
-
+import numpy as np
 import pandas as pd
 from numbers import Number
-from typing import List, Union, Tuple, Optional
+from typing import List, Union, Tuple, Optional, Dict
 
 from macrosynergy.management.utils import (
     reduce_df,
     is_valid_iso_date,
+    _map_to_business_day_frequency,
 )
 from macrosynergy.management.types import QuantamentalDataFrame, NoneType
 import macrosynergy.visuals as msv
 from macrosynergy.pnl import notional_positions, contract_signals, proxy_pnl_calc
+from macrosynergy.pnl.sharpe_stability_ratio import sharpe_stability_ratio
 
 from macrosynergy.pnl.transaction_costs import (
     TransactionCosts,
@@ -267,7 +269,7 @@ class ProxyPnL(object):
         spos: str = None,
         portfolio_name: str = None,
         df: QuantamentalDataFrame = None,
-        roll_freqs: Optional[dict] = None,
+        roll_freq: Optional[Union[str, dict]] = None,
         rstring: str = None,
         pnl_name: str = "PNL",
         tc_name: str = "TCOST",
@@ -308,7 +310,7 @@ class ProxyPnL(object):
             spos=spos,
             rstring=rstring,
             portfolio_name=portfolio_name,
-            roll_freqs=roll_freqs,
+            roll_freq=roll_freq,
             start=self.start,
             end=self.end,
             blacklist=self.blacklist,
@@ -320,11 +322,187 @@ class ProxyPnL(object):
         assert len(outs) == 3
         assert all(map(lambda x: isinstance(x, QuantamentalDataFrame), outs))
         self.proxy_pnl: QuantamentalDataFrame = outs[0]
-        self.txn_costs_df: QuantamentalDataFrame = outs[1]
-        self.pnl_excl_costs: QuantamentalDataFrame = outs[2]
+        self.pnl_excl_costs: QuantamentalDataFrame = outs[1]
+        self.txn_costs_df: QuantamentalDataFrame = outs[2]
         outs = None
 
         return self.proxy_pnl
+
+    def evaluate_pnl(
+        self,
+        aum: Number,
+        include_pnle: bool = False,
+        include_tcosts: bool = False,
+        label_dict: Optional[Dict[str, str]] = None,
+        start: Optional[str] = None,
+        end: Optional[str] = None,
+        benchmark_data: Optional[pd.DataFrame] = None,
+    ) -> pd.DataFrame:
+        """
+        Compute summary performance statistics for the proxy PnL.
+
+        The PnL series is converted to a percentage return on AUM and annualized
+        statistics are computed assuming 252 trading days per year. The method
+        requires that `proxy_pnl_calc` has already been run; `pnl_excl_costs` and
+        `txn_costs_df` are required only when the corresponding flags are set.
+
+        Parameters
+        ----------
+        aum : Number
+            Assets under management used to scale the PnL into percentage returns.
+        include_pnle : bool
+            If True, include the PnL excluding transaction costs (`self.pnl_excl_costs`)
+            as an additional column in the output.
+        include_tcosts : bool
+            If True, include total transaction costs as a row in the output. Requires
+            `self.txn_costs_df` to be available.
+        label_dict : dict
+            Mapping from raw column names (xcat values) to display labels used in the
+            output columns.
+        start : str
+            Start date (ISO format) used to filter the PnL prior to computing statistics.
+            If not provided, no lower bound is applied.
+        end : str
+            End date (ISO format) used to filter the PnL prior to computing statistics.
+            If not provided, no upper bound is applied.
+        benchmark_data : pd.DataFrame
+            QuantamentalDataFrame of benchmark series. If provided, the correlation
+            between each PnL column and each benchmark ticker (cid_xcat) is added as
+            a row in the output.
+
+        Returns
+        -------
+        pd.DataFrame
+            Summary statistics with one column per PnL series. Rows include the
+            annualized return and standard deviation (in %), Sharpe and Sortino
+            ratios, Sharpe stability, maximum 21-day, 6-month and peak-to-trough
+            drawdowns (in %), the share of total PnL contributed by the top 5%
+            of months, optional benchmark correlations, optional transaction
+            costs, and the number of traded months.
+        """
+        # Input validation
+        for arg, value, types in [
+            ("aum", aum, Number),
+            ("include_pnle", include_pnle, bool),
+            ("include_tcosts", include_tcosts, bool),
+            ("label_dict", label_dict, (dict, type(None))),
+            ("start", start, (str, type(None))),
+            ("end", end, (str, type(None))),
+            ("benchmark_data", benchmark_data, (pd.DataFrame, type(None))),
+        ]:
+            if not isinstance(value, types):
+                raise TypeError(f"Argument {arg} must be one of: {types}")
+
+        pnl_exists = hasattr(self, "proxy_pnl") and self.proxy_pnl is not None
+        pnle_exists = hasattr(self, "pnl_excl_costs") and self.pnl_excl_costs is not None
+        tcosts_exists = hasattr(self, "txn_costs_df") and self.txn_costs_df is not None
+
+        missing_data_msg = "self.{} is missing"
+        if not pnl_exists:
+            raise ValueError(missing_data_msg.format("proxy_pnl"))
+        if not pnle_exists and include_pnle:
+            raise ValueError(missing_data_msg.format("pnl_excl_costs"))
+        if not tcosts_exists and include_tcosts:
+            raise ValueError(missing_data_msg.format("txn_costs_df"))
+
+
+        # Data preparation
+        df_pnl = self.proxy_pnl
+        df_pnle = self.pnl_excl_costs if include_pnle else pd.DataFrame()
+
+        df = pd.concat((df_pnl, df_pnle), ignore_index=True)
+        df = reduce_df(df, cids=[self.portfolio_name], start=start, end=end)
+
+        dfw = df.pivot(index="real_date", columns="xcat", values="value")
+        dfw = 100 * dfw / aum  # percentage return instead of $
+        dfw = dfw.rename(columns=label_dict if label_dict is not None else {})
+
+        # Summary statistics
+        ## Annualized mean and std
+        mean = dfw.mean(axis=0) * 252
+        std = dfw.std(axis=0) * np.sqrt(252)
+
+        ## Sharpes and Sortino
+        sharpe = mean / std
+        sortino = np.divide(
+            mean,
+            dfw.apply(lambda x: np.sqrt(np.sum(x[x < 0] ** 2) / len(x))) * np.sqrt(252),
+        )
+        sharpe_stability = [
+            sharpe_stability_ratio(
+                dfw[col].dropna(),
+                window=252,
+                benchmark_sr=0.0,
+                annualization_factor=252,
+            )
+            for col in dfw.columns
+        ]
+
+        ## Draws
+        draw_21_day = dfw.rolling(21).sum().min()
+        draw_6_month = dfw.rolling(6 * 21).sum().min()
+        draw_peak_to_trough = -(dfw.cumsum().cummax() - dfw.cumsum()).max()
+
+        ## PnL share
+        mfreq = _map_to_business_day_frequency("M")
+        monthly_pnl = dfw.resample(mfreq).sum()
+        total_pnl = monthly_pnl.sum(axis=0)
+        n_top = int(max(np.ceil(len(monthly_pnl) * 0.05), 1))
+        n_top_pnl = -np.sort(-monthly_pnl.values, axis=0)[:n_top].sum(0)
+        pnl_share = n_top_pnl / total_pnl
+
+        ## Number of traded months
+        n_traded_months = dfw.notna().resample(mfreq).sum().ne(0).sum()
+
+        ## Benchmark correlations
+        correlations = {}
+        if benchmark_data is not None and not benchmark_data.empty:
+            bm_data = benchmark_data.copy()
+            bm_data["ticker"] = bm_data["cid"] + "_" + bm_data["xcat"]
+            bm_data_w = bm_data.pivot(
+                index="real_date", columns="ticker", values="value"
+            )
+            shared_idx = dfw.index.intersection(bm_data_w.index)
+            correlations = {
+                f"{bm} correl": dfw.loc[shared_idx].corrwith(
+                    other=bm_data_w.loc[shared_idx][bm],
+                    drop=True,
+                )
+                for bm in bm_data_w.columns
+            }
+
+        ## Transaction costs
+        tcosts = {}
+        if include_tcosts:
+            txn_costs = reduce_df(
+                df=self.txn_costs_df,
+                cids=[self.portfolio_name],
+                blacklist=self.blacklist,
+            )
+            total_txn_costs = txn_costs["value"].sum()
+            total_txn_cost = [total_txn_costs, 0] if include_pnle else [total_txn_costs]
+            tcosts["Transaction Cost"] = total_txn_cost
+
+        # Format output
+        summary_statistics = {
+            "Return %": mean,
+            "St. Dev. %": std,
+            "Sharpe Ratio": sharpe,
+            "Sortino Ratio": sortino,
+            "Sharpe Stability": sharpe_stability,
+            "Max 21-Day Draw %": draw_21_day,
+            "Max 6-Month Draw %": draw_6_month,
+            "Peak to Trough Draw %": draw_peak_to_trough,
+            "Top 5% Monthly PnL Share": pnl_share,
+            **correlations,
+            **tcosts,
+            "Traded Months": n_traded_months,
+        }
+
+        summary_statistics = pd.DataFrame(summary_statistics).T
+        summary_statistics.columns = dfw.columns
+
+        return summary_statistics
 
     def plot_pnl(self, title: str = "Proxy PnL", cumsum: bool = True, **kwargs):
         """

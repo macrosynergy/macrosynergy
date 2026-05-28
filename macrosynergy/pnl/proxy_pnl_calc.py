@@ -2,6 +2,7 @@
 Module for calculating an approximate nominal PnL under consideration of transaction costs.
 """
 
+import numpy as np
 import pandas as pd
 from typing import List, Union, Tuple, Optional, Dict
 from numbers import Number
@@ -10,12 +11,41 @@ import macrosynergy.visuals as msv
 from macrosynergy.management.utils import (
     reduce_df,
     ticker_df_to_qdf,
+    get_eops,
 )
 from macrosynergy.management.types import QuantamentalDataFrame
 from macrosynergy.pnl.transaction_costs import (
     TransactionCosts,
     TransactionCostsDictAdapter,
 )
+
+
+def _generate_roll_dates(
+    index: pd.DatetimeIndex,
+    roll_freq: str,
+) -> pd.DatetimeIndex:
+    # End-of-period roll dates from `roll_freq`, constrained to `index`.
+    rf = roll_freq.upper()
+    if rf not in {"D", "W", "M", "Q"}:
+        raise ValueError(f"Unsupported roll frequency {roll_freq!r}.")
+    eops = pd.DatetimeIndex(get_eops(dates=pd.DatetimeIndex(index), freq=rf))
+    # Each roll date is anchored to a trading day on which an actual position is observed.
+    # If a calendar period-end falls on a weekend or holiday and is not in the data,
+    # the roll for that period is booked on the prior available trading day.
+    return sorted(eops.intersection(index))
+
+
+def _preprocess_positions_for_costs(pivot_pos: pd.DataFrame) -> pd.DataFrame:
+    # Reject a all-NaN/0s last row, fill remaining NaNs with 0, and prepend a
+    # zero-position anchor one business day before the first index date so
+    # that the opening trade enters as an absolute delta.
+    last = pivot_pos.iloc[-1]
+    if last.isna().all() or (last.fillna(0) == 0).all():
+        raise ValueError("The latest row of the positions frame is all-NaN/zero.")
+    pivot_pos = pivot_pos.fillna(0.0)
+    anchor = pivot_pos.index.min() - pd.tseries.offsets.BDay(1)
+    zero_row = pd.DataFrame(0.0, index=[anchor], columns=pivot_pos.columns)
+    return pd.concat([zero_row, pivot_pos])
 
 
 def _replace_strs(
@@ -98,6 +128,18 @@ def _split_returns_positions_df(
     pivot_returns: pd.DataFrame = df_wide.loc[:, returns_tickers]
     pivot_pos: pd.DataFrame = df_wide.loc[:, positions_tickers]
 
+    # A return series with no data anywhere on its index carries no PnL
+    # signal at all - that is almost always a data-prep mistake. Flag it
+    # here rather than letting it propagate silently into the cost path.
+    empty_returns = sorted(
+        c for c in pivot_returns.columns if pivot_returns[c].isna().all()
+    )
+    if empty_returns:
+        raise ValueError(
+            "The following return series are entirely NaN and carry no "
+            "data: " + ", ".join(empty_returns)
+        )
+
     assert set(_replace_strs(pivot_returns.columns, rstring)) == set(
         _replace_strs(pivot_pos.columns, f"_{spos}")
     )
@@ -145,7 +187,6 @@ def _prep_dfs_for_pnl_calcs(
     spos: str,
     rstring: str,
 ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, List[pd.Timestamp]]:
-
     # Split the returns and positions dataframes
     pivot_returns, pivot_pos = _split_returns_positions_df(
         df_wide=df_wide, spos=spos, rstring=rstring
@@ -188,7 +229,6 @@ def _prep_dfs_for_pnl_calcs(
 def _pnl_excl_costs(
     df_wide: pd.DataFrame, spos: str, rstring: str, pnle_name: str
 ) -> pd.DataFrame:
-
     pnl_df, pivot_pos, pivot_returns, rebal_dates = _prep_dfs_for_pnl_calcs(
         df_wide=df_wide, spos=spos, rstring=rstring
     )
@@ -228,68 +268,82 @@ def _calculate_trading_costs(
     rstring: str,
     transaction_costs: TransactionCosts,
     tc_name: str,
+    roll_freq: str = "M",
     bidoffer_name: str = "BIDOFFER",
     rollcost_name: str = "ROLLCOST",
 ) -> pd.DataFrame:
-
     pivot_returns, pivot_pos = _split_returns_positions_df(
         df_wide=df_wide, spos=spos, rstring=rstring
     )
-    rebal_dates = _get_rebal_dates(pivot_pos)
-    # Add last end date - as position taken on the last rebal date,
-    # is held until notional_positions data is available
-    _end = pd.Timestamp(pivot_pos.last_valid_index())
-    rebal_dates = sorted(set(rebal_dates + [_end]))
-    pos_cols = pivot_pos.columns.tolist()
-    tc_cols = [
-        f"{col}_{tc_name}_{cost_type}"
-        for col in pos_cols
-        for cost_type in [bidoffer_name, rollcost_name]
-    ]
-    # Create a dataframe to store the trading costs with all 0s
-    tc_df = pd.DataFrame(data=0.0, index=pivot_pos.index, columns=tc_cols)
+    # Per-contract first valid return date - no PnL can be earned before
+    # this, so no trading cost should book either. The pos-ticker keys are
+    # built from the returns-ticker columns via _replace_strs to mirror
+    # the rest of the module's suffix-swap convention. An entirely-NaN
+    # return series is rejected upstream in _split_returns_positions_df.
+    pos_keys = _replace_strs(pivot_returns.columns, rstring, f"_{spos}")
+    first_return = {
+        key: pivot_returns[col].first_valid_index()
+        for key, col in zip(pos_keys, pivot_returns.columns)
+    }
+    roll_dates = _generate_roll_dates(pivot_pos.index, roll_freq)
+    pivot_pos = _preprocess_positions_for_costs(pivot_pos)
+    pivot_pos = pivot_pos.sort_index()
 
     tickers = pivot_pos.columns.tolist()
+    tc_cols = [
+        f"{col}_{tc_name}_{cost}"
+        for col in tickers
+        for cost in (bidoffer_name, rollcost_name)
+    ]
+    tc_df = pd.DataFrame(data=0.0, index=pivot_pos.index, columns=tc_cols)
 
-    ## Taking the 1st position
-    ## Here, only the bidoffer is considered, as there is nothing to roll
-    first_pos = pivot_pos.loc[rebal_dates[0]]
+    # Trading costs decompose into two passes: bid-offer on every trade, and
+    # roll cost on the residual position carried across each roll date.
+
+    # Step 1: Bid-offer cost on the absolute change in position. Positions are
+    # flat between rebals, so non-zero deltas only occur on actual trades.
+    abs_position_change = pivot_pos.diff().abs()
     for ticker in tickers:
-        _fid = ticker.replace(f"_{spos}", "")
-        bidoffer = transaction_costs.bidoffer(
-            trade_size=first_pos[ticker],
-            fid=_fid,
-            real_date=rebal_dates[0],
-        )
-        # Add a 0 for rollcost
-        tc_df.loc[rebal_dates[0], f"{ticker}_{tc_name}_{rollcost_name}"] = 0
-        tc_df.loc[rebal_dates[0], f"{ticker}_{tc_name}_{bidoffer_name}"] = (
-            bidoffer / 100
-        )
+        fid = ticker.replace(f"_{spos}", "")
+        bo_col = f"{ticker}_{tc_name}_{bidoffer_name}"
+        traded = abs_position_change[ticker][abs_position_change[ticker] > 0]
+        for date, trade_size in traded.items():
+            bo_pct = transaction_costs.bidoffer(
+                trade_size=trade_size, fid=fid, real_date=date
+            )
+            tc_df.loc[date, bo_col] = trade_size * bo_pct / 100
 
-    for ix, (dt1, dt2) in enumerate(zip(rebal_dates[:-1], rebal_dates[1:])):
-        dt2x = dt2 - pd.offsets.BDay(1)
-        prev_pos, next_pos = pivot_pos.loc[dt1], pivot_pos.loc[dt2]
-        curr_pos = pivot_pos.loc[dt1:dt2x]
-        avg_pos: pd.Series = curr_pos.abs().mean(axis=0)
-        delta_pos = (next_pos - prev_pos).abs()
-        for ticker in tickers:
-            _fid = ticker.replace(f"_{spos}", "")
-            _rcn = f"{ticker}_{tc_name}_{rollcost_name}"
-            _bon = f"{ticker}_{tc_name}_{bidoffer_name}"
-            rollcost = transaction_costs.rollcost(
-                trade_size=avg_pos[ticker],
-                fid=_fid,
-                real_date=dt2,
+    # Step 2: Roll cost on the position held across each roll date.
+    # Charge min(abs(prev), abs(curr)) when the sign is unchanged from
+    # the previous trading day, else zero. shift(1) takes the prior
+    # business day's position.
+    pos_at_roll = pivot_pos.loc[roll_dates]
+    pos_before_roll = pivot_pos.shift(1).loc[roll_dates]
+
+    held_long = (pos_before_roll > 0) & (pos_at_roll > 0)
+    held_short = (pos_before_roll < 0) & (pos_at_roll < 0)
+    held_position = np.minimum(pos_at_roll.abs(), pos_before_roll.abs()).where(
+        held_long | held_short, 0.0
+    )
+    for ticker in tickers:
+        fid = ticker.replace(f"_{spos}", "")
+        rc_col = f"{ticker}_{tc_name}_{rollcost_name}"
+        rolled: pd.Series = held_position[ticker][held_position[ticker] > 0]
+        for date, roll_size in rolled.items():
+            rc_pct = transaction_costs.rollcost(
+                trade_size=roll_size, fid=fid, real_date=date
             )
-            bidoffer = transaction_costs.bidoffer(
-                trade_size=delta_pos[ticker],
-                fid=_fid,
-                real_date=dt2,
-            )
-            # delta_pos and avg_pos are already in absolute terms
-            tc_df.loc[dt2, _rcn] = avg_pos[ticker] * rollcost / 100
-            tc_df.loc[dt2, _bon] = delta_pos[ticker] * bidoffer / 100
+            tc_df.loc[date, rc_col] = roll_size * rc_pct / 100
+
+    # NaN-out per-contract costs before the first valid return date - no PnL
+    # is earned in that window, so no trading cost is applicable. Rows that
+    # end up all-NaN are dropped by the row-sum filter below.
+    for ticker in tickers:
+        cols = [
+            f"{ticker}_{tc_name}_{bidoffer_name}",
+            f"{ticker}_{tc_name}_{rollcost_name}",
+        ]
+        tc_df.loc[tc_df.index < first_return[ticker], cols] = np.nan
 
     # Sum TICKER_TCOST_BIDOFFER and TICKER_TCOST_ROLLCOST into TICKER_TCOST
     for ticker in tickers:
@@ -300,13 +354,10 @@ def _calculate_trading_costs(
             ]
         ].sum(axis=1)
 
-    # Drop rows with no trading costs
+    # Drop rows with no trading costs (also removes the synthetic anchor row)
+    # added to the positions df for the opening trade
     tc_df = tc_df.loc[tc_df.abs().sum(axis=1) > 0]
-
-    # check that remaining dates are part of rebal_dates
-    assert set(tc_df.index) <= set(rebal_dates)
     assert not (tc_df < 0).any().any()
-
     return tc_df
 
 
@@ -376,13 +427,13 @@ def _portfolio_sums(
     # Sum the trading costs
     glb_tcosts = df_outs["tc_wide"].loc[:, tcs_list].sum(axis=1, skipna=True)
 
-    df_outs["pnl_incl_costs"].loc[
-        :, f"{portfolio_name}_{spos}_{pnl_name}"
-    ] = glb_pnl_incl_costs
+    df_outs["pnl_incl_costs"].loc[:, f"{portfolio_name}_{spos}_{pnl_name}"] = (
+        glb_pnl_incl_costs
+    )
 
-    df_outs["pnl_excl_costs"].loc[
-        :, f"{portfolio_name}_{spos}_{pnle_name}"
-    ] = glb_pnl_excl_costs
+    df_outs["pnl_excl_costs"].loc[:, f"{portfolio_name}_{spos}_{pnle_name}"] = (
+        glb_pnl_excl_costs
+    )
 
     df_outs["tc_wide"].loc[:, f"{portfolio_name}_{spos}_{tc_name}"] = glb_tcosts
 
@@ -396,7 +447,7 @@ def proxy_pnl_calc(
     transaction_costs_object: Optional[
         Union[TransactionCosts, TransactionCostsDictAdapter, Dict]
     ],
-    roll_freqs: Optional[Dict] = None,
+    roll_freq: Optional[Union[str, Dict]] = None,
     start: Optional[str] = None,
     end: Optional[str] = None,
     blacklist: Optional[Dict] = None,
@@ -433,11 +484,10 @@ def proxy_pnl_calc(
         not want to use transaction costs, the function can be called with
         `transaction_costs_object=None`. Users can alternatively pass a dictionary of
         static cost parameters, which will be adapted to the TransactionCosts interface.
-    roll_freqs : dict
-        dictionary of roll frequencies for each contract type. This must use the
-        contract types as keys and frequency string ("w", "m", or "q") as values. The
-        default frequency for all contracts not in the dictionary is "m" for monthly.
-        Default is None: all contracts are rolled monthly.
+    roll_freq : str or None
+        roll frequency string ("D", "W", "M" or "Q"). `None` defaults to "M".
+        Per-fid dict form is reserved for a future release. Should be chosen
+        consistently with the `rebal_freq` passed to `notional_positions`.
     start : str
         the start date of the data. Default is None, which means that the start date is
         taken from the dataframe.
@@ -474,6 +524,19 @@ def proxy_pnl_calc(
     with the slope determined by the normal and large positions, if all relevant series
     are applied.
 
+    Bid-offer costs are charged on the absolute change in position from one
+    business day to the next, i.e. `abs(position[t] - position[t-1])`. Since
+    positions are flat between rebalance dates, non-zero deltas only occur
+    on actual rebalance dates.
+
+    Roll costs are charged only on the roll schedule and only on the held
+    portion of the position - the part that carries across the roll without
+    changing sign. Concretely, on each roll date the held size is
+    `min(abs(position_before_roll), abs(position_at_roll))` when both have
+    the same sign, and zero on opens, closures, or sign flips. The roll
+    schedule is derived from `roll_freq` via `get_eops` and intersected
+    with the position-panel index.
+
     Returns
     -------
     Union[QuantamentalDataFrame, Tuple[QuantamentalDataFrame, ...]
@@ -490,7 +553,7 @@ def proxy_pnl_calc(
             "transaction_costs",
             (TransactionCosts, TransactionCostsDictAdapter, dict, type(None)),
         ),
-        (roll_freqs, "roll_freqs", (dict, type(None))),
+        (roll_freq, "roll_freq", (str, dict, type(None))),
         (start, "start", (str, type(None))),
         (end, "end", (str, type(None))),
         (blacklist, "blacklist", (dict, type(None))),
@@ -509,10 +572,13 @@ def proxy_pnl_calc(
         concat_dfs = False
         warnings.warn(warn_str)
 
-    if roll_freqs is not None:
+    if isinstance(roll_freq, dict):
         raise NotImplementedError(
-            "Functionality to support `roll_freqs` is not yet implemented."
+            "Per-fid `roll_freq` (dict form) is not yet implemented; pass a single "
+            "frequency string or None."
         )
+    if roll_freq is None:
+        roll_freq = "M"
 
     df = QuantamentalDataFrame(df)
     _initialized_as_categorical: bool = df.InitializedAsCategorical
@@ -564,6 +630,7 @@ def proxy_pnl_calc(
             rstring=rstring,
             transaction_costs=transaction_costs_object,
             tc_name=tc_name,
+            roll_freq=roll_freq,
         )
 
         df_outs["pnl_incl_costs"] = _apply_trading_costs(
@@ -694,7 +761,6 @@ def plot_pnl(
 
 if __name__ == "__main__":
     import os
-
     import pickle
 
     cids_dmca = ["AUD", "CAD", "CHF", "EUR", "GBP", "JPY", "NOK", "NZD", "SEK", "USD"]
@@ -739,11 +805,25 @@ if __name__ == "__main__":
         row = tx.get_costs(fid=fid, real_date=cost_date)
         if row is None:
             raise ValueError(f"Missing transaction costs for {fid}")
+        size = {
+            "median": row[f"{fid}SIZE_MEDIAN"],
+            "pct90": row[f"{fid}SIZE_90PCTL"],
+        }
         cost_dict[fid] = {
-            "median_cost": row[f"{fid}BIDOFFER_MEDIAN"],
-            "median_size": row[f"{fid}SIZE_MEDIAN"],
-            "pct90_cost": row[f"{fid}BIDOFFER_90PCTL"],
-            "pct90_size": row[f"{fid}SIZE_90PCTL"],
+            "bid_offer": {
+                "size": dict(size),
+                "cost": {
+                    "median": row[f"{fid}BIDOFFER_MEDIAN"],
+                    "pct90": row[f"{fid}BIDOFFER_90PCTL"],
+                },
+            },
+            "rollcost": {
+                "size": dict(size),
+                "cost": {
+                    "median": row[f"{fid}ROLLCOST_MEDIAN"],
+                    "pct90": row[f"{fid}ROLLCOST_90PCTL"],
+                },
+            },
         }
 
     df_all_dict = proxy_pnl_calc(

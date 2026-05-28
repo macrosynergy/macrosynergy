@@ -16,6 +16,7 @@ from macrosynergy.download.transaction_costs import (
     AVAILABLE_STATS,
     AVAILABLE_CTYPES,
     AVAILABLE_CATS,
+    download_transaction_costs,
 )
 from macrosynergy.pnl.transaction_costs import (
     get_fids,
@@ -457,76 +458,208 @@ class TestTransactionCosts(unittest.TestCase):
         matplotlib.use(curr_backend)
 
 
+class TestDownloadTransactionCosts(unittest.TestCase):
+    def setUp(self):
+        self.cids = ["USD", "EUR"]
+        self.tiks = [f"{c}_{k}" for c in self.cids for k in AVAILABLE_CATS]
+        self.qdf = make_tx_cost_df(tickers=self.tiks)
+        # Source-shape frame the downloader expects: ticker/real_date/value
+        self.source_df = self.qdf.assign(
+            ticker=self.qdf["cid"] + "_" + self.qdf["xcat"]
+        )[["real_date", "ticker", "value"]].reset_index(drop=True)
+        self.csv_text = self.source_df.to_csv(index=False)
+
+    def _assert_matches_source(self, dfd: pd.DataFrame):
+        self.assertIsInstance(dfd, QuantamentalDataFrame)
+        self.assertEqual(
+            set(dfd.columns), set(QuantamentalDataFrame.IndexCols + ["value"])
+        )
+        self.assertEqual(len(dfd), len(self.source_df))
+
+    def test_invalid_file_url(self):
+        with self.assertRaises(ValueError):
+            download_transaction_costs(file_url=None)
+        with self.assertRaises(ValueError):
+            download_transaction_costs(file_url=123)
+
+    def test_download_csv_auto_extension(self):
+        with unittest.mock.patch(
+            "macrosynergy.download.transaction_costs._request_wrapper",
+            return_value=self.csv_text,
+        ) as mock_req:
+            dfd = download_transaction_costs(file_url="http://example.com/data.csv")
+        mock_req.assert_called_once()
+        self._assert_matches_source(dfd)
+
+    def test_download_csv_explicit_format(self):
+        # URL extension does not match; explicit file_format forces CSV path
+        with unittest.mock.patch(
+            "macrosynergy.download.transaction_costs._request_wrapper",
+            return_value=self.csv_text,
+        ) as mock_req:
+            dfd = download_transaction_costs(
+                file_url="http://example.com/data", file_format="csv"
+            )
+        mock_req.assert_called_once()
+        self._assert_matches_source(dfd)
+
+    def test_download_parquet_auto_extension(self):
+        with unittest.mock.patch(
+            "macrosynergy.download.transaction_costs.pd.read_parquet",
+            return_value=self.source_df.copy(),
+        ) as mock_pq:
+            dfd = download_transaction_costs(file_url="http://example.com/data.parquet")
+        mock_pq.assert_called_once_with("http://example.com/data.parquet")
+        self._assert_matches_source(dfd)
+
+    def test_download_parquet_explicit_format(self):
+        with unittest.mock.patch(
+            "macrosynergy.download.transaction_costs.pd.read_parquet",
+            return_value=self.source_df.copy(),
+        ) as mock_pq:
+            dfd = download_transaction_costs(
+                file_url="http://example.com/data", file_format="parquet"
+            )
+        mock_pq.assert_called_once()
+        self._assert_matches_source(dfd)
+
+    def test_unsupported_file_format(self):
+        # auto + unrecognised extension should raise
+        with self.assertRaises(ValueError):
+            download_transaction_costs(file_url="http://example.com/data.json")
+        # explicit unsupported format should raise
+        with self.assertRaises(ValueError):
+            download_transaction_costs(
+                file_url="http://example.com/data.csv", file_format="json"
+            )
+
+    def test_kwargs_forwarded_to_request(self):
+        with unittest.mock.patch(
+            "macrosynergy.download.transaction_costs._request_wrapper",
+            return_value=self.csv_text,
+        ) as mock_req:
+            download_transaction_costs(
+                file_url="http://example.com/data.csv",
+                verify=False,
+                headers={"X-Test": "1"},
+            )
+        _, kwargs = mock_req.call_args
+        self.assertEqual(kwargs.get("verify"), False)
+        self.assertEqual(kwargs.get("headers"), {"X-Test": "1"})
+
+
+def _anchors(median: Number, pct90: Number) -> dict:
+    return {"median": median, "pct90": pct90}
+
+
+def _cost_entry(bid_offer, rollcost, size) -> dict:
+    """Nested adapter cost entry; each arg is a (median, pct90) tuple."""
+    return {
+        "bid_offer": {"size": _anchors(*size), "cost": _anchors(*bid_offer)},
+        "rollcost": {"size": _anchors(*size), "cost": _anchors(*rollcost)},
+    }
+
+
 class TestTransactionCostsDictAdapter(unittest.TestCase):
-    def test_adapter_costs(self):
+    def test_adapter_routes_cost_types_independently(self):
+        # The nested schema must route bid-offer and roll cost through their
+        # own anchors - the two methods return different values for the same
+        # fid and trade size when their cost anchors differ.
         cost_dict = {
-            "USD_FX": {
-                "median_cost": 0.2,
-                "median_size": 35,
-                "pct90_cost": 0.4,
-                "pct90_size": 90,
-            },
-            "EUR_FX": {
-                "median_cost": 0.1,
-                "median_size": 30,
-                "pct90_cost": 0.2,
-                "pct90_size": 80,
-            },
+            "USD_FX": _cost_entry(
+                bid_offer=(0.2, 0.4), rollcost=(0.05, 0.15), size=(35, 90)
+            ),
+            "EUR_FX": _cost_entry(
+                bid_offer=(0.1, 0.2), rollcost=(0.02, 0.08), size=(30, 80)
+            ),
         }
         adapter = TransactionCostsDictAdapter(
-            cost_dict=cost_dict,
-            fids=["USD_FX", "EUR_FX"],
+            cost_dict=cost_dict, fids=["USD_FX", "EUR_FX"]
         )
         trade_size = 50
-        expected = extrapolate_cost(
-            trade_size=trade_size,
-            median_size=cost_dict["USD_FX"]["median_size"],
-            median_cost=cost_dict["USD_FX"]["median_cost"],
-            pct90_size=cost_dict["USD_FX"]["pct90_size"],
-            pct90_cost=cost_dict["USD_FX"]["pct90_cost"],
-        )
-        self.assertAlmostEqual(
-            adapter.bidoffer("USD_FX", trade_size, "2020-01-01"), expected
-        )
-        self.assertAlmostEqual(
-            adapter.rollcost("USD_FX", trade_size, "2020-01-01"), expected
-        )
+        for fid in ("USD_FX", "EUR_FX"):
+            entry = cost_dict[fid]
+            exp_bo = extrapolate_cost(
+                trade_size=trade_size,
+                median_size=entry["bid_offer"]["size"]["median"],
+                median_cost=entry["bid_offer"]["cost"]["median"],
+                pct90_size=entry["bid_offer"]["size"]["pct90"],
+                pct90_cost=entry["bid_offer"]["cost"]["pct90"],
+            )
+            exp_ro = extrapolate_cost(
+                trade_size=trade_size,
+                median_size=entry["rollcost"]["size"]["median"],
+                median_cost=entry["rollcost"]["cost"]["median"],
+                pct90_size=entry["rollcost"]["size"]["pct90"],
+                pct90_cost=entry["rollcost"]["cost"]["pct90"],
+            )
+            self.assertAlmostEqual(adapter.bidoffer(fid, trade_size, "2020-01-01"), exp_bo)
+            self.assertAlmostEqual(adapter.rollcost(fid, trade_size, "2020-01-01"), exp_ro)
+            self.assertNotAlmostEqual(exp_bo, exp_ro)
 
     def test_adapter_missing_fid(self):
         cost_dict = {
-            "USD_FX": {
-                "median_cost": 0.2,
-                "median_size": 35,
-                "pct90_cost": 0.4,
-                "pct90_size": 90,
-            }
+            "USD_FX": _cost_entry(
+                bid_offer=(0.2, 0.4), rollcost=(0.1, 0.3), size=(35, 90)
+            )
         }
         with self.assertRaises(ValueError):
             TransactionCostsDictAdapter(cost_dict=cost_dict, fids=["USD_FX", "EUR_FX"])
+
+    def test_adapter_rejects_malformed_entries(self):
+        good = _cost_entry(bid_offer=(0.2, 0.4), rollcost=(0.1, 0.3), size=(35, 90))
+
+        # Missing a cost type
+        bad_missing_type = {"USD_FX": {"bid_offer": good["bid_offer"]}}
+        with self.assertRaises(ValueError):
+            TransactionCostsDictAdapter(cost_dict=bad_missing_type, fids=["USD_FX"])
+
+        # Missing a property (cost) under a cost type
+        bad_missing_prop = {
+            "USD_FX": {
+                "bid_offer": {"size": _anchors(35, 90)},
+                "rollcost": good["rollcost"],
+            }
+        }
+        with self.assertRaises(ValueError):
+            TransactionCostsDictAdapter(cost_dict=bad_missing_prop, fids=["USD_FX"])
+
+        # Missing an anchor under a property
+        bad_missing_anchor = {
+            "USD_FX": {
+                "bid_offer": {
+                    "size": {"median": 35},
+                    "cost": _anchors(0.2, 0.4),
+                },
+                "rollcost": good["rollcost"],
+            }
+        }
+        with self.assertRaises(ValueError):
+            TransactionCostsDictAdapter(cost_dict=bad_missing_anchor, fids=["USD_FX"])
 
     def test_adapter_matches_constant_series(self):
         np.random.seed(1)
         fids = ["USD_FX", "EUR_FX"]
         dates = pd.bdate_range(start="2022-01-03", end="2022-01-14")
-        cost_template = {
-            "median_cost": 0.2,
-            "median_size": 35,
-            "pct90_cost": 0.4,
-            "pct90_size": 90,
-        }
+        # Distinct bid-offer and roll-cost anchors so the comparison would
+        # fail if either method mis-routed.
+        bo_cost, ro_cost, size = (0.2, 0.4), (0.1, 0.3), (35, 90)
         df_const = pd.DataFrame(index=dates)
         for fid in fids:
-            df_const[f"{fid}BIDOFFER_MEDIAN"] = cost_template["median_cost"]
-            df_const[f"{fid}BIDOFFER_90PCTL"] = cost_template["pct90_cost"]
-            df_const[f"{fid}ROLLCOST_MEDIAN"] = cost_template["median_cost"]
-            df_const[f"{fid}ROLLCOST_90PCTL"] = cost_template["pct90_cost"]
-            df_const[f"{fid}SIZE_MEDIAN"] = cost_template["median_size"]
-            df_const[f"{fid}SIZE_90PCTL"] = cost_template["pct90_size"]
+            df_const[f"{fid}BIDOFFER_MEDIAN"] = bo_cost[0]
+            df_const[f"{fid}BIDOFFER_90PCTL"] = bo_cost[1]
+            df_const[f"{fid}ROLLCOST_MEDIAN"] = ro_cost[0]
+            df_const[f"{fid}ROLLCOST_90PCTL"] = ro_cost[1]
+            df_const[f"{fid}SIZE_MEDIAN"] = size[0]
+            df_const[f"{fid}SIZE_90PCTL"] = size[1]
         df_const.index.name = "real_date"
 
         qdf = QuantamentalDataFrame.from_wide(df_const)
         tc_obj = TransactionCosts(df=qdf, fids=fids)
-        cost_dict = {fid: dict(cost_template) for fid in fids}
+        cost_dict = {
+            fid: _cost_entry(bid_offer=bo_cost, rollcost=ro_cost, size=size)
+            for fid in fids
+        }
         tc_dict = TransactionCostsDictAdapter(cost_dict=cost_dict, fids=fids)
 
         trade_sizes = [5, 35, 50, 120]
