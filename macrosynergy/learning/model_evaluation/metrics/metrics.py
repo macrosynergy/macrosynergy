@@ -688,6 +688,12 @@ def panel_sharpe_stability_ratio(
 
     ts = portfolio_returns.groupby(level=1).mean().sort_index().dropna()
 
+    std = ts.std()
+    if len(ts) < 3 or std == 0 or np.isnan(std):
+        sharpe = 0.0
+    else:
+        sharpe = float(ts.mean() / std * np.sqrt(annualization_factor))
+
     val = sharpe_stability_ratio(
         ts,
         window=window,
@@ -695,7 +701,7 @@ def panel_sharpe_stability_ratio(
         min_periods=window,
     )
     if not np.isfinite(val):
-        return val
+        return sharpe
     return float(val)
 
 

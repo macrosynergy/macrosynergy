@@ -92,13 +92,7 @@ def sharpe_stability_ratio(
         return float("nan")
 
     L = window
-    if N < L + 1: # N <= L + 1:
-        min_obs = _min_p + L
-        warnings.warn(
-            f"Insufficient data: need at least {min_obs} observations "
-            f"(~{min_obs / annualization_factor:.1f} years); returning NaN.",
-            RuntimeWarning,
-        )
+    if N < L + 1:
         return float("nan")
 
     z_bar = float(np.mean(z))
