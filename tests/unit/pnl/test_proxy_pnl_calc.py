@@ -209,6 +209,22 @@ class TestHelperFunctions(unittest.TestCase):
             with self.assertRaises(ValueError):
                 _split_returns_positions_df(df_wide=test_df, rstring=rstring, spos=spos)
 
+    def test_split_returns_positions_df_rejects_all_nan_return(self):
+        # A return series with no valid data anywhere carries no PnL
+        # signal - the cost path's first-valid-return lookup would have
+        # no anchor, so this is rejected up front.
+        spos, rstring = "SNAME_POS", "RETURNS"
+        cids = ["USD", "EUR"]
+        idx = pd.bdate_range(start="2020-01-01", end="2020-02-01", name="real_date")
+        cols = [f"{c}_FX{rstring}" for c in cids] + [f"{c}_FX_{spos}" for c in cids]
+        df = pd.DataFrame(
+            data=np.random.randn(len(idx), len(cols)), index=idx, columns=cols
+        )
+        df[f"USD_FX{rstring}"] = np.nan  # entirely NaN return series
+        with self.assertRaises(ValueError) as cm:
+            _split_returns_positions_df(df_wide=df, rstring=rstring, spos=spos)
+        self.assertIn(f"USD_FX{rstring}", str(cm.exception))
+
     def test_get_rebal_dates(self):
         _freq = "BME" if PD_NEW_DATE_FREQ else "BM"
         rd_idx = pd.Series(
@@ -730,9 +746,9 @@ class TestCalculations(unittest.TestCase):
             :, f"{portfolio_name}_{self.spos}_{pnle_name}"
         ] = glb_pnl_excl_costs
 
-        expc_df_outs["tc_wide"].loc[
-            :, f"{portfolio_name}_{self.spos}_{tc_name}"
-        ] = glb_tcosts
+        expc_df_outs["tc_wide"].loc[:, f"{portfolio_name}_{self.spos}_{tc_name}"] = (
+            glb_tcosts
+        )
 
         for key in df_outs.keys():
             pd.testing.assert_frame_equal(df_outs[key], expc_df_outs[key])
@@ -974,6 +990,44 @@ class TestCalculations(unittest.TestCase):
         self.assertAlmostEqual(rc.iloc[1], 0.50, places=12)
         self.assertAlmostEqual(rc.iloc[2], 0.10, places=12)
         self.assertAlmostEqual(rc.iloc[3], 0.00, places=12)
+
+    def test_calculate_trading_costs_skips_dates_before_first_valid_return(self):
+        # A contract may have positions established before its returns
+        # series begins (e.g. late-start data). No PnL can accrue in that
+        # window, so no bid-offer or roll cost should book either.
+        #
+        # Fixture: position rebalances monthly Jan-Aug 2020 but the return
+        # series is NaN until 2020-05-01. Only charges on or after May 1
+        # should appear.
+        spos, rstring = "SNAME_POS", "RETURNS"
+        contracts = ["A_FID"]
+        idx = pd.bdate_range("2020-01-01", "2020-08-31", name="real_date")
+        rebal = _generate_roll_dates(idx, roll_freq="M")
+
+        pos = pd.Series(np.nan, index=idx, name=f"A_FID_{spos}")
+        pos.loc[rebal] = [10, 12, -5, 8, 8, 4, 3, 2]
+        pos = pos.ffill().fillna(0.0)
+        ret = pd.Series(np.nan, index=idx, name=f"A_FID{rstring}")
+        first_valid = pd.Timestamp("2020-05-01")
+        ret.loc[first_valid:] = 0.0
+        df_wide = pd.concat([pos.to_frame(), ret.to_frame()], axis=1)
+        df_wide.index.name = "real_date"
+
+        adapter = TransactionCostsDictAdapter(
+            cost_dict={"A_FID": flat_cost_entry()}, fids=contracts
+        )
+        tc_df = _calculate_trading_costs(
+            df_wide, spos, rstring, adapter, "TC", roll_freq="M"
+        )
+
+        bo = tc_df[f"A_FID_{spos}_TC_BIDOFFER"]
+        rc = tc_df[f"A_FID_{spos}_TC_ROLLCOST"]
+        self.assertTrue((bo[bo.index < first_valid] == 0).all())
+        self.assertTrue((rc[rc.index < first_valid] == 0).all())
+        # And at least one post-first-valid charge survives, so we haven't
+        # accidentally zeroed everything.
+        self.assertTrue((bo[bo.index >= first_valid] > 0).any())
+        self.assertTrue((rc[rc.index >= first_valid] > 0).any())
 
     def test_calculate_trading_costs_rejects_bad_last_row(self):
         # An all-zero (or all-NaN) latest position row leaves the cost
