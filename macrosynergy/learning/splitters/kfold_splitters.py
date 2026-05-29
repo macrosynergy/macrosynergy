@@ -271,8 +271,8 @@ if __name__ == "__main__":
     dfd = msm.reduce_df(df=dfd, cids=cids, xcats=xcats, blacklist=black)
 
     dfd = dfd.pivot(index=["cid", "real_date"], columns="xcat", values="value")
-    X = dfd.drop(columns=["XR"])
-    y = dfd["XR"]    
+    X = dfd.drop(columns=["XR", "CRY"])
+    y = dfd[["XR","CRY"]]    
 
     """ Single validation set example """
     splitter = RecencyKFoldPanelSplit(n_splits=1, n_periods=21*12)
