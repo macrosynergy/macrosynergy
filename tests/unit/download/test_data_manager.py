@@ -27,7 +27,7 @@ from macrosynergy.download.datastream.data_manager import (  # noqa: E402
     DatastreamDataManager,
     parse_list_name,
 )
-
+_USERNAME = "DS:ID"
 # ---------------------------------------------------------------------------
 # Shared test helpers
 # ---------------------------------------------------------------------------
@@ -71,8 +71,32 @@ def _timeseries_df(dates, instruments, fields):
     return pd.DataFrame(data, index=idx, columns=cols)
 
 
-def _usage_stats_df():
-    return pd.DataFrame({"Datatype": ["DS.USERSTATS"], "Value": ["100/500"]})
+def _usage_stats_df(datapoints=3004):
+    return pd.DataFrame(
+        {
+            "Dates": ["2026-06-02"] * 7,
+            "Instrument": ["STATS"] * 7,
+            "Datatype": [
+                "User",
+                "Hits",
+                "Requests",
+                "Datatypes",
+                "Datapoints",
+                "Start Date",
+                "End Date",
+            ],
+            "Value": [
+                _USERNAME,
+                "18",
+                "12",
+                "3004",
+                str(datapoints),
+                "2026-06-01",
+                "2026-06-30",
+            ],
+            "Currency": ["NA"] * 7,
+        }
+    )
 
 
 def _stats_calls(mock_ds):
@@ -126,29 +150,68 @@ class TestLogUsageStats(unittest.TestCase):
         mock_ds.get_data.assert_not_called()
 
     def test_calls_stats_endpoint_when_flag_true(self):
+        today = date(2026, 6, 2)
         mgr, mock_ds = _make_manager(
             get_data_return=_usage_stats_df(), show_usage_stats=True
         )
-        mgr._log_usage_stats()
+        with patch(
+            "macrosynergy.download.datastream.data_manager.date"
+        ) as mock_date:
+            mock_date.today.return_value = today
+            mgr._log_usage_stats()
         mock_ds.get_data.assert_called_once_with(
             tickers="STATS",
             fields=["DS.USERSTATS"],
             kind=0,
+            start="2026-06-02",
         )
 
-    def test_prints_when_flag_true(self):
-        mgr, mock_ds = _make_manager(
+    def test_prints_stats_output(self):
+        mgr, _ = _make_manager(
             get_data_return=_usage_stats_df(), show_usage_stats=True
         )
         with patch("builtins.print") as mock_print:
             mgr._log_usage_stats()
-        self.assertTrue(mock_print.called)
+        printed = "\n".join(str(c[0][0]) for c in mock_print.call_args_list)
+        self.assertIn("Hits", printed)
+        self.assertIn("Datapoints", printed)
+        self.assertIn("monthly quota", printed)
+
+    def test_user_row_not_printed(self):
+        mgr, _ = _make_manager(
+            get_data_return=_usage_stats_df(), show_usage_stats=True
+        )
+        with patch("builtins.print") as mock_print:
+            mgr._log_usage_stats()
+        printed = "\n".join(str(c[0][0]) for c in mock_print.call_args_list)
+        self.assertNotIn(_USERNAME, printed)
 
     def test_does_not_print_when_flag_false(self):
         mgr, _ = _make_manager(show_usage_stats=False)
         with patch("builtins.print") as mock_print:
             mgr._log_usage_stats()
         mock_print.assert_not_called()
+
+    def test_quota_warning_above_90_pct(self):
+        mgr, _ = _make_manager(
+            get_data_return=_usage_stats_df(datapoints=950_000),
+            show_usage_stats=True,
+        )
+        with patch("builtins.print") as mock_print:
+            mgr._log_usage_stats()
+        printed = "\n".join(str(c[0][0]) for c in mock_print.call_args_list)
+        self.assertIn("WARNING", printed)
+        self.assertIn("95.0%", printed)
+
+    def test_no_quota_warning_below_90_pct(self):
+        mgr, _ = _make_manager(
+            get_data_return=_usage_stats_df(datapoints=500_000),
+            show_usage_stats=True,
+        )
+        with patch("builtins.print") as mock_print:
+            mgr._log_usage_stats()
+        printed = "\n".join(str(c[0][0]) for c in mock_print.call_args_list)
+        self.assertNotIn("WARNING", printed)
 
     def test_api_exception_is_suppressed(self):
         mgr, mock_ds = _make_manager(show_usage_stats=True)
