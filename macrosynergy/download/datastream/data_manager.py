@@ -57,6 +57,7 @@ DSWS_KIND_TABULAR: int = 0
 MAX_INSTRUMENTS_PER_REQUEST: int = 50
 MAX_DATATYPES_PER_REQUEST: int = 50
 MAX_ITEMS_PER_REQUEST: int = 100
+MONTHLY_QUOTA_PER_USER: int = 1000000
 
 # ---------------------------------------------------------------------------
 # Default metadata fields
@@ -598,6 +599,7 @@ class DatastreamDataManager:
                 tickers="STATS",
                 fields=["DS.USERSTATS"],
                 kind=DSWS_KIND_TABULAR,
+                start=date.today().strftime("%Y-%m-%d"),
             )
         except Exception as exc:
             logger.warning("Could not fetch DSWS usage statistics: %s", exc)
@@ -607,9 +609,44 @@ class DatastreamDataManager:
             logger.warning("DSWS usage statistics request returned no data.")
             return
 
-        logger.info("DSWS usage statistics:\n%s", stats_df.to_string(index=False))
-        print("DSWS usage statistics (current month):")
-        print(stats_df.to_string(index=False))
+        row = lambda key: stats_df.loc[stats_df["Datatype"] == key, "Value"].iloc[0]
+        try:
+            start_date = row("Start Date")
+            end_date = row("End Date")
+            hits = int(row("Hits"))
+            requests = int(row("Requests"))
+            datatypes = int(row("Datatypes"))
+            datapoints = int(row("Datapoints"))
+        except Exception as exc:
+            logger.warning("Could not parse DSWS usage statistics: %s", exc)
+            return
+
+        pct = datapoints / MONTHLY_QUOTA_PER_USER * 100
+        sep = "-" * 44
+        lines = [
+            "",
+            "DSWS Usage Statistics",
+            f"  Period     : {start_date} to {end_date}",
+            sep,
+            f"  Hits       : {hits:>10,}",
+            f"  Requests   : {requests:>10,}",
+            f"  Datatypes  : {datatypes:>10,}",
+            f"  Datapoints : {datapoints:>10,}  ({pct:.1f}% of monthly quota)",
+            sep,
+        ]
+        output = "\n".join(lines)
+
+        logger.info(output)
+        print(output)
+
+        if pct >= 90:
+            warning = (
+                f"WARNING: DSWS datapoint usage is at {pct:.1f}% of the monthly "
+                f"quota ({datapoints:,} / {MONTHLY_QUOTA_PER_USER:,}). "
+                "Consider reducing requests to avoid hitting the limit."
+            )
+            logger.warning(warning)
+            print(warning)
 
     @staticmethod
     def _normalize_to_list(
