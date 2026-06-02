@@ -3,6 +3,8 @@ Implementation of the ProxyPnL class.
 """
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
+from matplotlib.figure import Figure
 from numbers import Number
 from typing import List, Union, Tuple, Optional, Dict
 
@@ -503,6 +505,511 @@ class ProxyPnL(object):
         summary_statistics.columns = dfw.columns
 
         return summary_statistics
+
+    def plot(
+        self,
+        cids: Optional[List[str]] = None,
+        start: Optional[str] = None,
+        end: Optional[str] = None,
+        mark_cost_events: bool = True,
+        cumsum: bool = True,
+        title: str = "ProxyPnL summary",
+        figsize: Tuple[float, float] = (16, 10),
+        return_fig: bool = False,
+        **kwargs,
+    ) -> Optional[Figure]:
+        """
+        Render a composite 2x2 summary of the proxy PnL run.
+
+        The method draws a single figure with four panels: contract signals
+        (top-left), notional positions with optional cost-event markers
+        (top-right), cumulative PnL excluding and including transaction costs
+        (bottom-left), and a transaction-cost timeline split by bid-offer and
+        roll cost (bottom-right). The method requires that `contract_signals`,
+        `notional_positions`, and `proxy_pnl_calc` have all been run; if any
+        of the underlying attributes are missing, a `RuntimeError` is raised
+        naming the step the user needs to run first.
+
+        Parameters
+        ----------
+        cids : List[str]
+            Contracts (cids) to include in the signals and positions panels.
+            If not provided, all contracts found in the positions frame are
+            shown. The PnL and costs panels always show the portfolio-level
+            aggregate and are not affected by this filter.
+        start : str
+            ISO-format lower bound applied to the time axis of every panel.
+            If not provided, no lower bound is applied.
+        end : str
+            ISO-format upper bound applied to the time axis of every panel.
+            If not provided, no upper bound is applied.
+        mark_cost_events : bool
+            If True, overlay markers on the positions panel at the dates on
+            which a bid-offer or roll-cost charge was incurred. Bid-offer
+            charges are drawn as upward triangles, roll-cost charges as open
+            rings, with marker area scaled by charge magnitude within each
+            cost type. Silently treated as False when no transaction costs
+            are available.
+        cumsum : bool
+            If True (default), the PnL panel plots the cumulative PnL series;
+            if False, the daily series is plotted instead.
+        title : str
+            Figure suptitle.
+        figsize : tuple
+            Figure size in inches, passed to `plt.subplots`.
+        return_fig : bool
+            If True, the `matplotlib.figure.Figure` is returned to the caller
+            after rendering. If False (default), the figure is shown and None
+            is returned.
+        kwargs
+            Additional keyword arguments forwarded to `plt.subplots`.
+
+        Returns
+        -------
+        Optional[matplotlib.figure.Figure]
+            The figure object if `return_fig` is True, otherwise None.
+        """
+        # Validate that the pipeline has been run end-to-end. Each missing
+        # attribute is mapped back to the method the user needs to call.
+        required = {
+            "cs_df": "contract_signals",
+            "npos_df": "notional_positions",
+            "proxy_pnl": "proxy_pnl_calc",
+            "pnl_excl_costs": "proxy_pnl_calc",
+            "txn_costs_df": "proxy_pnl_calc",
+        }
+        missing = [a for a in required if getattr(self, a, None) is None]
+        if missing:
+            steps = sorted({required[a] for a in missing})
+            steps_str = ", ".join(f"ProxyPnL.{s}" for s in steps)
+            raise RuntimeError(
+                f"Cannot plot: missing attribute(s) {missing}. "
+                f"Run {steps_str} first."
+            )
+
+        for arg, value in (("start", start), ("end", end)):
+            if value is not None and not is_valid_iso_date(value):
+                raise ValueError(f"Invalid {arg} date format: {value!r}")
+
+        # Determine which contracts to show in the per-contract panels. The
+        # portfolio aggregate row is dropped from the contract universe so
+        # the signals and positions panels only show real contracts.
+        pos_wide = QuantamentalDataFrame(self.npos_df).to_wide()
+        pos_suffix = f"_{self.sname}_{self.pname}"
+        pos_cols_all = [c for c in pos_wide.columns if c.endswith(pos_suffix)]
+        available_fids = [c[: -len(pos_suffix)] for c in pos_cols_all]
+        available_cids = sorted({fid.split("_", 1)[0] for fid in available_fids})
+        available_cids = [c for c in available_cids if c != self.portfolio_name]
+
+        if cids is not None:
+            plot_cids = [c for c in cids if c in available_cids]
+            if not plot_cids:
+                raise ValueError(
+                    f"None of {cids} found in positions. "
+                    f"Available contracts: {available_cids}"
+                )
+        else:
+            plot_cids = available_cids
+
+        # Time-window helper used by every panel so that all four panels share
+        # the same date filter without duplicating the slicing logic.
+        start_ts = pd.Timestamp(start) if start is not None else None
+        end_ts = pd.Timestamp(end) if end is not None else None
+
+        def _window(df):
+            if start_ts is not None:
+                df = df.loc[df.index >= start_ts]
+            if end_ts is not None:
+                df = df.loc[df.index <= end_ts]
+            return df
+
+        def _annotate_empty(ax, msg):
+            ax.text(
+                0.5,
+                0.5,
+                msg,
+                transform=ax.transAxes,
+                ha="center",
+                va="center",
+                fontsize=11,
+                color="gray",
+            )
+            ax.set_xticks([])
+            ax.set_yticks([])
+
+        # Determine whether transaction-cost data is actually available. An
+        # empty txn_costs_df means proxy_pnl_calc was run without a cost
+        # object; the cost panel renders an annotation and the PnL panel
+        # falls back to a single ex-costs line.
+        tc_available = (
+            isinstance(self.txn_costs_df, pd.DataFrame) and not self.txn_costs_df.empty
+        )
+
+        # Fixed colour palette (matches the diagnostic script in PROXY_PNL.md
+        # so the two figures are immediately recognisable as describing the
+        # same pipeline).
+        c_bo = "#1f77b4"
+        c_rc = "#d62728"
+        c_pnle = "#2ca02c"
+        c_pnl = "#9467bd"
+        c_glb = "#d62728"
+        c_cum = "#404040"
+
+        fig, axes = plt.subplots(
+            2, 2, figsize=figsize, constrained_layout=True, **kwargs
+        )
+        ax_sig, ax_pos, ax_pnl, ax_cost = (
+            axes[0, 0],
+            axes[0, 1],
+            axes[1, 0],
+            axes[1, 1],
+        )
+
+        # --- Top-left: contract signals --------------------------------------
+        cs_wide = QuantamentalDataFrame(self.cs_df).to_wide()
+        csig_suffix = f"_CSIG_{self.sname}"
+        sig_cols = [
+            c
+            for c in cs_wide.columns
+            if c.endswith(csig_suffix)
+            and any(c.startswith(f"{cid}_") for cid in plot_cids)
+        ]
+        sig_wide = _window(cs_wide[sig_cols]) if sig_cols else cs_wide.iloc[:0]
+
+        if sig_wide.empty or sig_wide.dropna(how="all").empty:
+            _annotate_empty(ax_sig, "No signal data in selected range")
+        else:
+            label_lines = len(sig_cols) <= 10
+            for col in sig_cols:
+                series = sig_wide[col].dropna()
+                if series.empty:
+                    continue
+                label = col[: -len(csig_suffix)] if label_lines else None
+                ax_sig.plot(series.index, series.values, lw=0.9, alpha=0.5, label=label)
+            if not label_lines:
+                ax_sig.text(
+                    0.99,
+                    0.97,
+                    f"{len(sig_cols)} contracts overlaid",
+                    transform=ax_sig.transAxes,
+                    ha="right",
+                    va="top",
+                    fontsize=9,
+                    color="gray",
+                )
+            elif sig_cols:
+                ax_sig.legend(fontsize="small", loc="best")
+        ax_sig.set_title("Contract signals")
+        ax_sig.set_ylabel("signal")
+        ax_sig.grid(alpha=0.3)
+
+        # --- Top-right: notional positions + cost-event markers --------------
+        pos_cols = [
+            c for c in pos_cols_all if any(c.startswith(f"{cid}_") for cid in plot_cids)
+        ]
+        pos_filtered = _window(pos_wide[pos_cols]) if pos_cols else pos_wide.iloc[:0]
+        pos_title = "Notional positions"
+        if mark_cost_events and tc_available:
+            pos_title = "Notional positions with cost events"
+
+        if pos_filtered.empty or pos_filtered.dropna(how="all").empty:
+            _annotate_empty(ax_pos, "No position data in selected range")
+        else:
+            label_lines = len(pos_cols) <= 10
+            for col in pos_cols:
+                series = pos_filtered[col].dropna()
+                if series.empty:
+                    continue
+                label = col[: -len(pos_suffix)] if label_lines else None
+                ax_pos.plot(
+                    series.index,
+                    series.values,
+                    drawstyle="steps-post",
+                    lw=0.9,
+                    alpha=0.5,
+                    label=label,
+                )
+
+            # GLB gross exposure: the sum of absolute positions across every
+            # contract in view. Drawn as a red dashed line to read against
+            # the muted per-contract step lines underneath.
+            gross = pos_filtered.abs().sum(axis=1, min_count=1).dropna()
+            if not gross.empty:
+                ax_pos.plot(
+                    gross.index,
+                    gross.values,
+                    color=c_glb,
+                    linestyle="--",
+                    lw=1.6,
+                    label="GLB gross exposure",
+                )
+
+            if mark_cost_events and tc_available:
+                tc_wide = QuantamentalDataFrame(self.txn_costs_df).to_wide()
+                bo_cols = [
+                    c
+                    for c in tc_wide.columns
+                    if c.endswith("_BIDOFFER")
+                    and any(c.startswith(f"{cid}_") for cid in plot_cids)
+                ]
+                rc_cols = [
+                    c
+                    for c in tc_wide.columns
+                    if c.endswith("_ROLLCOST")
+                    and any(c.startswith(f"{cid}_") for cid in plot_cids)
+                ]
+
+                def _scatter_events(cost_cols, suffix, **scatter_kwargs):
+                    if not cost_cols:
+                        return 0
+                    sub = _window(tc_wide[cost_cols])
+                    sub = sub.where(sub > 0)
+                    if sub.dropna(how="all").empty:
+                        return 0
+                    max_val = float(np.nanmax(sub.values))
+                    n_events = 0
+                    for cost_col in cost_cols:
+                        pos_col = cost_col[: -len(suffix)]
+                        if pos_col not in pos_filtered.columns:
+                            continue
+                        charges = sub[cost_col].dropna()
+                        if charges.empty:
+                            continue
+                        # Position level is taken from the contract's own step
+                        # line, ffilled across any non-trading dates so that
+                        # the marker sits on the line and not floating mid-axis.
+                        pos_at_charge = (
+                            pos_filtered[pos_col].reindex(charges.index).ffill()
+                        )
+                        valid = pos_at_charge.notna() & charges.notna()
+                        if not valid.any():
+                            continue
+                        sizes = 20 + 200 * (charges[valid].values / max_val)
+                        ax_pos.scatter(
+                            charges.index[valid],
+                            pos_at_charge[valid].values,
+                            s=sizes,
+                            **scatter_kwargs,
+                        )
+                        n_events += int(valid.sum())
+                    return n_events
+
+                n_bo = _scatter_events(
+                    bo_cols,
+                    "_TCOST_BIDOFFER",
+                    marker="^",
+                    color=c_bo,
+                    alpha=0.7,
+                    label=None,
+                )
+                n_rc = _scatter_events(
+                    rc_cols,
+                    "_TCOST_ROLLCOST",
+                    marker="o",
+                    facecolors="none",
+                    edgecolors=c_rc,
+                    lw=1.5,
+                    label=None,
+                )
+                if n_bo > 0:
+                    ax_pos.scatter(
+                        [],
+                        [],
+                        marker="^",
+                        color=c_bo,
+                        alpha=0.7,
+                        label=f"bid-offer events (n={n_bo})",
+                    )
+                if n_rc > 0:
+                    ax_pos.scatter(
+                        [],
+                        [],
+                        marker="o",
+                        facecolors="none",
+                        edgecolors=c_rc,
+                        lw=1.5,
+                        label=f"roll-cost events (n={n_rc})",
+                    )
+
+            if not label_lines:
+                ax_pos.text(
+                    0.99,
+                    0.97,
+                    f"{len(pos_cols)} contracts overlaid",
+                    transform=ax_pos.transAxes,
+                    ha="right",
+                    va="top",
+                    fontsize=9,
+                    color="gray",
+                )
+            ax_pos.legend(fontsize="small", loc="best")
+            ax_pos.axhline(0, color="gray", lw=0.5, ls=":")
+        ax_pos.set_title(pos_title)
+        ax_pos.set_ylabel("position (USD mn)")
+        ax_pos.grid(alpha=0.3)
+
+        # --- Bottom-left: cumulative PnL excluding and including costs -------
+        def _portfolio_series(qdf):
+            sub = qdf.loc[qdf["cid"].astype(str) == self.portfolio_name]
+            if sub.empty:
+                return pd.Series(dtype=float)
+            return (
+                sub.sort_values("real_date")
+                .set_index("real_date")["value"]
+                .astype(float)
+            )
+
+        pnl_excl_series = _window(_portfolio_series(self.pnl_excl_costs))
+        pnl_incl_series = _window(_portfolio_series(self.proxy_pnl)) if tc_available else pd.Series(dtype=float)
+
+        if pnl_excl_series.empty and pnl_incl_series.empty:
+            _annotate_empty(ax_pnl, "No PnL data in selected range")
+        else:
+            if cumsum:
+                pnl_excl_plot = pnl_excl_series.cumsum()
+                pnl_incl_plot = pnl_incl_series.cumsum() if not pnl_incl_series.empty else pnl_incl_series
+                ax_pnl.set_title("Cumulative PnL")
+            else:
+                pnl_excl_plot = pnl_excl_series
+                pnl_incl_plot = pnl_incl_series
+                ax_pnl.set_title("Daily PnL")
+
+            if not pnl_excl_plot.empty:
+                total_excl = float(pnl_excl_series.sum())
+                ax_pnl.plot(
+                    pnl_excl_plot.index,
+                    pnl_excl_plot.values,
+                    color=c_pnle,
+                    lw=1.6,
+                    label=f"PnL ex-costs ({total_excl:.2f} USD mn)",
+                )
+            if not pnl_incl_plot.empty:
+                total_incl = float(pnl_incl_series.sum())
+                ax_pnl.plot(
+                    pnl_incl_plot.index,
+                    pnl_incl_plot.values,
+                    color=c_pnl,
+                    lw=1.6,
+                    label=f"PnL incl-costs ({total_incl:.2f} USD mn)",
+                )
+                # Shade the cost-drag area: difference between ex- and
+                # incl-costs paths over the common date range.
+                common_idx = pnl_excl_plot.index.intersection(pnl_incl_plot.index)
+                if len(common_idx) > 0:
+                    total_drag = float(pnl_excl_series.sum() - pnl_incl_series.sum())
+                    ax_pnl.fill_between(
+                        common_idx,
+                        pnl_incl_plot.loc[common_idx].values,
+                        pnl_excl_plot.loc[common_idx].values,
+                        color=c_rc,
+                        alpha=0.15,
+                        label=f"cost drag ({total_drag:.2f} USD mn)",
+                    )
+            ax_pnl.axhline(0, color="gray", lw=0.5, ls=":")
+            ax_pnl.legend(fontsize="small", loc="best")
+        ax_pnl.set_ylabel("USD mn")
+        ax_pnl.grid(alpha=0.3)
+
+        # --- Bottom-right: per-event transaction-cost bars -------------------
+        if not tc_available:
+            _annotate_empty(ax_cost, "No transaction costs available")
+            ax_cost.set_title("Transaction costs")
+        else:
+            tc_wide = QuantamentalDataFrame(self.txn_costs_df).to_wide()
+            bo_total_cols = [
+                c
+                for c in tc_wide.columns
+                if c.endswith("_BIDOFFER")
+                and not c.startswith(f"{self.portfolio_name}_")
+            ]
+            rc_total_cols = [
+                c
+                for c in tc_wide.columns
+                if c.endswith("_ROLLCOST")
+                and not c.startswith(f"{self.portfolio_name}_")
+            ]
+            bo_daily = (
+                _window(tc_wide[bo_total_cols]).sum(axis=1)
+                if bo_total_cols
+                else pd.Series(dtype=float)
+            )
+            rc_daily = (
+                _window(tc_wide[rc_total_cols]).sum(axis=1)
+                if rc_total_cols
+                else pd.Series(dtype=float)
+            )
+            bo_daily = bo_daily.loc[bo_daily.abs() > 0]
+            rc_daily = rc_daily.loc[rc_daily.abs() > 0]
+
+            charge_dates = bo_daily.index.union(rc_daily.index).sort_values()
+            if len(charge_dates) == 0:
+                _annotate_empty(ax_cost, "No transaction costs in selected range")
+                ax_cost.set_title("Transaction costs")
+            else:
+                bo_at = bo_daily.reindex(charge_dates).fillna(0.0)
+                rc_at = rc_daily.reindex(charge_dates).fillna(0.0)
+
+                # Bar width on a date axis is in days. A width tied to the
+                # median spacing between charge dates keeps sparse months
+                # visible without overlapping dense ones.
+                if len(charge_dates) > 1:
+                    gaps = (
+                        np.diff(charge_dates.values)
+                        .astype("timedelta64[D]")
+                        .astype(int)
+                    )
+                    bar_width = max(2, int(np.median(gaps)))
+                else:
+                    bar_width = 2
+
+                total_bo = float(bo_at.sum())
+                total_rc = float(rc_at.sum())
+                ax_cost.bar(
+                    charge_dates,
+                    bo_at.values,
+                    width=bar_width,
+                    color=c_bo,
+                    label=f"bid-offer ({total_bo:.2f} USD mn)",
+                )
+                ax_cost.bar(
+                    charge_dates,
+                    rc_at.values,
+                    width=bar_width,
+                    bottom=bo_at.values,
+                    color=c_rc,
+                    label=f"roll cost ({total_rc:.2f} USD mn)",
+                )
+
+                cum_total = (bo_at + rc_at).cumsum()
+                ax_cost_twin = ax_cost.twinx()
+                ax_cost_twin.plot(
+                    cum_total.index,
+                    cum_total.values,
+                    color=c_cum,
+                    linestyle="--",
+                    lw=1.2,
+                    label=f"cumulative total ({cum_total.iloc[-1]:.2f} USD mn)",
+                )
+                ax_cost_twin.set_ylabel("cumulative cost (USD mn)")
+
+                handles_b, labels_b = ax_cost.get_legend_handles_labels()
+                handles_t, labels_t = ax_cost_twin.get_legend_handles_labels()
+                ax_cost.legend(
+                    handles_b + handles_t,
+                    labels_b + labels_t,
+                    fontsize="small",
+                    loc="upper left",
+                )
+                ax_cost.set_title("Transaction costs")
+        ax_cost.set_ylabel("daily cost (USD mn)")
+        ax_cost.grid(alpha=0.3)
+
+        fig.suptitle(title, fontsize=13, fontweight="bold")
+        plt.show()
+
+        if return_fig:
+            return fig
+        return None
 
     def plot_pnl(self, title: str = "Proxy PnL", cumsum: bool = True, **kwargs):
         """
