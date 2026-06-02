@@ -95,6 +95,9 @@ class DatastreamDataManager:
         DSWS child ID.  Used only when *connection* is ``None``.
     password : str, optional
         DSWS password.  Used only when *connection* is ``None``.
+    show_usage_stats : bool, optional
+        When ``True``, current-month DSWS usage statistics are fetched and
+        printed to stdout after every ``get_*`` call.  Defaults to ``False``.
 
     Raises
     ------
@@ -124,6 +127,7 @@ class DatastreamDataManager:
         connection: Optional[DatastreamConnection] = None,
         username: Optional[str] = None,
         password: Optional[str] = None,
+        show_usage_stats: bool = False,
     ) -> None:
         if connection is not None:
             self._connection = connection
@@ -139,11 +143,13 @@ class DatastreamDataManager:
                 "Provide either a DatastreamConnection object via 'connection', "
                 "or supply both 'username' and 'password'."
             )
+        self._show_usage_stats = show_usage_stats
 
     def get_constituents(
         self,
         index_code: str,
         date: Optional[Union[str, datetime]] = None,
+        identifier_field: str = "MNEM",
     ) -> List[str]:
         """Fetch the mnemonic codes for all constituents of a Datastream list.
 
@@ -158,6 +164,8 @@ class DatastreamDataManager:
         date : str or datetime, optional
             Point-in-time date for the constituent snapshot.  ``None`` (default)
             returns the current composition.
+        identifier_field : str, optional
+            The field name for the identifier column.  Defaults to ``"MNEM"`` for backward compatibility, although ``"DSCD"`` is more robust and immutable.
 
         Returns
         -------
@@ -181,7 +189,7 @@ class DatastreamDataManager:
         try:
             result = ds.get_data(
                 tickers=list_code,
-                fields=["MNEM"],
+                fields=[identifier_field],
                 start=start_date,
                 kind=DSWS_KIND_TABULAR,
             )
@@ -204,12 +212,12 @@ class DatastreamDataManager:
                 f"Datastream returned an error for list '{list_code}': {error_sample}"
             )
 
-        # Parse MNEM column — handle three possible shapes:
-        #   1. A 'MNEM' column with one mnemonic per row.
-        #   2. A single 'Value' column with one mnemonic per row.
-        #   3. A 'Value' cell containing comma-separated mnemonics.
-        if "MNEM" in result.columns:
-            raw_values = result["MNEM"].dropna().astype(str).tolist()
+        # Parse the specified identifier column — handle three possible shapes:
+        #   1. A column with one identifier per row.
+        #   2. A single 'Value' column with one identifier per row.
+        #   3. A 'Value' cell containing comma-separated identifiers.
+        if identifier_field in result.columns:
+            raw_values = result[identifier_field].dropna().astype(str).tolist()
         elif value_col:
             raw_values = result[value_col].dropna().astype(str).tolist()
         else:
@@ -228,6 +236,7 @@ class DatastreamDataManager:
             len(unique_sorted),
             list_code,
         )
+        self._log_usage_stats()
         return unique_sorted
 
     def get_metadata(
@@ -290,6 +299,7 @@ class DatastreamDataManager:
 
         if not frames:
             logger.warning("get_metadata returned no data for tickers=%s.", ticker_list)
+            self._log_usage_stats()
             return pd.DataFrame()
 
         result = pd.concat(frames, axis=0, ignore_index=True)
@@ -299,6 +309,7 @@ class DatastreamDataManager:
             len(ticker_list),
             len(field_list),
         )
+        self._log_usage_stats()
         return result
 
     def get_data(
@@ -376,6 +387,7 @@ class DatastreamDataManager:
 
         if not frames:
             logger.warning("get_data returned no data for tickers=%s.", ticker_list)
+            self._log_usage_stats()
             return pd.DataFrame()
 
         result = pd.concat(frames, axis=1)
@@ -387,6 +399,7 @@ class DatastreamDataManager:
             len(ticker_list),
             len(field_list),
         )
+        self._log_usage_stats()
         return result
 
     # ------------------------------------------------------------------
@@ -567,6 +580,36 @@ class DatastreamDataManager:
     # ------------------------------------------------------------------
     # Private / internal helpers
     # ------------------------------------------------------------------
+
+    def _log_usage_stats(self) -> None:
+        """Fetch and display current-month DSWS usage statistics.
+
+        Issues ``ds.get_data(tickers='STATS', fields=['DS.USERSTATS'], kind=0)``
+        and prints the result to stdout.  Any error is logged as a warning so
+        that the calling ``get_*`` method is never disrupted.
+
+        Only runs when ``show_usage_stats=True`` was passed at construction.
+        """
+        if not self._show_usage_stats:
+            return
+        try:
+            ds = self._connection.get_connection()
+            stats_df = ds.get_data(
+                tickers="STATS",
+                fields=["DS.USERSTATS"],
+                kind=DSWS_KIND_TABULAR,
+            )
+        except Exception as exc:
+            logger.warning("Could not fetch DSWS usage statistics: %s", exc)
+            return
+
+        if stats_df is None or stats_df.empty:
+            logger.warning("DSWS usage statistics request returned no data.")
+            return
+
+        logger.info("DSWS usage statistics:\n%s", stats_df.to_string(index=False))
+        print("DSWS usage statistics (current month):")
+        print(stats_df.to_string(index=False))
 
     @staticmethod
     def _normalize_to_list(
