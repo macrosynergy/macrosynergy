@@ -139,14 +139,23 @@ class TestInit(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# _log_usage_stats
+# log_usage_stats
 # ---------------------------------------------------------------------------
 
 
 class TestLogUsageStats(unittest.TestCase):
+    def test_callable_directly_without_flag(self):
+        mgr, mock_ds = _make_manager(
+            get_data_return=_usage_stats_df(), show_usage_stats=False
+        )
+        with patch("builtins.print") as mock_print:
+            mgr.log_usage_stats(force=True)
+        self.assertTrue(mock_print.called)
+        mock_ds.get_data.assert_called_once()
+
     def test_no_api_call_when_flag_false(self):
         mgr, mock_ds = _make_manager(show_usage_stats=False)
-        mgr._log_usage_stats()
+        mgr.log_usage_stats()
         mock_ds.get_data.assert_not_called()
 
     def test_calls_stats_endpoint_when_flag_true(self):
@@ -158,7 +167,7 @@ class TestLogUsageStats(unittest.TestCase):
             "macrosynergy.download.datastream.data_manager.date"
         ) as mock_date:
             mock_date.today.return_value = today
-            mgr._log_usage_stats()
+            mgr.log_usage_stats()
         mock_ds.get_data.assert_called_once_with(
             tickers="STATS",
             fields=["DS.USERSTATS"],
@@ -171,7 +180,7 @@ class TestLogUsageStats(unittest.TestCase):
             get_data_return=_usage_stats_df(), show_usage_stats=True
         )
         with patch("builtins.print") as mock_print:
-            mgr._log_usage_stats()
+            mgr.log_usage_stats()
         printed = "\n".join(str(c[0][0]) for c in mock_print.call_args_list)
         self.assertIn("Hits", printed)
         self.assertIn("Datapoints", printed)
@@ -182,14 +191,14 @@ class TestLogUsageStats(unittest.TestCase):
             get_data_return=_usage_stats_df(), show_usage_stats=True
         )
         with patch("builtins.print") as mock_print:
-            mgr._log_usage_stats()
+            mgr.log_usage_stats()
         printed = "\n".join(str(c[0][0]) for c in mock_print.call_args_list)
         self.assertNotIn(_USERNAME, printed)
 
     def test_does_not_print_when_flag_false(self):
         mgr, _ = _make_manager(show_usage_stats=False)
         with patch("builtins.print") as mock_print:
-            mgr._log_usage_stats()
+            mgr.log_usage_stats()
         mock_print.assert_not_called()
 
     def test_quota_warning_above_90_pct(self):
@@ -198,7 +207,7 @@ class TestLogUsageStats(unittest.TestCase):
             show_usage_stats=True,
         )
         with patch("builtins.print") as mock_print:
-            mgr._log_usage_stats()
+            mgr.log_usage_stats()
         printed = "\n".join(str(c[0][0]) for c in mock_print.call_args_list)
         self.assertIn("WARNING", printed)
         self.assertIn("95.0%", printed)
@@ -209,18 +218,18 @@ class TestLogUsageStats(unittest.TestCase):
             show_usage_stats=True,
         )
         with patch("builtins.print") as mock_print:
-            mgr._log_usage_stats()
+            mgr.log_usage_stats()
         printed = "\n".join(str(c[0][0]) for c in mock_print.call_args_list)
         self.assertNotIn("WARNING", printed)
 
     def test_api_exception_is_suppressed(self):
         mgr, mock_ds = _make_manager(show_usage_stats=True)
         mock_ds.get_data.side_effect = RuntimeError("network failure")
-        mgr._log_usage_stats()  # must not raise
+        mgr.log_usage_stats()  # must not raise
 
     def test_empty_stats_response_does_not_crash(self):
         mgr, _ = _make_manager(get_data_return=pd.DataFrame(), show_usage_stats=True)
-        mgr._log_usage_stats()  # must not raise
+        mgr.log_usage_stats()  # must not raise
 
 
 # ---------------------------------------------------------------------------

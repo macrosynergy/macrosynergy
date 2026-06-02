@@ -237,7 +237,7 @@ class DatastreamDataManager:
             len(unique_sorted),
             list_code,
         )
-        self._log_usage_stats()
+        self.log_usage_stats()
         return unique_sorted
 
     def get_metadata(
@@ -300,7 +300,7 @@ class DatastreamDataManager:
 
         if not frames:
             logger.warning("get_metadata returned no data for tickers=%s.", ticker_list)
-            self._log_usage_stats()
+            self.log_usage_stats()
             return pd.DataFrame()
 
         result = pd.concat(frames, axis=0, ignore_index=True)
@@ -310,7 +310,7 @@ class DatastreamDataManager:
             len(ticker_list),
             len(field_list),
         )
-        self._log_usage_stats()
+        self.log_usage_stats()
         return result
 
     def get_data(
@@ -388,7 +388,7 @@ class DatastreamDataManager:
 
         if not frames:
             logger.warning("get_data returned no data for tickers=%s.", ticker_list)
-            self._log_usage_stats()
+            self.log_usage_stats()
             return pd.DataFrame()
 
         result = pd.concat(frames, axis=1)
@@ -400,7 +400,7 @@ class DatastreamDataManager:
             len(ticker_list),
             len(field_list),
         )
-        self._log_usage_stats()
+        self.log_usage_stats()
         return result
 
     # ------------------------------------------------------------------
@@ -582,16 +582,23 @@ class DatastreamDataManager:
     # Private / internal helpers
     # ------------------------------------------------------------------
 
-    def _log_usage_stats(self) -> None:
+    def log_usage_stats(self, force: bool = False) -> None:
         """Fetch and display current-month DSWS usage statistics.
 
         Issues ``ds.get_data(tickers='STATS', fields=['DS.USERSTATS'], kind=0)``
         and prints the result to stdout.  Any error is logged as a warning so
         that the calling ``get_*`` method is never disrupted.
 
-        Only runs when ``show_usage_stats=True`` was passed at construction.
+        Can be called directly at any time by passing ``force=True``, regardless
+        of whether ``show_usage_stats`` was set at construction.
+
+        Parameters
+        ----------
+        force : bool, optional
+            When ``True``, fetch and display statistics even if
+            ``show_usage_stats=False``.  Defaults to ``False``.
         """
-        if not self._show_usage_stats:
+        if not self._show_usage_stats and not force:
             return
         try:
             ds = self._connection.get_connection()
