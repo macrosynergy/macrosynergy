@@ -1598,11 +1598,14 @@ def get_sops(
     )
 
 
-def concat_categorical(df1: pd.DataFrame, df2: pd.DataFrame) -> pd.DataFrame:
+def concat_categorical(
+    df1: Optional[pd.DataFrame],
+    df2: Optional[pd.DataFrame],
+    columns: Optional[str] = None,
+) -> pd.DataFrame:
     """
-    Concatenate two DataFrames with categorical columns.  The dtypes of the of the
-    second DataFrame will be cast to the dtypes of the first. The columns of the
-    DataFrames must be identical.
+    Concatenate two DataFrames with categorical columns.  The dtypes of the
+    second DataFrame will be cast to the dtypes of the first.
 
     Parameters
     ----------
@@ -1610,51 +1613,90 @@ def concat_categorical(df1: pd.DataFrame, df2: pd.DataFrame) -> pd.DataFrame:
         The first DataFrame.
     df2 : pd.DataFrame
         The second DataFrame.
+    columns : Optional[str], default None
+        Controls the output column set. When None, the two frames must have identical
+        columns. "outer" returns a union of both frames' columns (missing values
+        filled with NA), while inner returns only columns present in both frames. "left"
+        returns df1's columns while "right" returns df2's columns.
+
 
     Returns
     -------
     pd.DataFrame
-        The concatenated DataFrame with the same columns as the input.
+        The concatenated DataFrame with columns determined by the `columns argument`.
     """
+    # Input validation
+    for arg, val, types in [
+        ("df1", df1, (pd.DataFrame, type(None))),
+        ("df2", df2, (pd.DataFrame, type(None))),
+        ("columns", columns, (str, type(None))),
+    ]:
+        if not isinstance(val, types):
+            raise TypeError(f"{arg} must be of type {types}")
 
-    if not isinstance(df1, pd.DataFrame) or not isinstance(df2, pd.DataFrame):
-        raise TypeError("Both DataFrames must be pandas DataFrames.")
+    if df1 is None and df2 is None:
+        raise ValueError("df1 and df2 cannot both be None")
 
-    if not (set(df1.columns) == set(df2.columns)):
-        raise ValueError("The columns of the two DataFrames must be identical.")
+    valid_columns = {None, "outer", "inner", "left", "right"}
+    if columns not in valid_columns:
+        raise ValueError(f"columns must be one of {valid_columns}")
 
-    # Explicitly set or create categorical columns based on the data in model_df_long
-    for col in df1.select_dtypes(include="category").columns:
+    # Early return if either df is None
+    if df1 is None:
+        return df2
+
+    if df2 is None:
+        return df1
+
+    # Determine output columns
+    df1, df2 = df1.copy(), df2.copy()
+    cols1, cols2 = set(df1.columns), set(df2.columns)
+    shared_cols = cols1 & cols2
+
+    if columns is None:
+        if cols1 != cols2:
+            raise ValueError("The columns of the two DataFrames must be identical.")
+        out_cols = list(df1.columns)
+    elif columns == "outer":
+        out_cols = list(dict.fromkeys([*df1.columns, *df2.columns])) # keep order
+    elif columns == "inner":
+        out_cols = [c for c in df1.columns if c in cols2]
+        if not out_cols:
+            raise ValueError("The two DataFrames share no columns.")
+    elif columns == "left":
+        if not shared_cols:
+            return df1
+        out_cols = list(df1.columns)
+    else: # columns == "right"
+        if not shared_cols:
+            return df2
+        out_cols = list(df2.columns)
+
+    # Cast df2's shared columns to df1's dtypes
+    cat_cols = df1.select_dtypes(include="category").columns
+    non_cat_cols = set(df1.select_dtypes(exclude="category").columns)
+
+    shared_cat_cols = shared_cols.intersection(cat_cols)
+    for col in shared_cat_cols:
         df2[col] = df2[col].astype("category")
 
-    non_categorical_cols = df1.select_dtypes(exclude="category").columns
-    df2[non_categorical_cols] = df2[non_categorical_cols].astype(
-        df1[non_categorical_cols].dtypes.to_dict()
-    )
-    # If one DataFrame is None, return the other (if both are None, return None)
-    if df1.empty:
-        return df2.reset_index(drop=True) if df2 is not None else None
-    if df2 is None or df2.empty:
-        return df1.reset_index(drop=True)
-    categorical_cols = list(
-        set(df1.select_dtypes(include="category").columns).union(
-            df2.select_dtypes(include="category").columns
-        )
-    )
-    for col in categorical_cols:
-        # Find the combined categories from both DataFrames for the current column
-        combined_categories = pd.Categorical(
-            df1[col].cat.categories.union(df2[col].cat.categories)
+    shared_non_cat_cols = list(shared_cols.intersection(non_cat_cols))
+    if shared_non_cat_cols:
+        df2[shared_non_cat_cols] = df2[shared_non_cat_cols].astype(
+            df1[shared_non_cat_cols].dtypes.to_dict()
         )
 
-        # Re-assign the categorical column with the combined categories to both DataFrames
-        df1[col] = pd.Categorical(df1[col], categories=combined_categories)
-        df2[col] = pd.Categorical(df2[col], categories=combined_categories)
+    # Reconcile categories for shared categorical columns
+    for col in shared_cat_cols:
+        combined = df1[col].cat.categories.union(df2[col].cat.categories)
+        df1[col] = pd.Categorical(df1[col], categories=combined)
+        df2[col] = pd.Categorical(df2[col], categories=combined)
 
-    # Concatenate the two DataFrames and reset the index
-    concatenated_df = pd.concat([df1, df2], axis=0, ignore_index=True)
+    # Reindex columns and return concatenated
+    df1 = df1.reindex(columns=out_cols)
+    df2 = df2.reindex(columns=out_cols)
 
-    return concatenated_df
+    return pd.concat((df1, df2), axis=0, ignore_index=True)
 
 
 def _insert_as_categorical(df, column_name, category_name, column_idx):

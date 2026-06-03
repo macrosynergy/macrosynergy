@@ -2092,7 +2092,6 @@ class TestAll(unittest.TestCase):
     def test_valid_worker(self, search_type, n_iter, drop_nas):
         search_type = "grid"
         n_iter = None
-
         store_correlations = False
         # Check that the worker private method works as expected for a grid search
         outer_splitter = ExpandingIncrementPanelSplit(
@@ -2163,13 +2162,13 @@ class TestAll(unittest.TestCase):
             )
 
             model_choice_data = split_result["model_choice"]
-            self.assertIsInstance(model_choice_data, list)
-            self.assertIsInstance(model_choice_data[0], datetime.date)
-            self.assertIsInstance(model_choice_data[1], str)
-            self.assertTrue(model_choice_data[1] in ["linreg", "ridge"])
-            self.assertIsInstance(model_choice_data[2], float)
-            self.assertIsInstance(model_choice_data[3], dict)
-            self.assertIsInstance(model_choice_data[4], dict)
+            self.assertIsInstance(model_choice_data, dict)
+            self.assertIsInstance(model_choice_data["real_date"], datetime.date)
+            self.assertIsInstance(model_choice_data["model_type"], str)
+            self.assertTrue(model_choice_data["model_type"] in ["linreg", "ridge"])
+            self.assertIsInstance(model_choice_data["score"], float)
+            self.assertIsInstance(model_choice_data["hparams"], dict)
+            self.assertIsInstance(model_choice_data["additional_params"], dict)
 
             prediction_data = split_result["predictions"]
             self.assertIsInstance(prediction_data[0], pd.MultiIndex)
@@ -2183,13 +2182,15 @@ class TestAll(unittest.TestCase):
                 self.assertIsInstance(val, (np.float64, np.float32, float))  # float or int
 
             intercept_data = split_result["intercepts"]
-            self.assertIsInstance(intercept_data, list)
+            self.assertIsInstance(intercept_data, dict)
             self.assertTrue(
                 len(intercept_data) == 2
             )  # 1 intercept + 2 extra columns
-            self.assertIsInstance(intercept_data[0], datetime.date)
-            if intercept_data[1] is not None:
-                self.assertIsInstance(intercept_data[1], (np.float64, np.float32, float))
+            self.assertIsInstance(intercept_data["real_date"], datetime.date)
+            if intercept_data["intercepts"] is not None:
+                self.assertIsInstance(
+                    intercept_data["intercepts"], (np.float64, np.float32, float)
+                )
 
             ftr_selection_data = split_result["selected_ftrs"]
             self.assertIsInstance(ftr_selection_data, dict)
@@ -2256,13 +2257,13 @@ class TestAll(unittest.TestCase):
             )
 
             model_choice_data = split_result["model_choice"]
-            self.assertIsInstance(model_choice_data, list)
-            self.assertIsInstance(model_choice_data[0], datetime.date)
-            self.assertIsInstance(model_choice_data[1], str)
-            self.assertTrue(model_choice_data[1] in ["linreg"])
-            self.assertIsInstance(model_choice_data[2], float)
-            self.assertIsInstance(model_choice_data[3], dict)
-            self.assertIsInstance(model_choice_data[4], dict)
+            self.assertIsInstance(model_choice_data, dict)
+            self.assertIsInstance(model_choice_data["real_date"], datetime.date)
+            self.assertIsInstance(model_choice_data["model_type"], str)
+            self.assertTrue(model_choice_data["model_type"] in ["linreg"])
+            self.assertIsInstance(model_choice_data["score"], float)
+            self.assertIsInstance(model_choice_data["hparams"], dict)
+            self.assertIsInstance(model_choice_data["additional_params"], dict)
 
             prediction_data = split_result["predictions"]
             self.assertIsInstance(prediction_data[0], pd.MultiIndex)
@@ -2276,13 +2277,11 @@ class TestAll(unittest.TestCase):
                 self.assertIsInstance(val, np.float32)
 
             intercept_data = split_result["intercepts"]
-            self.assertIsInstance(intercept_data, list)
-            self.assertTrue(
-                len(intercept_data) == 2
-            )  # 1 intercept + 2 extra columns
-            self.assertIsInstance(intercept_data[0], datetime.date)
-            if intercept_data[1] is not None:
-                self.assertIsInstance(intercept_data[1], np.float32)
+            self.assertIsInstance(intercept_data, dict)
+            self.assertTrue(len(intercept_data) == 2)  # 1 intercept + 2 extra columns
+            self.assertIsInstance(intercept_data["real_date"], datetime.date)
+            if intercept_data["intercepts"] is not None:
+                self.assertIsInstance(intercept_data["intercepts"], np.float32)
 
             ftr_selection_data = split_result["selected_ftrs"]
             self.assertIsInstance(ftr_selection_data, dict)
@@ -2790,13 +2789,13 @@ class TestAll(unittest.TestCase):
         selected_ftrs = so.get_selected_features(name="RF")
 
         self.assertIsInstance(selected_ftrs, pd.DataFrame)
-        self.assertEqual(selected_ftrs.shape[1], 5)
-        self.assertEqual(selected_ftrs.columns[0], "real_date")
-        self.assertEqual(selected_ftrs.columns[1], "name")
-        for i in range(2, 5):
-            self.assertEqual(selected_ftrs.columns[i], self.X.columns[i - 2])
+        self.assertEqual(selected_ftrs.shape[1], 4)
+        self.assertEqual(
+            selected_ftrs.columns.tolist(),
+            ["real_date", "name", "XR", "GROWTH"]
+        )
         assert selected_ftrs["XR"].eq(1).all()
-        assert selected_ftrs["CPI"].eq(0).all()
+        assert selected_ftrs["GROWTH"].eq(1).all()
 
 
 

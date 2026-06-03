@@ -6,6 +6,7 @@ import numbers
 import warnings
 from abc import ABC
 from functools import partial
+from typing import Optional, List
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -24,6 +25,7 @@ from macrosynergy.learning.splitters import (
 )
 from macrosynergy.management import categories_df
 from macrosynergy.management.types.qdf import QuantamentalDataFrame
+from macrosynergy.management.utils import _insert_as_categorical, concat_categorical
 
 
 class BasePanelLearner(ABC):
@@ -953,22 +955,23 @@ class BasePanelLearner(ABC):
             optimal_model_params = {}
             optimal_model_additional_data = {}
 
-        data = [
-            timestamp,
-            optimal_model_name,
-            optimal_model_score,
-            optimal_model_params,
-            optimal_model_additional_data,
-        ]
+        data = {
+            "real_date": timestamp,
+            "model_type": optimal_model_name,
+            "score": optimal_model_score,
+            "hparams": optimal_model_params,
+            "additional_params": optimal_model_additional_data,
+        }
 
         if inner_splitters_adj is not None:
             n_splits = {
                 splitter_name: splitter.n_splits
                 for splitter_name, splitter in inner_splitters_adj.items()
             }
-            data.append(n_splits)
         else:
-            data.append(0) # No splits were used because CV wasn't used
+            n_splits = 0 # No splits were used because CV wasn't used
+
+        data["n_splits_used"] = n_splits
 
         return {"model_choice": data}
 
@@ -1805,3 +1808,29 @@ class BasePanelLearner(ABC):
             df = getattr(self, attr, None)
             if df is not None and value in df[column].unique():
                 setattr(self, attr, df[df[column] != value])
+
+    @staticmethod
+    def _update_storage_df(
+        existing_df: Optional[pd.DataFrame],
+        results_df: pd.DataFrame,
+        name: Optional[str] = None,
+        drop_all_nan_cols: bool = False,
+    ) -> pd.DataFrame:
+        if name is not None and "name" not in results_df.columns:
+            results_df = _insert_as_categorical(
+                df=results_df,
+                column_name="name",
+                category_name=name,
+                column_idx=1,
+            )
+
+        out_df = concat_categorical(
+            df1=existing_df,
+            df2=results_df,
+            columns="outer",
+        )
+
+        if drop_all_nan_cols:
+            out_df = out_df.dropna(how="all", axis=1)
+
+        return out_df

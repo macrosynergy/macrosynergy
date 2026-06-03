@@ -16,7 +16,6 @@ from sklearn.pipeline import Pipeline
 
 from macrosynergy.learning import ExpandingIncrementPanelSplit
 from macrosynergy.learning.sequential import BasePanelLearner
-from macrosynergy.management.utils import concat_categorical, _insert_as_categorical
 from macrosynergy.management.types import QuantamentalDataFrame
 
 
@@ -410,83 +409,53 @@ class SignalOptimizer(BasePanelLearner):
                         (cross_section_key, slice(periods[0], periods[1])), :
                     ] = np.nan
 
+        # Update stored data
+        ## Prediction data
         forecasts_df.columns = forecasts_df.columns.astype("category")
-        forecasts_df_long = pd.melt(
-            frame=forecasts_df.reset_index(),
-            id_vars=["real_date", "cid"],
-            var_name="xcat",
-        )
-        self.preds = concat_categorical(
-            df1=self.preds,
-            df2=forecasts_df_long,
-        )
-
-        # Store model selection data
-        model_df_long = pd.DataFrame(
-            columns=[col for col in self.chosen_models.columns if col != "name"],
-            data=model_choice_data,
-        ).astype({"model_type": "category"})
-        model_df_long = _insert_as_categorical(model_df_long, "name", name, 1)
-
-        self.chosen_models = concat_categorical(
-            df1=self.chosen_models,
-            df2=model_df_long,
+        self.preds = self._update_storage_df(
+            existing_df=self.preds,
+            results_df=pd.melt(
+                frame=forecasts_df.reset_index(),
+                id_vars=["real_date", "cid"],
+                var_name="xcat",
+            ),
         )
 
-        # Store feature coefficients
-        ftr_importances_long = _insert_as_categorical(
-            df=pd.DataFrame.from_records(ftr_coef_data),
-            column_name="name",
-            category_name=name,
-            column_idx=1,
-        )
-        if isinstance(self.feature_importances, pd.DataFrame):
-            ftr_importances_long = pd.concat(
-                objs=(self.feature_importances, ftr_importances_long),
-                ignore_index=True,
-            )
-            self.feature_importances = ftr_importances_long[
-                ftr_importances_long.columns[~ftr_importances_long.isna().all()]
-            ]
-        else:
-            self.feature_importances = ftr_importances_long
-
-        # Store selected features
-        selected_ftrs_long = _insert_as_categorical(
-            df=pd.DataFrame.from_records(ftr_selection_data).fillna(0),
-            column_name="name",
-            category_name=name,
-            column_idx=1,
-        )
-        if isinstance(self.selected_ftrs, pd.DataFrame):
-            selected_ftrs_long = pd.concat(
-                objs=(self.selected_ftrs, selected_ftrs_long),
-                ignore_index=True,
-            )
-            self.selected_ftrs = selected_ftrs_long[
-                selected_ftrs_long.columns[~selected_ftrs_long.isna().all()]
-            ]
-        else:
-            self.selected_ftrs = selected_ftrs_long
-
-        # Store intercept
-        intercept_df_long = pd.DataFrame(
-            columns=[col for col in self.intercepts.columns if col != "name"],
-            data=intercept_data,
-        )
-        intercept_df_long = _insert_as_categorical(intercept_df_long, "name", name, 1)
-        self.intercepts = concat_categorical(
-            self.intercepts,
-            intercept_df_long,
+        ## Model selection data
+        self.chosen_models = self._update_storage_df(
+            existing_df=self.chosen_models,
+            results_df=pd.DataFrame(model_choice_data),
+            name=name,
         )
 
-        ftr_corr_df_long = pd.DataFrame(
-            columns=self.ftr_corr.columns, data=ftr_corr_data
+        ## Feature coefficients
+        self.feature_importances = self._update_storage_df(
+            existing_df=self.feature_importances,
+            results_df=pd.DataFrame(ftr_coef_data),
+            name=name,
+            drop_all_nan_cols=True,
         )
 
-        self.ftr_corr = concat_categorical(
-            self.ftr_corr,
-            ftr_corr_df_long,
+        ## Selected features
+        self.selected_ftrs = self._update_storage_df(
+            existing_df=self.selected_ftrs,
+            results_df=pd.DataFrame(ftr_selection_data).fillna(0),
+            name=name,
+            drop_all_nan_cols=True,
+        )
+
+        ## Intercepts
+        self.intercepts = self._update_storage_df(
+            existing_df=self.intercepts,
+            results_df=pd.DataFrame(intercept_data),
+            name=name,
+        )
+
+        ## Feature correlations
+        self.ftr_corr = self._update_storage_df(
+            existing_df=self.ftr_corr,
+            results_df=pd.DataFrame(ftr_corr_data, columns=self.ftr_corr.columns),
+            name=name,
         )
 
     def _check_duplicate_results(self, name):
@@ -581,18 +550,14 @@ class SignalOptimizer(BasePanelLearner):
         else:
             final_estimator = optimal_model
             feature_names = list(getattr(final_estimator, "feature_names_in_", []))
-
-
-        if not feature_names:
-            warnings.warn(
-                "There were no feature names when fitting the model. One "
-                "or more pipeline steps likely do not have the get_feature_names_out"
-                "method.",
-                UserWarning
-            )
+            if not feature_names:
+                warnings.warn(
+                    "There were no feature names when fitting the model.",
+                    UserWarning
+                )
 
         # Summarise feature importance
-        coefs = np.full(X_train.shape[1], np.nan)
+        coefs = np.full(len(feature_names), np.nan)
         coefs = getattr(final_estimator, "coef_", coefs)
         coefs = getattr(final_estimator, "feature_importances_", coefs)
 
@@ -628,7 +593,7 @@ class SignalOptimizer(BasePanelLearner):
         # Store data
         split_result = {
             "feature_importances": {"real_date": timestamp, **coef_ftr_map},
-            "intercepts": [timestamp, intercepts],
+            "intercepts": {"real_date": timestamp, "intercepts": intercepts},
             "selected_ftrs": {"real_date": timestamp, **selected_ftr_map},
             "predictions": prediction_data,
             "ftr_corr": ftr_corr_data,
@@ -785,9 +750,7 @@ class SignalOptimizer(BasePanelLearner):
                     )
 
             selected_ftrs = self.selected_ftrs[self.selected_ftrs.name.isin(name)]
-            selected_ftrs = selected_ftrs[
-                selected_ftrs.columns[~selected_ftrs.isna().all()]
-            ]
+            selected_ftrs = selected_ftrs.dropna(how="all", axis=1)
             return selected_ftrs
 
     def get_feature_importances(self, name=None):
@@ -838,9 +801,7 @@ class SignalOptimizer(BasePanelLearner):
             feature_importances = self.feature_importances[
                 self.feature_importances.name.isin(name)
             ].sort_values(by="real_date")
-            feature_importances = feature_importances[
-                feature_importances.columns[~feature_importances.isna().all()]
-            ]
+            feature_importances = feature_importances.dropna(how="all", axis=1)
 
             return feature_importances
 
@@ -1449,9 +1410,7 @@ class SignalOptimizer(BasePanelLearner):
         # Checks
         if not isinstance(name, str):
             raise TypeError("The pipeline name must be a string.")
-
         ftrcoef_df = self.get_feature_importances(name)
-
         if ftrcoef_df.iloc[:, 2:].isna().all().all():
             raise ValueError(
                 f"""There are no non-NA feature importances for the pipeline {name}.
@@ -1676,9 +1635,7 @@ class SignalOptimizer(BasePanelLearner):
         # Checks
         if not isinstance(name, str):
             raise TypeError("The pipeline name must be a string.")
-
         ftrcoef_df = self.get_feature_importances(name)
-
         if ftrcoef_df.iloc[:, 2:].isna().all().all():
             raise ValueError(
                 f"""There are no non-NA coefficients for the pipeline {name}.

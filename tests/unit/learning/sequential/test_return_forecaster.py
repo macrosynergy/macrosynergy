@@ -1287,7 +1287,9 @@ class TestReturnForecaster(unittest.TestCase):
         so_models_selected.iloc[:,1] = so_models_selected.iloc[:,1].str.split("_").str[1]
         rf_models_selected.iloc[:,1] = rf_models_selected.iloc[:,1].str.split("_").str[1]
 
-        np.testing.assert_array_equal(so_models_selected.values, rf_models_selected.values)
+        pd.testing.assert_frame_equal(
+            so_models_selected.reset_index(drop=True), rf_models_selected
+        )
 
         # Check that the predictions for each pipeline align
         so_preds = self.so.get_optimized_signals()[self.so.get_optimized_signals().real_date==pd.Timestamp(year=2020, month=11, day=30)].dropna()
@@ -1319,7 +1321,7 @@ class TestReturnForecaster(unittest.TestCase):
         so_fs.iloc[:,1] = so_fs.iloc[:,1].str.split("_").str[1]
         rf_fs.iloc[:,1] = rf_fs.iloc[:,1].str.split("_").str[1]
 
-        np.testing.assert_array_equal(so_fs.values, rf_fs.values)
+        np.testing.assert_array_equal(so_fs.fillna(0).values, rf_fs.fillna(0).values)
 
         # Check that the feature correlations are appropriately calculated
         so_corr = self.so.get_feature_correlations()[self.so.get_feature_correlations().real_date==pd.Timestamp(year=2020, month=11, day=30)]
@@ -1407,11 +1409,13 @@ class TestReturnForecaster(unittest.TestCase):
         """
         selected_ftrs = self.rf.get_selected_features()
         self.assertIsInstance(selected_ftrs, pd.DataFrame)
-        self.assertEqual(selected_ftrs.shape[1], 5)
+        self.assertEqual(selected_ftrs.shape[1], 7)
         self.assertEqual(selected_ftrs.columns[0], "real_date")
         self.assertEqual(selected_ftrs.columns[1], "name")
-        for i in range(2, 5):
-            self.assertEqual(selected_ftrs.columns[i], self.rf.X.columns[i - 2])
+        self.assertEqual(
+            selected_ftrs.columns[2:].tolist(),
+            [*self.rf.X.columns, "PCA 1", "PCA 2"]
+        )
         self.assertTrue(len(selected_ftrs) > 0)
         self.assertTrue(len(selected_ftrs) == len(self.pipelines))
 
@@ -1449,11 +1453,13 @@ class TestReturnForecaster(unittest.TestCase):
         """
         ftrs = self.rf.get_feature_importances()
         self.assertIsInstance(ftrs, pd.DataFrame)
-        self.assertEqual(ftrs.shape[1], 5)
+        self.assertEqual(ftrs.shape[1], 7)
         self.assertEqual(ftrs.columns[0], "real_date")
         self.assertEqual(ftrs.columns[1], "name")
-        for i in range(2, 5):
-            self.assertEqual(ftrs.columns[i], self.rf.X.columns[i - 2])
+        self.assertEqual(
+            ftrs.columns[2:].tolist(),
+            [*self.rf.X.columns, "PCA 1", "PCA 2"]
+        )
         self.assertTrue(len(ftrs) > 0)
         self.assertTrue(len(ftrs) == len(self.pipelines))
 
