@@ -18,7 +18,9 @@ import pandas as pd
 # ---------------------------------------------------------------------------
 sys.modules.setdefault("DatastreamPy", MagicMock())
 
-from macrosynergy.download.datastream.connection import DatastreamConnection  # noqa: E402
+from macrosynergy.download.datastream.connection import (
+    DatastreamConnection,
+)  # noqa: E402
 from macrosynergy.download.datastream.data_manager import (  # noqa: E402
     DEFAULT_STATIC_FIELDS,
     MAX_DATATYPES_PER_REQUEST,
@@ -27,6 +29,7 @@ from macrosynergy.download.datastream.data_manager import (  # noqa: E402
     DatastreamDataManager,
     parse_list_name,
 )
+
 _USERNAME = "DS:ID"
 # ---------------------------------------------------------------------------
 # Shared test helpers
@@ -101,7 +104,9 @@ def _usage_stats_df(datapoints=3004):
 
 def _stats_calls(mock_ds):
     """Return only the get_data calls that target the STATS ticker."""
-    return [c for c in mock_ds.get_data.call_args_list if c[1].get("tickers") == "STATS"]
+    return [
+        c for c in mock_ds.get_data.call_args_list if c[1].get("tickers") == "STATS"
+    ]
 
 
 # ---------------------------------------------------------------------------
@@ -163,9 +168,7 @@ class TestLogUsageStats(unittest.TestCase):
         mgr, mock_ds = _make_manager(
             get_data_return=_usage_stats_df(), show_usage_stats=True
         )
-        with patch(
-            "macrosynergy.download.datastream.data_manager.date"
-        ) as mock_date:
+        with patch("macrosynergy.download.datastream.data_manager.date") as mock_date:
             mock_date.today.return_value = today
             mgr.log_usage_stats()
         mock_ds.get_data.assert_called_once_with(
@@ -176,9 +179,7 @@ class TestLogUsageStats(unittest.TestCase):
         )
 
     def test_prints_stats_output(self):
-        mgr, _ = _make_manager(
-            get_data_return=_usage_stats_df(), show_usage_stats=True
-        )
+        mgr, _ = _make_manager(get_data_return=_usage_stats_df(), show_usage_stats=True)
         with patch("builtins.print") as mock_print:
             mgr.log_usage_stats()
         printed = "\n".join(str(c[0][0]) for c in mock_print.call_args_list)
@@ -187,9 +188,7 @@ class TestLogUsageStats(unittest.TestCase):
         self.assertIn("monthly quota", printed)
 
     def test_user_row_not_printed(self):
-        mgr, _ = _make_manager(
-            get_data_return=_usage_stats_df(), show_usage_stats=True
-        )
+        mgr, _ = _make_manager(get_data_return=_usage_stats_df(), show_usage_stats=True)
         with patch("builtins.print") as mock_print:
             mgr.log_usage_stats()
         printed = "\n".join(str(c[0][0]) for c in mock_print.call_args_list)
@@ -203,7 +202,7 @@ class TestLogUsageStats(unittest.TestCase):
 
     def test_quota_warning_above_90_pct(self):
         mgr, _ = _make_manager(
-            get_data_return=_usage_stats_df(datapoints=950_000),
+            get_data_return=_usage_stats_df(datapoints=9_500_000),
             show_usage_stats=True,
         )
         with patch("builtins.print") as mock_print:
@@ -331,7 +330,9 @@ class TestGetMetadata(unittest.TestCase):
         self.assertEqual(len(_stats_calls(mock_ds)), 0)
 
     def test_usage_stats_called_on_empty_response_when_flag_true(self):
-        mgr, mock_ds = _make_manager(get_data_return=pd.DataFrame(), show_usage_stats=True)
+        mgr, mock_ds = _make_manager(
+            get_data_return=pd.DataFrame(), show_usage_stats=True
+        )
         mgr.get_metadata(["VOD"], fields=["NAME"])
         self.assertEqual(len(_stats_calls(mock_ds)), 1)
 
@@ -386,7 +387,9 @@ class TestGetData(unittest.TestCase):
         self.assertEqual(len(_stats_calls(mock_ds)), 0)
 
     def test_usage_stats_called_on_empty_response_when_flag_true(self):
-        mgr, mock_ds = _make_manager(get_data_return=pd.DataFrame(), show_usage_stats=True)
+        mgr, mock_ds = _make_manager(
+            get_data_return=pd.DataFrame(), show_usage_stats=True
+        )
         mgr.get_data(["VOD"], fields=["P"])
         self.assertEqual(len(_stats_calls(mock_ds)), 1)
 
@@ -447,7 +450,8 @@ class TestFormatTickersArg(unittest.TestCase):
 
     def test_single_ticker_multi_field_wrapped(self):
         self.assertEqual(
-            DatastreamDataManager._format_tickers_arg(["VOD"], multi_field=True), "<VOD>"
+            DatastreamDataManager._format_tickers_arg(["VOD"], multi_field=True),
+            "<VOD>",
         )
 
     def test_multi_ticker_comma_joined(self):
@@ -523,9 +527,7 @@ class TestProcessMetadata(unittest.TestCase):
         self.assertEqual(result.index.name, "ticker")
 
     def test_empty_input_returns_empty(self):
-        self.assertTrue(
-            DatastreamDataManager.process_metadata(pd.DataFrame()).empty
-        )
+        self.assertTrue(DatastreamDataManager.process_metadata(pd.DataFrame()).empty)
 
     def test_error_rows_dropped(self):
         df = pd.DataFrame(
@@ -590,7 +592,9 @@ class TestProcessTimeseriesData(unittest.TestCase):
         self.assertEqual(dates, sorted(dates))
 
     def test_empty_input_returns_empty_dict(self):
-        self.assertEqual(DatastreamDataManager.process_timeseries_data(pd.DataFrame()), {})
+        self.assertEqual(
+            DatastreamDataManager.process_timeseries_data(pd.DataFrame()), {}
+        )
 
     def test_nan_values_dropped(self):
         idx = pd.DatetimeIndex(["2024-01-01", "2024-01-02"], name="Dates")
