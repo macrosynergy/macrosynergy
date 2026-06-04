@@ -404,6 +404,73 @@ class TestMisc(unittest.TestCase):
             self.assertTrue(result[dt].equals(expected_result[dt]))
 
 
+class TestGetFirstUsableDate(unittest.TestCase):
+    def setUp(self):
+        self.est_freqs = ["D"]
+        self.lback_periods = [15]
+        self.nan_tolerance = 0.1
+        self.rebal_freq = "M"
+        self.idx = pd.bdate_range(start="2010-01-01", end="2013-01-01")
+        self.rebal_dates = get_sops(dates=self.idx, freq=self.rebal_freq)
+        # mirrors the buffer derived inside `_get_first_usable_date`
+        self.max_lb = get_max_lookback(self.lback_periods[0], self.nan_tolerance)
+
+    def tearDown(self): ...
+
+    def _pivot(self, starts: Dict[str, str]) -> pd.DataFrame:
+        # build a wide panel of ones, NaN before each column's start date
+        df = pd.DataFrame(1.0, index=self.idx, columns=list(starts.keys()))
+        for col, start in starts.items():
+            df.loc[df.index < pd.Timestamp(start), col] = np.nan
+        return df
+
+    def _first_usable(
+        self, pivot_returns: pd.DataFrame, pivot_signals: pd.DataFrame
+    ) -> pd.Series:
+        return _get_first_usable_date(
+            pivot_returns=pivot_returns,
+            pivot_signals=pivot_signals,
+            rebal_dates=self.rebal_dates,
+            est_freqs=self.est_freqs,
+            lback_periods=self.lback_periods,
+            nan_tolerance=self.nan_tolerance,
+        )
+
+    def test_signal_start_is_not_buffered(self):
+        # EUR_EQ returns run from the start but its signal begins much later;
+        # USD_EQ has full history for both and acts as a control.
+        sig_start = "2011-06-01"
+        pivot_returns = self._pivot({"USD_EQ": "2010-01-01", "EUR_EQ": "2010-01-01"})
+        pivot_signals = self._pivot({"USD_EQ": "2010-01-01", "EUR_EQ": sig_start})
+
+        res = self._first_usable(pivot_returns, pivot_signals)
+
+        # the signal only needs to exist: EUR_EQ becomes usable on the first
+        # rebalance date on or after its signal start, with no `max_lb` buffer.
+        expected = self.rebal_dates[self.rebal_dates >= pd.Timestamp(sig_start)].min()
+        self.assertEqual(res["EUR_EQ"], expected)
+
+        # which is strictly earlier than the old, signal-buffered behaviour.
+        old_behaviour = self.rebal_dates[
+            self.rebal_dates >= pd.Timestamp(sig_start) + pd.offsets.BDay(self.max_lb)
+        ].min()
+        self.assertLess(res["EUR_EQ"], old_behaviour)
+
+    def test_return_start_keeps_buffer(self):
+        # when the signal is the longer series the contract must still wait for
+        # `max_lb` days of returns before it enters the covariance estimate.
+        ret_start = "2011-06-01"
+        pivot_returns = self._pivot({"USD_EQ": "2010-01-01", "EUR_EQ": ret_start})
+        pivot_signals = self._pivot({"USD_EQ": "2010-01-01", "EUR_EQ": "2010-01-01"})
+
+        res = self._first_usable(pivot_returns, pivot_signals)
+
+        expected = self.rebal_dates[
+            self.rebal_dates >= pd.Timestamp(ret_start) + pd.offsets.BDay(self.max_lb)
+        ].min()
+        self.assertEqual(res["EUR_EQ"], expected)
+
+
 class TestCalculatePortfolioVolatility(unittest.TestCase):
     def setUp(self):
         mkdf_args = dict(

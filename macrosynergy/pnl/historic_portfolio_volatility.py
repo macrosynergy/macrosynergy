@@ -270,6 +270,19 @@ def _get_first_usable_date(
     lback_periods: List[int],
     nan_tolerance: float,
 ) -> pd.Series:
+    """
+    Find the first rebalance date on which each contract can be positioned.
+
+    The variance-covariance estimate is built from returns only, so a contract
+    needs `max_lb` business days of return history before it enters the estimate.
+    The signal only needs to exist, since it is used for positioning rather than
+    for estimating volatility. The `max_lb` buffer is therefore applied to the
+    return start only, and the first usable date is the later of the buffered
+    return start and the first signal date. This stops a contract being held out
+    of the estimate after its signal has begun whenever the return history is the
+    longer of the two series, which would discard usable returns and destabilise
+    the early estimates.
+    """
     max_lb = 0
     # for each frequency and lookback
     for lb, est_freq in zip(lback_periods, est_freqs):
@@ -285,9 +298,10 @@ def _get_first_usable_date(
     pr_starts = {}
     ps_starts = {}
     for col in pivot_returns.columns.tolist():
-        # 'full' start date for returns - where the maximum lookback period is available
+        # returns are used to estimate volatility, so need `max_lb` days of history
         fstart_ret = pivot_returns[col].first_valid_index() + pd.offsets.BDay(max_lb)
-        fstart_sig = pivot_signals[col].first_valid_index() + pd.offsets.BDay(max_lb)
+        # the signal is only used for positioning, so it just needs to exist
+        fstart_sig = pivot_signals[col].first_valid_index()
         pr_starts[col] = rebal_dates[rebal_dates >= fstart_ret].min()
         ps_starts[col] = rebal_dates[rebal_dates >= fstart_sig].min()
 
