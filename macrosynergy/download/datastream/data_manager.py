@@ -57,7 +57,7 @@ DSWS_KIND_TABULAR: int = 0
 MAX_INSTRUMENTS_PER_REQUEST: int = 50
 MAX_DATATYPES_PER_REQUEST: int = 50
 MAX_ITEMS_PER_REQUEST: int = 100
-MONTHLY_QUOTA_PER_USER: int = 1000000
+MONTHLY_QUOTA_PER_USER: int = 10000000
 
 # ---------------------------------------------------------------------------
 # Default metadata fields
