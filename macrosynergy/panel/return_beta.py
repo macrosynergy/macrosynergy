@@ -62,7 +62,7 @@ def hedge_calculator(
     benchmark_return: pd.Series,
     rdates: List[pd.Timestamp],
     meth: str = "ols",
-    half_life: int = 21 * 12,
+    half_life: int = 11,
     min_obs: int = 24,
     max_obs: int = 1000,
 ) -> pd.DataFrame:
@@ -240,6 +240,7 @@ def return_beta(
     hedged_returns: bool = False,
     ratio_name: str = "_HR",
     hr_name: str = "H",
+    half_life: int = 11,
 ) -> QuantamentalDataFrame:
     """
     Estimate sensitivities (betas) of return category with respect to single return.
@@ -282,8 +283,8 @@ def return_beta(
         the maximum number of latest observations allowed in order to estimate a hedge
         ratio. The default value is 1000.
     meth : str
-        method used to estimate hedge ratio. At present the only method is OLS
-        regression ('ols').
+        method to estimate the hedge ratio. Valid options are ``'ols'`` for ordinary
+        least squares and ``'twls'`` for time-weighted least squares.
     hedged_returns : bool
         If True the function appends the hedged returns to the dataframe of hedge
         ratios. Default is False.
@@ -293,6 +294,9 @@ def return_beta(
     hr_name : str
         label used to distinguish the hedged returns in the DataFrame. The label is
         appended to the category being hedged. The default is "H".
+    half_life: int
+        half-life of the exponential decay function used to calculate the time weights
+        when ``meth='twls'``.
 
     Returns
     -------
@@ -403,6 +407,7 @@ def return_beta(
             benchmark_return=br,
             rdates=dates_re,
             meth=meth,
+            half_life=half_life,
             min_obs=min_obs,
             max_obs=max_obs,
         )
