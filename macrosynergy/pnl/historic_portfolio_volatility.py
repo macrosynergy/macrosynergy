@@ -296,20 +296,12 @@ def _get_first_usable_date(
 
     assert set(pivot_returns.columns.tolist()) == set(pivot_signals.columns.tolist())
     pr_starts = {}
-    ps_starts = {}
     for col in pivot_returns.columns.tolist():
-        # returns are used to estimate volatility, so need `max_lb` days of history
         fstart_ret = pivot_returns[col].first_valid_index() + pd.offsets.BDay(max_lb)
-        # the signal is only used for positioning, so it just needs to exist
-        fstart_sig = pivot_signals[col].first_valid_index()
         pr_starts[col] = rebal_dates[rebal_dates >= fstart_ret].min()
-        ps_starts[col] = rebal_dates[rebal_dates >= fstart_sig].min()
 
     # get the later of the two start dates and return
-    return pd.Series(
-        {k: max(pr_starts[k], ps_starts[k]) for k in pr_starts.keys()},
-        name="real_date",
-    )
+    return pd.Series(pr_starts, name="real_date")
 
 
 def _calculate_portfolio_volatility(
@@ -892,6 +884,14 @@ if __name__ == "__main__":
     # TODO simulate_returns_and_signals are risk-signals, not contract signals. We need to adjust for volatility and common (observed) factor.
     end = df["real_date"].max().strftime("%Y-%m-%d")
 
+    # Make the returns data start 5 years before the signals data by dropping
+    # the first 5 years of signal observations. The return history therefore
+    # leads the signals, exercising the returns-lead branch of
+    # `_get_first_usable_date`.
+    is_signal = df["xcat"].str.endswith("_CSIG_STRAT")
+    signals_start = pd.Timestamp(start) + pd.DateOffset(years=5)
+    df = df[~(is_signal & (df["real_date"] < signals_start))].reset_index(drop=True)
+
     df_copy = df.copy()  # TODO why copy?
 
     N_p_nans = 0.01
@@ -944,3 +944,45 @@ if __name__ == "__main__":
 
     # print(df_copy_vol.head(10))
     # print(df_copy_vol.tail(10))
+
+    ########################################
+
+    # Another identical call, but with the signals starting earlier than the
+    # returns. Here the first 5 years of return observations are dropped so the
+    # signal history leads the returns, exercising the signals-lead branch of
+    # `_get_first_usable_date`.
+    df_sig_lead = simulate_returns_and_signals(
+        cids=cids,
+        xcat=xcats[0],
+        return_suffix="XR",
+        signal_suffix="CSIG_STRAT",
+        start=start,
+        years=20,
+    )
+    end_sig_lead = df_sig_lead["real_date"].max().strftime("%Y-%m-%d")
+
+    is_signal = df_sig_lead["xcat"].str.endswith("_CSIG_STRAT")
+    returns_start = pd.Timestamp(start) + pd.DateOffset(years=5)
+    df_sig_lead = df_sig_lead[
+        ~(~is_signal & (df_sig_lead["real_date"] < returns_start))
+    ].reset_index(drop=True)
+
+    df_sig_lead["value"] = df_sig_lead["value"].apply(
+        lambda x: x if np.random.rand() > N_p_nans else np.nan
+    )
+
+    df_sig_lead_vol, vcv_sig_lead_df = historic_portfolio_vol(
+        df=df_sig_lead,
+        sname="STRAT",
+        fids=fids,
+        rebal_freq="m",
+        est_freqs=["D", "W", "M"],
+        est_weights=[0.1, 0.2, 0.7],
+        lback_periods=[30, 20, -1],
+        half_life=[10, 5, 2],
+        lback_meth="xma",
+        rstring="XR",
+        start=start,
+        end=end_sig_lead,
+        return_variance_covariance=True,
+    )
