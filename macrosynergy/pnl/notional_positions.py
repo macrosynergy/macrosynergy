@@ -103,6 +103,40 @@ def _check_df_for_contract_signals(
     return
 
 
+def _mask_unavailable_positions(
+    df_signals: pd.DataFrame,
+    vcv_df: pd.DataFrame,
+    sig_ident: str,
+) -> pd.DataFrame:
+    """
+    Blank out signals for contracts absent from that period's risk estimate.
+
+    A position may only be taken in a contract that entered the variance-
+    covariance estimate for its rebalance date. `vcv_df` records, per `real_date`,
+    the fids that did; any signal whose contract is absent from its date's estimate
+    is set to NaN so that no position is taken, keeping the positioned universe
+    identical to the one the portfolio volatility was estimated over.
+    """
+    available: pd.DataFrame = (
+        pd.concat(
+            [
+                vcv_df[["real_date", "fid1"]].rename(columns={"fid1": "fid"}),
+                vcv_df[["real_date", "fid2"]].rename(columns={"fid2": "fid"}),
+            ]
+        )
+        .drop_duplicates()
+        .assign(available=True)
+        .pivot(index="real_date", columns="fid", values="available")
+    )
+    available.columns = [f"{fid}{sig_ident}" for fid in available.columns]
+    available = (
+        available.reindex(index=df_signals.index, columns=df_signals.columns)
+        .fillna(False)
+        .astype(bool)
+    )
+    return df_signals.where(available)
+
+
 def _vol_target_positions(
     df_wide: pd.DataFrame,
     sname: str,
@@ -156,6 +190,10 @@ def _vol_target_positions(
 
     signal_columns: List[str] = [f"{contx:s}{sig_ident:s}" for contx in fids]
     df_signals: pd.DataFrame = df_wide.loc[histpvol.index, signal_columns]
+
+    # restrict positions to the contracts that entered each rebalance date's
+    # variance-covariance estimate, so the positioned and estimated universes match
+    df_signals = _mask_unavailable_positions(df_signals, vcv_df, sig_ident)
 
     out_df: pd.DataFrame = (
         histpvol[["scale"]].dot(np.ones(shape=(1, df_signals.shape[1]))).values

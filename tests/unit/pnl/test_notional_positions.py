@@ -1,34 +1,21 @@
 import unittest
+from typing import List, Set, Tuple
 from unittest import mock
+
 import numpy as np
 import pandas as pd
-from typing import List, Dict, Tuple, Union, Any, Set
-from numbers import Number
+
+from macrosynergy.management.simulate import make_test_df
+from macrosynergy.management.types import QuantamentalDataFrame
+from macrosynergy.management.utils import get_sops, qdf_to_ticker_df
+from macrosynergy.pnl.contract_signals import contract_signals
 from macrosynergy.pnl.notional_positions import (
-    notional_positions,
     _apply_slip,
     _check_df_for_contract_signals,
-    _vol_target_positions,
     _leverage_positions,
+    _mask_unavailable_positions,
+    _vol_target_positions,
     notional_positions,
-)
-from macrosynergy.pnl.historic_portfolio_volatility import (
-    historic_portfolio_vol,
-    RETURN_SERIES_XCAT,
-)
-from macrosynergy.pnl.contract_signals import contract_signals
-from macrosynergy.management.types import QuantamentalDataFrame
-from macrosynergy.management.simulate import make_test_df
-from macrosynergy.management.utils import (
-    is_valid_iso_date,
-    standardise_dataframe,
-    ticker_df_to_qdf,
-    get_sops,
-    qdf_to_ticker_df,
-    reduce_df,
-    update_df,
-    get_cid,
-    get_xcat,
 )
 
 
@@ -64,6 +51,64 @@ def mock_historic_portfolio_vol(
     vcv_df = pd.DataFrame(vcv_dict).T.reset_index()
     vcv_df.columns = ["real_date", "fid1", "fid2", "value"]
     return vol_df, vcv_df
+
+
+class TestMaskUnavailablePositions(unittest.TestCase):
+    def setUp(self) -> None:
+        self.sig_ident: str = "_CSIG_STRAT"
+        self.dates = pd.to_datetime(["2020-01-31", "2020-02-28", "2020-03-31"])
+        self.fids: List[str] = ["AUD_FX", "EUR_FX"]
+        self.signal_columns: List[str] = [f"{fid}{self.sig_ident}" for fid in self.fids]
+        self.df_signals = pd.DataFrame(
+            2.0, index=self.dates, columns=self.signal_columns
+        )
+
+    def tearDown(self) -> None: ...
+
+    def _vcv(self, rows: List[list]) -> pd.DataFrame:
+        return pd.DataFrame(rows, columns=["real_date", "fid1", "fid2", "value"])
+
+    def test_masks_fids_absent_from_vcv(self):
+        # AUD_FX is in the estimate on every date; EUR_FX only from the 2nd date.
+        rows = [[dt, "AUD_FX", "AUD_FX", 1.0] for dt in self.dates]
+        for dt in self.dates[1:]:
+            rows += [
+                [dt, "EUR_FX", "EUR_FX", 1.0],
+                [dt, "AUD_FX", "EUR_FX", 0.5],
+            ]
+        masked = _mask_unavailable_positions(
+            self.df_signals, self._vcv(rows), self.sig_ident
+        )
+
+        # AUD_FX positioned throughout; EUR_FX blanked on the first date only.
+        self.assertFalse(masked["AUD_FX_CSIG_STRAT"].isna().any())
+        self.assertTrue(np.isnan(masked.loc[self.dates[0], "EUR_FX_CSIG_STRAT"]))
+        self.assertFalse(masked.loc[self.dates[1:], "EUR_FX_CSIG_STRAT"].isna().any())
+
+    def test_fid_never_in_vcv_is_fully_masked(self):
+        # only AUD_FX ever appears - EUR_FX must be blanked on every date.
+        rows = [[dt, "AUD_FX", "AUD_FX", 1.0] for dt in self.dates]
+        masked = _mask_unavailable_positions(
+            self.df_signals, self._vcv(rows), self.sig_ident
+        )
+
+        self.assertFalse(masked["AUD_FX_CSIG_STRAT"].isna().any())
+        self.assertTrue(masked["EUR_FX_CSIG_STRAT"].isna().all())
+
+    def test_full_universe_is_unchanged(self):
+        # every contract present on every date - masking must be a no-op.
+        rows = []
+        for dt in self.dates:
+            rows += [
+                [dt, "AUD_FX", "AUD_FX", 1.0],
+                [dt, "EUR_FX", "EUR_FX", 1.0],
+                [dt, "AUD_FX", "EUR_FX", 0.5],
+            ]
+        masked = _mask_unavailable_positions(
+            self.df_signals, self._vcv(rows), self.sig_ident
+        )
+
+        pd.testing.assert_frame_equal(masked, self.df_signals)
 
 
 class TestNotionalPositions(unittest.TestCase):
