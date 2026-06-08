@@ -809,11 +809,11 @@ git commit -m "feat(signal): render raw SSR t-stat in secondary heatmap slot"
 
 ---
 
-## Task 7: Full regression + docstring + changelog
+## Task 7: Full regression + docstrings
 
 **Files:**
-- Modify: `single_statistic_table` docstring (document `stat="sharpe"`, `stat="ssr"`, `pval_stat="ssr"`, `sharpe_position`, the daily-PnL/252 convention, and the `type` restriction).
-- Modify: repo changelog / release notes if the repo keeps one (check `docs/` or `CHANGELOG`).
+- Modify: `single_statistic_table` and `show_single_statistic_table` docstrings (document `stat="sharpe"`, `stat="ssr"`, `pval_stat="ssr"`, `sharpe_position`, the daily-PnL/252 convention, and the `type` restriction). Also the `__init__` docstring for the new `sharpe_position` parameter.
+- **Do NOT touch any changelog/release-notes file.** This repo has no hand-maintained changelog: `docs/release_notes.py` regenerates `docs/source/release_notes.md` automatically from the GitHub Releases API (merged-PR titles). The practice is therefore: (a) keep conventional-commit subjects (`feat(signal): …`, already used throughout this plan), and (b) write a clear PR title/description — those become the release-note entry automatically. No manual changelog edit.
 
 - [ ] **Step 1: Update the docstrings**
 
