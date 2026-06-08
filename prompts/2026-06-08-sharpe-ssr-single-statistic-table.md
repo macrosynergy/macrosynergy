@@ -39,7 +39,9 @@ Read these before writing any code. The plan quotes them, but you must see them 
 
 These were decided with the requester; call them out explicitly in the PR description so the reviewer can confirm.
 
-1. **Position convention = `np.sign(signal)` (long/short ±1), default.** This mirrors the entire existing `SignalReturnRelations` philosophy (accuracy, AUC, precision all use `np.sign`) and needs no z-scoring/winsorization machinery (YAGNI). Expose it as a constructor/​method-level knob `sharpe_position: str = "sign"` with the only other accepted value `"raw"` (use the signal value itself as the position weight) so a reviewer can switch to magnitude-aware positions without a rewrite. **Recommendation: ship `"sign"` as default; document the trade-off (sign discards the cyclical-strength magnitude) in the docstring.**
+1. **Position convention = `np.sign(signal)` (long/short ±1), default — and per-signal configurable.** This mirrors the entire existing `SignalReturnRelations` philosophy (accuracy, AUC, precision all use `np.sign`) and needs no z-scoring/winsorization machinery (YAGNI). Expose `sharpe_position` as a constructor knob that accepts **either a scalar** (`"sign"` | `"raw"`, applied to all signals) **or a per-signal mapping** — a `dict {sig_name: "sign"|"raw"}` or a `list` aligned with `sigs`. Default `"sign"` for every signal. `"raw"` uses the signal value itself as the position weight (magnitude-aware). Internally normalize to `self._sharpe_position_map: Dict[str, str]`.
+
+   **Directional sign (which way a signal points) is NOT handled by `sharpe_position` — it is handled by the existing `sig_neg` constructor argument.** A `single_statistic_table` can contain multiple signals, some positively and some negatively related to returns. `sig_neg` (a bool or per-signal list, lines 250–287) negates a signal into a `{sig}_NEG` column **before** `self.original_df` is frozen at line 289. Because `_daily_strategy_returns` reads `[sig, ret]` from `original_df` using the post-negation names in `self.sigs`, the correct orientation is inherited **for free** — both `"sign"` and `"raw"` positions then simply go long the already-correctly-oriented signal. So: **switch a signal's sign at construction via `sig_neg`, not in the Sharpe position logic.** Document this clearly so users don't double-flip. **Recommendation: ship `"sign"` as default; document that `"raw"` keeps the cyclical-strength magnitude, and that mixed-direction tables are oriented through `sig_neg`.**
 2. **PnL is daily; rebalancing is at `freq`.** The Sharpe/SSR annualization factor is always **252** regardless of the rebalance frequency. `freq` only controls how often the position updates.
 3. **SSR is kept as a raw t-stat** in the bracketed slot — NOT converted to a probability. The display path must therefore skip the `1 - x` transform for "score-style" secondary stats and threshold the raw value (default highlight at **`1.96`** ≈ 95% confidence). A future probability transform (normal CDF) is explicitly out of scope.
 4. **Segment support:** `"sharpe"` and `"ssr"` support `type="panel"` (aggregate the daily strategy return across cids into one series) and `type="mean_cids"` (per-cid stat, then mean). For `type in {"mean_years","pr_years","pr_cids"}` they return `NaN` with a `warnings.warn` (a single year is too short for a 252-day rolling SSR, and a positive-ratio of a Sharpe is not meaningful). The headline use case (`cids=["GLB"]`, `type="panel"`) is fully covered.
@@ -144,13 +146,45 @@ def test_sharpe_ssr_registered(self):
     )
     self.assertIn("sharpe", sr.metrics)
     self.assertIn("ssr", sr.metrics)
-    self.assertEqual(sr.sharpe_position, "sign")
+    # Scalar default normalizes to a per-signal map of "sign".
+    self.assertEqual(sr._sharpe_position_map, {"CRY": "sign"})
     with self.assertRaises(ValueError):
         SignalReturnRelations(
             df=self.dfd, rets="XR", sigs="CRY", freqs="W",
             blacklist=self.blacklist, slip=1, sharpe_position="BOGUS",
         )
+
+def test_sharpe_position_per_signal(self):
+    # dict form (per-signal)
+    sr = SignalReturnRelations(
+        df=self.dfd, rets="XR", sigs=["CRY", "INFL"], freqs="W",
+        blacklist=self.blacklist, slip=1,
+        sharpe_position={"CRY": "raw", "INFL": "sign"},
+    )
+    self.assertEqual(sr._sharpe_position_map, {"CRY": "raw", "INFL": "sign"})
+    # list form (aligned with sigs)
+    sr2 = SignalReturnRelations(
+        df=self.dfd, rets="XR", sigs=["CRY", "INFL"], freqs="W",
+        blacklist=self.blacklist, slip=1,
+        sharpe_position=["raw", "sign"],
+    )
+    self.assertEqual(sr2._sharpe_position_map, {"CRY": "raw", "INFL": "sign"})
+    # bad value inside a container is rejected
+    with self.assertRaises(ValueError):
+        SignalReturnRelations(
+            df=self.dfd, rets="XR", sigs=["CRY", "INFL"], freqs="W",
+            blacklist=self.blacklist, slip=1,
+            sharpe_position={"CRY": "raw", "INFL": "BOGUS"},
+        )
+    # wrong-length list is rejected
+    with self.assertRaises(ValueError):
+        SignalReturnRelations(
+            df=self.dfd, rets="XR", sigs=["CRY", "INFL"], freqs="W",
+            blacklist=self.blacklist, slip=1, sharpe_position=["raw"],
+        )
 ```
+
+> **Note:** `_sharpe_position_map` is keyed by the **post-`sig_neg`** signal names (i.e. the entries in `self.sigs`, which may be `"CRY_NEG"`). Build it *after* the `sig_neg` negation block (after line 287) so a per-signal dict can be keyed by either the original or the negated name — resolve a `dict` against both `self.sigs` and the pre-negation names, falling back to `"sign"` for any signal not listed. Keep this resolution explicit and tested.
 
 - [ ] **Step 2: Run test to verify it fails**
 
@@ -159,12 +193,49 @@ Expected: FAIL — `"sharpe" not in sr.metrics` / unexpected `sharpe_position` k
 
 - [ ] **Step 3: Write minimal implementation**
 
-Add `sharpe_position: str = "sign"` to the `__init__` signature. Validate and store it near the other `__init__` validations:
+Add `sharpe_position: Union[str, list, dict] = "sign"` to the `__init__` signature. Normalize and validate it into a per-signal map **after** the `sig_neg` negation block (after line 287, where `self.sigs` holds the final, possibly-`_NEG` names):
 
 ```python
-if sharpe_position not in ("sign", "raw"):
-    raise ValueError("sharpe_position must be one of {'sign', 'raw'}.")
-self.sharpe_position = sharpe_position
+def _normalize_sharpe_position(self, sharpe_position, pre_neg_sigs):
+    """Normalize sharpe_position (scalar | list | dict) to a {sig: mode}
+    map keyed by the post-sig_neg signal names in self.sigs. ``pre_neg_sigs``
+    is the signal name list before negation, used to resolve dict keys given
+    in either the original or the _NEG form."""
+    valid = {"sign", "raw"}
+    if isinstance(sharpe_position, str):
+        if sharpe_position not in valid:
+            raise ValueError("sharpe_position must be one of {'sign', 'raw'}.")
+        return {s: sharpe_position for s in self.sigs}
+    if isinstance(sharpe_position, list):
+        if len(sharpe_position) != len(self.sigs):
+            raise ValueError(
+                "sharpe_position list must have one entry per signal "
+                f"({len(self.sigs)} expected, got {len(sharpe_position)})."
+            )
+        for v in sharpe_position:
+            if v not in valid:
+                raise ValueError("sharpe_position values must be 'sign' or 'raw'.")
+        return dict(zip(self.sigs, sharpe_position))
+    if isinstance(sharpe_position, dict):
+        out = {}
+        for final, orig in zip(self.sigs, pre_neg_sigs):
+            mode = sharpe_position.get(final, sharpe_position.get(orig, "sign"))
+            if mode not in valid:
+                raise ValueError("sharpe_position values must be 'sign' or 'raw'.")
+            out[final] = mode
+        return out
+    raise TypeError("sharpe_position must be a str, list, or dict.")
+```
+
+Then in `__init__` (after negation): capture the pre-negation names and store the map. Note `self.sigs` is *reassigned* to the negated names at line 287, so snapshot the originals first:
+
+```python
+# (immediately before the sig_neg negation loop, snapshot the originals)
+pre_neg_sigs = list(self.sigs)
+# ... existing negation loop that may append _NEG names and reassign self.sigs ...
+self._sharpe_position_map = self._normalize_sharpe_position(
+    sharpe_position, pre_neg_sigs
+)
 ```
 
 Extend the metrics list (after `"auc"`, before the `ms_panel_test`/`additional_metrics` blocks at lines 191–205):
@@ -226,7 +297,7 @@ This is the core new logic. It builds a **daily** strategy-return series for one
 **Algorithm (mirrors `make_pnl` minimal core):**
 1. `reduce_df(self.original_df, xcats=[sig, ret], cids=css_or_self.cids, start, end, blacklist)` then `apply_slip` on the **signal** xcat only (same as `manipulate_df` lines 759–765). Keep it **daily** (no `categories_df` freq resampling).
 2. Pivot long→wide per cid: a daily frame with columns `[sig, ret]` indexed by `(cid, real_date)`. Use the same `categories_df(...)` call as `manipulate_df` **but with `freq="D"` and `lag=0`** (we apply the 1-day signal lag ourselves to match `make_pnl`), or pivot directly with `pandas`. **Verify which is correct against `categories_df`'s lag semantics during implementation** — the invariant the test in Step 1 pins down is: position on day *t* uses signal observed on day *t−1*, held constant until the next rebalance date.
-3. Build the rebalancing input frame with columns `["real_date", "psig", "cid"]` where `psig` = the **1-day-lagged** signal position. Apply the position convention: `psig = np.sign(signal_lagged)` if `self.sharpe_position == "sign"` else `signal_lagged`.
+3. Build the rebalancing input frame with columns `["real_date", "psig", "cid"]` where `psig` = the **1-day-lagged** signal position. Apply the **per-signal** position convention: `mode = self._sharpe_position_map[sig]`; `psig = np.sign(signal_lagged)` if `mode == "sign"` else `signal_lagged`. (Directionality is already baked into `sig` via `sig_neg`, so no extra sign flip here.)
 4. `sig_series = NaivePnL.rebalancing(dfw, rebal_freq=self._freq_to_rebal_freq(freq), rebal_slip=0)` → daily held position.
 5. `daily_pnl_per_cid = held_position * daily_return` aligned on `(cid, real_date)`.
 6. Return a **dict `{cid: daily_return_series}`** (each a `pd.Series` indexed by `real_date`, NaNs dropped). The caller aggregates: `panel` → align and **sum across cids** into one series; `mean_cids` → keep per-cid.
@@ -307,9 +378,11 @@ def _daily_strategy_returns(self, ret: str, sig: str, freq: str,
         )
         if sig not in wide or ret not in wide:
             continue
-        # 1-day lag on the signal (no look-ahead), then position convention.
+        # 1-day lag on the signal (no look-ahead), then per-signal position
+        # convention. Directionality is already baked into `sig` via sig_neg.
         lagged = wide[sig].shift(1)
-        position = np.sign(lagged) if self.sharpe_position == "sign" else lagged
+        mode = self._sharpe_position_map.get(sig, "sign")
+        position = np.sign(lagged) if mode == "sign" else lagged
         dfw = pd.DataFrame({
             "real_date": wide.index,
             "psig": position.values,
@@ -322,7 +395,7 @@ def _daily_strategy_returns(self, ret: str, sig: str, freq: str,
     return out
 ```
 
-> **Implementation notes for the engineer:** (1) Confirm `reduce_df`, `apply_slip` are already imported in this module (they are — `manipulate_df` uses them). (2) `Dict` must be imported from `typing` (check the existing imports; add if missing). (3) `NaivePnL.rebalancing` mutates/returns a frame indexed by `real_date`; the `.reindex(wide.index)` realigns it to this cid's daily grid. Verify the returned Series column name is `"psig"` (it drops `"cid"`; if it returns a single-column frame, take that column). (4) Do **not** import `NaivePnL` at module top if it introduces a circular import — the local import inside the method avoids that risk; verify.
+> **Implementation notes for the engineer:** (1) Confirm `reduce_df`, `apply_slip` are already imported in this module (they are — `manipulate_df` uses them). (2) `Dict`/`Union` are already imported from `typing` (line 12) — no change needed. (3) `NaivePnL.rebalancing` mutates/returns a frame indexed by `real_date`; the `.reindex(wide.index)` realigns it to this cid's daily grid. Verify the returned Series column name is `"psig"` (it drops `"cid"`; if it returns a single-column frame, take that column). (4) Do **not** import `NaivePnL` at module top if it introduces a circular import — the local import inside the method avoids that risk; verify.
 
 - [ ] **Step 4: Run test to verify it passes**
 
@@ -705,4 +778,5 @@ _ = srr.single_statistic_table(
 2. **No look-ahead:** Task 3 test pins the 1-day lag.
 3. **Positional-slice safety:** Task 2 appends new metrics at the end; `pr_*` slices (lines 1181–1186) untouched.
 4. **No push:** confirm `git log origin/feature/srr-sharpe-ssr` does not exist; branch stays local pending review.
-5. **Open items flagged for reviewer:** position convention (`sign` vs `raw`); the `significance_threshold == 0.9` default-swap heuristic; whether to thread `freq` as a parameter vs `self._active_freq`. List these in the PR description.
+5. **Per-signal positions:** `sharpe_position` accepts scalar/list/dict, normalized to `_sharpe_position_map` keyed by post-`sig_neg` names; directionality flows through `sig_neg` (not the Sharpe logic). Tested in `test_sharpe_position_per_signal`.
+6. **Resolved defaults (confirmed with requester — note in PR, no longer open):** position default `"sign"`; `significance_threshold == 0.9` default-swap heuristic for score-style secondaries; `self._active_freq` threading. Mention them in the PR description for transparency but they need no further sign-off.
