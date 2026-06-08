@@ -52,7 +52,7 @@ These were decided with the requester; call them out explicitly in the PR descri
 
 | File | Change |
 | --- | --- |
-| `macrosynergy/signal/signal_return_relations.py` | Add `"sharpe"`, `"ssr"` to `self.metrics`; add `sharpe_position` knob; add private helpers `_freq_to_rebal_freq`, `_daily_strategy_returns`, `_score_style_secondary` set; add two `elif` branches in `calculate_single_stat`; generalize the secondary-stat display block + `_format_dual_annot` call. |
+| `macrosynergy/signal/signal_return_relations.py` | Add `"sharpe"`, `"ssr"` to `self.metrics`; add per-signal `sharpe_position` knob (`_sharpe_position_map`); add private helpers `_freq_to_rebal_freq`, `_daily_strategy_returns`, `_check_daily_frequency`, `_normalize_sharpe_position`, and the `_SCORE_STYLE_SECONDARY` set; add two `elif` branches in `calculate_single_stat`; generalize the secondary-stat display block + `_format_dual_annot` call. |
 | `tests/unit/signal/test_signal_return_relations.py` | New tests: value-correctness for `sharpe` & `ssr` (independent recompute), validation, `type` guards, secondary-slot display (raw t-stat, no `1-x`), heatmap smoke test. |
 
 No new modules. Everything reuses `naive_pnl.rebalancing` and `pnl.sharpe_stability_ratio` by import.
@@ -357,6 +357,7 @@ def _daily_strategy_returns(self, ret: str, sig: str, freq: str,
     """
     from macrosynergy.pnl.naive_pnl import NaivePnL
 
+    self._check_daily_frequency()  # warn (once) if input is not business-daily
     cids = css if css is not None else self.cids
     dfd = reduce_df(
         self.original_df, xcats=[sig, ret], cids=cids,
@@ -407,6 +408,104 @@ Expected: PASS (after tightening the numeric assertions).
 ```bash
 git add macrosynergy/signal/signal_return_relations.py tests/unit/signal/test_signal_return_relations.py
 git commit -m "feat(signal): daily signal-conditioned strategy-return helper"
+```
+
+---
+
+## Task 3b: Business-daily frequency guard
+
+**Files:**
+- Modify: `macrosynergy/signal/signal_return_relations.py` (new private method `_check_daily_frequency`, called from `_daily_strategy_returns`).
+- Test: `tests/unit/signal/test_signal_return_relations.py`
+
+The Sharpe/SSR design annualizes at **252** and the SSR uses a **252-observation** rolling window — both assume the input PnL is business-daily. If a user feeds weekly or monthly data, the numbers are silently meaningless. Guard with a one-time warning (not a hard raise — short or holiday-sparse samples should not crash; the warning lets an informed user proceed).
+
+- [ ] **Step 1: Write the failing test**
+
+```python
+def test_daily_frequency_guard(self):
+    import pandas as pd, warnings
+    # Weekly-spaced data must trigger the guard.
+    dates = pd.date_range("2018-01-01", periods=60, freq="W-FRI")
+    rows = []
+    for d in dates:
+        rows.append({"cid": "USD", "xcat": "SIG", "real_date": d, "value": 1.0})
+        rows.append({"cid": "USD", "xcat": "RET", "real_date": d, "value": 0.01})
+    wk = pd.DataFrame(rows)
+    sr = SignalReturnRelations(df=wk, rets="RET", sigs="SIG", freqs="W", slip=0)
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        sr._daily_strategy_returns(ret="RET", sig="SIG", freq="W")
+    self.assertTrue(
+        any("business-daily" in str(x.message) for x in w)
+    )
+
+    # Business-daily data must NOT trigger it.
+    bdates = pd.bdate_range("2018-01-01", periods=60)
+    rows = []
+    for d in bdates:
+        rows.append({"cid": "USD", "xcat": "SIG", "real_date": d, "value": 1.0})
+        rows.append({"cid": "USD", "xcat": "RET", "real_date": d, "value": 0.01})
+    dl = pd.DataFrame(rows)
+    sr2 = SignalReturnRelations(df=dl, rets="RET", sigs="SIG", freqs="D", slip=0)
+    with warnings.catch_warnings(record=True) as w2:
+        warnings.simplefilter("always")
+        sr2._daily_strategy_returns(ret="RET", sig="SIG", freq="D")
+    self.assertFalse(
+        any("business-daily" in str(x.message) for x in w2)
+    )
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `pytest tests/unit/signal/test_signal_return_relations.py::TestAll::test_daily_frequency_guard -v`
+Expected: FAIL — `AttributeError: ... '_check_daily_frequency'` (or no warning emitted).
+
+- [ ] **Step 3: Write minimal implementation**
+
+```python
+def _check_daily_frequency(self) -> None:
+    """Warn (once) if ``self.original_df`` is not business-daily. The Sharpe
+    and SSR statistics annualize at 252 and use a 252-observation rolling
+    window, both of which assume a daily PnL; non-daily input yields
+    misleading values."""
+    if getattr(self, "_daily_freq_warned", False):
+        return
+    gaps = (
+        self.original_df.sort_values(["cid", "real_date"])
+        .groupby("cid", observed=True)["real_date"]
+        .diff()
+        .dt.days
+        .dropna()
+    )
+    if gaps.empty:
+        return
+    median_gap = float(gaps.median())
+    # Business-daily medians are 1 calendar day (Fri->Mon gaps of 3 are a
+    # minority and do not move the median). Weekly -> ~7, monthly -> ~30.
+    if median_gap > 4.0:
+        warnings.warn(
+            f"Input data has a median observation gap of {median_gap:.0f} "
+            "calendar days and does not look business-daily. Sharpe/SSR "
+            "assume a daily PnL and annualize at 252; results may be "
+            "misleading.",
+            UserWarning,
+        )
+    self._daily_freq_warned = True
+```
+
+> The `_daily_freq_warned` flag suppresses repeat warnings across the per-cell `single_statistic_table` loop. Reset it to `False` at the top of `single_statistic_table` (alongside `self.df = self.original_df.copy()` at line 1679) so each fresh table call re-checks once.
+
+- [ ] **Step 4: Run test to verify it passes**
+
+Run: `pytest tests/unit/signal/test_signal_return_relations.py::TestAll::test_daily_frequency_guard -v`
+Expected: PASS.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add macrosynergy/signal/signal_return_relations.py tests/unit/signal/test_signal_return_relations.py
+git commit -m "feat(signal): warn when sharpe/ssr input is not business-daily"
 ```
 
 ---
@@ -774,7 +873,7 @@ _ = srr.single_statistic_table(
 
 ## Self-review checklist (run before opening the PR)
 
-1. **Spec coverage:** Sharpe stat ✓ (Task 4), SSR stat ✓ (Task 4), SSR-in-secondary-slot as raw t-stat ✓ (Task 6), daily-PnL-from-weekly-signal reusing `rebalancing` ✓ (Task 3), reuse of existing `sharpe_stability_ratio` ✓ (Task 4), solid tests with independent recompute ✓ (Tasks 4 & 6).
+1. **Spec coverage:** Sharpe stat ✓ (Task 4), SSR stat ✓ (Task 4), SSR-in-secondary-slot as raw t-stat ✓ (Task 6), daily-PnL-from-weekly-signal reusing `rebalancing` ✓ (Task 3), business-daily input guard ✓ (Task 3b), reuse of existing `sharpe_stability_ratio` ✓ (Task 4), solid tests with independent recompute ✓ (Tasks 4 & 6).
 2. **No look-ahead:** Task 3 test pins the 1-day lag.
 3. **Positional-slice safety:** Task 2 appends new metrics at the end; `pr_*` slices (lines 1181–1186) untouched.
 4. **No push:** confirm `git log origin/feature/srr-sharpe-ssr` does not exist; branch stays local pending review.
