@@ -3,8 +3,6 @@
 name: Test Python package on Ubuntu - Release
 
 on:
-  push:
-    branches: [py314]
   pull_request:
     branches: [main]
   workflow_dispatch:
