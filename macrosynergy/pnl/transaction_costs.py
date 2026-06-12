@@ -3,7 +3,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-from typing import List, Optional, Mapping
+from typing import List, Optional, Mapping, Iterable, Callable, Tuple, Dict
 from numbers import Number
 
 from macrosynergy.download.transaction_costs import (
@@ -191,6 +191,47 @@ def _plot_costs_func(
 
     fig.supxlabel(x_axis_label)
     fig.supylabel(y_axis_label)
+    plt.show()
+
+def _costs_heatmap(
+    cost_calculator: Callable[[str, Number], Number],
+    fids: List[str],
+    trade_sizes: Iterable[Number],
+    title: str = "",
+    xlabel: str = "Fid",
+    ylabel: str = "Ticket size (USD millions)",
+    fid_names: Optional[Dict[str, str]] = None,
+    figsize: Tuple[float, float] = (11, 5),
+) -> None:
+    # Construct implied cost data
+    fid_names = fid_names or {}
+    data = [
+        (fid_names.get(fid, fid), trade_size, 1e6 * cost_calculator(fid, trade_size))
+        for trade_size in trade_sizes
+        for fid in fids
+    ]
+
+    data = pd.DataFrame(data, columns=["fid", "trade_size", "cost"])
+    data = data.pivot(index="trade_size", columns="fid", values="cost")
+    data = data.sort_index(ascending=False)
+
+    # Plot implied cost data
+    ax: plt.Axes
+    fig, ax = plt.subplots(figsize=figsize)
+
+    sns.heatmap(
+        data,
+        cmap="rocket_r",
+        annot=True,
+        fmt=".0f",
+        annot_kws={"fontsize": 8},
+        ax=ax,
+    )
+
+    ax.set_title(title)
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel(ylabel)
+
     plt.show()
 
 
@@ -508,11 +549,51 @@ class TransactionCostsDictAdapter:
             pct90_cost=ct_entry["cost"]["pct90"],
         )
 
-    def bidoffer(self, fid: str, trade_size: Number, real_date: str) -> Number:
+    def bidoffer(self, fid: str, trade_size: Number, real_date: str = None) -> Number:
         return self._cost(fid=fid, cost_type="bid_offer", trade_size=trade_size)
 
-    def rollcost(self, fid: str, trade_size: Number, real_date: str) -> Number:
+    def rollcost(self, fid: str, trade_size: Number, real_date: str = None) -> Number:
         return self._cost(fid=fid, cost_type="rollcost", trade_size=trade_size)
+
+    def bidoffer_heatmap(
+        self,
+        trade_sizes: Iterable[Number] = (25, 50, 100),
+        title: str = "Implied bidoffer costs by ticket size",
+        xlabel: str = "Fid",
+        ylabel: str = "Ticket size (USD millions)",
+        fid_names: Optional[Dict[str, str]] = None,
+        figsize: Tuple[float, float] = (10, 5),
+    ) -> None:
+        _costs_heatmap(
+            cost_calculator=self.bidoffer,
+            fids=self.fids,
+            trade_sizes=trade_sizes,
+            fid_names=fid_names,
+            title=title,
+            xlabel=xlabel,
+            ylabel=ylabel,
+            figsize=figsize,
+        )
+
+    def rollcost_heatmap(
+        self,
+        trade_sizes: Iterable[Number] = (25, 50, 100),
+        title: str = "Implied roll costs by size",
+        xlabel: str = "Fid",
+        ylabel: str = "Roll size (USD millions)",
+        fid_names: Optional[Dict[str, str]] = None,
+        figsize: Tuple[float, float] = (10, 5),
+    ) -> None:
+        _costs_heatmap(
+            cost_calculator=self.rollcost,
+            fids=self.fids,
+            trade_sizes=trade_sizes,
+            fid_names=fid_names,
+            title=title,
+            xlabel=xlabel,
+            ylabel=ylabel,
+            figsize=figsize,
+        )
 
 
 class ExampleAdapter(TransactionCosts):  # pragma: no cover
