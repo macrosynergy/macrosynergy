@@ -295,7 +295,7 @@ if __name__ == "__main__":
         ],
         scoring = make_scorer(r2_score, greater_is_better=True),
         cv = ExpandingKFoldPanelSplit(n_splits = 5),
-        temperature = "max-min",
+        temperature = "iqr",
         min_weight = 0.0
     ).fit(X_train, y_train)
 
