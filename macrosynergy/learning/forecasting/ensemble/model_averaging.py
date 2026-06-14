@@ -72,16 +72,16 @@ class ModelAveragingRegressor(BaseEstimator, RegressorMixin):
         self.best_estimators_ = {}
         self.best_params_ = {}
         self.cv_scores_ = {}
-
+        
         for name, estimator, param_grid in self.estimators:
             gs = GridSearchCV(
                 estimator = clone(estimator),
                 param_grid = param_grid,
                 scoring = self.scoring,
                 cv = self.cv,
-                refit = self.refit,
-                verbose = self.verbose,
-                error_score = self.error_score,
+                refit = False,
+                verbose = -1,
+                error_score = np.nan,
             ) 
             gs.fit(X, y)
 
@@ -90,7 +90,7 @@ class ModelAveragingRegressor(BaseEstimator, RegressorMixin):
             self.best_params_[name] = gs.best_params_
             self.cv_scores_[name] = gs.best_score_
 
-        self.model_names_ = list(self.best_estimators_.keys())
+        self.model_names_ = [name for name, _, _ in self.estimators]
         self.weights_ = self._compute_weights(self.cv_scores_, self.temperature, self.min_weight)
 
         return self
@@ -133,8 +133,8 @@ class ModelAveragingRegressor(BaseEstimator, RegressorMixin):
         weights = np.exp(scaled_scores)
         weights = weights / weights.sum()
 
-        if self.min_weight > 0:
-            weights = np.maximum(weights, self.min_weight)
+        if min_weight > 0:
+            weights = np.maximum(weights, min_weight)
             weights = weights / weights.sum()
 
         return dict(zip(self.model_names_, weights))
@@ -228,6 +228,11 @@ class ModelAveragingRegressor(BaseEstimator, RegressorMixin):
             raise ValueError(
                 "min_weight must be a non-negative float. Got {} instead.".format(min_weight)
             )
+        
+    def _check_fit_params(self, X, y):
+        pass
          
+    def _check_predict_params(self, X):
+        pass
         
         
