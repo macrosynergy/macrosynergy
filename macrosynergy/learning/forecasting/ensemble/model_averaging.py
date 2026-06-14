@@ -79,8 +79,8 @@ class ModelAveragingRegressor(BaseEstimator, RegressorMixin):
                 param_grid = param_grid,
                 scoring = self.scoring,
                 cv = self.cv,
-                refit = False,
-                verbose = -1,
+                refit = True,
+                verbose = 0,
                 error_score = np.nan,
             ) 
             gs.fit(X, y)
@@ -235,4 +235,71 @@ class ModelAveragingRegressor(BaseEstimator, RegressorMixin):
     def _check_predict_params(self, X):
         pass
         
-        
+if __name__ == "__main__":
+    import macrosynergy.management as msm
+    from macrosynergy.management.simulate import make_qdf
+
+    from sklearn.linear_model import Ridge, Lasso
+
+    cids = ["AUD", "CAD", "GBP", "USD"]
+    xcats = ["XR", "CRY", "GROWTH", "INFL"]
+    cols = ["earliest", "latest", "mean_add", "sd_mult", "ar_coef", "back_coef"]
+
+    """Example: Unbalanced panel """
+
+    df_cids = pd.DataFrame(
+        index=cids, columns=["earliest", "latest", "mean_add", "sd_mult"]
+    )
+    df_cids.loc["AUD"] = ["2002-01-01", "2020-12-31", 0, 1]
+    df_cids.loc["CAD"] = ["2003-01-01", "2020-12-31", 0, 1]
+    df_cids.loc["GBP"] = ["2000-01-01", "2020-12-31", 0, 1]
+    df_cids.loc["USD"] = ["2000-01-01", "2020-12-31", 0, 1]
+
+    df_xcats = pd.DataFrame(index=xcats, columns=cols)
+    df_xcats.loc["XR"] = ["2000-01-01", "2020-12-31", 0.1, 1, 0, 0.3]
+    df_xcats.loc["CRY"] = ["2000-01-01", "2020-12-31", 1, 2, 0.95, 1]
+    df_xcats.loc["GROWTH"] = ["2000-01-01", "2020-12-31", 1, 2, 0.9, 1]
+    df_xcats.loc["INFL"] = ["2000-01-01", "2020-12-31", -0.1, 2, 0.8, 0.3]
+
+    dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
+    dfd["grading"] = np.ones(dfd.shape[0])
+    black = {
+        "GBP": (
+            pd.Timestamp(year=2009, month=1, day=1),
+            pd.Timestamp(year=2012, month=6, day=30),
+        ),
+        "CAD": (
+            pd.Timestamp(year=2015, month=1, day=1),
+            pd.Timestamp(year=2100, month=1, day=1),
+        ),
+    }
+
+    train = msm.categories_df(
+        df=dfd, xcats=xcats, cids=cids, val="value", blacklist=black, freq="M", lag=1
+    ).dropna()
+
+    # Dataset
+    X_train = train.drop(columns=["XR"])
+    y_train = train["XR"]
+
+    model = ModelAveragingRegressor(
+        estimators = [
+            ("ridge1", Ridge(alpha = 1), {}),
+            ("ridge10", Ridge(alpha = 10), {}),
+            ("ridge100", Ridge(alpha = 100), {}),
+            ("ridge1000", Ridge(alpha = 1000), {}),
+            ("lasso1", Lasso(alpha = 1), {}),
+            ("lasso.1", Lasso(alpha = 0.1), {}),
+            ("lasso.01", Lasso(alpha = 0.01), {}),
+            ("lasso.001", Lasso(alpha = 0.001), {}),
+        ],
+        scoring = make_scorer(r2_score, greater_is_better=True),
+        cv = ExpandingKFoldPanelSplit(n_splits = 5),
+        temperature = "max-min",
+        min_weight = 0.0
+    ).fit(X_train, y_train)
+
+    print(model.weights_)
+
+
+    
