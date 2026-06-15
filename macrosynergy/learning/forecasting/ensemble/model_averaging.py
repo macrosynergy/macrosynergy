@@ -37,7 +37,10 @@ class ModelAveragingRegressor(BaseEstimator, RegressorMixin):
         - float: a custom scaling factor
     min_weight : float, default=0.0
         Minimum weight to be included in the final ensemble. Weights below this threshold
-        will be set to zero.    
+        will be set to zero.
+    error_score : "raise" or numeric, default=np.nan
+        Value to assign to the score if an error occurs in estimator fitting. If set to "
+        raise", the error is raised. If numeric, the score is set to this value.  
     """
     def __init__(
         self,
@@ -46,6 +49,7 @@ class ModelAveragingRegressor(BaseEstimator, RegressorMixin):
         cv = ExpandingKFoldPanelSplit(n_splits = 5),
         temperature = "max-min",
         min_weight = 0.0,
+        error_score = np.nan,
     ):
         # Checks
         self._check_init_params(
@@ -54,6 +58,7 @@ class ModelAveragingRegressor(BaseEstimator, RegressorMixin):
             cv, 
             temperature, 
             min_weight,
+            error_score
         )
         
         # Attributes
@@ -62,6 +67,7 @@ class ModelAveragingRegressor(BaseEstimator, RegressorMixin):
         self.cv = cv
         self.temperature = temperature
         self.min_weight = min_weight
+        self.error_score = error_score
 
     def fit(self, X, y):
         # Checks
@@ -81,7 +87,7 @@ class ModelAveragingRegressor(BaseEstimator, RegressorMixin):
                 cv = self.cv,
                 refit = True,
                 verbose = 0,
-                error_score = np.nan,
+                error_score = self.error_score,
             ) 
             gs.fit(X, y)
 
@@ -146,6 +152,7 @@ class ModelAveragingRegressor(BaseEstimator, RegressorMixin):
         cv,
         temperature,
         min_weight,
+        error_score
     ):
         # estimators
         if not isinstance(estimators, list):
@@ -228,6 +235,15 @@ class ModelAveragingRegressor(BaseEstimator, RegressorMixin):
             raise ValueError(
                 "min_weight must be a non-negative float. Got {} instead.".format(min_weight)
             )
+        
+        # error_score can be "raise", np.inf, np.nan, or a float
+        if error_score != "raise":
+            if not isinstance(error_score, numbers.Number):
+                raise TypeError(
+                    "error_score must be 'raise', np.inf, np.nan, or a float. "
+                    "Got {} instead.".format(type(error_score))
+                )
+        
         
     def _check_fit_params(self, X, y):
         pass
