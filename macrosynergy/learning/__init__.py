@@ -65,6 +65,9 @@ from .forecasting import (
     PLSTransformer,
     LinearMultiTargetRegression,
     TimeWeightedWrapper,
+)
+
+from .model_selection import (
     ModelAveragingRegressor,
 )
 
@@ -167,4 +170,6 @@ __all__ = [
     "TimeSeriesSampler",
     "MultiOutputSharpe",
     "MultiOutputMCR",
+    # model selection
+    "ModelAveragingRegressor",
 ]
