@@ -252,7 +252,7 @@ class TestAll(unittest.TestCase):
                 if method == "ols":
                     weights = np.ones_like(yvar)
                 elif method == "twls":
-                    weights = np.power(2, -np.arange(yvar.shape[0]) / 252)[::-1]
+                    weights = np.power(2, -np.arange(yvar.shape[0]) / 11)[::-1]
 
                 betas = weighted_least_squares(
                     X=np.column_stack((np.ones(xvar.shape[0]), xvar)),
@@ -351,7 +351,8 @@ class TestAll(unittest.TestCase):
         self.assertTrue(INR_return == INR_HR)
         self.assertTrue(IDR_return == IDR_HR)
 
-    def test_hedge_ratio(self):
+    @parameterized.expand(["ols", "twls"])
+    def test_hedge_ratio(self, meth):
         """
         Estimates hedge ratios with respect to a hedge benchmark. The subroutine also
         allows for returning hedged returns if the respective parameter is set to True.
@@ -434,7 +435,7 @@ class TestAll(unittest.TestCase):
             start="2010-01-01",
             end="2020-10-30",
             blacklist=self.blacklist,
-            meth="ols",
+            meth=meth,
             oos=True,
             refreq="w",
             min_obs=24,
