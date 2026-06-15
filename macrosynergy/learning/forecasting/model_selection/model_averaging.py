@@ -15,6 +15,10 @@ class ModelAveragingRegressor(BaseEstimator, RegressorMixin):
     """
     Ensemble of regression models weighted by their cross-validation performance.
 
+    .. note::
+        This class is still **experimental**: the predictions and the API might change
+        without any deprecation cycle.
+
     Parameters
     ----------
     estimators : list of tuples
@@ -40,7 +44,22 @@ class ModelAveragingRegressor(BaseEstimator, RegressorMixin):
         will be set to zero.
     error_score : "raise" or numeric, default=np.nan
         Value to assign to the score if an error occurs in estimator fitting. If set to "
-        raise", the error is raised. If numeric, the score is set to this value.  
+        raise", the error is raised. If numeric, the score is set to this value.
+
+    Notes
+    -----
+    Model averaging uses cross-validation to estimate a probability distribution over a
+    discrete space of models. The final prediction is a weighted average of the predictions
+    from each model. The weights correspond to the estimated probability of each model
+    being the "optimal" model, based on estimated out-of-sample performance. 
+
+    One issue with the cross-validation estimator is that maximising the scores amplifies 
+    noise in the estimation, resulting in a "winners curse" effect. When a large number of
+    models are considered, this selection bias is more pronounced and can result in
+    detrimental trading signals, simply by flickering between similar models across time 
+    periods, even if those models have very similar out-of-sample performance. The dynamics
+    caused by this model selection overfitting impacts the stability of the trading signal,
+    not to mention transaction costs. 
     """
     def __init__(
         self,
