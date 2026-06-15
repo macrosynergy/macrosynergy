@@ -246,10 +246,45 @@ class ModelAveragingRegressor(BaseEstimator, RegressorMixin):
         
         
     def _check_fit_params(self, X, y):
-        pass
+        # X
+        if not isinstance(X, (pd.DataFrame, np.ndarray)):
+            raise TypeError(
+                "X must be a pandas DataFrame or a numpy ndarray. "
+                "Got {} instead.".format(type(X))
+            )
+        if not isinstance(X, np.ndarray):
+            if not isinstance(X.index, pd.MultiIndex):
+                raise TypeError(
+                    "X must have a pandas MultiIndex with (cid, date) as levels. "
+                    "Got {} instead.".format(type(X.index))
+                )
+        # y
+        if not isinstance(y, (pd.Series, pd.DataFrame, np.ndarray)):
+            raise TypeError(
+                "y must be a pandas Series, DataFrame, or a numpy ndarray. "
+                "Got {} instead.".format(type(y))
+            )
+        
+        # check X and y index match
+        if not isinstance(X, np.ndarray) and not isinstance(y, np.ndarray):
+            if not X.index.equals(y.index):
+                raise ValueError(
+                    "The index of X and y must match. "
+                    "Got X.index: {} and y.index: {}.".format(X.index, y.index)
+                )
          
     def _check_predict_params(self, X):
-        pass
+        if not isinstance(X, (pd.DataFrame, np.ndarray)):
+            raise TypeError(
+                "X must be a pandas DataFrame or a numpy ndarray. "
+                "Got {} instead.".format(type(X))
+            )
+        if not isinstance(X, np.ndarray):
+            if not isinstance(X.index, pd.MultiIndex):
+                raise TypeError(
+                    "X must have a pandas MultiIndex with (cid, date) as levels. "
+                    "Got {} instead.".format(type(X.index))
+                )
         
 if __name__ == "__main__":
     import macrosynergy.management as msm
