@@ -323,8 +323,6 @@ class BasePanelSplit(BaseCrossValidator, ABC):
                 raise TypeError("X must be a pandas dataframe.")
             if not isinstance(y, (pd.DataFrame, pd.Series)):
                 raise TypeError("y must be a pandas dataframe or series.")
-            if isinstance(y, pd.DataFrame) and len(y.columns) != 1:
-                raise ValueError("If y is a dataframe, it must have only one column.")
 
             # Check indexing of X and y
             if not X.index.equals(y.index):

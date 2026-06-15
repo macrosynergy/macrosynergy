@@ -117,7 +117,27 @@ class ModelAveragingRegressor(BaseEstimator, RegressorMixin):
 
         self.model_names_ = [name for name, _, _ in self.estimators]
         self.weights_ = self._compute_weights(self.cv_scores_, self.temperature, self.min_weight)
+        
+        # Store whether this is a single or multi-output model
+        if isinstance(y, pd.DataFrame):
+            self.multi_output_ = y.shape[1] > 1
+            self.targets_ = y.columns.tolist()
+        else:
+            self.multi_output_ = False
+            self.targets_ = None
 
+        # For now, return feature importances of the model with the highest weight, if available
+        # For comparability, get absolute value of the feature importances, and sum to one
+        best_model_name = max(self.weights_, key=self.weights_.get)
+        best_model = self.best_estimators_[best_model_name]
+        if hasattr(best_model, "feature_importances_"):
+            self.feature_importances_ = best_model.feature_importances_
+            self.feature_importances_ = np.abs(self.feature_importances_)/np.sum(np.abs(self.feature_importances_))
+        elif hasattr(best_model, "coef_"):
+            self.feature_importances_ = best_model.coef_
+            self.feature_importances_ = np.abs(self.feature_importances_)/np.sum(np.abs(self.feature_importances_))
+        else:
+            self.feature_importances_ = None
         return self
     
     def predict(self, X):
@@ -126,17 +146,33 @@ class ModelAveragingRegressor(BaseEstimator, RegressorMixin):
 
         check_is_fitted(self, ["best_estimators_", "weights_"])
 
-        predictions = np.column_stack([
+        predictions = [
             self.best_estimators_[name].predict(X)
             for name in self.model_names_
-        ])
+        ]
+        # Convert to numpy arrays 
+        predictions = [
+            pred if isinstance(pred, np.ndarray) else pred.values
+            for pred in predictions
+        ]
+        # Check if the model is single or multi-output
+        predictions = np.stack(predictions, axis=-1)
 
         weights = np.array([
             self.weights_[name]
             for name in self.model_names_
         ])
 
-        return predictions @ weights
+        adjusted_predictions = predictions @ weights
+
+        if self.multi_output_:
+            return pd.DataFrame(
+                data = adjusted_predictions,
+                index = X.index,
+                columns = self.targets_
+            )
+        else:
+            return adjusted_predictions
     
     def _compute_weights(self, cv_scores, temperature, min_weight):
         all_scores = np.array([cv_scores[name] for name in self.model_names_])
@@ -158,11 +194,28 @@ class ModelAveragingRegressor(BaseEstimator, RegressorMixin):
         weights = np.exp(scaled_scores)
         weights = weights / weights.sum()
 
+        if isinstance(min_weight, str):
+            if min_weight == "mean":
+                min_weight = np.mean(weights)
+            elif min_weight == "median":
+                min_weight = np.median(weights)
+            elif min_weight == "lq":
+                min_weight = np.percentile(weights, 25)
+            elif min_weight == "uq":
+                min_weight = np.percentile(weights, 75)
+            elif min_weight == "lb":
+                min_weight = np.percentile(weights, 25) - 1.5 * (np.percentile(weights, 75) - np.percentile(weights, 25))
+            elif min_weight == "ub":
+                min_weight = np.percentile(weights, 75) + 1.5 * (np.percentile(weights, 75) - np.percentile(weights, 25))
+        
         if min_weight > 0:
-            weights = np.maximum(weights, min_weight)
-            weights = weights / weights.sum()
+            adjusted_weights = np.where(weights < min_weight, 0.0, weights)
+            if adjusted_weights.sum() == 0:
+                adjusted_weights = weights
+            else:
+                adjusted_weights = adjusted_weights / adjusted_weights.sum()
 
-        return dict(zip(self.model_names_, weights))
+        return dict(zip(self.model_names_, adjusted_weights))
     
     def _check_init_params(
         self,
@@ -246,13 +299,18 @@ class ModelAveragingRegressor(BaseEstimator, RegressorMixin):
             )
         
         # min_weight
-        if not isinstance(min_weight, numbers.Number):
+        if not isinstance(min_weight, (str, numbers.Number)):
             raise TypeError(
-                "min_weight must be a float. Got {} instead.".format(type(min_weight))
+                "min_weight must be a float or a str. Got {} instead.".format(type(min_weight))
             )
-        if min_weight < 0:
+        if isinstance(min_weight, numbers.Number) and min_weight < 0:
             raise ValueError(
                 "min_weight must be a non-negative float. Got {} instead.".format(min_weight)
+            )
+        if isinstance(min_weight, str) and min_weight not in ["mean", "median", "lq", "uq", "lb", "ub"]:
+            raise ValueError(
+                "min_weight must be one of 'mean', 'median', 'lq', 'uq', 'lb', 'ub' or a non-negative float. "
+                "Got {} instead.".format(min_weight)
             )
         
         # error_score can be "raise", np.inf, np.nan, or a float
@@ -282,6 +340,10 @@ class ModelAveragingRegressor(BaseEstimator, RegressorMixin):
             raise TypeError(
                 "y must be a pandas Series, DataFrame, or a numpy ndarray. "
                 "Got {} instead.".format(type(y))
+            )
+        if isinstance(y, np.ndarray) and y.ndim >= 2:
+            raise ValueError(
+                "If y is a numpy array, it must be 1-dimensional. Got an array with shape {} instead.".format(y.shape)
             )
         
         # check X and y index match
@@ -349,8 +411,8 @@ if __name__ == "__main__":
     ).dropna()
 
     # Dataset
-    X_train = train.drop(columns=["XR"])
-    y_train = train["XR"]
+    X_train = train.iloc[:, :-2]
+    y_train = train.iloc[:,-2:]
 
     model = ModelAveragingRegressor(
         estimators = [
@@ -366,10 +428,13 @@ if __name__ == "__main__":
         scoring = make_scorer(r2_score, greater_is_better=True),
         cv = ExpandingKFoldPanelSplit(n_splits = 5),
         temperature = "mad",
-        min_weight = 0.0
+        min_weight = "lq"
     ).fit(X_train, y_train)
 
+    model.predict(X_train)
+
     print(model.weights_)
+    print(model.feature_importances_)
 
 
     
