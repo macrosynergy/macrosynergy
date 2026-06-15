@@ -29,6 +29,7 @@ from .meta_estimators import ProbabilityEstimator, FIExtractor, DataFrameTransfo
 from .ensemble import (
     VotingClassifier,
     VotingRegressor,
+    ModelAveragingRegressor,
 )
 
 from .factor_models import (
@@ -76,6 +77,7 @@ __all__ = [
     "ProbabilityEstimator",
     "VotingClassifier",
     "VotingRegressor",
+    "ModelAveragingRegressor",
     "FIExtractor",
     "DataFrameTransformer",
     "GlobalLocalRegression",

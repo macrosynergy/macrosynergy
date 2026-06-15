@@ -65,6 +65,7 @@ from .forecasting import (
     PLSTransformer,
     LinearMultiTargetRegression,
     TimeWeightedWrapper,
+    ModelAveragingRegressor,
 )
 
 from .random_effects import RandomEffects
@@ -146,6 +147,7 @@ __all__ = [
     "TimeWeightedWrapper",
     "LinearMultiTargetRegression",
     "MLPRegressor",
+    "ModelAveragingRegressor",
     # market beta estimation
     "BetaEstimator",
     # regression system
