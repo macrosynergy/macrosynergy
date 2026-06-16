@@ -4,6 +4,8 @@ import warnings
 import pandas as pd
 import itertools
 import os
+import json
+import tempfile
 from typing import List, Dict, Any
 from macrosynergy.download.jpmaqs import (
     JPMaQSDownload,
@@ -1042,6 +1044,117 @@ class TestFunctions(unittest.TestCase):
             },
         ]
         self.assertFalse(check_attributes_in_sync(out_of_sync_ts_list))
+
+
+class TestDownloadAllToDisk(unittest.TestCase):
+    """Tests for ``JPMaQSDownload.download_all_to_disk`` file-extension handling.
+
+    Regression coverage for a bug where the post-download "did anything get
+    saved?" check always globbed for ``*.csv`` files, even when the data was
+    saved as JSON (``as_dataframe=False``). That made JSON downloads raise a
+    spurious ``ValueError("No data was downloaded.")`` despite the JSON files
+    having been written successfully.
+    """
+
+    def setUp(self) -> None:
+        self.expressions: List[str] = [
+            "DB(JPMAQS,GBP_FXXR_NSA,value)",
+            "DB(JPMAQS,EUR_FXXR_NSA,value)",
+        ]
+        self.jpmaqs_download = JPMaQSDownload(
+            client_id="client_id",
+            client_secret="client_secret",
+            check_connection=False,
+        )
+
+    @staticmethod
+    def _writer_side_effect(extension: str, subdir: str = None):
+        """Build a ``download_data`` side-effect that writes one file per
+        expression with the given extension, mimicking the on-disk layout
+        produced by the real save helpers (one file per ticker/expression)."""
+
+        def _side_effect(*args, **kwargs):
+            save_path = kwargs["save_path"]
+            expressions = kwargs["expressions"]
+            target_dir = (
+                save_path if subdir is None else os.path.join(save_path, subdir)
+            )
+            os.makedirs(target_dir, exist_ok=True)
+            for expr in expressions:
+                fpath = os.path.join(target_dir, f"{expr}.{extension}")
+                with open(fpath, "w") as fh:
+                    if extension == "json":
+                        json.dump({"expression": expr}, fh)
+                    else:
+                        fh.write("real_date,value\n")
+            return [True]
+
+        return _side_effect
+
+    def _run(self, *, as_dataframe, dataframe_format, side_effect):
+        """Run download_all_to_disk with the network/validation layers mocked.
+
+        Returns the (download_data, validate_downloaded_data) mocks.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            with mock.patch.object(
+                self.jpmaqs_download, "check_connection", return_value=True
+            ), mock.patch.object(
+                self.jpmaqs_download, "download_data", side_effect=side_effect
+            ) as mock_dl, mock.patch(
+                "macrosynergy.download.jpmaqs.validate_downloaded_data",
+                return_value=[],
+            ) as mock_validate:
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore")
+                    self.jpmaqs_download.download_all_to_disk(
+                        path=tmp,
+                        expressions=self.expressions,
+                        as_dataframe=as_dataframe,
+                        dataframe_format=dataframe_format,
+                        show_progress=False,
+                    )
+            return mock_dl, mock_validate
+
+    def test_json_download_does_not_raise_no_data(self):
+        # The bug: JSON files ARE written, but the saved-data check globs for
+        # *.csv, finds nothing, and wrongly raises "No data was downloaded.".
+        try:
+            mock_dl, mock_validate = self._run(
+                as_dataframe=False,
+                dataframe_format="qdf",
+                side_effect=self._writer_side_effect("json"),
+            )
+        except ValueError as exc:  # pragma: no cover - failure path
+            self.fail(
+                "download_all_to_disk raised ValueError for a successful JSON "
+                f"download: {exc}"
+            )
+        mock_dl.assert_called_once()
+        # Reaching validation proves we passed the file-count check.
+        mock_validate.assert_called_once()
+
+    def test_json_download_raises_when_nothing_saved(self):
+        # A genuinely empty download must still raise, even after the fix.
+        with self.assertRaises(ValueError):
+            self._run(
+                as_dataframe=False,
+                dataframe_format="qdf",
+                side_effect=lambda *args, **kwargs: [True],
+            )
+
+    def test_csv_download_still_works(self):
+        # Regression guard: the csv (dataframe) path must keep working.
+        try:
+            self._run(
+                as_dataframe=True,
+                dataframe_format="wide",
+                side_effect=self._writer_side_effect("csv"),
+            )
+        except ValueError as exc:  # pragma: no cover - failure path
+            self.fail(
+                f"download_all_to_disk raised unexpectedly for a csv download: {exc}"
+            )
 
 
 if __name__ == "__main__":
