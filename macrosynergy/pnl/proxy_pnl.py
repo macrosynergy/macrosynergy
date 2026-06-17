@@ -1,6 +1,7 @@
 """
 Implementation of the ProxyPnL class.
 """
+
 import numpy as np
 import pandas as pd
 from numbers import Number
@@ -165,7 +166,7 @@ class ProxyPnL(object):
         sname: str = None,
         fids: List[str] = None,
         aum: Number = 100,
-        dollar_per_signal: Number = 1.0,
+        dollar_per_signal: Optional[Number] = None,
         slip: int = 1,
         leverage: Optional[Number] = None,
         vol_target: Optional[Number] = None,
@@ -394,7 +395,9 @@ class ProxyPnL(object):
                 raise TypeError(f"Argument {arg} must be one of: {types}")
 
         pnl_exists = hasattr(self, "proxy_pnl") and self.proxy_pnl is not None
-        pnle_exists = hasattr(self, "pnl_excl_costs") and self.pnl_excl_costs is not None
+        pnle_exists = (
+            hasattr(self, "pnl_excl_costs") and self.pnl_excl_costs is not None
+        )
         tcosts_exists = hasattr(self, "txn_costs_df") and self.txn_costs_df is not None
 
         missing_data_msg = "self.{} is missing"
@@ -404,7 +407,6 @@ class ProxyPnL(object):
             raise ValueError(missing_data_msg.format("pnl_excl_costs"))
         if not tcosts_exists and include_tcosts:
             raise ValueError(missing_data_msg.format("txn_costs_df"))
-
 
         # Data preparation
         df_pnl = self.proxy_pnl

@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 from numbers import Number
 from typing import List, Union, Tuple, Optional, Set
+import warnings
 
 from macrosynergy.management.utils import (
     standardise_dataframe,
@@ -261,12 +262,52 @@ def _leverage_positions(
     return df_wide
 
 
+def _dollar_per_signal_positions(
+    df_wide: pd.DataFrame,
+    sname: str,
+    fids: List[str],
+    aum: Number = 100,
+    dollar_per_signal: Number = 1.0,
+    pname: str = "POS",
+) -> pd.DataFrame:
+    """"""
+    if not isinstance(dollar_per_signal, Number):
+        raise ValueError("`dollar_per_signal` must be a number.")
+    _check_df_for_contract_signals(df_wide=df_wide, sname=sname, fids=fids)
+    sig_ident: str = f"_CSIG_{sname}"
+
+    _contracts: List[str] = [f"{contx}{sig_ident}" for contx in fids]
+
+    rowsums: pd.Series = df_wide.loc[:, _contracts].abs().sum(axis=1)
+    rowsums[rowsums == 0] = np.nan
+
+    for _, contx in enumerate(fids):
+        pos_col: str = f"{contx}_{sname}_{pname}"
+        cont_name: str = contx + sig_ident
+        # position = signal * dollar_per_signal
+        df_wide[pos_col] = df_wide[cont_name] * dollar_per_signal
+
+    positions_exceed_aum = (
+        df_wide[[f"{contx}_{sname}_{pname}" for contx in fids]].sum(axis=1) > aum
+    )
+    if positions_exceed_aum.any():
+        exceed_dates = df_wide.index[positions_exceed_aum].strftime("%Y-%m-%d").tolist()
+        warning_msg = (
+            f"Warning: On the following dates, the total notional positions exceed AUM:\n"
+            f"{', '.join(exceed_dates)}\n"
+            f"Consider adjusting `dollar_per_signal` or `aum` to avoid exceeding AUM."
+        )
+        warnings.warn(warning_msg, UserWarning)
+
+    return df_wide
+
+
 def notional_positions(
     df: QuantamentalDataFrame,
     sname: str,
     fids: List[str],
     aum: Number = 100,
-    dollar_per_signal: Number = 1.0,
+    dollar_per_signal: Optional[Number] = None,
     slip: int = 1,
     leverage: Optional[Number] = None,
     vol_target: Optional[Number] = None,
@@ -311,9 +352,12 @@ def notional_positions(
     aum : float
         the assets under management in USD million (for consistency). This is basis for
         all position sizes. Default is 100.
-    dollar_per_signal : float
-        the amount of notional (e.g. USD) per contract signal value. Default is 1. The
-        default scale is arbitrary and is merely a basis for tryouts.
+    dollar_per_signal : Optional[float]
+        the amount of notional (e.g. USD) per contract signal value.
+        Default is None, i.e. the method is not applied. This parameter is used to
+        directly scale the input contract signals to notional positions, by the simple
+        formula: position = signal * dollar_per_signal. This method cannot be used in
+        conjunction with leverage or vol_target.
     leverage : float
         the ratio of the sum of notional positions to AUM. This is the main basis for
         leveraged-based positioning. Since different contracts have different expected
@@ -395,7 +439,7 @@ def notional_positions(
         (sname, "sname", str),
         (fids, "fids", list),
         (aum, "aum", Number),
-        (dollar_per_signal, "dollar_per_signal", Number),
+        (dollar_per_signal, "dollar_per_signal", (Number, NoneType)),
         (leverage, "leverage", (Number, NoneType)),
         (vol_target, "vol_target", (Number, NoneType)),
         (rebal_freq, "rebal_freq", str),
@@ -422,9 +466,9 @@ def notional_positions(
     _initialized_as_categorical: bool = df.InitializedAsCategorical
 
     ## Volatility targeting and leverage cannot be applied at the same time
-    if bool(leverage) and bool(vol_target):
+    if sum(map(bool, [vol_target, leverage, dollar_per_signal])) != 1:
         raise ValueError(
-            "Either `leverage` or `vol_target` must be specified, but not both."
+            "Exactly one of `vol_target`, `leverage` or `dollar_per_signal` may be specified"
         )
 
     ## Check the dates
@@ -479,8 +523,16 @@ def notional_positions(
             leverage=leverage,
             pname=pname,
         )
-
-    else:
+    elif dollar_per_signal:
+        return_df: pd.DataFrame = _dollar_per_signal_positions(
+            df_wide=df_wide,
+            sname=sname,
+            fids=fids,
+            aum=aum,
+            dollar_per_signal=dollar_per_signal,
+            pname=pname,
+        )
+    elif vol_target:
         return_df, pvol, vcv_df = _vol_target_positions(
             df_wide=df_wide,
             sname=sname,
@@ -499,11 +551,9 @@ def notional_positions(
             remove_zeros=remove_zeros,
         )
 
-    # return ticker_df_to_qdf(df=return_df).dropna()
     return_pvol = return_pvol and (locals().get("pvol") is not None)
     return_vcv = return_vcv and (locals().get("vcv_df") is not None)
 
-    # return_df = ticker_df_to_qdf(df=return_df).dropna()
     return_df = QuantamentalDataFrame.from_wide(
         df=return_df, categorical=_initialized_as_categorical
     )
