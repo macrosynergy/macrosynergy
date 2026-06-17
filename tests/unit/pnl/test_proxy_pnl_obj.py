@@ -1,4 +1,5 @@
 import unittest
+import warnings
 import numpy as np
 import pandas as pd
 from typing import List
@@ -240,6 +241,44 @@ class TestProxyPNLObject(unittest.TestCase):
         pd.testing.assert_frame_equal(proxy_pnl_obj.pnl_excl_costs, expected_excl)
         pd.testing.assert_frame_equal(proxy_pnl_obj.txn_costs_df, expected_tc)
 
+    def test_notional_positions_dollar_per_signal_passthrough(self):
+        # ProxyPnL.notional_positions must forward the `dollar_per_signal` pathway
+        # to the functional layer unchanged, mirroring the leverage check in
+        # `test_flow`.
+        args = self.get_contract_signals_args()
+        xcats = args["xcats"].copy()
+        xcats += [f"{xc}XR" for xc in xcats]
+        xcats += [args["sig"]] + [args["hedge_xcat"]]
+        df = make_test_df(
+            cids=args["cids"],
+            xcats=xcats,
+            start=self.df["real_date"].min().strftime("%Y-%m-%d"),
+            end=self.df["real_date"].max().strftime("%Y-%m-%d"),
+        )
+
+        proxy_pnl_args = self.get_proxy_pnl_args()
+        proxy_pnl_args["df"] = df
+        proxy_pnl_obj = ProxyPnL(**proxy_pnl_args)
+        cs_df = proxy_pnl_obj.contract_signals(**args)
+
+        npos_args = dict(
+            fids=self.fids,
+            sname=self.sname,
+            aum=1000,
+            dollar_per_signal=0.5,
+        )
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            expected_notional_df = notional_positions(df=cs_df, **npos_args)
+            notional_df = proxy_pnl_obj.notional_positions(**npos_args)
+
+        pd.testing.assert_frame_equal(notional_df, expected_notional_df)
+
+        # only position tickers are returned - no signal (_CSIG_) leakage through
+        # the object layer either.
+        out_xcats = set(notional_df["xcat"].astype("object").unique())
+        self.assertFalse(any("_CSIG_" in x for x in out_xcats))
+
     def _build_cost_dict(self) -> dict:
         # Nested TransactionCostsDictAdapter schema: per fid, one entry per
         # cost type, each with size and cost anchors at median / pct90.
@@ -452,7 +491,6 @@ class TestEvaluatePnL(unittest.TestCase):
         self.assertAlmostEqual(out.loc["St. Dev. %", "PNL"], expected_std)
         self.assertAlmostEqual(out.loc["Sharpe Ratio", "PNL"], 0.0)
 
-
     def test_include_pnle_adds_pnle_column(self):
         obj = self._make_obj()
         obj.proxy_pnl = self._make_pnl_qdf("PNL", 0.01 * np.ones(252))
@@ -463,7 +501,6 @@ class TestEvaluatePnL(unittest.TestCase):
         self.assertEqual(sorted(out.columns.tolist()), ["PNL", "PNLe"])
         self.assertAlmostEqual(out.loc["Return %", "PNL"], 2.52)
         self.assertAlmostEqual(out.loc["Return %", "PNLe"], 2.52 * 2)
-
 
     def test_include_tcosts_adds_transaction_cost_row(self):
         obj = self._make_obj()
@@ -563,8 +600,14 @@ class TestEvaluatePnL(unittest.TestCase):
 
         cost_dict = {
             fid: {
-                "bid_offer": {"size": {"median": 50, "pct90": 200}, "cost": {"median": 0.1, "pct90": 0.3}},
-                "rollcost": {"size": {"median": 50, "pct90": 200}, "cost": {"median": 0.1, "pct90": 0.3}},
+                "bid_offer": {
+                    "size": {"median": 50, "pct90": 200},
+                    "cost": {"median": 0.1, "pct90": 0.3},
+                },
+                "rollcost": {
+                    "size": {"median": 50, "pct90": 200},
+                    "cost": {"median": 0.1, "pct90": 0.3},
+                },
             }
             for fid in fids
         }
