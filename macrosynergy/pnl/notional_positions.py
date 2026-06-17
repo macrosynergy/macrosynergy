@@ -276,11 +276,6 @@ def _dollar_per_signal_positions(
     _check_df_for_contract_signals(df_wide=df_wide, sname=sname, fids=fids)
     sig_ident: str = f"_CSIG_{sname}"
 
-    _contracts: List[str] = [f"{contx}{sig_ident}" for contx in fids]
-
-    rowsums: pd.Series = df_wide.loc[:, _contracts].abs().sum(axis=1)
-    rowsums[rowsums == 0] = np.nan
-
     for _, contx in enumerate(fids):
         pos_col: str = f"{contx}_{sname}_{pname}"
         cont_name: str = contx + sig_ident
@@ -298,6 +293,9 @@ def _dollar_per_signal_positions(
             f"Consider adjusting `dollar_per_signal` or `aum` to avoid exceeding AUM."
         )
         warnings.warn(warning_msg, UserWarning)
+
+    # filter df to only contain position columns
+    df_wide = df_wide.loc[:, [f"{contx}_{sname}_{pname}" for contx in fids]]
 
     return df_wide
 
