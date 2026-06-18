@@ -224,7 +224,7 @@ def _costs_heatmap(
     sns.heatmap(
         data,
         cmap="rocket_r",
-        annot=data.map(lambda x: f"{x:.2f}%"),  # pandas DataFrame
+        annot=data.map(lambda x: f"{x:.4f}%"),  # pandas DataFrame
         fmt="",
         annot_kws={"fontsize": 8},
         cbar_kws={"label": "Cost (% of trade size)"},
