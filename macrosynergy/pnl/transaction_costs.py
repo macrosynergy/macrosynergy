@@ -203,28 +203,31 @@ def _costs_heatmap(
     fid_names: Optional[Dict[str, str]] = None,
     figsize: Tuple[float, float] = (11, 5),
 ) -> None:
-    # Construct implied cost data
     fid_names = fid_names or {}
+    # create percentage cost data for each fid and trade size
     data = [
-        (fid_names.get(fid, fid), trade_size, 1e6 * cost_calculator(fid, trade_size))
+        (
+            fid_names.get(fid, fid),
+            trade_size,
+            100 * cost_calculator(fid, trade_size) / trade_size,
+        )
         for trade_size in trade_sizes
         for fid in fids
     ]
 
-    data = pd.DataFrame(data, columns=["fid", "trade_size", "cost"])
-    data = data.pivot(index="trade_size", columns="fid", values="cost")
+    data = pd.DataFrame(data, columns=["fid", "trade_size", "cost_pct"])
+    data = data.pivot(index="trade_size", columns="fid", values="cost_pct")
     data = data.sort_index(ascending=False)
 
-    # Plot implied cost data
-    ax: plt.Axes
     fig, ax = plt.subplots(figsize=figsize)
 
     sns.heatmap(
         data,
         cmap="rocket_r",
-        annot=True,
-        fmt=".0f",
+        annot=data.map(lambda x: f"{x:.2f}%"),  # pandas DataFrame
+        fmt="",
         annot_kws={"fontsize": 8},
+        cbar_kws={"label": "Cost (% of trade size)"},
         ax=ax,
     )
 
