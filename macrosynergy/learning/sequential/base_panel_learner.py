@@ -6,14 +6,15 @@ import numbers
 import warnings
 from abc import ABC
 from functools import partial
-from typing import Optional, List
+from typing import Optional, List, Union, Dict
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
 from joblib import Parallel, delayed
-from sklearn.base import ClassifierMixin, RegressorMixin
+from sklearn.base import ClassifierMixin, RegressorMixin, BaseEstimator
+from sklearn.feature_selection import SelectorMixin
 from sklearn.model_selection import BaseCrossValidator, GridSearchCV, RandomizedSearchCV
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
@@ -960,7 +961,7 @@ class BasePanelLearner(ABC):
             "model_type": optimal_model_name,
             "score": optimal_model_score,
             "hparams": optimal_model_params,
-            "additional_params": optimal_model_additional_data,
+            "additional_data": optimal_model_additional_data,
         }
 
         if inner_splitters_adj is not None:
@@ -1834,3 +1835,70 @@ class BasePanelLearner(ABC):
             out_df = out_df.dropna(how="all", axis=1)
 
         return out_df
+
+    @staticmethod
+    def _get_selected_feature_map(
+        optimal_model: Union[BaseEstimator, Pipeline],
+        model_feature_names: List[str],
+    ) -> Dict[str, int]:
+        """
+        Map each candidate feature to 1 if it survives feature selection
+        and 0 otherwise.
+
+        Parameters
+        ----------
+        optimal_model : Union[BaseEstimator, Pipeline]
+            The fitted model or pipeline selected at a retraining date.
+        model_feature_names : List[str]
+            Feature names reaching the final model. Used as the candidate universe when
+            the pipeline performs no feature selection.
+
+        Returns
+        -------
+        dict
+            Mapping from feature name to 1 (selected) or 0 (dropped).
+
+        Notes
+        -----
+        The candidate universe is the set of features entering the last feature
+        selection step (a `SelectorMixin`), so a feature the selector always drops still
+        appears, marked 0. Reading the names at the selector's input rather than the
+        pipeline's output keeps this robust to feature renaming by upstream steps. When
+        the pipeline has no selection step, every feature reaching the model is marked 1.
+
+        Only the last selection step is considered; pipelines with multiple selectors
+        report selection relative to the latest one.
+        """
+        feature_map = {ftr: 1 for ftr in model_feature_names}
+        if not isinstance(optimal_model, Pipeline):
+            return feature_map
+
+        idx = max(
+            [
+                i for i, (_, est) in enumerate(optimal_model.steps)
+                if isinstance(est, SelectorMixin)
+            ],
+            default=None,
+        )
+
+        if idx is None:
+            return feature_map
+
+        try:
+            input_names = (
+                list(getattr(optimal_model, "feature_names_in_", [])) if idx == 0 else
+                optimal_model[:idx].get_feature_names_out().tolist()
+            )
+            input_selected = np.asarray(optimal_model[idx].get_support())
+        except AttributeError:
+            return feature_map
+
+        if len(input_names) != len(input_selected):
+            return feature_map
+
+        feature_map = {
+            ftr: int(selected)
+            for ftr, selected in zip(input_names, input_selected)
+        }
+
+        return feature_map

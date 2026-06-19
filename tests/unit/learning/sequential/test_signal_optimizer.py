@@ -1,4 +1,3 @@
-import sys
 import datetime
 import itertools
 import unittest
@@ -9,30 +8,46 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import scipy.stats as stats
-from parameterized import parameterized
-from packaging.version import Version
 import sklearn
+from packaging.version import Version
+from parameterized import parameterized
 from sklearn.decomposition import PCA
-from sklearn.linear_model import (Lasso, LinearRegression, LogisticRegression,
-                                  Ridge)
 from sklearn.ensemble import RandomForestRegressor
-from sklearn.impute import SimpleImputer, KNNImputer
-from sklearn.metrics import (accuracy_score, balanced_accuracy_score,
-                             make_scorer, r2_score)
-from sklearn.model_selection import KFold
+from sklearn.impute import KNNImputer, SimpleImputer
+from sklearn.linear_model import Lasso, LinearRegression, LogisticRegression, Ridge
+from sklearn.metrics import (
+    accuracy_score,
+    balanced_accuracy_score,
+    make_scorer,
+    r2_score,
+)
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
-from macrosynergy.learning import (ExpandingIncrementPanelSplit,
-                                   ExpandingKFoldPanelSplit, LassoSelector,
-                                   RandomEffects, RollingKFoldPanelSplit,
-                                   SignalOptimizer,
-                                   regression_balanced_accuracy, ConstantImputer)
-from macrosynergy.learning.preprocessing.imputers.imputers import CrossSectionalImputer
+from macrosynergy.learning import (
+    ConstantImputer,
+    ExpandingIncrementPanelSplit,
+    ExpandingKFoldPanelSplit,
+    RandomEffects,
+    RollingKFoldPanelSplit,
+    SignalOptimizer,
+    regression_balanced_accuracy,
+    BasePanelSelector,
+    CrossSectionalImputer,
+)
 from macrosynergy.management.simulate import make_qdf
 from macrosynergy.management.utils.df_utils import categories_df
 
 recent_sklearn = Version(sklearn.__version__) > Version("1.5")
+
+
+class _DropLastSelector(BasePanelSelector):
+    """Deterministic selector that always drops the final input feature."""
+
+    def determine_features(self, X, y):
+        mask = np.ones(X.shape[1], dtype=bool)
+        mask[-1] = False
+        return mask
 
 class TestAll(unittest.TestCase):
     @classmethod
@@ -2168,7 +2183,7 @@ class TestAll(unittest.TestCase):
             self.assertTrue(model_choice_data["model_type"] in ["linreg", "ridge"])
             self.assertIsInstance(model_choice_data["score"], float)
             self.assertIsInstance(model_choice_data["hparams"], dict)
-            self.assertIsInstance(model_choice_data["additional_params"], dict)
+            self.assertIsInstance(model_choice_data["additional_data"], dict)
 
             prediction_data = split_result["predictions"]
             self.assertIsInstance(prediction_data[0], pd.MultiIndex)
@@ -2263,7 +2278,7 @@ class TestAll(unittest.TestCase):
             self.assertTrue(model_choice_data["model_type"] in ["linreg"])
             self.assertIsInstance(model_choice_data["score"], float)
             self.assertIsInstance(model_choice_data["hparams"], dict)
-            self.assertIsInstance(model_choice_data["additional_params"], dict)
+            self.assertIsInstance(model_choice_data["additional_data"], dict)
 
             prediction_data = split_result["predictions"]
             self.assertIsInstance(prediction_data[0], pd.MultiIndex)
@@ -2797,7 +2812,43 @@ class TestAll(unittest.TestCase):
         assert selected_ftrs["XR"].eq(1).all()
         assert selected_ftrs["GROWTH"].eq(1).all()
 
+    def test_selected_features_records_always_dropped_features(self):
+        # A feature a selection step always drops must still appear in selected_ftrs,
+        # marked 0 over the selector's candidate universe, rather than being absent.
+        so = SignalOptimizer(
+            df=self.df,
+            xcats=self.xcats,
+            cids=self.cids,
+            drop_nas="y",
+        )
 
+        so.calculate_predictions(
+            name="SELECT",
+            models={
+                "SELECT": Pipeline([
+                    ("select", _DropLastSelector()),
+                    ("RF", RandomForestRegressor(n_estimators=10, max_depth=1)),
+                ])
+            },
+            n_jobs_outer=1,
+            min_cids=1,
+            min_periods=12,
+        )
+
+        selected_ftrs = so.get_selected_features(name="SELECT")
+
+        candidate_features = list(so.X.columns)
+        dropped_feature = candidate_features[-1]
+        kept_features = candidate_features[:-1]
+
+        # The full candidate universe is present, including the always-dropped feature
+        self.assertEqual(
+            selected_ftrs.columns.tolist(),
+            ["real_date", "name"] + candidate_features,
+        )
+        # The dropped feature is recorded as an all-zeros column, not absent
+        self.assertTrue(selected_ftrs[dropped_feature].eq(0).all())
+        self.assertTrue(selected_ftrs[kept_features].eq(1).all().all())
 
     def test_types_get_feature_importances(self):
         so = self.so_with_calculated_preds

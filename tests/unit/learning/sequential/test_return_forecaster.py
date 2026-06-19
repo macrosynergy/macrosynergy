@@ -4,9 +4,6 @@ import unittest
 import matplotlib
 import matplotlib.pyplot as plt
 
-import parameterized
-import itertools
-
 from macrosynergy.management import make_qdf
 from unittest.mock import patch
 import scipy.stats as stats
@@ -16,7 +13,27 @@ from sklearn.linear_model import Ridge, LinearRegression
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import r2_score, make_scorer
 
-from macrosynergy.learning import PanelPCA, RandomEffects, ExpandingKFoldPanelSplit, PanelStandardScaler, LassoSelector, SignalOptimizer, RollingKFoldPanelSplit, ReturnForecaster
+from macrosynergy.learning import (
+    PanelPCA,
+    RandomEffects,
+    ExpandingKFoldPanelSplit,
+    PanelStandardScaler,
+    LassoSelector,
+    SignalOptimizer,
+    RollingKFoldPanelSplit,
+    ReturnForecaster,
+    BasePanelSelector,
+)
+
+
+class _DropLastSelector(BasePanelSelector):
+    """Deterministic selector that always drops the final input feature."""
+
+    def determine_features(self, X, y):
+        mask = np.ones(X.shape[1], dtype=bool)
+        mask[-1] = False
+        return mask
+
 
 class TestReturnForecaster(unittest.TestCase):
     @classmethod
@@ -1321,7 +1338,7 @@ class TestReturnForecaster(unittest.TestCase):
         so_fs.iloc[:,1] = so_fs.iloc[:,1].str.split("_").str[1]
         rf_fs.iloc[:,1] = rf_fs.iloc[:,1].str.split("_").str[1]
 
-        np.testing.assert_array_equal(so_fs.fillna(0).values, rf_fs.fillna(0).values)
+        pd.testing.assert_frame_equal(so_fs.reset_index(drop=True), rf_fs)
 
         # Check that the feature correlations are appropriately calculated
         so_corr = self.so.get_feature_correlations()[self.so.get_feature_correlations().real_date==pd.Timestamp(year=2020, month=11, day=30)]
@@ -1418,6 +1435,42 @@ class TestReturnForecaster(unittest.TestCase):
         )
         self.assertTrue(len(selected_ftrs) > 0)
         self.assertTrue(len(selected_ftrs) == len(self.pipelines))
+
+    def test_selected_features_records_always_dropped_features(self):
+        # A feature a selection step always drops must still appear in selected_ftrs,
+        # marked 0 over the selector's candidate universe, rather than being absent.
+        rf = ReturnForecaster(
+            df=self.df,
+            xcats=["CPI", "GROWTH", "RIR", "XR"],
+            real_date=self.evaluation_date,
+            blacklist=self.black_valid,
+        )
+
+        rf.calculate_predictions(
+            name="SELECT",
+            models={
+                "SELECT": Pipeline([
+                    ("select", _DropLastSelector()),
+                    ("RF", RandomForestRegressor(n_estimators=10, max_depth=1)),
+                ])
+            },
+            hyperparameters={"SELECT": {}},
+            scorers={"R2": make_scorer(r2_score)},
+            inner_splitters={"Rolling": RollingKFoldPanelSplit(5)},
+        )
+
+        selected_ftrs = rf.get_selected_features(name="SELECT")
+
+        candidate_features = list(rf.X.columns)
+        dropped_feature = candidate_features[-1]
+        kept_features = candidate_features[:-1]
+
+        self.assertEqual(
+            selected_ftrs.columns.tolist(),
+            ["real_date", "name"] + candidate_features,
+        )
+        self.assertTrue(selected_ftrs[dropped_feature].eq(0).all())
+        self.assertTrue(selected_ftrs[kept_features].eq(1).all().all())
 
     def test_types_get_feature_importances(self):
         """

@@ -177,7 +177,7 @@ class ReturnForecaster(BasePanelLearner):
             }
         )
 
-        # Feature names cannot be known now so populate later
+        # Feature names cannot be known now
         self.feature_importances = None
         self.selected_ftrs = None
 
@@ -483,7 +483,7 @@ class ReturnForecaster(BasePanelLearner):
         coefs = np.atleast_2d(coefs).mean(axis=0)
 
         coef_ftr_map = dict(zip(feature_names, coefs))
-        selected_ftr_map = {ftr: 1 for ftr in feature_names}
+        selected_ftr_map = self._get_selected_feature_map(optimal_model, feature_names)
 
         if hasattr(final_estimator, "intercept_"):
             if isinstance(final_estimator.intercept_, np.ndarray):

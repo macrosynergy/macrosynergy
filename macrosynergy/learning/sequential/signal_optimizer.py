@@ -439,7 +439,7 @@ class SignalOptimizer(BasePanelLearner):
         ## Selected features
         self.selected_ftrs = self._update_storage_df(
             existing_df=self.selected_ftrs,
-            results_df=pd.DataFrame(ftr_selection_data).fillna(0),
+            results_df=pd.DataFrame(ftr_selection_data),
             name=name,
             drop_all_nan_cols=True,
         )
@@ -567,9 +567,7 @@ class SignalOptimizer(BasePanelLearner):
         coefs = np.atleast_2d(coefs).mean(axis=0)
 
         coef_ftr_map = dict(zip(feature_names, coefs))
-
-        # Create selected feature info
-        selected_ftr_map = {ftr: 1 for ftr in feature_names}
+        selected_ftr_map = self._get_selected_feature_map(optimal_model, feature_names)
 
         if hasattr(final_estimator, "intercept_"):
             if isinstance(final_estimator.intercept_, np.ndarray):
