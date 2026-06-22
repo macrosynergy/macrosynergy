@@ -209,7 +209,7 @@ def _costs_heatmap(
         (
             fid_names.get(fid, fid),
             trade_size,
-            100 * cost_calculator(fid, trade_size) / trade_size,
+            cost_calculator(fid, trade_size),
         )
         for trade_size in trade_sizes
         for fid in fids
