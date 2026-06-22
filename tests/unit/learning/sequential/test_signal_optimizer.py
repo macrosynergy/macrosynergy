@@ -2190,8 +2190,9 @@ class TestAll(unittest.TestCase):
             self.assertIsInstance(prediction_data[1], np.ndarray)
 
             ftr_data = split_result["feature_importances"]
+            expected_size = 4 if recent_sklearn else 1 # 3 ftrs + date
             self.assertIsInstance(ftr_data, dict)
-            self.assertTrue(len(ftr_data) == 1 + 3) # 3 ftrs + date
+            self.assertTrue(len(ftr_data) == expected_size)
             self.assertIsInstance(ftr_data.pop("real_date"), datetime.date)
             for val in ftr_data.values():
                 self.assertIsInstance(val, (np.float64, np.float32, float))  # float or int
@@ -2208,8 +2209,9 @@ class TestAll(unittest.TestCase):
                 )
 
             ftr_selection_data = split_result["selected_ftrs"]
+            expected_size = 4 if recent_sklearn else 1 # 3 ftrs + date
             self.assertIsInstance(ftr_selection_data, dict)
-            self.assertTrue(len(ftr_selection_data) == 1 + 3) # 3 ftrs + date
+            self.assertTrue(len(ftr_selection_data) == expected_size)
             self.assertIsInstance(ftr_selection_data.pop("real_date"), datetime.date)
             for val in ftr_selection_data.values():
                 self.assertTrue(val in [0, 1])
@@ -2285,8 +2287,9 @@ class TestAll(unittest.TestCase):
             self.assertIsInstance(prediction_data[1], np.ndarray)
 
             ftr_data = split_result["feature_importances"]
+            expected_size = 4 if recent_sklearn else 1 # 3 ftrs + date
             self.assertIsInstance(ftr_data, dict)
-            self.assertTrue(len(ftr_data) == 1 + 3) # 3 ftrs + date
+            self.assertTrue(len(ftr_data) == expected_size)
             self.assertIsInstance(ftr_data.pop("real_date"), datetime.date)
             for val in ftr_data.values():
                 self.assertIsInstance(val, np.float32)
@@ -2299,8 +2302,9 @@ class TestAll(unittest.TestCase):
                 self.assertIsInstance(intercept_data["intercepts"], np.float32)
 
             ftr_selection_data = split_result["selected_ftrs"]
+            expected_size = 4 if recent_sklearn else 1 # 3 ftrs + date
             self.assertIsInstance(ftr_selection_data, dict)
-            self.assertTrue(len(ftr_selection_data) == 1 + 3)  # 3 ftrs + date
+            self.assertTrue(len(ftr_selection_data) == expected_size)
             self.assertIsInstance(ftr_selection_data.pop("real_date"), datetime.date)
             for val in ftr_selection_data.values():
                 self.assertTrue(val in [0, 1])
@@ -2603,6 +2607,11 @@ class TestAll(unittest.TestCase):
         with self.assertRaises(TypeError):
             so.get_selected_features(name={})
 
+    @unittest.skipIf(
+        not recent_sklearn,
+        reason="get_feature_names_out is not consistently implemented in "
+               "old sklearn versions",
+    )
     def test_valid_get_selected_features(self):
         so = self.so_with_calculated_preds
         # Test that running get_selected_features on pipeline "test" works
@@ -2812,20 +2821,50 @@ class TestAll(unittest.TestCase):
         assert selected_ftrs["XR"].eq(1).all()
         assert selected_ftrs["GROWTH"].eq(1).all()
 
+    def test_valid_get_selected_features_no_feature_name_getter(self):
+        """
+        Test get_selected_features when not all steps of a sklearn pipeline have the
+        get_feature_names_out method
+        """
+        so = SignalOptimizer(df=self.df, xcats=self.xcats, cids=self.cids)
+
+        with patch.object(
+            Pipeline,
+            attribute="get_feature_names_out",
+            side_effect=AttributeError,
+        ):
+            so.calculate_predictions(
+                name="lr",
+                models={
+                    "lr": Pipeline(
+                        [
+                            ("imputer", SimpleImputer()),
+                            ("pca", PCA(n_components=2)),
+                            ("pred", LinearRegression()),
+                        ]
+                    )
+                },
+                n_jobs_outer=1,
+                min_cids=1,
+                min_periods=12,
+            )
+
+        selected_features = so.get_selected_features("lr")
+
+        self.assertIsInstance(selected_features, pd.DataFrame)
+        self.assertEqual(selected_features.shape[1], 2)
+        self.assertEqual(selected_features.columns[0], "real_date")
+        self.assertEqual(selected_features.columns[1], "name")
+
     def test_selected_features_records_always_dropped_features(self):
         # A feature a selection step always drops must still appear in selected_ftrs,
         # marked 0 over the selector's candidate universe, rather than being absent.
-        so = SignalOptimizer(
-            df=self.df,
-            xcats=self.xcats,
-            cids=self.cids,
-            drop_nas="y",
-        )
+        so = SignalOptimizer(df=self.df, xcats=self.xcats, cids=self.cids)
 
         so.calculate_predictions(
-            name="SELECT",
+            name="RF",
             models={
-                "SELECT": Pipeline([
+                "RF": Pipeline([
                     ("select", _DropLastSelector()),
                     ("RF", RandomForestRegressor(n_estimators=10, max_depth=1)),
                 ])
@@ -2835,7 +2874,7 @@ class TestAll(unittest.TestCase):
             min_periods=12,
         )
 
-        selected_ftrs = so.get_selected_features(name="SELECT")
+        selected_ftrs = so.get_selected_features(name="RF")
 
         candidate_features = list(so.X.columns)
         dropped_feature = candidate_features[-1]
@@ -2872,6 +2911,10 @@ class TestAll(unittest.TestCase):
         with self.assertRaises(TypeError):
             so2.get_feature_importances(name={})
 
+    @unittest.skipIf(
+        not recent_sklearn,
+        reason="get_feature_names_out is not consistently implemented in old sklearn versions"
+    )
     def test_valid_get_feature_importances(self):
         so = self.so_with_calculated_preds
         so2 = self.so_no_na
@@ -2903,9 +2946,8 @@ class TestAll(unittest.TestCase):
         self.assertTrue(feature_importances2.name.unique()[0] == "RF")
         self.assertTrue(feature_importances3.name.unique()[0] == "RIDGE")
         self.assertTrue(feature_importances.isna().sum().sum() == 0)
-        if recent_sklearn:
-            self.assertTrue(feature_importances2.isna().sum().sum() == 0)
-            self.assertTrue(feature_importances3.isna().sum().sum() == 0)
+        self.assertTrue(feature_importances2.isna().sum().sum() == 0)
+        self.assertTrue(feature_importances3.isna().sum().sum() == 0)
 
         # Test that running get_feature_importances without a name works
         try:
@@ -2927,9 +2969,41 @@ class TestAll(unittest.TestCase):
             self.assertEqual(feature_importances2.columns[i], self.X.columns[i - 2])
         self.assertTrue(feature_importances.name.unique()[0] == "test")
         self.assertTrue(feature_importances2.name.unique()[0] == "RF")
-        if recent_sklearn:
-            self.assertTrue(feature_importances.isna().sum().sum() == 0)
-            self.assertTrue(feature_importances2.isna().sum().sum() == 0)
+        self.assertTrue(feature_importances.isna().sum().sum() == 0)
+        self.assertTrue(feature_importances2.isna().sum().sum() == 0)
+
+    def test_valid_get_feature_importances_no_feature_name_getter(self):
+        """
+        Test get_feature_importances when not all steps of a sklearn pipeline have the
+        get_feature_names_out method
+        """
+
+        so = SignalOptimizer(df=self.df, xcats=self.xcats, cids=self.cids)
+
+        with patch.object(Pipeline, "get_feature_names_out", side_effect=AttributeError):
+            so.calculate_predictions(
+                name="lr",
+                models={
+                    "lr": Pipeline(
+                        [
+                            ("imputer", SimpleImputer()),
+                            ("pca", PCA(n_components=2)),
+                            ("pred", LinearRegression()),
+                        ]
+                    )
+                },
+                n_jobs_outer=1,
+                min_cids=1,
+                min_periods=12,
+            )
+
+        feature_importances = so.get_feature_importances("lr")
+
+        self.assertIsInstance(feature_importances, pd.DataFrame)
+        self.assertEqual(feature_importances.shape[1], 2)
+        self.assertEqual(feature_importances.columns[0], "real_date")
+        self.assertEqual(feature_importances.columns[1], "name")
+
 
     def test_types_get_intercepts(self):
         so = self.so_with_calculated_preds
