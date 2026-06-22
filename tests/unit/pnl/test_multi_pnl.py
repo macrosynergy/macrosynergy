@@ -189,6 +189,16 @@ class TestMultiPnL(unittest.TestCase):
 
         eval_df = ma_pnl.evaluate_pnls([f"{self.PNL_XCAT_1}/EQXR", "LONG"])
         self.assertFalse(any("correl" in idx for idx in eval_df.index.tolist()))
+        self.assertIn("p-value >= SR 0.25", eval_df.index.tolist())
+        self.assertIn("p-value >= SR 0.5", eval_df.index.tolist())
+        self.assertIn("p-value >= SR 0.75", eval_df.index.tolist())
+
+        eval_no_probs = ma_pnl.evaluate_pnls(
+            [f"{self.PNL_XCAT_1}/EQXR", "LONG"], sr_probs=[]
+        )
+        self.assertFalse(
+            any(idx.startswith("p-value >= SR") for idx in eval_no_probs.index)
+        )
 
     def test_evaluate_pnls_with_benchmark_adds_rows_all_pnls(self):
         ma_pnl = MultiPnL(bms="AUD_EQXR", df=self.dfd)
@@ -200,6 +210,20 @@ class TestMultiPnL(unittest.TestCase):
         self.assertIn("AUD_EQXR correl", eval_df.index.tolist())
         self.assertIn(f"{self.PNL_XCAT_1}/EQXR", eval_df.columns.tolist())
         self.assertIn("LONG", eval_df.columns.tolist())
+
+        eval_custom = ma_pnl.evaluate_pnls(
+            [f"{self.PNL_XCAT_1}/EQXR", "LONG"], sr_probs=[0.1]
+        )
+        self.assertIn("p-value >= SR 0.1", eval_custom.index.tolist())
+        self.assertNotIn("p-value >= SR 0.25", eval_custom.index.tolist())
+
+    def test_evaluate_pnls_sr_probs_type_checks(self):
+        ma_pnl = MultiPnL()
+        ma_pnl.add_pnl(self.pnl1, [self.PNL_XCAT_1])
+
+        for argval in [1, "A", ["A"]]:
+            with self.assertRaises(TypeError):
+                ma_pnl.evaluate_pnls(sr_probs=argval)
 
     def test_benchmark_row_position(self):
         ma_pnl = MultiPnL(bms="AUD_EQXR", df=self.dfd)
