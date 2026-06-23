@@ -605,6 +605,7 @@ def compare_proxy_pnls(
         cumsum=cumsum,
         return_fig=True,
         cid_labels=pnl_names,
+        ax_hline=0.0
         **kwargs,
     )
     if return_fig:
