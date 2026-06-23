@@ -202,14 +202,16 @@ def _costs_heatmap(
     ylabel: str = "Ticket size (USD millions)",
     fid_names: Optional[Dict[str, str]] = None,
     figsize: Tuple[float, float] = (11, 5),
+    show_as_bps: bool = False,
 ) -> None:
     fid_names = fid_names or {}
-    # create percentage cost data for each fid and trade size
+
+    cost_scaler = 100 if show_as_bps else 1
     data = [
         (
             fid_names.get(fid, fid),
             trade_size,
-            cost_calculator(fid, trade_size),
+            cost_scaler * cost_calculator(fid, trade_size),
         )
         for trade_size in trade_sizes
         for fid in fids
@@ -221,13 +223,18 @@ def _costs_heatmap(
 
     fig, ax = plt.subplots(figsize=figsize)
 
+    if show_as_bps:
+        cbar_unit, annot, fmt = "bps", True, ".3f"
+    else:
+        cbar_unit, annot, fmt = "% of trade size", data.map(lambda x: f"{x:.4f}%"), ""
+
     sns.heatmap(
         data,
         cmap="rocket_r",
-        annot=data.map(lambda x: f"{x:.4f}%"),  # pandas DataFrame
-        fmt="",
+        annot=annot,
+        fmt=fmt,
         annot_kws={"fontsize": 8},
-        cbar_kws={"label": "Cost (% of trade size)"},
+        cbar_kws={"label": f"Cost ({cbar_unit})"},
         ax=ax,
     )
 
@@ -566,6 +573,7 @@ class TransactionCostsDictAdapter:
         ylabel: str = "Ticket size (USD millions)",
         fid_names: Optional[Dict[str, str]] = None,
         figsize: Tuple[float, float] = (10, 5),
+        show_as_bps: bool = False,
     ) -> None:
         _costs_heatmap(
             cost_calculator=self.bidoffer,
@@ -576,6 +584,7 @@ class TransactionCostsDictAdapter:
             xlabel=xlabel,
             ylabel=ylabel,
             figsize=figsize,
+            show_as_bps=show_as_bps,
         )
 
     def rollcost_heatmap(
@@ -586,6 +595,7 @@ class TransactionCostsDictAdapter:
         ylabel: str = "Roll size (USD millions)",
         fid_names: Optional[Dict[str, str]] = None,
         figsize: Tuple[float, float] = (10, 5),
+        show_as_bps: bool = False,
     ) -> None:
         _costs_heatmap(
             cost_calculator=self.rollcost,
@@ -596,6 +606,7 @@ class TransactionCostsDictAdapter:
             xlabel=xlabel,
             ylabel=ylabel,
             figsize=figsize,
+            show_as_bps=show_as_bps,
         )
 
 
