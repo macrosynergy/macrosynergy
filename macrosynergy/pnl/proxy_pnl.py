@@ -585,6 +585,7 @@ def compare_proxy_pnls(
         pnlname, pnle_name = sorted(pnl_xcats_found)
         rename_map = dict(zip([pnlname, pnle_name], include_exclude_cost_labels))
         pnl_df["xcat"] = pnl_df["xcat"].replace(rename_map)
+        pnl_df["cid"] = pnl_names[i]
         pnl_dfs.append(pnl_df)
 
     if not pnl_dfs:
@@ -608,7 +609,7 @@ def compare_proxy_pnls(
     )
     if return_fig:
         return fig
-    fig.show()
+    plt.show()
 
 
 if __name__ == "__main__":
