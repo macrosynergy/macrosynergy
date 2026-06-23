@@ -565,7 +565,11 @@ def compare_proxy_pnls(
 
         pnl_xcats_found = []
         for pnlcatname in [pnl_incl_costs_name, pnl_incl_costs_name + "e"]:
-            pnl_xcat = pnl_df["xcat"].str.endswith(pnlcatname).unique().tolist()
+            pnl_xcat = (
+                pnl_df["xcat"][pnl_df["xcat"].str.endswith(pnlcatname)]
+                .unique()
+                .tolist()
+            )
             if len(pnl_xcat) != 1:
                 raise ValueError(
                     f"Expected exactly one xcat ending with {pnlcatname}, "
