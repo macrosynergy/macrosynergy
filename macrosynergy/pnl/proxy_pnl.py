@@ -533,6 +533,7 @@ def compare_proxy_pnls(
     proxy_pnls: Union[ProxyPnL, List[ProxyPnL]],
     pnl_names: Optional[List[str]] = None,
     title: str = "Proxy PnL Comparison",
+    title_fontsize: int = 22,
     common_portfolio_name: str = "GLB",
     pnl_incl_costs_name="PNL",
     include_exclude_cost_labels=["Incl. Costs", "Excl. Costs"],
@@ -606,6 +607,7 @@ def compare_proxy_pnls(
         return_fig=True,
         cid_labels=pnl_names,
         ax_hline=0.0,
+        title_fontsize=title_fontsize,
         **kwargs,
     )
     if return_fig:
