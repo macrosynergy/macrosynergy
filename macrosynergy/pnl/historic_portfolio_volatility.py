@@ -272,16 +272,8 @@ def _get_first_usable_date(
 ) -> pd.Series:
     """
     Find the first rebalance date on which each contract can be positioned.
-
     The variance-covariance estimate is built from returns only, so a contract
     needs `max_lb` business days of return history before it enters the estimate.
-    The signal only needs to exist, since it is used for positioning rather than
-    for estimating volatility. The `max_lb` buffer is therefore applied to the
-    return start only, and the first usable date is the later of the buffered
-    return start and the first signal date. This stops a contract being held out
-    of the estimate after its signal has begun whenever the return history is the
-    longer of the two series, which would discard usable returns and destabilise
-    the early estimates.
     """
     max_lb = 0
     # for each frequency and lookback
