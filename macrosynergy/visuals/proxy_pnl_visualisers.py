@@ -15,6 +15,7 @@ def transaction_cost_heatmap(
     figsize: Tuple[float, float] = (10, 6),
     exclude_cids: Tuple[str, ...] = ("GLB",),
     label_dict: Dict[str, str] = None,
+    title_fontsize: int = 14,
 ) -> plt.Axes:
     """
     Plot a heatmap of summed transaction costs by cross-section and category.
@@ -45,6 +46,8 @@ def transaction_cost_heatmap(
     label_dict: Dict[str, str]
         Optional mapping used to rename categories for display. Defaults to
         None, in which case the original category names are used.
+    title_fontsize: int
+        Font size of the title. Defaults to 14.
 
     Returns
     -------
@@ -66,7 +69,7 @@ def transaction_cost_heatmap(
 
     sns.heatmap(data, cmap="rocket_r", annot=True, fmt=".2f", ax=ax)
 
-    ax.set_title(title)
+    ax.set_title(title, fontsize=title_fontsize)
     ax.set_xlabel(xlabel)
     ax.set_ylabel(ylabel)
 
@@ -82,6 +85,7 @@ def sensitivity_plot(
     ylabel: str = "",
     figsize: Tuple[float, float] = (10, 6),
     ax: plt.Axes = None,
+    title_fontsize: int = 14,
 ) -> plt.Axes:
     """
     Plot one line per series in a sensitivity analysis.
@@ -111,6 +115,8 @@ def sensitivity_plot(
     ax: plt.Axes
         Optional existing axes to draw on. Defaults to None, in which case a
         new figure and axes are created.
+    title_fontsize: int
+        Font size of the title. Defaults to 14.
 
     Returns
     -------
@@ -123,7 +129,7 @@ def sensitivity_plot(
     for i, label in enumerate(labels):
         sns.lineplot(x=x_values, y=y_values[i], label=label, ax=ax)
 
-    ax.set_title(title)
+    ax.set_title(title, fontsize=title_fontsize)
     ax.set_xlabel(xlabel)
     ax.set_ylabel(ylabel)
 

@@ -203,6 +203,7 @@ def _costs_heatmap(
     fid_names: Optional[Dict[str, str]] = None,
     figsize: Tuple[float, float] = (11, 5),
     show_as_bps: bool = False,
+    title_fontsize: int = 14,
 ) -> None:
     fid_names = fid_names or {}
 
@@ -238,7 +239,7 @@ def _costs_heatmap(
         ax=ax,
     )
 
-    ax.set_title(title)
+    ax.set_title(title, fontsize=title_fontsize)
     ax.set_xlabel(xlabel)
     ax.set_ylabel(ylabel)
 
@@ -574,6 +575,7 @@ class TransactionCostsDictAdapter:
         fid_names: Optional[Dict[str, str]] = None,
         figsize: Tuple[float, float] = (10, 5),
         show_as_bps: bool = False,
+        title_fontsize: int = 14,
     ) -> None:
         _costs_heatmap(
             cost_calculator=self.bidoffer,
@@ -585,6 +587,7 @@ class TransactionCostsDictAdapter:
             ylabel=ylabel,
             figsize=figsize,
             show_as_bps=show_as_bps,
+            title_fontsize=title_fontsize,
         )
 
     def rollcost_heatmap(
@@ -596,6 +599,7 @@ class TransactionCostsDictAdapter:
         fid_names: Optional[Dict[str, str]] = None,
         figsize: Tuple[float, float] = (10, 5),
         show_as_bps: bool = False,
+        title_fontsize: int = 14,
     ) -> None:
         _costs_heatmap(
             cost_calculator=self.rollcost,
@@ -607,6 +611,7 @@ class TransactionCostsDictAdapter:
             ylabel=ylabel,
             figsize=figsize,
             show_as_bps=show_as_bps,
+            title_fontsize=title_fontsize,
         )
 
 
