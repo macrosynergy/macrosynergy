@@ -509,7 +509,13 @@ class ProxyPnL(object):
 
         return summary_statistics
 
-    def plot_pnl(self, title: str = "Proxy PnL", cumsum: bool = True, **kwargs):
+    def plot_pnl(
+        self,
+        title: str = "Proxy PnL",
+        title_fontsize: int = 22,
+        cumsum: bool = True,
+        **kwargs,
+    ):
         """
         Plot the proxy PnL DataFrame. The method uses the proxy PnL calculated in the
         previous step.
@@ -518,6 +524,8 @@ class ProxyPnL(object):
         ----------
         title : str, optional
             Title of the plot.
+        title_fontsize : int, optional
+            Font size of the title.
         cumsum : bool, optional
             Whether to plot the cumulative sum of the proxy PnL.
         kwargs
@@ -526,7 +534,9 @@ class ProxyPnL(object):
         """
         cdf = pd.concat((self.proxy_pnl, self.pnl_excl_costs), axis=0)
         rdf = reduce_df(cdf, cids=["GLB"])
-        msv.timelines(rdf, title=title, cumsum=cumsum)
+        msv.timelines(
+            rdf, title=title, title_fontsize=title_fontsize, cumsum=cumsum, **kwargs
+        )
 
 
 def compare_proxy_pnls(
