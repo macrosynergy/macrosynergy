@@ -270,7 +270,11 @@ def _dollar_per_signal_positions(
     dollar_per_signal: Number = 1.0,
     pname: str = "POS",
 ) -> pd.DataFrame:
-    """"""
+    """
+    This function is used to directly scale the input contract signals to notional 
+    positions, by the simple formula: position = signal * dollar_per_signal.
+    This method cannot be used in conjunction with leverage or vol_target.
+    """
     if not isinstance(dollar_per_signal, Number):
         raise ValueError("`dollar_per_signal` must be a number.")
     _check_df_for_contract_signals(df_wide=df_wide, sname=sname, fids=fids)
