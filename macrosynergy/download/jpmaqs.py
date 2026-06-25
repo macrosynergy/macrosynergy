@@ -1269,9 +1269,10 @@ class JPMaQSDownload(DataQueryInterface):
         assert all([d is True for d in data])
         if path == "":
             return
+        ext = "csv" if as_dataframe else "json"
         d_exprs = [
-            os.path.basename(csv).split(".")[0]
-            for csv in glob.glob(f"{save_path}/**/*.csv", recursive=True)
+            os.path.basename(f).split(".")[0]
+            for f in glob.glob(f"{save_path}/**/*.{ext}", recursive=True)
         ]
         if len(d_exprs) == 0:
             raise ValueError("No data was downloaded.")

@@ -246,8 +246,19 @@ class TestArgChecks(unittest.TestCase):
                 "lback_min_obs": [1, 1, 1],
             }
 
-        good_args_order = ["est_freqs", "est_weights", "lback_periods", "half_life", "lback_min_obs"]
-        numeric_list_args = ["est_weights", "lback_periods", "half_life", "lback_min_obs"]
+        good_args_order = [
+            "est_freqs",
+            "est_weights",
+            "lback_periods",
+            "half_life",
+            "lback_min_obs",
+        ]
+        numeric_list_args = [
+            "est_weights",
+            "lback_periods",
+            "half_life",
+            "lback_min_obs",
+        ]
         # Test good args
         __check_results(
             good_args=good_args(),
@@ -402,6 +413,71 @@ class TestMisc(unittest.TestCase):
 
         for dt in result:
             self.assertTrue(result[dt].equals(expected_result[dt]))
+
+
+class TestGetFirstUsableDate(unittest.TestCase):
+    def setUp(self):
+        self.est_freqs = ["D"]
+        self.lback_periods = [15]
+        self.nan_tolerance = 0.1
+        self.rebal_freq = "M"
+        self.idx = pd.bdate_range(start="2010-01-01", end="2013-01-01")
+        self.rebal_dates = get_sops(dates=self.idx, freq=self.rebal_freq)
+        # mirrors the buffer derived inside `_get_first_usable_date`
+        self.max_lb = get_max_lookback(self.lback_periods[0], self.nan_tolerance)
+
+    def tearDown(self): ...
+
+    def _pivot(self, starts: Dict[str, str]) -> pd.DataFrame:
+        # build a wide panel of ones, NaN before each column's start date
+        df = pd.DataFrame(1.0, index=self.idx, columns=list(starts.keys()))
+        for col, start in starts.items():
+            df.loc[df.index < pd.Timestamp(start), col] = np.nan
+        return df
+
+    def _first_usable(
+        self, pivot_returns: pd.DataFrame, pivot_signals: pd.DataFrame
+    ) -> pd.Series:
+        return _get_first_usable_date(
+            pivot_returns=pivot_returns,
+            pivot_signals=pivot_signals,
+            rebal_dates=self.rebal_dates,
+            est_freqs=self.est_freqs,
+            lback_periods=self.lback_periods,
+            nan_tolerance=self.nan_tolerance,
+        )
+
+    def test_signal_start_is_ignored(self):
+        # the usable date is driven by returns only: a contract enters the
+        # estimate once it has `max_lb` days of return history. The signal start
+        # plays no part, so moving it later must not change the result.
+        ret_start = "2010-01-01"
+        pivot_returns = self._pivot({"USD_EQ": ret_start, "EUR_EQ": ret_start})
+
+        expected = self.rebal_dates[
+            self.rebal_dates >= pd.Timestamp(ret_start) + pd.offsets.BDay(self.max_lb)
+        ].min()
+
+        # EUR_EQ signal starts well after its returns; USD_EQ is the control.
+        for sig_start in ("2010-01-01", "2011-06-01"):
+            pivot_signals = self._pivot({"USD_EQ": ret_start, "EUR_EQ": sig_start})
+            res = self._first_usable(pivot_returns, pivot_signals)
+            self.assertEqual(res["EUR_EQ"], expected)
+            self.assertEqual(res["USD_EQ"], expected)
+
+    def test_return_start_keeps_buffer(self):
+        # when the signal is the longer series the contract must still wait for
+        # `max_lb` days of returns before it enters the covariance estimate.
+        ret_start = "2011-06-01"
+        pivot_returns = self._pivot({"USD_EQ": "2010-01-01", "EUR_EQ": ret_start})
+        pivot_signals = self._pivot({"USD_EQ": "2010-01-01", "EUR_EQ": "2010-01-01"})
+
+        res = self._first_usable(pivot_returns, pivot_signals)
+
+        expected = self.rebal_dates[
+            self.rebal_dates >= pd.Timestamp(ret_start) + pd.offsets.BDay(self.max_lb)
+        ].min()
+        self.assertEqual(res["EUR_EQ"], expected)
 
 
 class TestCalculatePortfolioVolatility(unittest.TestCase):

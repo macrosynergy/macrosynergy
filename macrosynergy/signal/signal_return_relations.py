@@ -1571,7 +1571,7 @@ class SignalReturnRelations:
             constant-level collapse described under ``xlabel``.
         xcat_labels : dict, optional
             Unified rename dictionary covering both signal and return
-            ``xcat``\s. Internally split by membership in ``self.sigs`` /
+            ``xcats``. Internally split by membership in ``self.sigs`` /
             ``self.rets`` and routed through ``signal_name_dict`` /
             ``return_name_dict``; xcats not listed in the dict are kept
             verbatim. Mutually exclusive with the two legacy kwargs — pass
@@ -2000,7 +2000,7 @@ class SignalReturnRelations:
             constant-level collapse described under ``xlabel``.
         xcat_labels : dict, optional
             Unified rename dictionary covering both signal and return
-            ``xcat``\s. Internally split by membership in ``self.sigs`` /
+            ``xcats``. Internally split by membership in ``self.sigs`` /
             ``self.rets`` and routed through ``signal_name_dict`` /
             ``return_name_dict``; xcats not listed in the dict are kept
             verbatim. Mutually exclusive with the two legacy kwargs — pass
@@ -2110,7 +2110,7 @@ class SignalReturnRelations:
             constant-level collapse described under ``xlabel``.
         xcat_labels : dict, optional
             Unified rename dictionary covering both signal and return
-            ``xcat``\s. Internally split by membership in ``self.sigs`` /
+            ``xcats``. Internally split by membership in ``self.sigs`` /
             ``self.rets`` and routed through ``signal_name_dict`` /
             ``return_name_dict``; xcats not listed in the dict are kept
             verbatim. Mutually exclusive with the two legacy kwargs — pass

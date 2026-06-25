@@ -10,18 +10,10 @@ if sys.version_info[:2] < (3, 7):
     raise RuntimeError("Python version >= 3.8 required.")
 
 MAJOR = 1
-MINOR = 6
+MINOR = 7
 MICRO = 0
 ISRELEASED = True
 VERSION = "%d.%d.%d" % (MAJOR, MINOR, MICRO)
-
-if sys.version_info >= (3, 13):
-    # The first version not in the `Programming Language :: Python :: ...` classifiers above
-    warnings.warn(
-        f"Macrosynergy {VERSION} may not yet support Python "
-        f"{sys.version_info.major}.{sys.version_info.minor}.",
-        RuntimeWarning,
-    )
 
 if sys.version_info < (3, 8):
     warnings.warn(
