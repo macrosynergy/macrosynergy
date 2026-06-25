@@ -2,7 +2,7 @@ import datetime
 import pandas as pd
 import warnings
 import requests
-from typing import List, Literal
+from typing import List
 from macrosynergy.management.types import QuantamentalDataFrame
 from macrosynergy.management.utils import get_cid, get_xcat
 from io import StringIO
@@ -43,12 +43,13 @@ AVAILABLE_CATS: List[str] = [
     for s in AVAILABLE_STATS
 ]
 
+VALID_FILE_FORMATS: List[str] = ["auto", "csv", "parquet"]
 
 def download_transaction_costs(
     file_url: str = TRANSACTION_COSTS_FILE_URL,
     verbose: bool = False,
     categorical: bool = False,
-    file_format: Literal["auto", "csv", "parquet"] = "auto",
+    file_format: str = "auto",
     **kwargs,
 ) -> QuantamentalDataFrame:
     """
@@ -61,9 +62,9 @@ def download_transaction_costs(
         to infer the file format from the URL extension.
     verbose : bool
         Print progress information.
-    file_format : Literal["auto", "csv", "parquet"]
-        Format of the file to download. If "auto", the function will try to infer the format
-        from the URL extension. Supported formats are "csv" and "parquet".
+    file_format : str
+        Format of the file to download. Default is "auto", where the function will try to
+        infer the format from the URL extension. Supported formats are "csv" and "parquet".
     **kwargs : args
         Additional keyword arguments to pass to `requests.get`. This can be used to pass
         additional headers, proxy settings, cert verification, etc.
@@ -73,6 +74,7 @@ def download_transaction_costs(
     if verbose:
         print(f"Timestamp (UTC): {datetime.datetime.now(datetime.timezone.utc)}")
         print(f"Downloading trading costs data from {file_url}")
+    file_format = file_format.lower()
     if file_format == "csv" or (file_format == "auto" and file_url.endswith(".csv")):
         dfd: pd.DataFrame = pd.read_csv(
             StringIO(_request_wrapper(file_url, **kwargs)),
@@ -83,7 +85,10 @@ def download_transaction_costs(
     ):
         dfd: pd.DataFrame = pd.read_parquet(file_url)
     else:
-        raise ValueError(f"Unsupported file format: {file_format}")
+        raise ValueError(
+            f"Invalid file format provided: {file_format}. "
+            f"Supported formats are: {VALID_FILE_FORMATS}"
+        )
     dfd["cid"], dfd["xcat"] = get_cid(dfd["ticker"]), get_xcat(dfd["ticker"])
     dfd = dfd[QuantamentalDataFrame.IndexCols + ["value"]]
     if not isinstance(dfd, pd.DataFrame) or dfd.empty:
