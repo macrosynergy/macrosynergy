@@ -246,8 +246,19 @@ class TestArgChecks(unittest.TestCase):
                 "lback_min_obs": [1, 1, 1],
             }
 
-        good_args_order = ["est_freqs", "est_weights", "lback_periods", "half_life", "lback_min_obs"]
-        numeric_list_args = ["est_weights", "lback_periods", "half_life", "lback_min_obs"]
+        good_args_order = [
+            "est_freqs",
+            "est_weights",
+            "lback_periods",
+            "half_life",
+            "lback_min_obs",
+        ]
+        numeric_list_args = [
+            "est_weights",
+            "lback_periods",
+            "half_life",
+            "lback_min_obs",
+        ]
         # Test good args
         __check_results(
             good_args=good_args(),
@@ -436,25 +447,23 @@ class TestGetFirstUsableDate(unittest.TestCase):
             nan_tolerance=self.nan_tolerance,
         )
 
-    def test_signal_start_is_not_buffered(self):
-        # EUR_EQ returns run from the start but its signal begins much later;
-        # USD_EQ has full history for both and acts as a control.
-        sig_start = "2011-06-01"
-        pivot_returns = self._pivot({"USD_EQ": "2010-01-01", "EUR_EQ": "2010-01-01"})
-        pivot_signals = self._pivot({"USD_EQ": "2010-01-01", "EUR_EQ": sig_start})
+    def test_signal_start_is_ignored(self):
+        # the usable date is driven by returns only: a contract enters the
+        # estimate once it has `max_lb` days of return history. The signal start
+        # plays no part, so moving it later must not change the result.
+        ret_start = "2010-01-01"
+        pivot_returns = self._pivot({"USD_EQ": ret_start, "EUR_EQ": ret_start})
 
-        res = self._first_usable(pivot_returns, pivot_signals)
-
-        # the signal only needs to exist: EUR_EQ becomes usable on the first
-        # rebalance date on or after its signal start, with no `max_lb` buffer.
-        expected = self.rebal_dates[self.rebal_dates >= pd.Timestamp(sig_start)].min()
-        self.assertEqual(res["EUR_EQ"], expected)
-
-        # which is strictly earlier than the old, signal-buffered behaviour.
-        old_behaviour = self.rebal_dates[
-            self.rebal_dates >= pd.Timestamp(sig_start) + pd.offsets.BDay(self.max_lb)
+        expected = self.rebal_dates[
+            self.rebal_dates >= pd.Timestamp(ret_start) + pd.offsets.BDay(self.max_lb)
         ].min()
-        self.assertLess(res["EUR_EQ"], old_behaviour)
+
+        # EUR_EQ signal starts well after its returns; USD_EQ is the control.
+        for sig_start in ("2010-01-01", "2011-06-01"):
+            pivot_signals = self._pivot({"USD_EQ": ret_start, "EUR_EQ": sig_start})
+            res = self._first_usable(pivot_returns, pivot_signals)
+            self.assertEqual(res["EUR_EQ"], expected)
+            self.assertEqual(res["USD_EQ"], expected)
 
     def test_return_start_keeps_buffer(self):
         # when the signal is the longer series the contract must still wait for
