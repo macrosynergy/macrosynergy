@@ -1329,7 +1329,7 @@ class NaivePnL:
         start: Optional[str] = None,
         end: Optional[str] = None,
         label_dict: Optional[Dict[str, str]] = None,
-        sr_probs: Optional[List[float]] = None,
+        sr_thresholds: Optional[List[float]] = None,
     ):
         """
         Returns a table of PnL statistics containing the following metrics:
@@ -1346,7 +1346,7 @@ class NaivePnL:
               sample size and serial dependence
             - p-value >= SR {threshold} - one-sided asymptotic probability
               that the mean rolling Sharpe ratio is above each threshold in
-              ``sr_probs``
+              ``sr_thresholds``, if provided
             - Traded Months
 
         Parameters
@@ -1364,10 +1364,10 @@ class NaivePnL:
             latest date in ISO format. Default is None and latest date in df is used.
         label_dict : dict[str, str]
             dictionary with keys as pnl_cats and values as new labels for the PnLs.
-        sr_probs : List[float], optional
+        sr_thresholds : List[float], optional
             Sharpe ratio thresholds for which one-sided probabilities are
-            reported. Defaults to ``[0.25, 0.5, 0.75]``. Pass an empty list to
-            suppress these rows.
+            reported. Default is None and no threshold probability rows are
+            shown.
 
         Returns
         -------
@@ -1381,15 +1381,15 @@ class NaivePnL:
             raise TypeError(error_cids)
         if not isinstance(pnl_cats, (list, type(None))):
             raise TypeError(error_xcats)
-        if sr_probs is None:
-            sr_probs = [0.25, 0.5, 0.75]
-        if not isinstance(sr_probs, list):
-            raise TypeError("sr_probs must be a list of numbers.")
+        if sr_thresholds is None:
+            sr_thresholds = []
+        if not isinstance(sr_thresholds, list):
+            raise TypeError("sr_thresholds must be a list of numbers.")
         if not all(
             isinstance(elem, Number) and not isinstance(elem, bool)
-            for elem in sr_probs
+            for elem in sr_thresholds
         ):
-            raise TypeError("sr_probs must be a list of numbers.")
+            raise TypeError("sr_thresholds must be a list of numbers.")
         if pnl_cats is not None:
             if not all([isinstance(elem, str) for elem in pnl_cats]):
                 raise TypeError(error_xcats)
@@ -1442,7 +1442,7 @@ class NaivePnL:
                 stats.insert(len(stats) - 1, f"{bm} correl")
 
         stats.insert(len(stats) - 1, "Sharpe Stability Ratio")
-        sr_prob_rows = [f"p-value >= SR {float(sr):g}" for sr in sr_probs]
+        sr_prob_rows = [f"p-value >= SR {float(sr):g}" for sr in sr_thresholds]
         for row in sr_prob_rows:
             stats.insert(len(stats) - 1, row)
 
@@ -1495,7 +1495,7 @@ class NaivePnL:
                 benchmark_sr=0.0,
                 annualization_factor=252,
             )
-            for sr, row in zip(sr_probs, sr_prob_rows):
+            for sr, row in zip(sr_thresholds, sr_prob_rows):
                 df.loc[row, col] = sharpe_stability_ratio(
                     dfw[col].dropna(),
                     window=252,
