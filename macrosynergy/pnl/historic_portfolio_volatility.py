@@ -292,7 +292,6 @@ def _get_first_usable_date(
         fstart_ret = pivot_returns[col].first_valid_index() + pd.offsets.BDay(max_lb)
         pr_starts[col] = rebal_dates[rebal_dates >= fstart_ret].min()
 
-    # get the later of the two start dates and return
     return pd.Series(pr_starts, name="real_date")
 
 
