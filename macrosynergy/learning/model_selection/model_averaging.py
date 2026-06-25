@@ -245,10 +245,10 @@ class ModelAveragingRegressor(BaseEstimator, RegressorMixin):
                     "The first element of each tuple should be a string name for the "
                     "estimator. Got {} instead.".format(type(name))
                 )
-            if not isinstance(estimator, RegressorMixin):
+            if not hasattr(estimator, "fit") or not hasattr(estimator, "predict"):
                 raise TypeError(
                     "The second element of each tuple should be a scikit-learn compatible "
-                    "regressor, inheriting from RegressorMixin. Check {}.".format(estimator)
+                    "estimator with fit and predict methods. Got {} instead.".format(type(estimator))
                 )
             if not isinstance(param_grid, dict):
                 raise TypeError(
