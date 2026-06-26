@@ -24,9 +24,11 @@ In particular, the class allows proceeding in three separate steps, implemented 
 
 - The method `contract_signals` transforms standard cross-sectional trading signals into notional contract-specific position signals. For example, if the raw signals refer to vol-targeted positions, the signals need to be inversely proportional to estimated volatility. Or if the signal refers to a hedged position with a hedge basket, the signal needs to be translated into positions for the main contract and all contracts that make up the hedging basket, in proportion to the hedge ratio and the basket shares (under consideration of potential contract blacklisting). Finally, the position signals need to be consolidated so that there is only one position signal per contract.
 
-- The method `notional_positions` transforms contract signals into USD positions. This can be done with two principal methods. The first is to assign an AUM number and a leveraging rule. This means that the total sum of the positions is limited to a specified multiple of the set AUM. The second principal method targets the expected volatility of the portfolio based on the estimated volatility of the contract returns and their correlation. The second method will require an estimate_portfolio_vol function that estimates portfolio volatility based on contract sizes and historical returns.
+- The method `notional_positions` transforms contract signals into USD positions. Exactly one of three sizing methods must be chosen: a leverage rule (total positions capped at a multiple of a set AUM), `dollar_per_signal` (each position is the signal scaled by a fixed USD amount), or a volatility target (positions scaled so the portfolio's expected volatility matches the target, with `historical_portfolio_volatility` estimating it from contract-return volatilities and correlations).
 
-- The method `proxy_pnl` multiplies positions with proxy returns and estimates transaction costs. In particular, it uses a trading_cost method to apply transaction costs and their size dependency to discretionary position changes. And it applies a roll_cost method to apply roll costs to positions at certain intervals. This function also should provide some analytics as to estimated PnLs across sections and the impact of trading costs.
+- The method `proxy_pnl` multiplies positions with proxy returns and estimates transaction costs. Bid-offer cost is charged on the absolute day-over-day change in each position; since positions are flat between rebalances, this is non-zero only on actual trades, with the opening trade booked from a zero-position anchor. Roll cost is charged on a schedule set by `roll_freq` (`"D"`, `"W"`, `"M"` or `"Q"`) and only on the held portion of a position that carries across the roll without changing sign - `min(|position before|, |position after|)` for same-sign positions, and zero on opens, closes, or sign flips. Per-contract costs are suppressed before that contract's first available return. The method returns the PnL including costs, the PnL excluding costs, and per-contract transaction costs.
+
+- Results can be summarized with `evaluate_pnl` (annualized return, Sharpe/Sortino, Sharpe stability, drawdowns, top-5% monthly PnL share, optional benchmark correlations and costs), and multiple `ProxyPnL` runs compared on one chart with `compare_proxy_pnls`.
 
 ### Terminology
 
@@ -99,10 +101,12 @@ flowchart TD;
 
 ```{mermaid}
 flowchart TD
-  CS{{Contract Signals}}
+  DPS[Dollar Per Signal]
   AUM[AUM]
+  CS{{Contract Signals}}
   LVG[Leverage]
   LVGfunc['leverage_positions']
+  DPSfunc['dollar_per_signal_positions']
   VT[Volatility Target]
   HPVfunc(['historical_portfolio_volatility'])
   VTPOSfunc(['volatility_target_positions'])
@@ -114,10 +118,11 @@ flowchart TD
   NPfunc(['notional_positions'])
     VT_UINP -.-> VTPOSfunc
     LVG -.-> LVGfunc
-
+    DPS -.-> DPSfunc
 
     subgraph NP_UINP[User Inputs]
       LVG
+      DPS
       AUM
       CS
       subgraph VT_UINP[Volatility Target Specific Inputs]
@@ -132,6 +137,7 @@ flowchart TD
       LVGfunc
       VTPOSfunc
       HPVfunc
+      DPSfunc
     end
 
     subgraph OUTPUTS[Outputs]
@@ -144,9 +150,11 @@ flowchart TD
     HPVfunc --> HPV
     HPVfunc --> VCV
     NPfunc -.-> LVGfunc
+    NPfunc -.-> DPSfunc
     VTPOSfunc <-.-> HPVfunc
 
     LVGfunc -.-o NP
+    DPSfunc -.-o NP
     NPfunc --> NP
     VTPOSfunc -.-o NP
     NP_UINP --> NPfunc
