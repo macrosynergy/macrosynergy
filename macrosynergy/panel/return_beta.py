@@ -7,8 +7,6 @@ import warnings
 import numpy as np
 import pandas as pd
 from typing import List, Tuple
-import statsmodels.api as sm
-from statsmodels.regression.linear_model import RegressionResults
 
 from macrosynergy.management.types import QuantamentalDataFrame
 from macrosynergy.management.simulate import make_qdf
@@ -107,60 +105,64 @@ def hedge_calculator(
     if max_obs < min_obs:
         raise ValueError(f"max_obs ({max_obs}) must be >= min_obs ({min_obs})")
 
-    benchmark_return = benchmark_return[
-        benchmark_return.first_valid_index() : benchmark_return.last_valid_index()
-    ]
-    unhedged_return = unhedged_return[
-        unhedged_return.first_valid_index() : unhedged_return.last_valid_index()
-    ]
+    # Align returns
+    benchmark_return = benchmark_return.dropna()
+    unhedged_return = unhedged_return.dropna()
 
-    s_date, e_date = date_alignment(
-        unhedged_return=unhedged_return, benchmark_return=benchmark_return
+    common_idx_sorted = (
+        benchmark_return.index
+        .intersection(unhedged_return.index)
+        .sort_values()
     )
 
-    unhedged_return = unhedged_return.truncate(before=s_date, after=e_date)
-    benchmark_return = benchmark_return.truncate(before=s_date, after=e_date)
+    benchmark_return = benchmark_return[common_idx_sorted]
+    unhedged_return = unhedged_return[common_idx_sorted]
 
-    # The date series will be adjusted to each cross-section. Daily dates each return
-    # series is defined over.
-    date_series = unhedged_return.index
-    df_ur = unhedged_return.to_frame(name="returns")
-    df_ur = df_ur.reset_index()
+    if len(common_idx_sorted) < min_obs:
+        raise ValueError(
+            f"Only {len(common_idx_sorted)} overlapping observations between the "
+            f"unhedged and benchmark returns; at least min_obs = "
+            f"{min_obs} are required."
+        )
 
-    # Access the minimum date from the adjusted series: having aligned the unhedged asset
-    # and the benchmark return. Both series will be defined over the same timestamps.
-    min_obs_date = date_series[min_obs]
+    # First date where we have min_obs observations
+    min_obs_date = common_idx_sorted[min_obs - 1]
 
-    # Storage dataframe defined over the re-balancing dates.
-    data_column = np.empty(len(rdates))
-    data_column[:] = np.nan
-    df_hrat = pd.DataFrame(data=data_column, index=rdates, columns=["value"])
+    # Check all re-estimation dates are valid
+    rdates = np.array(rdates)
+    invalid_rdate = rdates < min_obs_date
+    if invalid_rdate.any():
+        raise ValueError(
+            f"Re-estimation dates {rdates[invalid_rdate]} are invalid as there is not "
+            f"at least {min_obs} observations of data."
+        )
 
-    for d in rdates:
-        if d > min_obs_date:
-            curr_start_date: pd.Timestamp = rdates[max(0, rdates.index(d) - max_obs)]
-            # Inclusive of the re-estimation date.
-            yvar = unhedged_return.loc[curr_start_date:d]
-            xvar = benchmark_return.loc[curr_start_date:d]
+    hedge_ratios = {}
+    for rdate in rdates:
+        # Inclusive of the re-estimation date.
+        yvar = unhedged_return.loc[:rdate].values[-max_obs:]
+        xvar = benchmark_return.loc[:rdate].values[-max_obs:].reshape(-1, 1)
 
-            if meth == "ols":
-                weights = np.ones_like(yvar)
-            elif meth == "twls":
-                weights = np.power(2, -np.arange(yvar.shape[0]) / half_life)[::-1]
+        if meth == "ols":
+            weights = np.ones_like(yvar)
+        elif meth == "twls":
+            weights = np.power(2, -np.arange(yvar.shape[0]) / half_life)[::-1]
 
-            betas = weighted_least_squares(
-                X=np.column_stack((np.ones(xvar.shape[0]), xvar)),
-                y=yvar,
-                weights=weights,
-            )
+        betas = weighted_least_squares(
+            X=np.column_stack((np.ones(xvar.shape[0]), xvar)),
+            y=yvar,
+            weights=weights,
+        )
 
-            df_hrat.loc[d] = betas[1]
+        hedge_ratios[rdate] = betas[1]
 
-    # Any dates prior to the minimum observation which would be classified by NaN values
-    # remove from the DataFrame.
-    df_hrat = df_hrat.dropna(axis=0, how="all")
+    # Create hedge ratios dataframe
+    df_hrat = pd.DataFrame.from_dict(hedge_ratios, orient="index", columns=["value"])
     df_hrat.index.name = "real_date"
     df_hrat = df_hrat.reset_index(level=0)
+
+    # Create unhedged return df
+    df_ur = unhedged_return.to_frame(name="returns").reset_index()
 
     # Merge to convert to the re-estimation frequency. The intermediary dates, daily
     # business days between re-estimation dates, will be populated with np.nan values.
@@ -356,7 +358,7 @@ def return_beta(
     cid_hedge = post_fix[0]
     if xcat_hedge == xcat:
         if cid_hedge in cids:
-            cids.remove(cid_hedge)
+            cids = [cid for cid in cids if cid != cid_hedge]
         warnings.warn(
             f"Return to be hedged for cross section {cid_hedge} is the hedge "
             f"return and has been removed from the panel."
@@ -393,19 +395,38 @@ def return_beta(
     br = dfw["hedge"]
 
     rf = _map_to_business_day_frequency(freq=refreq, valid_freqs=["W", "M", "Q"])
-    dates_re = dfw.asfreq(rf).index
+    dates_re = dfw.asfreq(rf).index.values
 
-    if isinstance(dates_re, pd.DatetimeIndex):
-        dates_re: List[str] = dates_re.to_list()
+    # Find first re-balancing date with at least min_obs in the cid and hedge.
+    # Satisfaction is judged at the re-estimation dates, since hedge ratios are only
+    # ever estimated there - a cross-section that reaches min_obs only after the final
+    # re-estimation date cannot be estimated and must be skipped, not crash the run.
+    hedge_valid = dfw["hedge"].notna()
+    min_obs_satisfied = dfw[cids].notna().mul(hedge_valid, axis=0).cumsum().ge(min_obs)
+    satisfied_at_rdate = min_obs_satisfied.asfreq(rf)
+
+    satisfied_cids = satisfied_at_rdate.columns[satisfied_at_rdate.any(axis=0)].tolist()
+    unsatisfied_cids = [c for c in cids if c not in satisfied_cids]
+
+    if len(unsatisfied_cids) == len(cids):
+        raise RuntimeError(f"None of {cids} satisfy min_obs {min_obs}")
+    if unsatisfied_cids:
+        warnings.warn(
+            f"Cannot calculate beta for the following cross sections: "
+            f"{unsatisfied_cids} as there are no re-estimation dates where "
+            f"these cross sections satisfy min_obs = {min_obs}."
+        )
+
+    first_rdate_map = satisfied_at_rdate[satisfied_cids].idxmax().to_dict()
 
     # Cross-section-wise hedge ratio estimation.
 
     aggregate = []
-    for c in cids:
+    for c in satisfied_cids:
         df_hr = hedge_calculator(
             unhedged_return=dfw[c],
             benchmark_return=br,
-            rdates=dates_re,
+            rdates=dates_re[dates_re >= first_rdate_map[c]],
             meth=meth,
             half_life=half_life,
             min_obs=min_obs,
