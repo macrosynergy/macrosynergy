@@ -61,14 +61,14 @@ growing frame; `union_categoricals` skipped when `df_add` is object → washes t
   · **macrosynergy pytest:** `tests/unit/management` 269 passed. Reviewer: APPROVE, 0 blockers,
   2 rounds (round 1: empty-base sort regression + unvectorized public `update_tickers` → fixed).
 
-## Q3 — T2 · `perf/ticker-split-vectorize`  — **TODO**
+## Q3 — T2 · `perf/ticker-split-vectorize`  — **IN REVIEW** (APPROVED; PR #6 open, awaiting human merge — self-approval guard blocked auto-merge)
 `split_ticker` iterable branch (core.py:44) factorize-on-uniques (Level A) +
 `ticker_df_to_qdf` (df_utils.py:251) split column labels pre-stack (Level B). Output-identical.
 - **Cells:** 13 (`InformationStateChanges.to_qdf`).
 - **Baseline:** cell 13 = 244s / 12079 MiB (`ticker_df_to_qdf` ~133s; `split_ticker` 61.5M calls).
 - **After:** _tbd_ · **Parity:** _tbd_ · **macrosynergy pytest:** _tbd_
 
-## Q4 — T3 · `perf/reduce-df-fast-dedup`  — **TODO**
+## Q4 — T3 · `perf/reduce-df-fast-dedup`  — **IN REVIEW** (APPROVED; PR #7 open, awaiting human merge — self-approval guard blocked auto-merge)
 `reduce_df` (df_utils.py:688) object-dtype fallback: skip/fast the terminal all-column
 `drop_duplicates()` (factor-code dedup, or unique-index guard). Output-identical.
 **Fix BOTH implementations (TARGETS §7.3):** object path `df_utils.py::reduce_df`(688) AND the
@@ -77,7 +77,7 @@ categorical/QDF-native twin `qdf/methods.py::reduce_df`(309).
 - **Baseline:** cell 12 = 5.6s / 1928 MiB (`drop_duplicates` 3.3s).
 - **After:** _tbd_ · **Parity:** _tbd_ · **macrosynergy pytest:** _tbd_
 
-## Q5 — T4 · `perf/srr-parallel-mixedlm`  — **TODO** (higher risk)
+## Q5 — T4 · `perf/srr-parallel-mixedlm`  — **IN REVIEW** (higher risk; APPROVED parity, NO win on this machine — PR #8 HELD OPEN for human decision per instruction; see PR body for 4 findings)
 Parallelize the independent MixedLM panel-test fits in `SignalReturnRelations`
 (signal_return_relations.py); fold in the `map_pval` double-`summary()` dedup (lines 967/972).
 Serial default; identical table output. **Slice first, fan out the minimum** — parallelize at the
@@ -88,12 +88,18 @@ BLAS, releases the GIL → no extra memory) **or** processes (tiny payloads) wor
 - **Baseline:** 31=188s, 33=179s, 35=114s, 39=78s, 45=101s, 50=89s (≈749s, all ~7.4 GiB; 50=11.3 GiB).
 - **After:** _tbd_ · **Parity:** _tbd_ · **macrosynergy pytest:** _tbd_
 
-## Q6 — T5 · `perf/zn-scores-reduce`  — **TODO** (depends on Q4)
+## Q6 — T5 · `perf/zn-scores-reduce`  — **DONE (investigation: no change — subsumed by Q4)**
 Investigate hoisting/scoping the repeated full-frame `reduce_df` inside the cell-19
 `make_zn_scores` loop beyond what Q4 already buys.
-- **Cells:** 19. **Baseline:** 139s / 8217 MiB. **After:** _tbd_
+- **Cells:** 19. **Baseline:** 139s / 8217 MiB.
+- **After:** DEFERRED, no code change. Measured post-Q4 (20-cid × 6-xcat panel, 24 single-xcat
+  calls): `reduce_df` is only **7.4%** of `make_zn_scores` (10.0 ms/call); the call is inherently
+  per-xcat (each selects a different xcat) so there is no hoist/scope win — confirmed subsumed by
+  Q4 (T3). No PR. `test_zn_scores.py` 17 passed, `tests/unit/panel` 210 passed, `reduce_df` parity
+  2 passed; `tests/perf/golden/` unchanged. Measured on the Q4 worktree (Q4 not yet merged).
+  · **Findings spun out → see Stretch (T5a/T5b).**
 
-## Q7 — T6 · `perf/basket-categorical-loc`  — **TODO** (small, enables QDF-native notebook)
+## Q7 — T6 · `perf/basket-categorical-loc`  — **IN REVIEW** (small, enables QDF-native notebook; APPROVED, PR #9 open, awaiting human merge — self-approval guard blocked auto-merge)
 `Basket.make_weights` (basket.py:502) `dfw_wgs[fvi:]` raises `InvalidIndexError` on categorical
 input (CategoricalIndex columns). Fix to label slice `dfw_wgs.loc[fvi:]`; audit Basket for similar
 `df[ts:]` patterns. Output-identical. Prerequisite for passing a categorical `dfx` to `Basket`
@@ -106,13 +112,21 @@ input (CategoricalIndex columns). Fix to label slice `dfw_wgs.loc[fvi:]`; audit 
   `make_relative_value` / `panel_calculator` / `make_zn_scores` / `SignalReturnRelations` too).
 - **After:** _tbd_ · **Parity:** _tbd_ · **macrosynergy pytest:** _tbd_
 
-## Q8 — T7 · `perf/zn-scores-parallel`  — **OPTIONAL / low priority** (do after Q4; gated)
+## Q8 — T7 · `perf/zn-scores-parallel`  — **DONE (investigation: no change — deferred, not worthwhile after Q4)**
 Add opt-in `n_jobs` to fan the independent per-xcat scorings in `make_zn_scores` (serial default).
 **Likely deferred:** cell-19 cost is `reduce_df` (Q4), not the z-score math (expanding estimation
 already `O(n)`); inner per-series estimation is sequential. With **per-xcat slicing** (fan out one
 xcat's panel per worker, via an iterator producer) the process-pool memory objection goes away, but
 the residual upside is small. Reassess only if meaningful cost remains after Q4. See TARGETS §3.1.
-- **Cells:** 19. **Baseline:** 139s / 8217 MiB. **After:** _tbd_
+- **Cells:** 19. **Baseline:** 139s / 8217 MiB.
+- **After:** DEFERRED, no code change. Measured post-Q4 (cProfile, neutral=zero / cell-19 case):
+  z-score expanding math is only **~3%** of `make_zn_scores`; the dominant cost is `min()`/`max()`
+  datetime-builtin iteration (~47%) + `date_range` (~13%), which are sequential per-call overhead
+  with no parallelism opportunity, and the small per-xcat granule (~134 ms) is below worker-spawn
+  overhead. Parallelism not worthwhile after Q4 (T7 confirmed deferred per TARGETS §T7/§3.1).
+  `test_zn_scores.py` 17 passed, `tests/unit/panel` 210 passed. No PR. Corroborates the T5a finding
+  (the real `make_zn_scores` lever is the `min`/`max` builtins, not parallelism). Measured on the
+  Q4 worktree (Q4 not yet merged).
 
 > **Notebook-side companion (academy, separate repo/branch):** the cyclical-strength notebook can
 > be made QDF-native (`download(categorical_dataframe=True)` + `.astype(str)`/`observed=True` edits
@@ -126,3 +140,11 @@ the residual upside is small. Reassess only if meaningful cost remains after Q4.
 - **T1b** `perf/qdf-categorical-propagation` (depends on Q2): route the structural-QDF object
   path through the categorical fast path so `cid`/`xcat` return as `category` and speed all
   downstream cells. Changes return dtype → explicit parity treatment required.
+- **T5a** `perf/zn-scores-minmax` (spun out of Q6, trivial, high-value): in
+  `make_zn_scores.py::_make_zn_scores_for_xcat` (≈257-258) the Python builtins
+  `min(df["real_date"])`/`max(df["real_date"])` iterate the datetime Series element-by-element
+  (~37% of `make_zn_scores` runtime). Replace with `df["real_date"].min()`/`.max()` —
+  byte-identical output, ~37% win. Strong candidate to schedule.
+- **T5b** QDF-wrapping overhead (spun out of Q6): `QuantamentalDataFrame(...)` wrapping at
+  `make_zn_scores.py` start costs ~22.6% per call (categorical conversion) — points back at
+  T1/T2c QDF-construction overhead, not a standalone fix.
