@@ -6,7 +6,7 @@ Run: pytest tests/perf/test_perf_update_df.py -m perf --benchmark-only -n0 --no-
 import pytest
 
 from macrosynergy.management.utils import update_df, update_tickers
-from tests.perf.data import qdf_for_tier, update_df_pieces
+from tests.perf.data import update_df_pieces
 
 TIERS = ["small", "medium"]
 

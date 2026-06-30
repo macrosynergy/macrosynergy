@@ -11,6 +11,7 @@ from macrosynergy.management.utils import (
 )
 from macrosynergy.panel.make_relative_value import make_relative_value
 from typing import Union, List, Dict, Tuple, Optional
+import inspect as _inspect
 
 
 class TestAll(unittest.TestCase):
@@ -456,9 +457,6 @@ class TestAll(unittest.TestCase):
             update_tickers(df=self.dfd, df_add=1)
 
 
-import inspect as _inspect
-
-
 class TestUpdateDfEdge(unittest.TestCase):
     def setUp(self):
         self.df = pd.DataFrame({
@@ -485,11 +483,18 @@ class TestUpdateDfEdge(unittest.TestCase):
         merged = out.set_index(["cid", "xcat", "real_date"])["value"]
         self.assertEqual(merged.loc[("AUD", "XR", pd.Timestamp("2020-01-01"))], 10.0)
 
-    def test_non_qdf_raises_typeerror(self):
-        # Current code accesses df.columns before the isinstance guard, so a non-DataFrame
-        # raises AttributeError; accept either TypeError or AttributeError as the contract.
-        with self.assertRaises((TypeError, AttributeError)):
+    def test_non_df_raises_attributeerror(self):
+        # A list has no .columns; current update_df accesses df.columns before its
+        # isinstance guard, so a non-DataFrame raises AttributeError (pinning current behaviour).
+        with self.assertRaises(AttributeError):
             update_df([1, 2, 3], self.df)
+
+    def test_non_qdf_dataframe_raises_typeerror(self):
+        # A plain DataFrame has .columns (survives that access) but is not a
+        # QuantamentalDataFrame, so the isinstance guard fires the documented TypeError.
+        bad_df = pd.DataFrame({"a": [1], "b": [2]})
+        with self.assertRaises(TypeError):
+            update_df(bad_df, self.df)
 
     def test_update_df_signature_unchanged(self):
         sig = _inspect.signature(update_df)
