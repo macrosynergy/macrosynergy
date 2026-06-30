@@ -1907,10 +1907,6 @@ class TestQDFInitializationMethods(unittest.TestCase):
         self.assertTrue(qdf.equals(expc_df))
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 import inspect
 import unittest as _unittest
 import pandas as _pd
@@ -1918,7 +1914,6 @@ import pandas as _pd
 from macrosynergy.management.types import QuantamentalDataFrame as _QDF
 from macrosynergy.management.types.qdf.methods import (
     _get_tickers_series as _gts,
-    add_ticker_column as _atc_fn,
 )
 
 
@@ -1969,3 +1964,7 @@ class TestAddTickerColumnAPI(_unittest.TestCase):
         self.assertEqual(
             list(sig.parameters), ["self", "tickers", "start", "end", "blacklist"]
         )
+
+
+if __name__ == "__main__":
+    unittest.main()

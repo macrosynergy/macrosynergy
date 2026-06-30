@@ -31,6 +31,7 @@ def test_bench_add_ticker_column(benchmark, tier):
 
 
 @pytest.mark.perf
+@pytest.mark.perf
 @pytest.mark.parametrize("tier", TIERS)
 def test_mem_get_tickers_series(tier, perf_env, tmp_path):
     qdf = qdf_for_tier(tier, categorical=True)

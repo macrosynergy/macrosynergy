@@ -5,7 +5,7 @@ import pandas as pd
 from macrosynergy.management.types import QuantamentalDataFrame
 from macrosynergy.management.types.qdf.methods import _get_tickers_series
 from tests.perf.data import qdf_for_tier
-from tests.perf.parity import assert_categorical_equal, assert_qdf_equal
+from tests.perf.parity import assert_categorical_equal
 
 
 def test_get_tickers_series_categorical_contract():
