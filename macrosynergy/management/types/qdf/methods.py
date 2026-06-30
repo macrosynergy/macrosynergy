@@ -518,10 +518,116 @@ def update_df(
 
     if xcat_replace:
         df = update_categories(df=df, df_add=df_add)
+        # Sort: factorize + lexsort on int codes is faster than sort_values on
+        # strings/categoricals.
+        cid_codes, _ = pd.factorize(df["cid"], sort=True)
+        xcat_codes, _ = pd.factorize(df["xcat"], sort=True)
+        rd_vals = df["real_date"].to_numpy(
+            dtype="datetime64[ns]", na_value=np.datetime64("NaT")
+        ).view(np.int64)
+        nat_sentinel = np.datetime64("NaT").view(np.int64)
+        rd_vals = np.where(
+            rd_vals == nat_sentinel, np.iinfo(np.int64).max, rd_vals
+        )
+        order = np.lexsort((rd_vals, xcat_codes, cid_codes))
+        return df.take(order).reset_index(drop=True)
     else:
-        df = update_tickers(df=df, df_add=df_add)
-    _sortorder = QuantamentalDataFrameBase.IndexColsSortOrder
-    return df.sort_values(_sortorder).reset_index(drop=True)
+        # Non-replace path: combine concat + sort + dedup in one factorize+lexsort pass.
+        return _concat_sort_dedup_qdf(df=df, df_add=df_add)
+
+
+def _concat_sort_dedup_qdf(
+    df: pd.DataFrame,
+    df_add: pd.DataFrame,
+) -> QuantamentalDataFrameBase:
+    """Concat two QDFs, sort by IndexColsSortOrder, and dedup in a single factorize+lexsort pass.
+
+    When ``df`` has categorical ``cid``/``xcat`` but ``df_add`` is object-dtype (e.g. output of
+    ``linear_composite`` / ``panel_calculator``), both the large frame and the small add-in have
+    different dtypes and pd.concat would upcast to object.  We avoid that by re-categorizing the
+    small ``df_add`` to the running frame's category set before concat so the result stays
+    categorical — **without mutating the caller's frame**.
+
+    Last-write-wins: the stable lexsort preserves insertion order for equal keys, so duplicate
+    (cid, xcat, real_date) triples have ``df_add``'s row last → it is kept.
+    """
+    if df_add.empty:
+        return df
+
+    # Do NOT short-circuit when df.empty — df_add may be unsorted and must go
+    # through the sort+dedup path to guarantee IDX_COLS_SORT_ORDER output order.
+    # When df is empty we skip concat (avoids dtype-mismatch issues on categoricals)
+    # and just sort+dedup df_add alone.
+    if df.empty:
+        combined = df_add.reset_index(drop=True)
+    else:
+        # Check which columns are categorical on the running-frame side (df).
+        df_cid_cat = df["cid"].dtype.name == "category"
+        df_xcat_cat = df["xcat"].dtype.name == "category"
+
+        # Re-categorize df_add only when df has categorical string-key columns AND
+        # df_add does not — this is the "categorical washes out" case where df_add is
+        # object-dtype (e.g. output of linear_composite / panel_calculator).
+        # When df_add is already categorical pd.concat handles dtype natively.
+        add_cid_obj = df_add["cid"].dtype.name != "category"
+        add_xcat_obj = df_add["xcat"].dtype.name != "category"
+        need_recategorize = (
+            (df_cid_cat and add_cid_obj) or (df_xcat_cat and add_xcat_obj)
+        )
+        if need_recategorize:
+            df_add = df_add.copy()
+            df_overrides: dict = {}
+            for col, df_is_cat, add_is_obj in (
+                ("cid", df_cid_cat, add_cid_obj),
+                ("xcat", df_xcat_cat, add_xcat_obj),
+            ):
+                if not (df_is_cat and add_is_obj):
+                    continue
+                existing = df[col].cat.categories
+                extra = pd.Index(
+                    df_add[col].astype(str).unique()
+                ).difference(existing)
+                cats = existing.append(extra) if len(extra) else existing
+                df_add[col] = pd.Categorical(
+                    df_add[col].astype(str), categories=cats
+                )
+                if len(extra):
+                    df_overrides[col] = pd.Categorical(df[col], categories=cats)
+            if df_overrides:
+                df = df.assign(**df_overrides)
+
+        combined = pd.concat([df, df_add], axis=0, ignore_index=True)
+
+    # factorize with sort=True: codes 0..k-1 in alphabetical order → lexsort gives
+    # the same row order as sort_values on the string/category column.
+    cid_codes, _ = pd.factorize(combined["cid"], sort=True)
+    xcat_codes, _ = pd.factorize(combined["xcat"], sort=True)
+    rd_int = combined["real_date"].to_numpy(
+        dtype="datetime64[ns]", na_value=np.datetime64("NaT")
+    ).view(np.int64)
+    # NaT maps to iinfo(int64).min under the int64 view, which sorts before valid
+    # dates.  Replace NaT sentinels with iinfo max so they sort last, matching
+    # sort_values(na_position='last') semantics of the original code.
+    nat_sentinel = np.datetime64("NaT").view(np.int64)
+    rd_int = np.where(rd_int == nat_sentinel, np.iinfo(np.int64).max, rd_int)
+
+    # np.lexsort: rightmost key is primary → (cid, xcat, real_date) ascending
+    sort_order = np.lexsort((rd_int, xcat_codes, cid_codes))
+
+    # After stable lexsort equal keys are adjacent; detect duplicates in one vectorised pass.
+    cid_s = cid_codes[sort_order]
+    xcat_s = xcat_codes[sort_order]
+    rd_s = rd_int[sort_order]
+    n = len(sort_order)
+    is_dup = np.empty(n, dtype=bool)
+    is_dup[-1] = False
+    is_dup[:-1] = (
+        (cid_s[:-1] == cid_s[1:])
+        & (xcat_s[:-1] == xcat_s[1:])
+        & (rd_s[:-1] == rd_s[1:])
+    )
+    keep_order = sort_order[~is_dup]
+    return combined.take(keep_order).reset_index(drop=True)
 
 
 def update_tickers(
@@ -543,37 +649,7 @@ def update_tickers(
     QuantamentalDataFrame
         Updated DataFrame.
     """
-    if df_add.empty:
-        return df
-    elif df.empty:
-        return df_add
-
-    if all(
-        _df[icol].dtype.name == "category"
-        for _df in [df, df_add]
-        for icol in ["cid", "xcat"]
-    ):
-        union_cids = pd.api.types.union_categoricals(
-            [df["cid"].unique(), df_add["cid"].unique()]
-        )
-        union_xcats = pd.api.types.union_categoricals(
-            [df["xcat"].unique(), df_add["xcat"].unique()]
-        )
-        df["cid"] = pd.Categorical(df["cid"], categories=union_cids.categories)
-        df["xcat"] = pd.Categorical(df["xcat"], categories=union_xcats.categories)
-
-        df_add["cid"] = pd.Categorical(df_add["cid"], categories=union_cids.categories)
-        df_add["xcat"] = pd.Categorical(
-            df_add["xcat"], categories=union_xcats.categories
-        )
-
-    df = pd.concat([df, df_add], axis=0, ignore_index=True)
-
-    df = df.drop_duplicates(
-        subset=QuantamentalDataFrameBase.IndexCols,
-        keep="last",
-    ).reset_index(drop=True)
-    return df
+    return _concat_sort_dedup_qdf(df=df, df_add=df_add)
 
 
 def update_categories(
