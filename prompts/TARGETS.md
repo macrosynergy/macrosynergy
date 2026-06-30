@@ -359,6 +359,7 @@ its GATE. Capture runs **after** the profiling sweep frees memory (not concurren
 | 4 | T3 | `perf/reduce-df-fast-dedup` | — |
 | 5 | T4 | `perf/srr-parallel-mixedlm` (incl. `summary()` dedup) | — |
 | 6 | T5 | `perf/zn-scores-reduce` | T3 |
+| 7 | T6 | `perf/basket-categorical-loc` (Basket `.loc[fvi:]`) | — (enables QDF-native notebook; see §7.2) |
 | — | T1b (stretch) | `perf/qdf-categorical-propagation` | **demoted — see §7.1** |
 
 ## 7. Notebook-side (academy) complementary optimization — flagged, NOT part of Scope-2
@@ -446,5 +447,80 @@ categorical:
   notebook could *both* drop its hand-rolled concatenations *and* be categorical-safe. A neat
   post-T2c notebook cleanup, but not on the macrosynergy critical path.
 
-(The categorical harness mode lives in the scratch `cat_profile.py`; given it breaks 4/8 cells it
-is **not** worth folding into the committed Scope-1 harness.)
+(The categorical harness mode lives in the scratch `cat_profile.py`.)
+
+### 7.2 Measured result — notebook fixed to be QDF-native, end-to-end re-run
+
+Followed the flip: instead of changing macrosynergy, **fixed the notebook cells** so the pipeline
+runs on a categorical `QuantamentalDataFrame` (`download(categorical_dataframe=True)`), then re-ran
+the full sweep. Fixes (in the harness mirror `cells.py`; mirror to the `.ipynb`):
+
+- **Cells 12, 13, 15** — the `cid + "_" + xcat` / `xcat += "A"` string ops were rewritten
+  `.astype(str)`-first, and the cell-12 `groupby` got `observed=True` (so categorical grouping
+  keeps only observed combinations = the object result). Dtype-agnostic, parity-preserving.
+- **Cell 27** — *could not* be fixed notebook-side: `msp.Basket.make_weights` (`basket.py:502`)
+  slices its wide frame with `dfw_wgs[fvi:]` (a Timestamp slice), which raises `InvalidIndexError`
+  on a `CategoricalIndex`. Worked around by feeding `Basket` a string-typed view
+  (`QuantamentalDataFrame(dfx, categorical=False)`) — which **copies the frame** and is the cause
+  of cell 27's higher peak RSS below. The real fix is macrosynergy-side → **new target T6**.
+
+**Value parity:** object vs categorical outputs are **identical** for cells 12/13/15/27 (dfx
+values + extras), verified on a representative cid subset (`parity_check.py`).
+
+| Cell | Object wall / RSS(MiB) | QDF-native wall / RSS(MiB) | Δ |
+|---|---|---|---|
+| 12 | 5.6 / 1928 | 4.3 / 1699 | faster, lighter |
+| 13 | 243.6 / 12079 | 246.6 / **12730** | unchanged, +RSS |
+| 14 | 64.9 / 6182 | **6.3** / 4221 | **−90% wall** |
+| 15 | 37.6 / 9240 | 39.6 / 9106 | unchanged |
+| 17 | 418.6 / 9007 | 429.3 / 9003 | unchanged |
+| 18 | 751.2 / 8477 | 452.4 / **9190** | −40% wall (paging-noisy), +RSS |
+| 19 | 139.3 / 8217 | 63.1 / 8146 | **−55% wall** |
+| 27 | 589.7 / 10336 | 575.0 / **12915** | ~same wall, **+25% RSS** |
+| 31/33/35/39/45/50 (SRR) | 749 total | 723 total | ~same |
+| **building chain (12–19,27)** | **2250s** | **1817s** | **−19% wall** |
+| **whole sweep** | **~3048s** | **~2565s** | **−16% wall** |
+| **peak RSS (max cell)** | **12079 (c13)** | **12915 (c27)** | **+7% (worse)** |
+
+**What this proves (the data you asked for):**
+
+1. **A QDF-native notebook is feasible and parity-safe** — three cells need trivial
+   `.astype(str)` / `observed=True` edits. **But cell 27 can't be done notebook-side** — `Basket`
+   rejects categorical input (a real macrosynergy bug, T6).
+2. **The wall win is real but narrow (~16%)** and comes almost entirely from **cell 14**
+   (pure-pandas relabel, 65s→6.3s) and **cell 19** (139s→63s). The three dominant cells —
+   **13 (`split_ticker`/T2), 17 (`update_df`/T1), 27 (`Basket`/`reduce_df_by_ticker`/T2c)** — are
+   **unchanged**. So categorical does *not* substitute for T1/T2/T2c.
+3. **Memory got worse, not better.** Peak RSS rose 12.1→12.9 GiB. The "QDF is a smaller object"
+   intuition holds **at rest** (the stored `dfx`'s `cid`/`xcat` become int codes), but **peak
+   working set** — the metric that drives OOM and paging — is set by the transient **object-dtype
+   intermediates** the panel functions still materialize, plus the categorical metadata overhead
+   and (cell 27) the Basket object-copy. Notebook-side categorical alone cannot lower the peak;
+   that needs the macrosynergy-side fixes (T1/T2c/T2/T3 reduce the intermediates themselves).
+
+**Revised recommendation:**
+
+- **Adopt the QDF-native notebook edits** (cells 12/13/15 + the cell-27 workaround, and
+  `download(categorical_dataframe=True)`): they're cheap, parity-safe, and buy ~16% wall — *and*
+  a categorical `dfx` is the better default representation. Worth doing **for the wall win on
+  14/19 and as the canonical dtype**, not for memory.
+- **It does not change the macrosynergy priority.** T2c → T1 → T2 → T3 still own the dominant
+  costs (cells 13/17/27) and are the only way to actually cut peak RSS. Ship them regardless.
+- **The two compose best together:** with a categorical `dfx` *and* T2c (which makes the
+  categorical `_get_tickers_series` fast) *and* T1 (fast `update_df` so categorical doesn't wash
+  out), the building chain would improve far more than either alone.
+
+### T6 — `Basket` categorical-input bug (enables the QDF-native notebook)
+*(perf/basket-categorical-loc)*
+
+- **File/function:** `macrosynergy/panel/basket.py::make_weights` (line 502) — `dfw_wgs[fvi:]`
+  where `fvi` is a `Timestamp` and `dfw_wgs` has a `CategoricalIndex` of tickers/cids → pandas
+  evaluates `fvi in columns` → `CategoricalIndex.__contains__` → **`InvalidIndexError`**.
+- **Repro:** any `msp.Basket(df, …).make_basket(...)` where `df` is a categorical
+  `QuantamentalDataFrame` (cell 27). Object-dtype input works, so it's latent.
+- **Fix (output-identical):** use label-based slicing — `dfw_wgs = dfw_wgs.loc[fvi:]` — which does
+  not probe the columns index. Audit `Basket` for other `df[ts:]`/`in columns` patterns.
+- **Risk:** low; `.loc[fvi:]` is the correct row-label slice. Run the macrosynergy suite.
+- **Why it matters:** without it the notebook can't pass a categorical frame to `Basket` and must
+  copy back to object (the +25% RSS on cell 27). Prerequisite for a clean categorical-native
+  notebook; small and self-contained.

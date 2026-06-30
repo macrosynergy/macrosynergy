@@ -56,6 +56,20 @@ Investigate hoisting/scoping the repeated full-frame `reduce_df` inside the cell
 `make_zn_scores` loop beyond what Q4 already buys.
 - **Cells:** 19. **Baseline:** 139s / 8217 MiB. **After:** _tbd_
 
+## Q7 — T6 · `perf/basket-categorical-loc`  — **TODO** (small, enables QDF-native notebook)
+`Basket.make_weights` (basket.py:502) `dfw_wgs[fvi:]` raises `InvalidIndexError` on categorical
+input (CategoricalIndex columns). Fix to label slice `dfw_wgs.loc[fvi:]`; audit Basket for similar
+`df[ts:]` patterns. Output-identical. Prerequisite for passing a categorical `dfx` to `Basket`
+(cell 27) without an object-copy (which today costs +25% peak RSS on that cell).
+- **Cells:** 27. **Baseline:** object 590s / 10336 MiB; categorical+object-copy 575s / 12915 MiB.
+- **After:** _tbd_ · **Parity:** _tbd_ · **macrosynergy pytest:** _tbd_
+
+> **Notebook-side companion (academy, separate repo/branch):** the cyclical-strength notebook can
+> be made QDF-native (`download(categorical_dataframe=True)` + `.astype(str)`/`observed=True` edits
+> to cells 12/13/15 + the cell-27 Basket workaround until T6 lands). Parity-verified, ~16% wall
+> (cells 14 & 19); does **not** reduce peak RSS. Adopt as canonical dtype, but **not** a substitute
+> for Q1–Q5. See TARGETS.md §7.2.
+
 ---
 
 ## Stretch (not scheduled)
