@@ -195,3 +195,8 @@ coverage.xml
 # Visual studio
 .trunk/
 launch.json
+
+# perf framework: machine-specific result artifacts and large golden blobs
+tests/perf/results/*
+!tests/perf/results/.gitkeep
+tests/perf/golden/*.parquet
