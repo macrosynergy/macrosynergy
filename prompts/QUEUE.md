@@ -25,6 +25,10 @@ Vectorize `_get_tickers_series` (qdf/methods.py:172): replace the per-row f-stri
 ## Q2 — T1 · `perf/update-df-categorical-sort`  — **TODO**
 `update_df`/`update_tickers` (df_utils.py:561/627) object-dtype branch: dedup + sort on
 factorized integer codes instead of object strings; restore dtype + order (byte-identical).
+**Fix BOTH implementations (TARGETS §7.3):** the object path `df_utils.py::update_df/update_tickers`
+AND the categorical/QDF-native twins `qdf/methods.py::update_df`(458)/`update_tickers`(493) +
+`qdf/classes.py::update_df`(291) — the categorical path is still ~330s in cell 17 (re-sorts the
+growing frame; `union_categoricals` skipped when `df_add` is object → washes to object).
 - **Cells:** 17, 18, 27, 15, 19, 13.
 - **Baseline:** cell 17 = 419s / 9007 MiB (update_df ≈330s); cell 15 = 38s; cell 13 = 244s.
 - **After:** _tbd_ · **Parity:** _tbd_ · **macrosynergy pytest:** _tbd_
@@ -39,6 +43,8 @@ factorized integer codes instead of object strings; restore dtype + order (byte-
 ## Q4 — T3 · `perf/reduce-df-fast-dedup`  — **TODO**
 `reduce_df` (df_utils.py:688) object-dtype fallback: skip/fast the terminal all-column
 `drop_duplicates()` (factor-code dedup, or unique-index guard). Output-identical.
+**Fix BOTH implementations (TARGETS §7.3):** object path `df_utils.py::reduce_df`(688) AND the
+categorical/QDF-native twin `qdf/methods.py::reduce_df`(309).
 - **Cells:** 12, 19, 43, 47 (+ inside `linear_composite`/`make_zn_scores`/`NaivePnL`).
 - **Baseline:** cell 12 = 5.6s / 1928 MiB (`drop_duplicates` 3.3s).
 - **After:** _tbd_ · **Parity:** _tbd_ · **macrosynergy pytest:** _tbd_
@@ -62,6 +68,11 @@ input (CategoricalIndex columns). Fix to label slice `dfw_wgs.loc[fvi:]`; audit 
 `df[ts:]` patterns. Output-identical. Prerequisite for passing a categorical `dfx` to `Basket`
 (cell 27) without an object-copy (which today costs +25% peak RSS on that cell).
 - **Cells:** 27. **Baseline:** object 590s / 10336 MiB; categorical+object-copy 575s / 12915 MiB.
+- **Test gap (must fix as part of T6):** `Basket`'s unit tests only cover object-dtype input, so
+  this `InvalidIndexError` on categorical was never caught — it should have been flagged at PR
+  time. Add a regression test running `Basket` on a categorical `QuantamentalDataFrame`, and add a
+  categorical-input case to the shared panel-function test matrix (audit `linear_composite` /
+  `make_relative_value` / `panel_calculator` / `make_zn_scores` / `SignalReturnRelations` too).
 - **After:** _tbd_ · **Parity:** _tbd_ · **macrosynergy pytest:** _tbd_
 
 > **Notebook-side companion (academy, separate repo/branch):** the cyclical-strength notebook can

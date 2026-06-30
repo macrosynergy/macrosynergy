@@ -110,11 +110,15 @@ from drafting, **not** the ranking — the ranking is the order in this table:
 | 4 | **T3** | `reduce_df` fast dedup | 12, 19, 43, 47, + inside others | moderate, broad | med | med (very broad use) |
 | 5 | **T4** | parallelize SRR MixedLM panel test | 31,33,35,39,45,50 | ~749s (25% of total) | med | **high** (concurrency in core class) |
 | 6 | **T5** | `make_zn_scores` repeated `reduce_df` | 19 | subsumed by T3 | med | low (depends on T3) |
+| 7 | **T6** | `Basket` categorical-input fix (`.loc[fvi:]`) | 27 | enabler for QDF-native notebook; removes cell-27 object-copy (+25% RSS) | high | low |
 
 T2c, T1, T2, T3 are one coherent theme — **the notebook's `dfx` is object-dtype, so the data
 oscillates between object and categorical representations and pays string-handling / conversion
 costs in both directions.** They are independent sub-branches but compose; together they target
 the ~74% of runtime in the building chain. T4 is a separate, higher-risk lever for the SRR 25%.
+T6 is small and unblocks the QDF-native notebook (§7.2–7.3). **Note (§7.3):** for T1 and T3 the
+hot path is in `df_utils.py` for object input and in the `qdf/methods.py`+`classes.py` twins for
+categorical (QDF-native) input — **fix both implementations**; T2/T2c are dtype-independent.
 
 ---
 
@@ -528,6 +532,15 @@ values + extras), verified on a representative cid subset (`parity_check.py`).
 - **Fix (output-identical):** use label-based slicing — `dfw_wgs = dfw_wgs.loc[fvi:]` — which does
   not probe the columns index. Audit `Basket` for other `df[ts:]`/`in columns` patterns.
 - **Risk:** low; `.loc[fvi:]` is the correct row-label slice. Run the macrosynergy suite.
+- **Test-coverage gap (should have been flagged):** `QuantamentalDataFrame` supports a categorical
+  mode and `JPMaQSDownload.download(categorical_dataframe=True)` is a public option, yet `Basket`'s
+  unit tests evidently exercise **object-dtype input only** — a categorical-input case would have
+  caught this `InvalidIndexError` at PR time. **T6 must add a regression test that runs `Basket`
+  (`make_basket`/`make_weights`/`return_basket`) on a categorical `QuantamentalDataFrame`**, and
+  the same categorical-input case should be added to the shared panel-function test matrix
+  (`Basket`, and audited for `linear_composite`/`make_relative_value`/`panel_calculator`/
+  `make_zn_scores`/`SignalReturnRelations`) so categorical is a first-class tested input, not a
+  latent path. Treat "object-only test coverage of a dtype-polymorphic API" as the root cause.
 - **Why it matters:** without it the notebook can't pass a categorical frame to `Basket` and must
   copy back to object (the +25% RSS on cell 27). Prerequisite for a clean categorical-native
   notebook; small and self-contained.
