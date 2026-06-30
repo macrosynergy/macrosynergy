@@ -9,7 +9,12 @@ from __future__ import annotations
 
 import argparse
 import json
+import pathlib
 import sys
+
+# Allow running as a bare script (`python tests/perf/capture_parity.py`): ensure the
+# repo root is importable so `tests.perf.*` resolves without PYTHONPATH being set.
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]))
 
 import pandas as pd
 
@@ -55,7 +60,7 @@ def main(argv=None) -> int:
         print(f"  captured {name}: {kind} sha256={h[:12]}…")
 
     GOLDEN_DIR.mkdir(parents=True, exist_ok=True)
-    index_path.write_text(json.dumps(index, indent=2, sort_keys=True))
+    index_path.write_text(json.dumps(index, indent=2, sort_keys=True) + "\n")
     print(f"Wrote {index_path} ({len(index)} goldens).")
     return 0
 

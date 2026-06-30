@@ -46,4 +46,9 @@ def save_golden(name: str, df: pd.DataFrame) -> str:
 
 
 def load_golden(name: str) -> pd.DataFrame:
-    return pd.read_parquet(GOLDEN_DIR / f"{name}.parquet")
+    path = GOLDEN_DIR / f"{name}.parquet"
+    if not path.exists():
+        raise FileNotFoundError(
+            f"Golden not found: {path}. Run `python tests/perf/capture_parity.py --update` first."
+        )
+    return pd.read_parquet(path)
