@@ -1,4 +1,3 @@
-import hashlib
 from tests.perf.env import environment_fingerprint, fingerprint_hash, comparable
 
 

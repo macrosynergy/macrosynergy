@@ -48,7 +48,9 @@ def _git_sha() -> Optional[str]:
             ["git", "rev-parse", "--short", "HEAD"],
             capture_output=True, text=True, timeout=5,
         )
-        return out.stdout.strip() or None if out.returncode == 0 else None
+        if out.returncode != 0:
+            return None
+        return out.stdout.strip() or None
     except Exception:
         return None
 
