@@ -150,7 +150,7 @@ Expected: exit code 0, "no tests ran" (no perf tests exist yet) and **no** "Unkn
 
 - [ ] **Step 6: Verify the default gate still collects normally**
 
-Run: `pytest tests/unit/management/test_qdf.py --collect-only -q -p no:cov -n0`
+Run: `pytest tests/unit/management/test_qdf.py --collect-only -q --no-cov -n0`
 Expected: tests collected, exit code 0.
 
 - [ ] **Step 7: Commit**
@@ -216,7 +216,7 @@ def test_comparable_false_when_cpu_differs():
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `pytest tests/perf/test_env.py -v -p no:cov -n0`
+Run: `pytest tests/perf/test_env.py -v --no-cov -n0`
 Expected: FAIL with `ModuleNotFoundError: No module named 'tests.perf.env'`.
 
 - [ ] **Step 3: Write the implementation**
@@ -333,7 +333,7 @@ def comparable(fp_a: dict, fp_b: dict) -> bool:
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `pytest tests/perf/test_env.py -v -p no:cov -n0`
+Run: `pytest tests/perf/test_env.py -v --no-cov -n0`
 Expected: 4 passed.
 
 - [ ] **Step 5: Commit**
@@ -426,7 +426,7 @@ def test_srr_panel_has_signal_and_return_xcats():
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `pytest tests/perf/test_data.py -v -p no:cov -n0`
+Run: `pytest tests/perf/test_data.py -v --no-cov -n0`
 Expected: FAIL with `ModuleNotFoundError: No module named 'tests.perf.data'`.
 
 - [ ] **Step 3: Write the implementation**
@@ -572,7 +572,7 @@ def srr_panel(
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `pytest tests/perf/test_data.py -v -p no:cov -n0`
+Run: `pytest tests/perf/test_data.py -v --no-cov -n0`
 Expected: 8 passed. (If `test_qdf_for_tier_tiny_is_small_enough` reports a row count, confirm tiny < 50k; adjust `SCALE_TIERS["tiny"]` down if needed.)
 
 - [ ] **Step 5: Commit**
@@ -626,7 +626,7 @@ def test_measure_rss_off_by_default():
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `pytest tests/perf/test_mem.py -v -p no:cov -n0`
+Run: `pytest tests/perf/test_mem.py -v --no-cov -n0`
 Expected: FAIL with `ModuleNotFoundError: No module named 'tests.perf.mem'`.
 
 - [ ] **Step 3: Write the implementation**
@@ -714,7 +714,7 @@ def measure(
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `pytest tests/perf/test_mem.py -v -p no:cov -n0`
+Run: `pytest tests/perf/test_mem.py -v --no-cov -n0`
 Expected: 3 passed.
 
 - [ ] **Step 5: Commit**
@@ -750,7 +750,7 @@ def test_perf_env_fixture(perf_env):
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `pytest tests/perf/test_conftest_hook.py -v -p no:cov -n0`
+Run: `pytest tests/perf/test_conftest_hook.py -v --no-cov -n0`
 Expected: FAIL with `fixture 'perf_env' not found`.
 
 - [ ] **Step 3: Write the implementation**
@@ -777,7 +777,7 @@ def pytest_benchmark_update_machine_info(config, machine_info):
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `pytest tests/perf/test_conftest_hook.py -v -p no:cov -n0`
+Run: `pytest tests/perf/test_conftest_hook.py -v --no-cov -n0`
 Expected: 1 passed.
 
 - [ ] **Step 5: Commit**
@@ -860,7 +860,7 @@ def test_save_and_load_golden_roundtrip(tmp_path, monkeypatch):
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `pytest tests/perf/test_parity_helpers.py -v -p no:cov -n0`
+Run: `pytest tests/perf/test_parity_helpers.py -v --no-cov -n0`
 Expected: FAIL with `ModuleNotFoundError: No module named 'tests.perf.parity'`.
 
 - [ ] **Step 3: Write `parity.py`**
@@ -992,7 +992,7 @@ if __name__ == "__main__":
 
 - [ ] **Step 5: Run helper tests + generate goldens**
 
-Run: `pytest tests/perf/test_parity_helpers.py -v -p no:cov -n0`
+Run: `pytest tests/perf/test_parity_helpers.py -v --no-cov -n0`
 Expected: 5 passed.
 Then run: `python tests/perf/capture_parity.py --update`
 Expected: prints 3 captured goldens; writes `tests/perf/golden/index.json`.
@@ -1057,7 +1057,7 @@ def test_cross_machine_shows_banner():
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `pytest tests/perf/test_record.py -v -p no:cov -n0`
+Run: `pytest tests/perf/test_record.py -v --no-cov -n0`
 Expected: FAIL with `ModuleNotFoundError: No module named 'tests.perf.record'`.
 
 - [ ] **Step 3: Write the implementation**
@@ -1133,7 +1133,7 @@ if __name__ == "__main__":
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `pytest tests/perf/test_record.py -v -p no:cov -n0`
+Run: `pytest tests/perf/test_record.py -v --no-cov -n0`
 Expected: 3 passed.
 
 - [ ] **Step 5: Commit**
@@ -1206,7 +1206,7 @@ def test_reduce_df_by_ticker_parity():
 
 - [ ] **Step 2: Run parity test to verify it passes on current code**
 
-Run: `pytest tests/perf/test_parity_qdf_ticker_series.py -v -p no:cov -n0`
+Run: `pytest tests/perf/test_parity_qdf_ticker_series.py -v --no-cov -n0`
 Expected: 3 passed. (If `_get_tickers_series` category ordering differs, align the expected construction to the source at `methods.py:200-210` — categories via `pd.unique` in first-appearance order, `ordered=True`.)
 
 - [ ] **Step 3: Add edge/dtype/API tests to `tests/unit/management/test_qdf.py`**
@@ -1276,7 +1276,7 @@ class TestAddTickerColumnAPI(_unittest.TestCase):
 
 - [ ] **Step 4: Run the new unit tests**
 
-Run: `pytest tests/unit/management/test_qdf.py -k "GetTickersSeriesEdge or AddTickerColumnAPI" -v -p no:cov -n0`
+Run: `pytest tests/unit/management/test_qdf.py -k "GetTickersSeriesEdge or AddTickerColumnAPI" -v --no-cov -n0`
 Expected: all passed.
 
 - [ ] **Step 5: Write the benchmark module**
@@ -1395,7 +1395,7 @@ def test_update_df_does_not_mutate_input():
 
 - [ ] **Step 2: Run parity test**
 
-Run: `pytest tests/perf/test_parity_update_df.py -v -p no:cov -n0`
+Run: `pytest tests/perf/test_parity_update_df.py -v --no-cov -n0`
 Expected: 3 passed. (Golden `update_df_loop_tiny` was created in Task 6.)
 
 - [ ] **Step 3: Add edge/dtype/API tests to `tests/unit/management/test_update_df.py`**
@@ -1448,7 +1448,7 @@ class TestUpdateDfEdge(unittest.TestCase):
 
 - [ ] **Step 4: Run the new unit tests**
 
-Run: `pytest tests/unit/management/test_update_df.py -k "UpdateDfEdge" -v -p no:cov -n0`
+Run: `pytest tests/unit/management/test_update_df.py -k "UpdateDfEdge" -v --no-cov -n0`
 Expected: all passed.
 
 - [ ] **Step 5: Write the benchmark module**
@@ -1541,7 +1541,7 @@ def test_ticker_df_to_qdf_columns():
 
 - [ ] **Step 2: Run parity test**
 
-Run: `pytest tests/perf/test_parity_ticker_split.py -v -p no:cov -n0`
+Run: `pytest tests/perf/test_parity_ticker_split.py -v --no-cov -n0`
 Expected: 2 passed.
 
 - [ ] **Step 3: Add `split_ticker` direct + edge/API tests to `tests/unit/management/test_utils.py`**
@@ -1595,7 +1595,7 @@ class TestSplitTickerDirect(_ut_st.TestCase):
 
 - [ ] **Step 4: Run the new unit tests**
 
-Run: `pytest tests/unit/management/test_utils.py -k "SplitTickerDirect" -v -p no:cov -n0`
+Run: `pytest tests/unit/management/test_utils.py -k "SplitTickerDirect" -v --no-cov -n0`
 Expected: 9 passed.
 
 - [ ] **Step 5: Write the benchmark module**
@@ -1694,7 +1694,7 @@ def test_reduce_df_no_spurious_row_drop_on_clean_panel():
 
 - [ ] **Step 2: Run parity test**
 
-Run: `pytest tests/perf/test_parity_reduce_df.py -v -p no:cov -n0`
+Run: `pytest tests/perf/test_parity_reduce_df.py -v --no-cov -n0`
 Expected: 2 passed.
 
 - [ ] **Step 3: Add edge/dtype/API tests to `tests/unit/management/test_qdf.py`**
@@ -1743,7 +1743,7 @@ class TestReduceDfEdgeAPI(_unittest.TestCase):
 
 - [ ] **Step 4: Run the new unit tests**
 
-Run: `pytest tests/unit/management/test_qdf.py -k "ReduceDfEdgeAPI" -v -p no:cov -n0`
+Run: `pytest tests/unit/management/test_qdf.py -k "ReduceDfEdgeAPI" -v --no-cov -n0`
 Expected: 5 passed.
 
 - [ ] **Step 5: Write the benchmark module**
@@ -1851,7 +1851,7 @@ class TestMapPvalDirect(_ut_srr.TestCase):
 
 - [ ] **Step 3: Run the new unit test**
 
-Run: `pytest tests/unit/signal/test_signal_return_relations.py -k "MapPvalDirect" -v -p no:cov -n0`
+Run: `pytest tests/unit/signal/test_signal_return_relations.py -k "MapPvalDirect" -v --no-cov -n0`
 Expected: 2 passed. (If a `ConvergenceWarning` is emitted, the test still passes — `map_pval` returns a float regardless.)
 
 - [ ] **Step 4: Write the benchmark module**
@@ -1973,7 +1973,7 @@ versions/git SHA/CI label) so results are never silently compared across machine
 
 - [ ] **Step 2: Run the FULL default gate for the touched areas (parity + edge must pass; perf deselected)**
 
-Run: `pytest tests/perf tests/unit/management tests/unit/signal -p no:cov -n0 -q`
+Run: `pytest tests/perf tests/unit/management tests/unit/signal --no-cov -n0 -q`
 Expected: all parity/edge/API tests pass; benchmark tests show as deselected by `-m 'not perf'`. Exit code 0.
 
 - [ ] **Step 3: Smoke-run one benchmark end-to-end with JSON output**
