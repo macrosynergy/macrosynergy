@@ -130,7 +130,7 @@ is single large pandas ops (sort/dedup/factorize/string-build), which want **vec
 | Candidate | Cells | Independent? | Verdict |
 |---|---|---|---|
 | **SRR MixedLM fits** | 31/33/35/39/45/50 (~749s) | yes — ~35 fits/cell, fully independent | **Best win → this is T4.** statsmodels/numpy releases the GIL ⇒ a **thread** pool works (no extra memory). |
-| **`make_zn_scores` loop** | 19 (139s/63s) | outer loop over xcats: yes; inner sequential estimation: **no** | **Low value → optional T7.** Cell-19 cost is `reduce_df` (T3), not the z-score math; inner re-estimation is serial; pandas is GIL-bound ⇒ needs **processes** ⇒ multiplies the ~8 GiB. Do T3 first; parallelize only if residual cost justifies. |
+| **`make_zn_scores` loop** | 19 (139s/63s) | outer loop over xcats: yes; inner sequential estimation: **no** | **Low value → optional T7.** Cell-19 cost is `reduce_df` (T3), not the z-score math (expanding estimation is already `O(n)`); inner re-estimation is serial. GIL-bound, but with **per-xcat slicing** (§3.1) each worker holds only one xcat's panel, so a process pool no longer multiplies the 8 GiB. Still: do T3 first; parallelize only if residual cost justifies. |
 | **`NaivePnL` spec loop** | 43 (9s), 47 (8s) | yes (6 specs) | **Not worth it** — cells are already ~8–9s; parallelism saves seconds against fork/thread overhead. |
 | **`linear_composite` loop** | 17 (419s) | compute independent, **but** each iteration `update_df`s the shared `dfx` (serializes) | **Not a parallelism target** — the cost is `update_df` (T1), not the composite compute. The real win is *batching* (compute all composites, one `update_df`) — a notebook-side / T1-adjacent change, not threads. |
 | **`InformationStateChanges` per-ticker** | 13 (244s) | per-ticker independent | **Vectorize, don't parallelize** — the cost is `split_ticker`/`ticker_df_to_qdf` (T2), which vectorization removes outright; parallelism would just spread the redundant work. |
@@ -141,6 +141,27 @@ caveats for any parallel work here: (1) **memory** — cells already peak 7–12
 can OOM; prefer threads where the heavy work releases the GIL (numpy/statsmodels), avoid processes
 for pandas-bound loops; (2) **determinism/parity** — keep a serial default and guarantee identical,
 order-stable output (GATE §5).
+
+**Data-locality refinement (recommended design for any parallel target): slice first, fan out the
+minimum.** Do **not** hand each worker the whole `dfx` — that is the source of the memory/IPC
+overhead. Extract each task's minimal sub-frame *before* dispatch and give a worker only that:
+- **T4:** the unit of work is one `(signal, return)` pair, whose data is just two aligned
+  columns over the cid/date panel (`map_pval` already takes pre-extracted `ret_vals`/`sig_vals`
+  Series — the per-pair reduction happens internally before the MixedLM). Parallelize **at that
+  boundary**: fan out the small `(y, X, groups)` arrays, not the frame. Payloads become tiny, so a
+  **process** pool is viable too (no shared-frame memory, cheap pickling) — not only threads.
+- **T7:** the unit is one xcat; slice `dfx` to that xcat's panel and fan that out — each worker
+  holds ~`1/n_xcats` of the frame, which **removes the "processes multiply 8 GiB" objection**.
+
+An **iterator/producer** is the right shape for this: a generator that yields the per-task slices
+(or, for online stats, walks dates forward releasing running sufficient statistics) feeds the pool
+lazily so only the in-flight slices are resident — bounding peak memory regardless of task count.
+Note on the **walk-forward** angle specifically: the sequential expanding estimation in
+`make_zn_scores` is already `O(n)` via pandas `.expanding()` (and is effectively free here because
+the notebook uses `neutral="zero"`), so an explicit walk-forward iterator is **not** a speed lever
+for this workload — its value is (a) as the memory-bounded slice **producer** above, and (b) a
+latent fix only for non-additive stats (e.g. `stat="median"`/non-zero neutrals) where expanding
+re-scans; not needed for this notebook.
 
 ### T7 (optional, low priority) — parallelize the `make_zn_scores` xcat loop
 *(perf/zn-scores-parallel)* — **do only after T3; gated on residual cost**
@@ -324,10 +345,12 @@ order-stable output (GATE §5).
   independent. Dispatch the per-segment `map_pval` / per-(sig,ret) statistic computation across
   a worker pool (`concurrent.futures`/joblib, n_jobs param defaulting to 1 to preserve current
   behavior unless opted in — *or* internal thread/process pool guarded so the public API and
-  returned table are unchanged). **Prefer a thread pool:** statsmodels `MixedLM.fit` is numpy
-  linear algebra (BLAS/`linalg.solve`) which **releases the GIL**, so threads parallelize it with
-  **no extra memory** — important since these cells already peak ~7.4 GiB and a process pool would
-  multiply that. Same fits, same numbers, concurrent → wall ÷ ~n_workers on the
+  returned table are unchanged). **Slice first, fan out the minimum (§3.1):** parallelize at the
+  per-`(sig,ret)` boundary — `map_pval` already receives pre-extracted `ret_vals`/`sig_vals`, so
+  dispatch the small `(y, X, groups)` arrays, **not** the shared `dfx`. With tiny payloads
+  **either** a thread pool (`MixedLM.fit` is BLAS/`linalg.solve`, **releases the GIL** → no extra
+  memory) **or** a process pool (cheap pickling, no shared frame) works; threads are simplest given
+  these cells already peak ~7.4 GiB. Same fits, same numbers, concurrent → wall ÷ ~n_workers on the
   heavy heatmap cells. **Secondary (cheap, fold in):** `map_pval` builds the statsmodels
   `summary()` **twice** (lines 967, 972) to parse one p-value — call it once / read `re.pvalues`
   reproducing the 3-dp rounding; small but free.
