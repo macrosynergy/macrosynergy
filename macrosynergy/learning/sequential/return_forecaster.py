@@ -473,14 +473,19 @@ class ReturnForecaster(BasePanelLearner):
 
         # Summarise feature importance
         coefs = np.full(len(feature_names), np.nan)
-        coefs = getattr(final_estimator, "coef_", coefs)
-        coefs = getattr(final_estimator, "feature_importances_", coefs)
-
-        # Reshape coefficients for storage compatibility
-        if coefs.ndim > 2:
-            raise RuntimeError("coefs.ndim cannot be greater than 2")
-
-        coefs = np.atleast_2d(coefs).mean(axis=0)
+        if hasattr(final_estimator, "feature_importances_") or (
+            hasattr(final_estimator, "coef_")
+        ):
+            if hasattr(final_estimator, "feature_importances_"):
+                coef = final_estimator.feature_importances_
+            elif hasattr(final_estimator, "coef_"):
+                coef = final_estimator.coef_
+            # Reshape coefficients for storage compatibility
+            if coef.ndim == 1:
+                coefs = coef
+            elif coef.ndim == 2:
+                if coef.shape[0] == 1:
+                    coefs = coef.flatten()
 
         coef_ftr_map = dict(zip(feature_names, coefs))
         selected_ftr_map = self._get_selected_feature_map(optimal_model, feature_names)
