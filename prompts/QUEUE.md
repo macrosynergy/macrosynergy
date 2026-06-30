@@ -39,7 +39,7 @@ Vectorize `_get_tickers_series` (qdf/methods.py:172): replace the per-row f-stri
   · **macrosynergy pytest:** `tests/unit/management` + `tests/unit/panel` 479 passed. Reviewer:
   APPROVE, 0 blockers, 1 round.
 
-## Q2 — T1 · `perf/update-df-categorical-sort`  — **TODO**
+## Q2 — T1 · `perf/update-df-categorical-sort`  — **DONE** (PR #5, squash `7d27a24c`)
 `update_df`/`update_tickers` (df_utils.py:561/627) object-dtype branch: dedup + sort on
 factorized integer codes instead of object strings; restore dtype + order (byte-identical).
 **Fix BOTH implementations (TARGETS §7.3):** the object path `df_utils.py::update_df/update_tickers`
@@ -48,7 +48,18 @@ AND the categorical/QDF-native twins `qdf/methods.py::update_df`(458)/`update_ti
 growing frame; `union_categoricals` skipped when `df_add` is object → washes to object).
 - **Cells:** 17, 18, 27, 15, 19, 13.
 - **Baseline:** cell 17 = 419s / 9007 MiB (update_df ≈330s); cell 15 = 38s; cell 13 = 244s.
-- **After:** _tbd_ · **Parity:** _tbd_ · **macrosynergy pytest:** _tbd_
+- **After:** micro-benchmark (record.py, `-m perf -k small`): `update_df_growing_loop[obj-small]`
+  106.7 ms → 69 ms (~−35%); `[cat-small]` 53.1 ms → ~44–48 ms (~−10–18%, noisy at small tier);
+  `update_tickers[small]` neutral (within noise — now routes through the shared factorize/lexsort
+  helper and additionally sorts). Single `factorize(sort=True)+np.lexsort`+vectorized adjacent-dup
+  pass replaces object-string `drop_duplicates(keep=last)+sort_values`; categorical twin
+  re-categorizes object `df_add` to keep the frame categorical instead of upcasting. NaT `real_date`
+  sorts last (na_position='last' parity). `classes.py::update_df` delegates to `methods.py` (no
+  change needed). Macro cell re-capture pending external harness.
+  · **Parity:** byte-identical — `test_parity_update_df` 3 passed (last-wins + IDX_COLS_SORT_ORDER +
+  no-mutate), `UpdateDfEdge` 7 passed, `tests/perf/golden/` unchanged.
+  · **macrosynergy pytest:** `tests/unit/management` 269 passed. Reviewer: APPROVE, 0 blockers,
+  2 rounds (round 1: empty-base sort regression + unvectorized public `update_tickers` → fixed).
 
 ## Q3 — T2 · `perf/ticker-split-vectorize`  — **TODO**
 `split_ticker` iterable branch (core.py:44) factorize-on-uniques (Level A) +
