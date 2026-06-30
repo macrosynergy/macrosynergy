@@ -24,14 +24,20 @@ Status legend: `TODO` · `IN PROGRESS` · `IN REVIEW` · `DONE` · `BLOCKED`
 
 ---
 
-## Q1 — T2c · `perf/qdf-ticker-series-vectorize`  — **TODO**
+## Q1 — T2c · `perf/qdf-ticker-series-vectorize`  — **DONE** (PR #4, squash `d8e376f4`)
 Vectorize `_get_tickers_series` (qdf/methods.py:172): replace the per-row f-string comprehension
 + `pd.Categorical` rebuild with a uniques-based / vectorized build. Fixes both
 `add_ticker_column` and `reduce_df_by_ticker` (→ `panel_calculator`, `make_relative_value`,
 `Basket`).
 - **Cells:** 18, 27 (also any `add_ticker_column`/`Basket` path).
 - **Baseline:** cell 18 = 751s / 8477 MiB; cell 27 = 590s / 10336 MiB.
-- **After:** _tbd_ · **Parity:** _tbd_ · **macrosynergy pytest:** _tbd_
+- **After:** micro-benchmark (record.py, `-m perf -k small`): `get_tickers_series[cat-small]`
+  31.9 ms → 1.3 ms (~24×, −96%); `add_ticker_column[small]` 33.8 ms → 3.4 ms (~10×, −90%); obj
+  branch unchanged (within machine noise). Macro cell re-capture pending external harness.
+  · **Parity:** byte-identical — `test_parity_qdf_ticker_series` 3 passed, `tests/perf/golden/`
+  unchanged; output `Categorical` equal (categories, first-appearance order, `ordered`, codes).
+  · **macrosynergy pytest:** `tests/unit/management` + `tests/unit/panel` 479 passed. Reviewer:
+  APPROVE, 0 blockers, 1 round.
 
 ## Q2 — T1 · `perf/update-df-categorical-sort`  — **TODO**
 `update_df`/`update_tickers` (df_utils.py:561/627) object-dtype branch: dedup + sort on
