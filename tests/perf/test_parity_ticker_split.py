@@ -14,5 +14,4 @@ def test_ticker_df_to_qdf_matches_golden():
 
 def test_ticker_df_to_qdf_columns():
     out = ticker_df_to_qdf(wide_ticker_frame(6, 20))
-    expected = {"cid", "xcat", "real_date", "value"}
-    assert set(pd.DataFrame(out).columns) == expected
+    assert list(pd.DataFrame(out).columns) == ["real_date", "cid", "xcat", "value"]

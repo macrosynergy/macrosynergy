@@ -1,4 +1,6 @@
+import inspect as _inspect_st
 import unittest
+import unittest as _ut_st
 import pandas as pd
 import warnings
 import datetime
@@ -34,6 +36,7 @@ from macrosynergy.management.utils import (
     Timer,
     rotate_cid_xcat,
 )
+from macrosynergy.management.utils.core import split_ticker as _split_ticker
 from macrosynergy.management.utils.df_utils import _long_to_wide, _wide_to_long
 from macrosynergy.management.constants import FREQUENCY_MAP
 from macrosynergy.management.utils.math import expanding_mean_with_nan
@@ -1970,12 +1973,6 @@ class TestRotateCidXcat(unittest.TestCase):
         restored = rotate_cid_xcat(rotated, "to_cids", template, "EQXR_NSA")
         self.assertEqual(set(restored["cid"].unique()), set(cids))
         self.assertTrue((restored["xcat"] == "EQXR_NSA").all())
-
-
-import inspect as _inspect_st
-import unittest as _ut_st
-
-from macrosynergy.management.utils.core import split_ticker as _split_ticker
 
 
 class TestSplitTickerDirect(_ut_st.TestCase):
