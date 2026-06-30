@@ -6,13 +6,15 @@ import numbers
 import warnings
 from abc import ABC
 from functools import partial
+from typing import Optional, List, Union, Dict
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
 from joblib import Parallel, delayed
-from sklearn.base import ClassifierMixin, RegressorMixin
+from sklearn.base import ClassifierMixin, RegressorMixin, BaseEstimator
+from sklearn.feature_selection import SelectorMixin
 from sklearn.model_selection import BaseCrossValidator, GridSearchCV, RandomizedSearchCV
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
@@ -24,6 +26,7 @@ from macrosynergy.learning.splitters import (
 )
 from macrosynergy.management import categories_df
 from macrosynergy.management.types.qdf import QuantamentalDataFrame
+from macrosynergy.management.utils import _insert_as_categorical, concat_categorical
 
 
 class BasePanelLearner(ABC):
@@ -953,22 +956,23 @@ class BasePanelLearner(ABC):
             optimal_model_params = {}
             optimal_model_additional_data = {}
 
-        data = [
-            timestamp,
-            optimal_model_name,
-            optimal_model_score,
-            optimal_model_params,
-            optimal_model_additional_data,
-        ]
+        data = {
+            "real_date": timestamp,
+            "model_type": optimal_model_name,
+            "score": optimal_model_score,
+            "hparams": optimal_model_params,
+            "additional_data": optimal_model_additional_data,
+        }
 
         if inner_splitters_adj is not None:
             n_splits = {
                 splitter_name: splitter.n_splits
                 for splitter_name, splitter in inner_splitters_adj.items()
             }
-            data.append(n_splits)
         else:
-            data.append(0) # No splits were used because CV wasn't used
+            n_splits = 0 # No splits were used because CV wasn't used
+
+        data["n_splits_used"] = n_splits
 
         return {"model_choice": data}
 
@@ -1802,6 +1806,99 @@ class BasePanelLearner(ABC):
             List of tuples containing the attribute name, column name and value to filter on.
         """
         for attr, column, value in conditions:
-            df = getattr(self, attr)
-            if value in df[column].unique():
+            df = getattr(self, attr, None)
+            if df is not None and value in df[column].unique():
                 setattr(self, attr, df[df[column] != value])
+
+    @staticmethod
+    def _update_storage_df(
+        existing_df: Optional[pd.DataFrame],
+        results_df: pd.DataFrame,
+        name: Optional[str] = None,
+        drop_all_nan_cols: bool = False,
+    ) -> pd.DataFrame:
+        if name is not None and "name" not in results_df.columns:
+            results_df = _insert_as_categorical(
+                df=results_df,
+                column_name="name",
+                category_name=name,
+                column_idx=1,
+            )
+
+        out_df = concat_categorical(
+            df1=existing_df,
+            df2=results_df,
+            columns="outer",
+        )
+
+        if drop_all_nan_cols:
+            out_df = out_df.dropna(how="all", axis=1)
+
+        return out_df
+
+    @staticmethod
+    def _get_selected_feature_map(
+        optimal_model: Union[BaseEstimator, Pipeline],
+        model_feature_names: List[str],
+    ) -> Dict[str, int]:
+        """
+        Map each candidate feature to 1 if it survives feature selection
+        and 0 otherwise.
+
+        Parameters
+        ----------
+        optimal_model : Union[BaseEstimator, Pipeline]
+            The fitted model or pipeline selected at a retraining date.
+        model_feature_names : List[str]
+            Feature names reaching the final model. Used as the candidate universe when
+            the pipeline performs no feature selection.
+
+        Returns
+        -------
+        dict
+            Mapping from feature name to 1 (selected) or 0 (dropped).
+
+        Notes
+        -----
+        The candidate universe is the set of features entering the last feature
+        selection step (a `SelectorMixin`), so a feature the selector always drops still
+        appears, marked 0. Reading the names at the selector's input rather than the
+        pipeline's output keeps this robust to feature renaming by upstream steps. When
+        the pipeline has no selection step, every feature reaching the model is marked 1.
+
+        Only the last selection step is considered; pipelines with multiple selectors
+        report selection relative to the latest one.
+        """
+        feature_map = {ftr: 1 for ftr in model_feature_names}
+        if not isinstance(optimal_model, Pipeline):
+            return feature_map
+
+        idx = max(
+            [
+                i for i, (_, est) in enumerate(optimal_model.steps)
+                if isinstance(est, SelectorMixin)
+            ],
+            default=None,
+        )
+
+        if idx is None:
+            return feature_map
+
+        try:
+            input_names = (
+                list(getattr(optimal_model, "feature_names_in_", [])) if idx == 0 else
+                optimal_model[:idx].get_feature_names_out().tolist()
+            )
+            input_selected = np.asarray(optimal_model[idx].get_support())
+        except AttributeError:
+            return feature_map
+
+        if len(input_names) != len(input_selected):
+            return feature_map
+
+        feature_map = {
+            ftr: int(selected)
+            for ftr, selected in zip(input_names, input_selected)
+        }
+
+        return feature_map

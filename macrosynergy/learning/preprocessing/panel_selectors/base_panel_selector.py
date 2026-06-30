@@ -101,7 +101,7 @@ class BasePanelSelector(BaseEstimator, SelectorMixin, ABC):
         """
         return self.mask
 
-    def get_feature_names_out(self):
+    def get_feature_names_out(self, input_features=None):
         """
         Method to mask feature names according to selected features.
         """

@@ -9,11 +9,7 @@ import pandas as pd
 from sklearn.pipeline import Pipeline
 
 from macrosynergy.learning.sequential import BasePanelLearner
-from macrosynergy.management.utils import (
-    concat_categorical,
-    _insert_as_categorical,
-    reduce_df,
-)
+from macrosynergy.management.utils import reduce_df
 from macrosynergy.management.types import QuantamentalDataFrame
 
 
@@ -150,15 +146,6 @@ class ReturnForecaster(BasePanelLearner):
                 "value": "float32",
             }
         )
-        self.feature_importances = pd.DataFrame(
-            columns=["real_date", "name"] + list(self.X.columns)
-        ).astype(
-            {
-                **{col: "float32" for col in self.X.columns},
-                "real_date": "datetime64[ns]",
-                "name": "category",
-            }
-        )
         self.intercepts = pd.DataFrame(
             columns=["real_date", "name", "intercepts"]
         ).astype(
@@ -166,15 +153,6 @@ class ReturnForecaster(BasePanelLearner):
                 "real_date": "datetime64[ns]",
                 "name": "category",
                 "intercepts": "float32",
-            }
-        )
-        self.selected_ftrs = pd.DataFrame(
-            columns=["real_date", "name"] + list(self.X.columns)
-        ).astype(
-            {
-                **{col: "int" for col in self.X.columns},
-                "real_date": "datetime64[ns]",
-                "name": "category",
             }
         )
 
@@ -198,6 +176,10 @@ class ReturnForecaster(BasePanelLearner):
                 "pearson": "float",
             }
         )
+
+        # Feature names cannot be known now
+        self.feature_importances = None
+        self.selected_ftrs = None
 
     def calculate_predictions(
         self,
@@ -338,8 +320,8 @@ class ReturnForecaster(BasePanelLearner):
         )
         # Create quantamental dataframe of forecasts
         model = (
-            models[optim_results["model_choice"][1]]
-            .set_params(**optim_results["model_choice"][3])
+            models[optim_results["model_choice"]["model_type"]]
+            .set_params(**optim_results["model_choice"]["hparams"])
             .fit(self.X, self.y)
         )
         forecasts = model.predict(self.X_test)
@@ -353,69 +335,53 @@ class ReturnForecaster(BasePanelLearner):
                         (cross_section_key, slice(periods[0], periods[1])), :
                     ] = np.nan
 
+        # Update stored data
+        ## Prediction data
         forecasts_df.columns = forecasts_df.columns.astype("category")
-        forecasts_df_long = pd.melt(
-            frame=forecasts_df.reset_index(),
-            id_vars=["real_date", "cid"],
-            var_name="xcat",
-        )
-        self.preds = concat_categorical(
-            df1=self.preds,
-            df2=forecasts_df_long,
-        )
-
-        # Store model selection data
-        model_df_long = pd.DataFrame(
-            columns=[col for col in self.chosen_models.columns if col != "name"],
-            data=model_choice_data,
-        ).astype({"model_type": "category"})
-        model_df_long = _insert_as_categorical(model_df_long, "name", name, 1)
-
-        self.chosen_models = concat_categorical(
-            df1=self.chosen_models,
-            df2=model_df_long,
+        self.preds = self._update_storage_df(
+            existing_df=self.preds,
+            results_df=pd.melt(
+                frame=forecasts_df.reset_index(),
+                id_vars=["real_date", "cid"],
+                var_name="xcat",
+            ),
         )
 
-        # Store feature coefficients
-        coef_df_long = pd.DataFrame(
-            columns=[col for col in self.feature_importances.columns if col != "name"],
-            data=ftr_coef_data,
-        )
-        coef_df_long = _insert_as_categorical(coef_df_long, "name", name, 1)
-        self.feature_importances = concat_categorical(
-            self.feature_importances,
-            coef_df_long,
+        ## Model selection data
+        self.chosen_models = self._update_storage_df(
+            existing_df=self.chosen_models,
+            results_df=pd.DataFrame(model_choice_data),
+            name=name,
         )
 
-        # Store intercept
-        intercept_df_long = pd.DataFrame(
-            columns=[col for col in self.intercepts.columns if col != "name"],
-            data=intercept_data,
-        )
-        intercept_df_long = _insert_as_categorical(intercept_df_long, "name", name, 1)
-        self.intercepts = concat_categorical(
-            self.intercepts,
-            intercept_df_long,
+        ## Feature coefficients
+        self.feature_importances = self._update_storage_df(
+            existing_df=self.feature_importances,
+            results_df=pd.DataFrame(ftr_coef_data),
+            name=name,
+            drop_all_nan_cols=True,
         )
 
-        # Store selected features
-        ftr_select_df_long = pd.DataFrame(
-            columns=[col for col in self.selected_ftrs.columns if col != "name"],
-            data=ftr_selection_data,
-        )
-        ftr_select_df_long = _insert_as_categorical(ftr_select_df_long, "name", name, 1)
-        self.selected_ftrs = concat_categorical(
-            self.selected_ftrs,
-            ftr_select_df_long,
+        ## Selected features
+        self.selected_ftrs = self._update_storage_df(
+            existing_df=self.selected_ftrs,
+            results_df=pd.DataFrame(ftr_selection_data),
+            name=name,
+            drop_all_nan_cols=True,
         )
 
-        ftr_corr_df_long = pd.DataFrame(
-            columns=self.ftr_corr.columns, data=ftr_corr_data
+        ## Intercepts
+        self.intercepts = self._update_storage_df(
+            existing_df=self.intercepts,
+            results_df=pd.DataFrame(intercept_data),
+            name=name,
         )
 
-        self.ftr_corr = concat_categorical(
-            self.ftr_corr,
-            ftr_corr_df_long,
+        ## Feature correlations
+        self.ftr_corr = self._update_storage_df(
+            existing_df=self.ftr_corr,
+            results_df=pd.DataFrame(ftr_corr_data, columns=self.ftr_corr.columns),
+            name=name,
         )
 
     def _check_duplicate_results(self, name):
@@ -486,27 +452,27 @@ class ReturnForecaster(BasePanelLearner):
         """
         if isinstance(optimal_model, Pipeline):
             final_estimator = optimal_model[-1]
-            feature_names_getter = getattr(
-                optimal_model[-2], "get_feature_names_out", None
-            )
-
-            if feature_names_getter is not None:
-                feature_names = feature_names_getter()
-            else:
+            try:
+                feature_names = optimal_model[:-1].get_feature_names_out().tolist()
+            except AttributeError:
                 feature_names = []
                 warnings.warn(
-                    "Unable to infer feature names. This is likely because one or"
-                    "more steps in the Pipeline are missing the `get_feature_names_out` method."
-                    "This may make it impossible to produce feature selection and feature "
-                    "importance plots later on",
+                    "Could not extract feature names from the pipeline's preprocessing "
+                    "steps. It's likely one or more steps do not have the "
+                    "get_feature_names_out method.",
                     UserWarning,
                 )
         else:
             final_estimator = optimal_model
-            feature_names = np.array(X_train.columns)
+            feature_names = list(getattr(final_estimator, "feature_names_in_", []))
+            if not feature_names:
+                warnings.warn(
+                    "There were no feature names when fitting the model.",
+                    UserWarning
+                )
 
-        coefs = np.full(X_train.shape[1], np.nan)
-
+        # Summarise feature importance
+        coefs = np.full(len(feature_names), np.nan)
         if hasattr(final_estimator, "feature_importances_") or (
             hasattr(final_estimator, "coef_")
         ):
@@ -521,11 +487,9 @@ class ReturnForecaster(BasePanelLearner):
                 if coef.shape[0] == 1:
                     coefs = coef.flatten()
 
-        coef_ftr_map = {ftr: coef for ftr, coef in zip(feature_names, coefs)}
-        coefs = [
-            coef_ftr_map[ftr] if ftr in coef_ftr_map else np.nan
-            for ftr in X_train.columns
-        ]
+        coef_ftr_map = dict(zip(feature_names, coefs))
+        selected_ftr_map = self._get_selected_feature_map(optimal_model, feature_names)
+
         if hasattr(final_estimator, "intercept_"):
             if isinstance(final_estimator.intercept_, np.ndarray):
                 # Store the intercept if it has length one
@@ -539,20 +503,15 @@ class ReturnForecaster(BasePanelLearner):
         else:
             intercepts = np.nan
 
-        # Get feature selection information
-        ftr_selection_data = [timestamp] + [
-            1 if name in feature_names else 0 for name in X_train.columns
-        ]
-
         ftr_corr_data = self._get_ftr_corr_data(
             pipeline_name, optimal_model, X_train, timestamp
         )
 
         # Store data
         split_result = {
-            "feature_importances": [timestamp] + coefs,
-            "intercepts": [timestamp, intercepts],
-            "selected_ftrs": ftr_selection_data,
+            "feature_importances": {"real_date": timestamp, **coef_ftr_map},
+            "intercepts": {"real_date": timestamp, "intercepts": intercepts},
+            "selected_ftrs": {"real_date": timestamp, **selected_ftr_map},
             "ftr_corr": ftr_corr_data,
         }
 
@@ -683,6 +642,12 @@ class ReturnForecaster(BasePanelLearner):
         pd.DataFrame
             Pandas dataframe of the selected features at each retraining date.
         """
+        if self.selected_ftrs is None:
+            raise ValueError(
+                "self.selected_ftrs is None. Please ensure calculate_predictions()"
+                " has been run."
+            )
+
         if name is None:
             return self.selected_ftrs
         
@@ -701,7 +666,10 @@ class ReturnForecaster(BasePanelLearner):
                 correct, please run calculate_predictions() first.
                 """
             )
-        return self.selected_ftrs[self.selected_ftrs.name.isin(name)]
+        selected_ftrs = self.selected_ftrs[self.selected_ftrs.name.isin(name)]
+        selected_ftrs = selected_ftrs.dropna(how="all", axis=1)
+
+        return selected_ftrs
 
     def get_feature_importances(self, name=None):
         """
@@ -724,6 +692,12 @@ class ReturnForecaster(BasePanelLearner):
         Availability of feature importances is subject to the selected model having a
         `feature_importances_` or `coef_` attribute.
         """
+        if self.feature_importances is None:
+            raise ValueError(
+                "self.feature_importances is None. Please ensure calculate_predictions()"
+                " has been run."
+            )
+
         if name is None:
             return self.feature_importances
 
@@ -743,9 +717,12 @@ class ReturnForecaster(BasePanelLearner):
                 """
             )
 
-        return self.feature_importances[
+        feature_importances = self.feature_importances[
             self.feature_importances.name.isin(name)
         ].sort_values(by="real_date")
+        feature_importances = feature_importances.dropna(how="all", axis=1)
+
+        return feature_importances
 
     def get_intercepts(self, name=None):
         """

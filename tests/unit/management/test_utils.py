@@ -33,6 +33,7 @@ from macrosynergy.management.utils import (
     estimate_release_frequency,
     Timer,
     rotate_cid_xcat,
+    concat_categorical,
 )
 from macrosynergy.management.utils.df_utils import _long_to_wide, _wide_to_long
 from macrosynergy.management.constants import FREQUENCY_MAP
@@ -1970,6 +1971,128 @@ class TestRotateCidXcat(unittest.TestCase):
         restored = rotate_cid_xcat(rotated, "to_cids", template, "EQXR_NSA")
         self.assertEqual(set(restored["cid"].unique()), set(cids))
         self.assertTrue((restored["xcat"] == "EQXR_NSA").all())
+
+
+class TestConcatCategorical(unittest.TestCase):
+    # Test input validation
+    def test_df1_wrong_type(self):
+        with self.assertRaisesRegex(TypeError, expected_regex="df1 must be of type"):
+            concat_categorical(df1="not a df", df2=pd.DataFrame({"a": [1]}))
+
+    def test_df2_wrong_type(self):
+        with self.assertRaisesRegex(TypeError, expected_regex="df2 must be of type"):
+            concat_categorical(df1=pd.DataFrame({"a": [1]}), df2=29)
+
+    def test_columns_wrong_type(self):
+        with self.assertRaisesRegex(TypeError, expected_regex="columns must be of type"):
+            concat_categorical(
+                df1=pd.DataFrame({"a": [1]}),
+                df2=pd.DataFrame({"a": [2]}),
+                columns=123
+            )
+
+    def test_both_none_raises(self):
+        with self.assertRaisesRegex(ValueError, expected_regex="df1 and df2 cannot"):
+            concat_categorical(None, None)
+
+    def test_invalid_columns_value(self):
+        with self.assertRaisesRegex(ValueError, expected_regex="columns must be one of"):
+            concat_categorical(
+                df1=pd.DataFrame({"a": [1]}),
+                df2=pd.DataFrame({"a": [2]}),
+                columns="full",
+            )
+
+    # Test None handling
+    def test_df1_none_returns_df2(self):
+        df2 = pd.DataFrame({"a": [1, 2]})
+        result = concat_categorical(None, df2)
+        pd.testing.assert_frame_equal(result, df2)
+
+    def test_df2_none_returns_df1(self):
+        df1 = pd.DataFrame({"a": [1, 2]})
+        result = concat_categorical(df1, None)
+        pd.testing.assert_frame_equal(result, df1)
+
+    # Test column modes
+    ## columns = None
+    def test_mismatched_columns_errors(self):
+        df1 = pd.DataFrame({"a": [1]})
+        df2 = pd.DataFrame({"b": [2]})
+        with self.assertRaises(ValueError):
+            concat_categorical(df1, df2)
+
+    def test_identical_columns(self):
+        df1 = pd.DataFrame({"a": [1], "b": [2]})
+        df2 = pd.DataFrame({"a": [3], "b": [4]})
+        result = concat_categorical(df1, df2)
+        expected = pd.DataFrame({"a": [1, 3], "b": [2, 4]})
+        pd.testing.assert_frame_equal(result, expected)
+
+    ## columns = outer
+    def test_outer(self):
+        df1 = pd.DataFrame({"a": [1], "b": [2]})
+        df2 = pd.DataFrame({"b": [3], "c": [4]})
+        result = concat_categorical(df1, df2, columns="outer")
+        expected = pd.DataFrame({"a": [1, np.nan], "b": [2, 3], "c": [np.nan, 4]})
+        pd.testing.assert_frame_equal(result, expected)
+
+    ## columns = inner
+    def test_inner(self):
+        df1 = pd.DataFrame({"a": [1], "b": [2]})
+        df2 = pd.DataFrame({"b": [3], "c": [4]})
+        result = concat_categorical(df1, df2, columns="inner")
+        expected = pd.DataFrame({"b": [2, 3]})
+        pd.testing.assert_frame_equal(result, expected)
+
+    def test_inner_no_shared_columns_errors(self):
+        df1 = pd.DataFrame({"a": [1]})
+        df2 = pd.DataFrame({"z": [2]})
+        with self.assertRaises(ValueError):
+            concat_categorical(df1, df2, columns="inner")
+
+    ## columns = left
+    def test_left_overlap(self):
+        df1 = pd.DataFrame({"a": [1], "b": [2]})
+        df2 = pd.DataFrame({"b": [3], "c": [4]})
+        result = concat_categorical(df1, df2, columns="left")
+        expected = pd.DataFrame({"a": [1, np.nan], "b": [2, 3]})
+        pd.testing.assert_frame_equal(result, expected)
+
+    def test_left_no_overlap(self):
+        df1 = pd.DataFrame({"a": [1], "b": [2]})
+        df2 = pd.DataFrame({"c": [3], "d": [4]})
+        result = concat_categorical(df1, df2, columns="left")
+        pd.testing.assert_frame_equal(result, df1)
+
+    ## columns = right
+    def test_right(self):
+        df1 = pd.DataFrame({"a": [1], "b": [2]})
+        df2 = pd.DataFrame({"b": [3], "c": [4]})
+        result = concat_categorical(df1, df2, columns="right")
+        expected = pd.DataFrame({"b": [2, 3], "c": [np.nan, 4]})
+        pd.testing.assert_frame_equal(result, expected)
+
+    def test_right_no_overlap(self):
+        df1 = pd.DataFrame({"a": [1], "b": [2]})
+        df2 = pd.DataFrame({"c": [3], "d": [4]})
+        result = concat_categorical(df1, df2, columns="right")
+        pd.testing.assert_frame_equal(result, df2)
+
+    # Test categorical casting behaviour
+    def test_df2_shared_col_cast_to_category(self):
+        df1 = pd.DataFrame({"x": pd.Categorical(["a", "b"])})
+        df2 = pd.DataFrame({"x": ["c", "a"]}, dtype="object")  # object dtype
+        result = concat_categorical(df1, df2)
+        self.assertIsInstance(result["x"].dtype, pd.CategoricalDtype)
+        self.assertEqual(result["x"].dtype.categories.tolist(), ["a", "b", "c"])
+
+    def test_non_cat_dtype_cast_to_df1(self):
+        df1 = pd.DataFrame({"n": pd.Series([1, 2], dtype="int64")})
+        df2 = pd.DataFrame({"n": pd.Series([3.0, 4.0], dtype="float64")})
+        result = concat_categorical(df1, df2)
+        self.assertEqual(result["n"].dtype, np.dtype("int64"))
+        self.assertEqual(result["n"].tolist(), [1, 2, 3, 4])
 
 
 if __name__ == "__main__":
