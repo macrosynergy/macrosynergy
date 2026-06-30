@@ -359,7 +359,7 @@ its GATE. Capture runs **after** the profiling sweep frees memory (not concurren
 | 4 | T3 | `perf/reduce-df-fast-dedup` | — |
 | 5 | T4 | `perf/srr-parallel-mixedlm` (incl. `summary()` dedup) | — |
 | 6 | T5 | `perf/zn-scores-reduce` | T3 |
-| — | T1b (stretch) | `perf/qdf-categorical-propagation` | T1 |
+| — | T1b (stretch) | `perf/qdf-categorical-propagation` | **demoted — see §7.1** |
 
 ## 7. Notebook-side (academy) complementary optimization — flagged, NOT part of Scope-2
 
@@ -393,6 +393,58 @@ But the diagnosis points at one **notebook-side** change worth a controlled expe
   notebook's own run. It is an **academy** change on its own review track, sequenced **after**
   T2c/T1, and measured by this same harness.
 
-**Recommendation:** keep Scope-2 macrosynergy-side as ranked; add "evaluate
-`categorical_dataframe=True` for the notebook" as a **post-T2c/T1 follow-up experiment**, not a
-current queue item.
+### 7.1 Measured result — categorical `dfx` experiment
+
+Ran the full sweep a second time with each cell's input wrapped as
+`QuantamentalDataFrame(df, categorical=True)` (simulating `download(categorical_dataframe=True)`;
+script `cat_profile.py`, same wall+RSS+cProfile method, per-cell errors caught). Object vs
+categorical:
+
+| Cell | Object wall / RSS | Categorical wall / RSS | Verdict |
+|---|---|---|---|
+| 12 | 5.6s / 1928 | **ERROR** `Categorical + str` | notebook `cid + "_"` |
+| 13 | 244s / 12079 | **ERROR** `Categorical + str` | notebook `cid + "_"` / `xcat += "A"` |
+| 14 | 64.9s / 6182 | **6.5s / 4234** | **10× faster** (pure-pandas `.replace`/sort/dedup) |
+| 15 | 37.6s / 9240 | **ERROR** `Categorical + str` | notebook ticker `cid + "_"` |
+| 17 | 418.6s / 9007 | 423.2s / 8984 | **no change** (the 419s cell — the big one) |
+| 18 | 751s / 8477 | 484.6s / 9226 | −35% wall (paging-noisy), RSS flat |
+| 19 | 139.3s / 8217 | 112.6s / 8052 | −19% |
+| 27 | 589.7s / 10336 | **ERROR** `InvalidIndexError` | categorical indexing in basket path |
+| 31/33/35/39/45/50 | 749s total / ~7.4 GiB | 766s total / ~7.6 GiB | **~same / marginally slower** |
+| viz/PnL (21,22,24,25,37,41–49) | ~50s | ~40s | trivial either way |
+
+**What this proves about prioritization:**
+
+1. **Categorical is not a drop-in: it breaks 4 of 8 building cells** (12, 13, 15, 27 — half the
+   pipeline, including the 244s and 590s cells). The notebook builds tickers/xcats with string
+   ops (`cid + "_" + xcat`, `xcat += "A"`) that raise on categorical dtype. So
+   `categorical_dataframe=True` would require **rewriting the notebook's core construction code**,
+   not a one-line flag.
+2. **It does not help the dominant cost.** Cell 17 (419s, the largest building cell) is
+   **unchanged** — because `update_df`'s `df_add` (the `linear_composite` output) is object, so
+   `concat(categorical, object)` collapses back to object and the bottleneck `sort_values`/
+   `drop_duplicates` is paid anyway. The categorical input "washes out" after the first
+   `update_df`. **The SRR cells (25% of runtime) are unaffected** (MixedLM is dtype-insensitive;
+   categorical is marginally *slower*).
+3. **The only large clean win is cell 14 — which is pure pandas, not a macrosynergy target.**
+
+**Conclusion (this is the better data you asked for):**
+
+- **The macrosynergy-side targets (T2c → T1 → T2 → T3) are confirmed as the priority.** They
+  speed the package up regardless of caller dtype, need **zero notebook changes**, and break
+  nothing. The categorical route helps neither the biggest building cell (17) nor the SRR 25%.
+- **`categorical_dataframe=True` is demoted from "follow-up experiment" to "blocked / not
+  worthwhile as-is"** — it requires notebook rewrites just to *run*, and even then doesn't touch
+  the dominant costs. Revisit only if the notebook is rewritten to be categorical-native AND the
+  panel functions (`linear_composite`/`panel_calculator`/`make_zn_scores`) are made to *return*
+  categorical (so the dtype doesn't wash out) — a far larger effort than T1–T3.
+- **The stretch target T1b (categorical propagation) is also demoted** by the same cell-17
+  evidence: propagating categorical only pays off if every panel function preserves it end to
+  end; today they don't, so T1 (fast object-dtype path) is strictly the better investment.
+- **Bonus insight:** the breakages are exactly the manual `cid + "_" + xcat` constructions that
+  `_get_tickers_series`/`add_ticker_column` exist to do — so once **T2c** makes those fast, the
+  notebook could *both* drop its hand-rolled concatenations *and* be categorical-safe. A neat
+  post-T2c notebook cleanup, but not on the macrosynergy critical path.
+
+(The categorical harness mode lives in the scratch `cat_profile.py`; given it breaks 4/8 cells it
+is **not** worth folding into the committed Scope-1 harness.)
