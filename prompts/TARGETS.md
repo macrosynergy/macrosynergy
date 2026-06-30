@@ -123,7 +123,10 @@ the ~74% of runtime in the building chain. T4 is a separate, higher-risk lever f
 
 - **File/function:** `macrosynergy/management/utils/df_utils.py::update_df` (line 561) →
   `update_tickers` (627); the final `df.sort_values(IDX_COLS_SORT_ORDER)` (624) and the
-  `drop_duplicates(subset=[real_date,xcat,cid])` (651).
+  `drop_duplicates(subset=[real_date,xcat,cid])` (651). **Twin (categorical/QDF-native input —
+  see §7.3):** `macrosynergy/management/types/qdf/methods.py::update_df` (458) / `update_tickers`
+  (493) and `qdf/classes.py::update_df` (291) — still ~330s in cell 17 under categorical, so
+  **fix both implementations.**
 - **Current cost:** cell 17 **≈330s / 80% of the cell** (20 calls; `drop_duplicates` 182s +
   `factorize` 132s); cell 15 ≈16s; cell 13 ≈13s; plus cells 18/19/27 (`update_df` loops,
   numbers pending). The single largest time sink in the notebook.
@@ -244,7 +247,8 @@ the ~74% of runtime in the building chain. T4 is a separate, higher-risk lever f
 *(perf/reduce-df-fast-dedup)*
 
 - **File/function:** `macrosynergy/management/utils/df_utils.py::reduce_df` (688); fallback
-  ends with `df.drop_duplicates()` over **all** columns (793).
+  ends with `df.drop_duplicates()` over **all** columns (793). **Twin (categorical/QDF-native —
+  see §7.3):** `macrosynergy/management/types/qdf/methods.py::reduce_df` (309) — fix both.
 - **Current cost:** cell 12 ≈5.0s (`drop_duplicates` 3.3s + `factorize` 1.5s). Recurs inside
   `make_zn_scores` (cell 19), `linear_composite` (cells 17/18), `NaivePnL.__init__` (cells
   41/42/43/47/49 — 6× each in 43/47), `make_relative_value`, and directly in cells 13/15/27.
@@ -527,3 +531,39 @@ values + extras), verified on a representative cid subset (`parity_check.py`).
 - **Why it matters:** without it the notebook can't pass a categorical frame to `Basket` and must
   copy back to object (the +25% RSS on cell 27). Prerequisite for a clean categorical-native
   notebook; small and self-contained.
+
+### 7.3 Targets when the notebook is QDF-native (answer: same targets, but the hot path moves)
+
+Re-profiled the dominant cells **with categorical input** (the QDF-native run) to check whether
+going categorical changes the package targets. **It does not change *which* functions to fix or
+their ranking — but it moves the hot code path from the object-dtype `df_utils.py` implementations
+to the categorical `qdf/methods.py` + `qdf/classes.py` twins.** Evidence (categorical-input
+profiles):
+
+| Cell | Dominant under categorical input | Target |
+|---|---|---|
+| 13 | `split_ticker` 61.5M calls / `ticker_df_to_qdf` 134s (unchanged) | **T2** |
+| 17 | `qdf/methods.py::update_tickers` 188s + `classes.py::update_df` 333s + `drop_duplicates` 149s | **T1** |
+| 18 | `classes.py::add_ticker_column` → `_get_tickers_series` 227s; `methods.py::update_df` 191s | **T2c**, T1 |
+| 27 | `methods.py::reduce_df_by_ticker` 254s (→`_get_tickers_series`); `add_ticker_column` 118s | **T2c**, T1 |
+
+**Implications for the target specs:**
+
+- **T2 (`split_ticker`) and T2c (`_get_tickers_series`) are dtype-independent** — same function,
+  same fix, whether the caller is object or categorical. No change.
+- **T1 (`update_df`) and T3 (`reduce_df`) must fix BOTH implementations.** With object input the
+  cost is in `df_utils.py::update_df`/`reduce_df`; with categorical input `type(df) is
+  QuantamentalDataFrame` is true, so the call routes through `qdf/methods.py::update_df` /
+  `update_tickers` / `reduce_df` and `qdf/classes.py::update_df`. **The categorical path is *also*
+  slow** — cell 17's `update_df` is still ~330s through `methods.py` because (a) it `sort_values`
+  + `drop_duplicates` the whole growing frame on every call, and (b) `union_categoricals` is
+  skipped when `df_add` is object (`linear_composite`/`panel_calculator` output), so the concat
+  upcasts back to object and washes the categorical out. So **T1's fix belongs in
+  `qdf/methods.py::update_tickers`/`update_df`** (factorized/incremental sort + dedup; keep
+  categorical when `df_add` is object by re-categorizing the small add rather than upcasting the
+  whole frame) **as well as** the `df_utils.py` fallback. Same for T3 →
+  `qdf/methods.py::reduce_df`.
+- **Net:** the ranked list is unchanged — **T2c → T1 → T2 → T3 → T4**, plus **T6** (Basket
+  categorical) as the enabler. Going QDF-native does not let us drop any target; it only changes
+  *which file* each fix lands in for T1/T3, and it makes T2c/T6 strictly more relevant (the
+  notebook will hit the categorical `_get_tickers_series`/`Basket` paths on every run).
