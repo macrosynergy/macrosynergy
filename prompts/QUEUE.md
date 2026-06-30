@@ -52,7 +52,9 @@ categorical/QDF-native twin `qdf/methods.py::reduce_df`(309).
 ## Q5 — T4 · `perf/srr-parallel-mixedlm`  — **TODO** (higher risk)
 Parallelize the independent MixedLM panel-test fits in `SignalReturnRelations`
 (signal_return_relations.py); fold in the `map_pval` double-`summary()` dedup (lines 967/972).
-Serial default; identical table output.
+Serial default; identical table output. **Prefer a thread pool** — `MixedLM.fit` is numpy/BLAS
+that releases the GIL, so threads parallelize with no extra memory (these cells already peak
+~7.4 GiB; a process pool would multiply that). See TARGETS §3.1.
 - **Cells:** 31, 33, 35, 39, 45, 50.
 - **Baseline:** 31=188s, 33=179s, 35=114s, 39=78s, 45=101s, 50=89s (≈749s, all ~7.4 GiB; 50=11.3 GiB).
 - **After:** _tbd_ · **Parity:** _tbd_ · **macrosynergy pytest:** _tbd_
@@ -74,6 +76,13 @@ input (CategoricalIndex columns). Fix to label slice `dfw_wgs.loc[fvi:]`; audit 
   categorical-input case to the shared panel-function test matrix (audit `linear_composite` /
   `make_relative_value` / `panel_calculator` / `make_zn_scores` / `SignalReturnRelations` too).
 - **After:** _tbd_ · **Parity:** _tbd_ · **macrosynergy pytest:** _tbd_
+
+## Q8 — T7 · `perf/zn-scores-parallel`  — **OPTIONAL / low priority** (do after Q4; gated)
+Add opt-in `n_jobs` to fan the independent per-xcat scorings in `make_zn_scores` (serial default).
+**Likely deferred:** cell-19 cost is `reduce_df` (Q4), not the z-score math; inner per-series
+estimation is sequential; pandas is GIL-bound ⇒ needs processes ⇒ multiplies the ~8 GiB peak.
+Reassess only if meaningful residual cost remains after Q4. See TARGETS §3.1.
+- **Cells:** 19. **Baseline:** 139s / 8217 MiB. **After:** _tbd_
 
 > **Notebook-side companion (academy, separate repo/branch):** the cyclical-strength notebook can
 > be made QDF-native (`download(categorical_dataframe=True)` + `.astype(str)`/`observed=True` edits

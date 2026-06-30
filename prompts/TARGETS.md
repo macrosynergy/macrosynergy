@@ -120,6 +120,39 @@ T6 is small and unblocks the QDF-native notebook (§7.2–7.3). **Note (§7.3):*
 hot path is in `df_utils.py` for object input and in the `qdf/methods.py`+`classes.py` twins for
 categorical (QDF-native) input — **fix both implementations**; T2/T2c are dtype-independent.
 
+### 3.1 Parallelization opportunities (where concurrency helps vs where it doesn't)
+
+Parallelism only pays where the cost is **many independent CPU-bound computations**. In this
+notebook that is essentially **one place** — the SRR MixedLM panel test. The building-chain cost
+is single large pandas ops (sort/dedup/factorize/string-build), which want **vectorization**
+(T1/T2/T2c/T3), not threads. Assessment of each candidate:
+
+| Candidate | Cells | Independent? | Verdict |
+|---|---|---|---|
+| **SRR MixedLM fits** | 31/33/35/39/45/50 (~749s) | yes — ~35 fits/cell, fully independent | **Best win → this is T4.** statsmodels/numpy releases the GIL ⇒ a **thread** pool works (no extra memory). |
+| **`make_zn_scores` loop** | 19 (139s/63s) | outer loop over xcats: yes; inner sequential estimation: **no** | **Low value → optional T7.** Cell-19 cost is `reduce_df` (T3), not the z-score math; inner re-estimation is serial; pandas is GIL-bound ⇒ needs **processes** ⇒ multiplies the ~8 GiB. Do T3 first; parallelize only if residual cost justifies. |
+| **`NaivePnL` spec loop** | 43 (9s), 47 (8s) | yes (6 specs) | **Not worth it** — cells are already ~8–9s; parallelism saves seconds against fork/thread overhead. |
+| **`linear_composite` loop** | 17 (419s) | compute independent, **but** each iteration `update_df`s the shared `dfx` (serializes) | **Not a parallelism target** — the cost is `update_df` (T1), not the composite compute. The real win is *batching* (compute all composites, one `update_df`) — a notebook-side / T1-adjacent change, not threads. |
+| **`InformationStateChanges` per-ticker** | 13 (244s) | per-ticker independent | **Vectorize, don't parallelize** — the cost is `split_ticker`/`ticker_df_to_qdf` (T2), which vectorization removes outright; parallelism would just spread the redundant work. |
+
+**Principle:** reach for parallelism only for SRR (T4). Everywhere else the cheaper, lower-risk,
+memory-neutral win is vectorization / faster sort-dedup / batched `update_df`. Two cross-cutting
+caveats for any parallel work here: (1) **memory** — cells already peak 7–12 GiB, so process pools
+can OOM; prefer threads where the heavy work releases the GIL (numpy/statsmodels), avoid processes
+for pandas-bound loops; (2) **determinism/parity** — keep a serial default and guarantee identical,
+order-stable output (GATE §5).
+
+### T7 (optional, low priority) — parallelize the `make_zn_scores` xcat loop
+*(perf/zn-scores-parallel)* — **do only after T3; gated on residual cost**
+
+- **What:** `make_zn_scores` already accepts a list of xcats and loops internally; add an opt-in
+  `n_jobs` to fan the **independent per-xcat** scorings across workers (serial default).
+- **Why low priority:** cell-19 cost is dominated by `reduce_df` (→ T3) and categorical
+  conversion, not the z-score estimation; the per-series sequential estimation can't be
+  parallelized; and the pandas work is GIL-bound so a real speed-up needs processes, which
+  multiplies the cell's ~8 GiB peak. Likely net-negative on memory until T3 lands.
+- **Verify:** cell 19 (wall + peak RSS); golden parity; `pytest`. Reassess after T3.
+
 ---
 
 ### T1 — `update_df` object-dtype fallback: factorized sort + dedup
@@ -291,7 +324,10 @@ categorical (QDF-native) input — **fix both implementations**; T2/T2c are dtyp
   independent. Dispatch the per-segment `map_pval` / per-(sig,ret) statistic computation across
   a worker pool (`concurrent.futures`/joblib, n_jobs param defaulting to 1 to preserve current
   behavior unless opted in — *or* internal thread/process pool guarded so the public API and
-  returned table are unchanged). Same fits, same numbers, concurrent → wall ÷ ~n_workers on the
+  returned table are unchanged). **Prefer a thread pool:** statsmodels `MixedLM.fit` is numpy
+  linear algebra (BLAS/`linalg.solve`) which **releases the GIL**, so threads parallelize it with
+  **no extra memory** — important since these cells already peak ~7.4 GiB and a process pool would
+  multiply that. Same fits, same numbers, concurrent → wall ÷ ~n_workers on the
   heavy heatmap cells. **Secondary (cheap, fold in):** `map_pval` builds the statsmodels
   `summary()` **twice** (lines 967, 972) to parse one p-value — call it once / read `re.pvalues`
   reproducing the 3-dp rounding; small but free.
@@ -368,6 +404,7 @@ its GATE. Capture runs **after** the profiling sweep frees memory (not concurren
 | 5 | T4 | `perf/srr-parallel-mixedlm` (incl. `summary()` dedup) | — |
 | 6 | T5 | `perf/zn-scores-reduce` | T3 |
 | 7 | T6 | `perf/basket-categorical-loc` (Basket `.loc[fvi:]`) | — (enables QDF-native notebook; see §7.2) |
+| — | T7 (optional) | `perf/zn-scores-parallel` | after T3; gated on residual cost (see §3.1) |
 | — | T1b (stretch) | `perf/qdf-categorical-propagation` | **demoted — see §7.1** |
 
 ## 7. Notebook-side (academy) complementary optimization — flagged, NOT part of Scope-2
