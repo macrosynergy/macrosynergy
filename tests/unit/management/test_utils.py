@@ -1972,5 +1972,49 @@ class TestRotateCidXcat(unittest.TestCase):
         self.assertTrue((restored["xcat"] == "EQXR_NSA").all())
 
 
+import inspect as _inspect_st
+import unittest as _ut_st
+
+from macrosynergy.management.utils.core import split_ticker as _split_ticker
+
+
+class TestSplitTickerDirect(_ut_st.TestCase):
+    def test_scalar_cid_and_xcat(self):
+        self.assertEqual(_split_ticker("AUD_XR_NSA", "cid"), "AUD")
+        self.assertEqual(_split_ticker("AUD_XR_NSA", "xcat"), "XR_NSA")
+
+    def test_iterable_returns_list(self):
+        self.assertEqual(
+            _split_ticker(["AUD_XR", "GBP_INFL"], "cid"), ["AUD", "GBP"]
+        )
+
+    def test_mode_normalised(self):
+        self.assertEqual(_split_ticker("AUD_XR", " CID "), "AUD")
+
+    def test_bad_mode_raises_valueerror(self):
+        with self.assertRaises(ValueError):
+            _split_ticker("AUD_XR", "nope")
+
+    def test_non_string_mode_raises_typeerror(self):
+        with self.assertRaises(TypeError):
+            _split_ticker("AUD_XR", 5)
+
+    def test_no_underscore_raises_valueerror(self):
+        with self.assertRaises(ValueError):
+            _split_ticker("AUDXR", "cid")
+
+    def test_empty_iterable_raises_valueerror(self):
+        with self.assertRaises(ValueError):
+            _split_ticker([], "cid")
+
+    def test_non_string_ticker_raises_typeerror(self):
+        with self.assertRaises(TypeError):
+            _split_ticker(5, "cid")
+
+    def test_signature_unchanged(self):
+        sig = _inspect_st.signature(_split_ticker)
+        self.assertEqual(list(sig.parameters), ["ticker", "mode"])
+
+
 if __name__ == "__main__":
     unittest.main()
