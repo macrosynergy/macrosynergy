@@ -209,10 +209,10 @@ Convenience to convert result JSON into the `QUEUE.md` before/after markdown row
   (pulls `py-cpuinfo` transitively → CPU fingerprint).
 - **psutil** — optional, guarded import (RAM + physical cores + RSS); not a hard dependency.
 
-> ⚠ **Policy gate (user global rule):** dependency changes must be version/vuln-vetted via the
-> Sonatype MCP tools **before** landing. A Sonatype MCP server does **not** appear connected in
-> this session — connect it (or perform a manual vet) and pin `pytest-benchmark` to a vetted
-> version before the implementation plan adds it to `pyproject.toml`.
+> **Sonatype vetting — waived for this change (user decision, 2026-06-30).** These are dev/test-only
+> dependencies; the user opted to skip Sonatype MCP vetting for them and pin to latest stable
+> (e.g. `pytest-benchmark>=4.0`). The global Sonatype-first policy still applies to any *runtime*
+> dependency added to the package.
 
 ## 6. Success criteria for this framework (not the optimizations)
 
@@ -234,4 +234,3 @@ Convenience to convert result JSON into the `QUEUE.md` before/after markdown row
 - **`large` tier** may be too slow/heavy for some machines → gated behind opt-in env flag, RSS-only.
 - **Golden snapshot churn:** parity goldens are committed; regenerating them must be a deliberate,
   reviewed action (a `--update` flag on `capture_parity.py`), never automatic.
-- **Sonatype vetting** (see §5) is a hard precondition for the dependency additions.
