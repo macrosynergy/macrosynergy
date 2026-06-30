@@ -1750,8 +1750,7 @@ class TestAll(unittest.TestCase):
 class TestMapPvalDirect(unittest.TestCase):
     """Direct exercising of map_pval and an API signature tripwire."""
 
-    def _build_wide_df(self):
-        """Return a wide MultiIndex(cid, real_date) DataFrame with XR00 and SIG00 cols."""
+    def test_map_pval_returns_float_in_unit_interval(self):
         df = srr_panel(n_cids=4, n_dates=400, n_signals=1, n_returns=1)
         cids = sorted(df["cid"].unique())
         wide = categories_df(
@@ -1763,16 +1762,12 @@ class TestMapPvalDirect(unittest.TestCase):
             lag=1,
             fwin=1,
             xcat_aggs=["last", "sum"],
-        )
-        return wide.dropna()
-
-    def test_map_pval_returns_float_in_unit_interval(self):
-        wide = self._build_wide_df()
+        ).dropna()
         srr = SignalReturnRelations(
-            srr_panel(n_cids=4, n_dates=400, n_signals=1, n_returns=1),
+            df,
             rets=["XR00"],
             sigs=["SIG00"],
-            cids=sorted(srr_panel(n_cids=4, n_dates=400, n_signals=1, n_returns=1)["cid"].unique()),
+            cids=cids,
             freqs=["M"],
             ms_panel_test=True,
         )
