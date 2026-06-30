@@ -416,6 +416,33 @@ its GATE. Capture runs **after** the profiling sweep frees memory (not concurren
    with no regression on others. Record before/after in `QUEUE.md`.
 4. **macrosynergy suite passes** — `pytest` in `~/repos/macrosynergy`.
 
+### 5.1 In-repo perf framework (the primary, reproducible GATE — `tests/perf/`)
+
+A self-contained in-repo framework now backs the GATE with synthetic, deterministic, machine-
+fingerprinted evidence (design: `docs/superpowers/specs/2026-06-30-macrosynergy-perf-framework-design.md`;
+how-to: `tests/perf/README.md`). It **complements** the external 24-cell harness (which stays the
+macro/real-data confirmation) and is the per-item gate each `perf/<slug>` branch runs:
+
+- **GATE-1 (API unchanged)** ← `inspect.signature` tripwires in the appended `tests/unit/...`
+  classes (`TestGetTickersSeriesEdge`/`AddTickerColumnAPI`, `TestUpdateDfEdge`,
+  `TestSplitTickerDirect`, `TestReduceDfEdgeAPI`, `TestMapPvalDirect`).
+- **GATE-2 (output parity)** ← `tests/perf/test_parity_*.py` golden snapshots (byte-identical /
+  category-set-and-order / exact column order) + invariant + edge/dtype tests, all run in the
+  **default** `pytest` gate. They are characterization tests: green on current code, and must
+  stay green after the optimization. Refresh goldens only via `python tests/perf/capture_parity.py --update`.
+- **GATE-3 (measurable win)** ← `pytest tests/perf -m perf --benchmark-only -n0 --no-cov
+  --benchmark-json=...` before/after, diffed by `python tests/perf/record.py <base> <branch>`
+  (cross-machine fingerprint guard) → paste into the QUEUE before/after row.
+- **GATE-4 (suite passes)** ← the default `pytest` gate (which now includes the parity/edge/API
+  tests; benchmarks are deselected by `-m 'not perf'`).
+
+**Coverage map (built):** Q1/T2c, Q2/T1, Q3/T2, Q4/T3, Q5/T4 each have a benchmark + parity +
+edge/API module. **Coverage gaps to add as their items are driven:** Q6/T5 (zn-scores) and
+Q8/T7 (zn-parallel) reuse the T3 modules but have no dedicated test; **Q7/T6 (Basket categorical)
+needs a new categorical-`QuantamentalDataFrame` regression test** (per §7.2/T6); and the
+**categorical-twin parity** (the `qdf/methods.py`+`classes.py` paths from §7.3) is benchmarked
+(object vs categorical params) but not yet goldened — add a categorical golden when driving Q2/Q4.
+
 ## 6. Sub-branch plan
 
 | Rank | Target | Sub-branch | Depends on |

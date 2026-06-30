@@ -4,10 +4,21 @@ Queue-driven book of work. Each item is a `perf/<slug>` sub-branch off `feature/
 An item may only merge back after passing the **GATE** (see `TARGETS.md` §5). Full diagnosis,
 designs, and the baseline that seeds this queue are in `TARGETS.md`.
 
-**Workflow per item:** branch `perf/<slug>` → implement the design → capture golden parity
-(`academy/drafts/surprises/performance/capture_golden.py` baseline vs re-capture) → run harness
-on the item's cells (record before/after) → `pytest` in `~/repos/macrosynergy` → fill the
-before/after table below → merge to `feature/performance`. Do **not** merge to develop/main.
+**Workflow per item:** branch `perf/<slug>` → implement the design (fix BOTH object + categorical
+implementations where §7.3 applies) → **in-repo GATE** (`tests/perf/`, see TARGETS §5.1): the
+default `pytest` gate incl. `tests/perf/test_parity_*` + the appended API/edge tests stays green
+(parity preserved), and the `-m perf` benchmark before/after (recorded via `tests/perf/record.py`)
+shows a win → `pytest` in `~/repos/macrosynergy` → **macro confirmation** (optional/when available):
+the external 24-cell harness (`academy/drafts/surprises/performance/capture_golden.py` baseline vs
+re-capture + the cell wall/RSS sweep) → fill the before/after table below → merge to
+`feature/performance`. Do **not** merge to develop/main.
+
+> **Driving the queue (manager/creator/reviewer team — mirrors academy `run-research-pipeline` and
+> knowledge `run-parse-pipeline`):** items are driven one at a time (Q1 first). A manager owns the
+> branch/worktree/queue bookkeeping; a builder agent implements one item end-to-end in an isolated
+> worktree against its brief + the in-repo GATE; a read-only adversarial reviewer returns
+> APPROVE/CHANGES before merge. The `tests/perf/` framework is the builder's self-verification and
+> the reviewer's re-run target.
 
 Status legend: `TODO` · `IN PROGRESS` · `IN REVIEW` · `DONE` · `BLOCKED`
 
