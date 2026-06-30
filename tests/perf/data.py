@@ -89,7 +89,7 @@ def wide_ticker_frame(n_tickers: int, n_days: int, *, seed: int = 42) -> pd.Data
                 break
             cols.append(f"{cid}_XCAT{j:03d}")
     cols = cols[:n_tickers]
-    idx = pd.bdate_range("2000-01-01", periods=n_days)
+    idx = pd.bdate_range("2000-01-01", periods=n_days, name="real_date")
     data = rng.standard_normal((n_days, len(cols)))
     return pd.DataFrame(data, index=idx, columns=cols)
 

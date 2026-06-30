@@ -200,3 +200,4 @@ launch.json
 tests/perf/results/*
 !tests/perf/results/.gitkeep
 tests/perf/golden/*.parquet
+!tests/perf/golden/index.json

@@ -1,0 +1,14 @@
+{
+  "reduce_df_tiny": {
+    "hash": "5f0a5175599f883caac4dd7ab205e3f519399ca24246f2e3b1c5d81dcc15a9df",
+    "kind": "qdf"
+  },
+  "ticker_df_to_qdf_tiny": {
+    "hash": "0b594f9420f1bdd2f6e28fa25044a4388d4b6dea277a3d8ff1a7ca7135417e9c",
+    "kind": "qdf"
+  },
+  "update_df_loop_tiny": {
+    "hash": "5f0a5175599f883caac4dd7ab205e3f519399ca24246f2e3b1c5d81dcc15a9df",
+    "kind": "qdf"
+  }
+}
