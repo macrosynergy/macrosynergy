@@ -451,9 +451,12 @@ categorical:
 
 ### 7.2 Measured result — notebook fixed to be QDF-native, end-to-end re-run
 
-Followed the flip: instead of changing macrosynergy, **fixed the notebook cells** so the pipeline
+Followed the flip: instead of changing macrosynergy, **fixed the benchmark cells** so the pipeline
 runs on a categorical `QuantamentalDataFrame` (`download(categorical_dataframe=True)`), then re-ran
-the full sweep. Fixes (in the harness mirror `cells.py`; mirror to the `.ipynb`):
+the full sweep. **Scope note:** these fixes are in our benchmark-harness cell versions
+(`academy/drafts/surprises/performance/cells.py`) only — the source `.ipynb` is being revised
+independently by a colleague (separate version, arriving next day) and the two will be reconciled
+then; the categorical edits below + T6 should carry into the combined notebook. Fixes:
 
 - **Cells 12, 13, 15** — the `cid + "_" + xcat` / `xcat += "A"` string ops were rewritten
   `.astype(str)`-first, and the cell-12 `groupby` got `observed=True` (so categorical grouping
