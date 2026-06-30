@@ -83,13 +83,11 @@ def wide_ticker_frame(n_tickers: int, n_days: int, *, seed: int = 42) -> pd.Data
     n_cids = max(1, int(np.ceil(np.sqrt(n_tickers))))
     cids = _cid_codes(n_cids)
     cols = []
-    k = 0
     for cid in cids:
         for j in range(n_cids):
             if len(cols) >= n_tickers:
                 break
             cols.append(f"{cid}_XCAT{j:03d}")
-            k += 1
     cols = cols[:n_tickers]
     idx = pd.bdate_range("2000-01-01", periods=n_days)
     data = rng.standard_normal((n_days, len(cols)))
@@ -99,15 +97,20 @@ def wide_ticker_frame(n_tickers: int, n_days: int, *, seed: int = 42) -> pd.Data
 def update_df_pieces(
     tier: str, n_pieces: int, *, categorical: bool = False, seed: int = 42
 ) -> Tuple[pd.DataFrame, List[pd.DataFrame]]:
-    """A base QDF plus `n_pieces` overlapping slices to feed update_df in a growing loop."""
+    """A base QDF plus `n_pieces` non-empty row-slices to feed update_df in a growing loop.
+
+    Splitting by rows (not by xcat) guarantees every piece is non-empty for any
+    ``1 <= n_pieces <= len(full)``, so callers can request more pieces than there are
+    categories without silently producing empty slices.
+    """
     full = qdf_for_tier(tier, categorical=categorical, seed=seed)
     xcats = list(pd.unique(full["xcat"]))
     base = full[full["xcat"].isin(xcats[: max(1, len(xcats) // 2)])].reset_index(drop=True)
-    pieces = []
-    splits = np.array_split(np.array(xcats), n_pieces)
-    for grp in splits:
-        piece = full[full["xcat"].isin(list(grp))].reset_index(drop=True)
-        pieces.append(piece)
+    pieces = [
+        full.iloc[idx].reset_index(drop=True)
+        for idx in np.array_split(np.arange(len(full)), n_pieces)
+        if len(idx) > 0
+    ]
     return base, pieces
 
 

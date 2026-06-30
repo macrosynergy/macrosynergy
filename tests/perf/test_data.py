@@ -49,6 +49,20 @@ def test_update_df_pieces_returns_base_and_list():
     base, pieces = update_df_pieces("tiny", n_pieces=4)
     assert isinstance(base, pd.DataFrame) and len(pieces) == 4
     assert all(set(["cid", "xcat", "real_date", "value"]) <= set(p.columns) for p in pieces)
+    assert all(len(p) > 0 for p in pieces)
+
+
+def test_update_df_pieces_more_pieces_than_xcats_are_nonempty():
+    base, pieces = update_df_pieces("tiny", n_pieces=10)  # tiny has 3 xcats
+    assert len(pieces) == 10
+    assert all(len(p) > 0 for p in pieces)
+
+
+def test_scale_tiers_row_count_ordering():
+    def _rows(t):
+        c = SCALE_TIERS[t]
+        return c["n_cids"] * c["n_xcats"] * c["n_days"]
+    assert _rows("tiny") < _rows("small") < _rows("medium") < _rows("large")
 
 
 def test_srr_panel_has_signal_and_return_xcats():
