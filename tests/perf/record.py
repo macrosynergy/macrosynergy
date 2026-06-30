@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import sys
-from typing import Optional
 
 from tests.perf.env import comparable
 
@@ -41,7 +40,7 @@ def render_report(baseline: dict, branch: dict) -> str:
         b0, b1 = base_idx.get(name), br_idx.get(name)
         b0s = f"{b0:.4f}" if b0 is not None else "—"
         b1s = f"{b1:.4f}" if b1 is not None else "—"
-        if is_comparable and b0 and b1:
+        if is_comparable and b0 is not None and b1 is not None and b0 != 0:
             pct = (1 - b1 / b0) * 100
             lines.append(f"| {name} | {b0s} | {b1s} | {pct:.0f}% |")
         elif is_comparable:

@@ -1,4 +1,3 @@
-import json
 from tests.perf.record import render_report, extract_env
 
 
@@ -20,7 +19,7 @@ def test_extract_env():
 def test_same_machine_shows_verdict():
     report = render_report(_bench(SAME, mean=2.0), _bench(SAME, mean=1.0))
     assert "advisory only" not in report
-    assert "50" in report  # ~50% faster shown somewhere
+    assert "50%" in report  # ~50% faster shown in the verdict column
 
 
 def test_cross_machine_shows_banner():
