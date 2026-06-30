@@ -201,3 +201,7 @@ tests/perf/results/*
 !tests/perf/results/.gitkeep
 tests/perf/golden/*.parquet
 !tests/perf/golden/index.json
+
+# perf-queue team: transient worktrees and machine-specific benchmark baselines
+.claude/worktrees/
+.claude/perf-baselines/*.json
