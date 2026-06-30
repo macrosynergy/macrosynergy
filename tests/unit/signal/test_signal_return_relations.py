@@ -1,7 +1,10 @@
+import inspect
 import unittest
 from macrosynergy.signal.signal_return_relations import SignalReturnRelations
+from macrosynergy.management.utils import categories_df
 
 from tests.simulate import make_qdf
+from tests.perf.data import srr_panel
 from sklearn.metrics import accuracy_score
 from scipy import stats
 import random
@@ -1742,6 +1745,48 @@ class TestAll(unittest.TestCase):
 
         plt.close("all")
         matplotlib.use(self.mpl_backend)
+
+
+class TestMapPvalDirect(unittest.TestCase):
+    """Direct exercising of map_pval and an API signature tripwire."""
+
+    def _build_wide_df(self):
+        """Return a wide MultiIndex(cid, real_date) DataFrame with XR00 and SIG00 cols."""
+        df = srr_panel(n_cids=4, n_dates=400, n_signals=1, n_returns=1)
+        cids = sorted(df["cid"].unique())
+        wide = categories_df(
+            df,
+            xcats=["SIG00", "XR00"],
+            cids=cids,
+            val="value",
+            freq="M",
+            lag=1,
+            fwin=1,
+            xcat_aggs=["last", "sum"],
+        )
+        return wide.dropna()
+
+    def test_map_pval_returns_float_in_unit_interval(self):
+        wide = self._build_wide_df()
+        srr = SignalReturnRelations(
+            srr_panel(n_cids=4, n_dates=400, n_signals=1, n_returns=1),
+            rets=["XR00"],
+            sigs=["SIG00"],
+            cids=sorted(srr_panel(n_cids=4, n_dates=400, n_signals=1, n_returns=1)["cid"].unique()),
+            freqs=["M"],
+            ms_panel_test=True,
+        )
+        ret_vals = wide["XR00"]
+        sig_vals = wide["SIG00"]
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            p = srr.map_pval(ret_vals, sig_vals)
+        self.assertIsInstance(p, float)
+        self.assertTrue(0.0 <= p <= 1.0, f"p-value {p} not in [0, 1]")
+
+    def test_map_pval_signature_unchanged(self):
+        sig = inspect.signature(SignalReturnRelations.map_pval)
+        self.assertEqual(list(sig.parameters), ["self", "ret_vals", "sig_vals"])
 
 
 if __name__ == "__main__":
