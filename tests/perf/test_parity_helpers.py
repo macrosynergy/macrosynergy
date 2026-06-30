@@ -4,7 +4,6 @@ import pytest
 
 from tests.perf.parity import (
     assert_frame_parity, assert_qdf_equal, assert_categorical_equal,
-    save_golden, load_golden,
 )
 
 

@@ -1,14 +1,14 @@
 {
-  "reduce_df_tiny": {
-    "hash": "5f0a5175599f883caac4dd7ab205e3f519399ca24246f2e3b1c5d81dcc15a9df",
+  "reduce_df_dedup_tiny": {
+    "hash": "ae5b3df5aed938c248d016005d50d90add4f4215a31ee2827388cc83dadb1bda",
     "kind": "qdf"
   },
   "ticker_df_to_qdf_tiny": {
     "hash": "0b594f9420f1bdd2f6e28fa25044a4388d4b6dea277a3d8ff1a7ca7135417e9c",
     "kind": "qdf"
   },
-  "update_df_loop_tiny": {
-    "hash": "5f0a5175599f883caac4dd7ab205e3f519399ca24246f2e3b1c5d81dcc15a9df",
+  "update_df_lastwins_tiny": {
+    "hash": "159ddefa90344bb50ab3e058e5329e79807baa5f6907d961ba24b81b0310c109",
     "kind": "qdf"
   }
 }

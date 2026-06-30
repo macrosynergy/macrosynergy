@@ -4,7 +4,7 @@ from tests.perf.mem import measure, MemResult
 
 def test_measure_records_wall_and_tracemalloc():
     with measure() as r:
-        x = [0] * 1_000_000  # allocate
+        _alloc = [0] * 1_000_000  # noqa: F841
     assert isinstance(r, MemResult)
     assert r.wall_s >= 0.0
     assert r.tracemalloc_peak_mib is not None and r.tracemalloc_peak_mib > 0

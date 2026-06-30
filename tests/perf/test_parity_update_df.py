@@ -3,17 +3,16 @@
 import pandas as pd
 
 from macrosynergy.management.utils import update_df
-from tests.perf.data import update_df_pieces
+from tests.perf.data import qdf_for_tier, update_df_pieces
 from tests.perf.parity import assert_qdf_equal, load_golden
 
 
-def test_update_df_loop_matches_golden():
-    base, pieces = update_df_pieces("tiny", n_pieces=3)
-    acc = base
-    for p in pieces:
-        acc = update_df(acc, p)
-    expected = load_golden("update_df_loop_tiny")
-    assert_qdf_equal(pd.DataFrame(acc), expected)
+def test_update_df_lastwins_matches_golden():
+    base = qdf_for_tier("tiny")
+    overlap = base.iloc[: len(base) // 2].copy()
+    overlap["value"] = overlap["value"] + 100.0
+    out = update_df(base, overlap)
+    assert_qdf_equal(pd.DataFrame(out), load_golden("update_df_lastwins_tiny"))
 
 
 def test_update_df_invariants_last_wins_and_sorted():

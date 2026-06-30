@@ -16,26 +16,27 @@ import sys
 # repo root is importable so `tests.perf.*` resolves without PYTHONPATH being set.
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]))
 
-import pandas as pd
+import pandas as pd  # noqa: E402
 
-from macrosynergy.management.utils import update_df, reduce_df, ticker_df_to_qdf
-from tests.perf.data import qdf_for_tier, wide_ticker_frame, update_df_pieces
-from tests.perf.parity import GOLDEN_DIR, save_golden
+from macrosynergy.management.utils import update_df, reduce_df, ticker_df_to_qdf  # noqa: E402
+from tests.perf.data import qdf_for_tier, wide_ticker_frame  # noqa: E402
+from tests.perf.parity import GOLDEN_DIR, save_golden  # noqa: E402
 
 
 def _build_goldens() -> dict:
     """Return {name: (kind, DataFrame)} computed on current code at tiny scale."""
     out = {}
 
-    # T3 reduce_df
-    out["reduce_df_tiny"] = ("qdf", pd.DataFrame(reduce_df(qdf_for_tier("tiny"))))
+    # T3 reduce_df — input WITH exact full-row duplicates so the terminal drop_duplicates actually fires.
+    clean = qdf_for_tier("tiny")
+    dupd = pd.concat([clean, clean.iloc[:100]], ignore_index=True)
+    out["reduce_df_dedup_tiny"] = ("qdf", pd.DataFrame(reduce_df(dupd)))
 
-    # T1 update_df growing loop
-    base, pieces = update_df_pieces("tiny", n_pieces=3)
-    acc = base
-    for p in pieces:
-        acc = update_df(acc, p)
-    out["update_df_loop_tiny"] = ("qdf", pd.DataFrame(acc))
+    # T1 update_df — df_add overlaps half the base keys with bumped values, so last-wins dedup fires.
+    base = qdf_for_tier("tiny")
+    overlap = base.iloc[: len(base) // 2].copy()
+    overlap["value"] = overlap["value"] + 100.0
+    out["update_df_lastwins_tiny"] = ("qdf", pd.DataFrame(update_df(base, overlap)))
 
     # T2 ticker_df_to_qdf
     out["ticker_df_to_qdf_tiny"] = ("qdf", pd.DataFrame(ticker_df_to_qdf(wide_ticker_frame(12, 60))))

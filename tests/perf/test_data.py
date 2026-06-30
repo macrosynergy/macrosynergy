@@ -1,5 +1,4 @@
 import pandas as pd
-import pytest
 
 from macrosynergy.management.types import QuantamentalDataFrame
 from tests.perf.data import (
