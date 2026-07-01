@@ -1,5 +1,7 @@
+import inspect
 import unittest
 from macrosynergy.signal.signal_return_relations import SignalReturnRelations
+from macrosynergy.management.utils import categories_df
 
 from tests.simulate import make_qdf
 from sklearn.metrics import accuracy_score
@@ -1742,6 +1744,84 @@ class TestAll(unittest.TestCase):
 
         plt.close("all")
         matplotlib.use(self.mpl_backend)
+
+
+def _cid_codes(n: int) -> List[str]:
+    # 3-char uppercase codes with no underscore (valid cid). AAA, AAB, ...
+    codes = []
+    i = 0
+    while len(codes) < n:
+        a, b, c = i // 676, (i // 26) % 26, i % 26
+        codes.append(chr(65 + a % 26) + chr(65 + b) + chr(65 + c))
+        i += 1
+    return codes
+
+
+def srr_panel(
+    n_cids: int, n_dates: int, n_signals: int, n_returns: int, *, seed: int = 42
+) -> pd.DataFrame:
+    """Deterministic QDF with `n_signals` signal xcats (SIGn) and `n_returns` return xcats (XRn).
+
+    Self-contained copy of the helper in tests/perf/data.py so this unit test does not
+    depend on the (opt-in) tests/perf package.
+    """
+    cids = _cid_codes(n_cids)
+    cal = int(n_dates * 7 / 5) + 10
+    latest = (pd.Timestamp("2000-01-01") + pd.Timedelta(days=cal)).strftime("%Y-%m-%d")
+    sig_xcats = [f"SIG{i:02d}" for i in range(n_signals)]
+    ret_xcats = [f"XR{i:02d}" for i in range(n_returns)]
+    xcats = sig_xcats + ret_xcats
+
+    df_cids = pd.DataFrame(
+        index=cids, columns=["earliest", "latest", "mean_add", "sd_mult"]
+    )
+    for cid in cids:
+        df_cids.loc[cid] = ["2000-01-01", latest, 0.0, 1.0]
+    df_xcats = pd.DataFrame(
+        index=xcats,
+        columns=["earliest", "latest", "mean_add", "sd_mult", "ar_coef", "back_coef"],
+    )
+    for xc in xcats:
+        df_xcats.loc[xc] = ["2000-01-01", latest, 0.0, 1.0, 0.3, 0.4]
+    df = make_qdf(df_cids, df_xcats, back_ar=0.5, seed=seed)
+    return df[["cid", "xcat", "real_date", "value"]].reset_index(drop=True)
+
+
+class TestMapPvalDirect(unittest.TestCase):
+    """Direct exercising of map_pval and an API signature tripwire."""
+
+    def test_map_pval_returns_float_in_unit_interval(self):
+        df = srr_panel(n_cids=4, n_dates=400, n_signals=1, n_returns=1)
+        cids = sorted(df["cid"].unique())
+        wide = categories_df(
+            df,
+            xcats=["SIG00", "XR00"],
+            cids=cids,
+            val="value",
+            freq="M",
+            lag=1,
+            fwin=1,
+            xcat_aggs=["last", "sum"],
+        ).dropna()
+        srr = SignalReturnRelations(
+            df,
+            rets=["XR00"],
+            sigs=["SIG00"],
+            cids=cids,
+            freqs=["M"],
+            ms_panel_test=True,
+        )
+        ret_vals = wide["XR00"]
+        sig_vals = wide["SIG00"]
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            p = srr.map_pval(ret_vals, sig_vals)
+        self.assertIsInstance(p, float)
+        self.assertTrue(0.0 <= p <= 1.0, f"p-value {p} not in [0, 1]")
+
+    def test_map_pval_signature_unchanged(self):
+        sig = inspect.signature(SignalReturnRelations.map_pval)
+        self.assertEqual(list(sig.parameters), ["self", "ret_vals", "sig_vals"])
 
 
 if __name__ == "__main__":
