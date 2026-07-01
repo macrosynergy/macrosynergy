@@ -178,16 +178,18 @@ class TestAll(unittest.TestCase):
         # re-estimation date series. Confirms the re-estimation frequency has been
         # correctly applied.
         # The frequency tested on will be monthly: business month end frequency.
+        min_observation: int = 50
+        MAX_OBS: int = 100
+
         start_date: pd.Timestamp
         end_date: pd.Timestamp
         start_date, end_date = date_alignment(unhedged_return=xr, benchmark_return=br)
         freq = _map_to_business_day_frequency("m")
-        dates_re: List[pd.Timestamp] = list(
-            pd.date_range(start=start_date, end=end_date, freq=freq)
-        )
-
-        min_observation: int = 50
-        MAX_OBS: int = 100
+        dates_re: List[pd.Timestamp] = pd.date_range(
+            start=start_date + pd.offsets.BDay(min_observation),
+            end=end_date,
+            freq=freq,
+        ).tolist()
 
         # Produce daily business day date series to determine the date that corresponds
         # to the specified minimum observation.
@@ -240,27 +242,23 @@ class TestAll(unittest.TestCase):
         data_column[:] = np.nan
         df_hrat = pd.DataFrame(data=data_column, index=dates_re, columns=["value"])
 
-        min_obs_date = xr.index[min_observation]
         for d in dates_re:
-            if d > min_obs_date:
-                curr_start_date: pd.Timestamp = dates_re[
-                    max(0, dates_re.index(d) - MAX_OBS)
-                ]
-                yvar = xr.loc[curr_start_date:d].values
-                xvar = br.loc[curr_start_date:d].values.reshape(-1, 1)
+            # Inclusive of the re-estimation date.
+            yvar = xr.loc[:d].values[-MAX_OBS:]
+            xvar = br.loc[:d].values[-MAX_OBS:].reshape(-1, 1)
 
-                if method == "ols":
-                    weights = np.ones_like(yvar)
-                elif method == "twls":
-                    weights = np.power(2, -np.arange(yvar.shape[0]) / 252)[::-1]
+            if method == "ols":
+                weights = np.ones_like(yvar)
+            elif method == "twls":
+                weights = np.power(2, -np.arange(yvar.shape[0]) / 11)[::-1]
 
-                betas = weighted_least_squares(
-                    X=np.column_stack((np.ones(xvar.shape[0]), xvar)),
-                    y=yvar,
-                    weights=weights,
-                )
+            betas = weighted_least_squares(
+                X=np.column_stack((np.ones(xvar.shape[0]), xvar)),
+                y=yvar,
+                weights=weights,
+            )
 
-                df_hrat.loc[d] = betas[1]
+            df_hrat.loc[d] = betas[1]
 
         df_hrat = df_hrat.dropna(axis=0, how="all")
         df_hrat.index.name = "real_date"
@@ -351,7 +349,8 @@ class TestAll(unittest.TestCase):
         self.assertTrue(INR_return == INR_HR)
         self.assertTrue(IDR_return == IDR_HR)
 
-    def test_hedge_ratio(self):
+    @parameterized.expand(["ols", "twls"])
+    def test_hedge_ratio(self, meth):
         """
         Estimates hedge ratios with respect to a hedge benchmark. The subroutine also
         allows for returning hedged returns if the respective parameter is set to True.
@@ -434,7 +433,7 @@ class TestAll(unittest.TestCase):
             start="2010-01-01",
             end="2020-10-30",
             blacklist=self.blacklist,
-            meth="ols",
+            meth=meth,
             oos=True,
             refreq="w",
             min_obs=24,
@@ -465,8 +464,8 @@ class TestAll(unittest.TestCase):
         self.assertTrue(test_value != df_hedge_INR_val)
 
 
-class TestHedgeRatio:
-    """Tests for the hege_ratio function"""
+class TestHedgeCalculator:
+    """Tests for the hege_calculator function"""
     @staticmethod
     def make_series():
         index = pd.date_range("2020-01-01",  periods=500, freq="D", name="real_date")
@@ -494,6 +493,21 @@ class TestHedgeRatio:
         with pytest.raises(ValueError, match="max_obs"):
             hedge_calculator(ur, br, rdates, min_obs=20, max_obs=10)
 
+        # rdate passed that doesn't satisfy min_obs
+        ur = self.make_series()
+        br = self.make_series()
+        rdates = [pd.Timestamp("2020-02-01"), pd.Timestamp("2021-01-01")]
+        with pytest.raises(ValueError, match="Re-estimation dates"):
+            hedge_calculator(ur, br, rdates, min_obs=40)
+
+    def test_insufficient_overlap_raises(self):
+        """Fewer overlapping observations than min_obs raises a ValueError."""
+        idx = pd.bdate_range("2020-01-01", periods=5, name="real_date")
+        ur = pd.Series(np.random.randn(5), index=idx)
+        br = pd.Series(np.random.randn(5), index=idx)
+        with pytest.raises(ValueError, match="overlapping observations"):
+            hedge_calculator(ur, br, [pd.Timestamp("2020-01-07")], min_obs=24)
+
     @pytest.mark.parametrize("method", ["ols", "twls"])
     def test_valid_runs(self, method):
         ur = self.make_series()
@@ -506,7 +520,7 @@ class TestHedgeRatio:
     def test_perfect_correlation_ratio_near_one(self, method):
         ur = self.make_series()
         br = ur.copy()
-        rdates = [pd.Timestamp("1920-06-01"), pd.Timestamp("2021-01-01"), pd.Timestamp("2021-06-01")] # TODO: fix test when bug fixed
+        rdates = [pd.Timestamp("2020-06-01"), pd.Timestamp("2021-01-01"), pd.Timestamp("2021-06-01")]
         result = hedge_calculator(ur, br, rdates, meth=method)
 
         assert np.allclose(result["value"].values[1:], 1.0, atol=1e-6)
@@ -515,7 +529,7 @@ class TestHedgeRatio:
     def test_scaled_perfect_correlation(self, method):
         br = self.make_series()
         ur = 2 * br
-        rdates = [pd.Timestamp("1920-06-01"), pd.Timestamp("2021-01-01"), pd.Timestamp("2021-06-01")]
+        rdates = [pd.Timestamp("2020-06-01"), pd.Timestamp("2021-01-01"), pd.Timestamp("2021-06-01")]
         result = hedge_calculator(ur, br, rdates, meth=method)
 
         assert np.allclose(result["value"].values[1:], 2, atol=1e-4)
@@ -531,6 +545,266 @@ class TestHedgeRatio:
         result = hedge_calculator(ur, br, [rdate], meth="ols", min_obs=24)
 
         assert np.isnan(result["value"][0].item())
+
+    def test_misaligned_series(self):
+        """Series with different lengths should be aligned on intersection."""
+        dates_long = pd.bdate_range("2020-01-01", periods=120, name="real_date")
+        dates_short = pd.bdate_range("2020-03-01", periods=80, name="real_date")
+        ur = pd.Series(np.random.randn(120), index=dates_long)
+        br = pd.Series(np.random.randn(80), index=dates_short)
+
+        common_dates = dates_long.intersection(dates_short)
+        br[common_dates] = ur[common_dates]
+
+        rdates = [pd.Timestamp("2020-04-01"), pd.Timestamp("2020-05-01")]
+
+        result = hedge_calculator(ur, br, rdates, min_obs=15)
+
+        assert not result.empty
+        assert result["real_date"].min() == pd.Timestamp("2020-04-01")
+        assert result["real_date"].max() == dates_long.max()
+        assert np.allclose(result["value"].values[1:], 1.0, atol=1e-6)
+
+
+class TestReturnBeta:
+    """Tests for the return_beta function."""
+
+    @staticmethod
+    def make_qdf_df(
+        cids=("AUD", "GBP", "USD"),
+        xcats=("FXXR_NSA", "EQXR_NSA"),
+        earliest="2010-01-01",
+        latest="2020-12-31",
+    ):
+        df_cids = pd.DataFrame(
+            index=list(cids), columns=["earliest", "latest", "mean_add", "sd_mult"]
+        )
+        for cid in cids:
+            df_cids.loc[cid] = [earliest, latest, 0, 1]
+
+        df_xcats = pd.DataFrame(
+            index=list(xcats),
+            columns=["earliest", "latest", "mean_add", "sd_mult", "ar_coef", "back_coef"],
+        )
+        for xcat in xcats:
+            df_xcats.loc[xcat] = [earliest, latest, 0, 1, 0, 0.2]
+
+        return make_qdf(df_cids, df_xcats)
+
+    def test_returns_standardised_quantamental_dataframe(self):
+        """Output is a standardised QDF whose only category is ``xcat + ratio_name``."""
+        cids = ["AUD", "GBP", "USD"]
+        dfd = self.make_qdf_df(cids)
+
+        result = return_beta(
+            df=dfd,
+            xcat="FXXR_NSA",
+            cids=cids,
+            benchmark_return="USD_EQXR_NSA",
+            refreq="m",
+            min_obs=24,
+        )
+
+        assert list(result.columns) == ["real_date", "cid", "xcat", "value"]
+        assert list(result["xcat"].unique()) == ["FXXR_NSA_HR"]
+        assert sorted(result["cid"].unique()) == cids
+
+    def test_unknown_benchmark_raises(self):
+        """A benchmark ticker absent from the DataFrame raises a ValueError."""
+        dfd = self.make_qdf_df()
+        with pytest.raises(ValueError, match="Benchmark return ticker"):
+            return_beta(
+                df=dfd,
+                xcat="FXXR_NSA",
+                cids=["AUD", "GBP", "USD"],
+                benchmark_return="USD_INTRGDP_NSA",
+                refreq="m",
+            )
+
+    def test_xcat_not_in_dataframe_raises(self):
+        """A category that is not present in the DataFrame raises a ValueError."""
+        dfd = self.make_qdf_df()
+        with pytest.raises(ValueError, match="not defined in the dataframe"):
+            return_beta(
+                df=dfd,
+                xcat="GROWTHXR_NSA",
+                cids=["AUD", "GBP", "USD"],
+                benchmark_return="USD_EQXR_NSA",
+                refreq="m",
+            )
+
+    def test_min_obs_below_floor_raises(self):
+        dfd = self.make_qdf_df()
+        with pytest.raises(ValueError, match="minimum observations"):
+            return_beta(
+                df=dfd,
+                xcat="FXXR_NSA",
+                cids=["AUD", "GBP", "USD"],
+                benchmark_return="USD_EQXR_NSA",
+                refreq="m",
+                min_obs=9,
+            )
+
+    def test_max_obs_below_min_obs_raises(self):
+        dfd = self.make_qdf_df()
+        with pytest.raises(ValueError, match="max_obs"):
+            return_beta(
+                df=dfd,
+                xcat="FXXR_NSA",
+                cids=["AUD", "GBP", "USD"],
+                benchmark_return="USD_EQXR_NSA",
+                refreq="m",
+                min_obs=24,
+                max_obs=10,
+            )
+
+    def test_invalid_refreq_raises(self):
+        dfd = self.make_qdf_df()
+        with pytest.raises(ValueError):
+            return_beta(
+                df=dfd,
+                xcat="FXXR_NSA",
+                cids=["AUD", "GBP", "USD"],
+                benchmark_return="USD_EQXR_NSA",
+                refreq="b",
+                min_obs=24,
+            )
+
+    def test_hedged_returns_appended(self):
+        dfd = self.make_qdf_df()
+        result = return_beta(
+            df=dfd,
+            xcat="FXXR_NSA",
+            cids=["AUD", "GBP", "USD"],
+            benchmark_return="USD_EQXR_NSA",
+            refreq="m",
+            min_obs=24,
+            hedged_returns=True,
+        )
+
+        assert sorted(result["xcat"].unique()) == ["FXXR_NSA_H", "FXXR_NSA_HR"]
+
+    def test_custom_ratio_and_hedge_labels(self):
+        dfd = self.make_qdf_df()
+        result = return_beta(
+            df=dfd,
+            xcat="FXXR_NSA",
+            cids=["AUD", "GBP", "USD"],
+            benchmark_return="USD_EQXR_NSA",
+            refreq="m",
+            min_obs=24,
+            hedged_returns=True,
+            ratio_name="_BETA",
+            hr_name="HEDGED",
+        )
+
+        assert sorted(result["xcat"].unique()) == ["FXXR_NSA_BETA", "FXXR_NSA_HEDGED"]
+
+    def test_benchmark_cross_section_removed_from_panel(self):
+        """
+        When the hedged category is the benchmark's category, the benchmark's own
+        cross-section is dropped from the panel and a warning is issued.
+        """
+        dfd = self.make_qdf_df()
+        with pytest.warns(UserWarning, match="has been removed from the panel"):
+            result = return_beta(
+                df=dfd,
+                xcat="EQXR_NSA",
+                cids=["AUD", "GBP", "USD"],
+                benchmark_return="USD_EQXR_NSA",
+                refreq="m",
+                min_obs=24,
+            )
+
+        assert sorted(result["cid"].unique()) == ["AUD", "GBP"]
+
+    def test_cids_subset_respected(self):
+        """Only the requested cross-sections appear in the output."""
+        dfd = self.make_qdf_df()
+        result = return_beta(
+            df=dfd,
+            xcat="FXXR_NSA",
+            cids=["AUD"],
+            benchmark_return="USD_EQXR_NSA",
+            refreq="m",
+            min_obs=24,
+        )
+
+        assert sorted(result["cid"].unique()) == ["AUD"]
+
+    @parameterized.expand(["ols", "twls"])
+    def test_estimation_methods_produce_ratios(self, meth):
+        dfd = self.make_qdf_df()
+        result = return_beta(
+            df=dfd,
+            xcat="FXXR_NSA",
+            cids=["AUD", "GBP", "USD"],
+            benchmark_return="USD_EQXR_NSA",
+            refreq="m",
+            min_obs=24,
+            meth=meth,
+        )
+
+        assert not result.empty
+        assert result["value"].notna().any()
+
+    def test_some_cids_dont_satisfy_min_obs(self):
+        dfd = self.make_qdf_df()
+        dfd.loc[dfd["cid"].eq("AUD"), "value"] = np.nan
+
+        with pytest.warns(UserWarning, match="Cannot calculate beta for the"):
+            result = return_beta(
+                df=dfd,
+                xcat="FXXR_NSA",
+                cids=["AUD", "GBP"],
+                benchmark_return="USD_EQXR_NSA",
+                refreq="m",
+                min_obs=24,
+                meth="twls",
+            )
+
+        assert sorted(result["cid"].unique()) == ["GBP"]
+
+    def test_all_cids_dont_satisfy_min_obs(self):
+        dfd = self.make_qdf_df()
+        dfd = dfd.groupby(["cid", "xcat"], as_index=False).head(23)
+
+        with pytest.raises(RuntimeError, match="None of"):
+            return_beta(
+                df=dfd,
+                xcat="FXXR_NSA",
+                cids=["AUD", "GBP"],
+                benchmark_return="USD_EQXR_NSA",
+                refreq="m",
+                min_obs=24,
+                meth="twls",
+            )
+
+    def test_cid_satisfied_only_after_last_rdate(self):
+        """
+        A cross-section that reaches min_obs only after the final re-estimation
+        date (panel ends mid-period) is warned-and-skipped rather than crashing the
+        run for the satisfied cross-sections.
+        """
+        dfd = self.make_qdf_df(latest="2021-01-15")
+        late_start = (
+            dfd["cid"].eq("AUD")
+            & dfd["xcat"].eq("FXXR_NSA")
+            & dfd["real_date"].lt(pd.Timestamp("2021-01-04"))
+        )
+        dfd.loc[late_start, "value"] = np.nan
+
+        with pytest.warns(UserWarning, match="Cannot calculate beta"):
+            result = return_beta(
+                df=dfd,
+                xcat="FXXR_NSA",
+                cids=["AUD", "GBP", "USD"],
+                benchmark_return="USD_EQXR_NSA",
+                refreq="m",
+                min_obs=10,
+            )
+
+        assert sorted(result["cid"].unique()) == ["GBP", "USD"]
 
 
 class TestWeightedLeastSquares:

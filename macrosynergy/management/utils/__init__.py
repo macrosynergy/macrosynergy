@@ -43,6 +43,7 @@ from .df_utils import (
     concat_categorical,
     _insert_as_categorical,
     forward_fill_wide_df,
+    rotate_cid_xcat,
 )
 
 from .sparse import (
@@ -60,7 +61,6 @@ from .math import (
     ewm_sum,
     calculate_cumulative_weights,
 )
-
 
 __all__ = [
     "core",
@@ -104,6 +104,7 @@ __all__ = [
     "get_sops",
     "merge_categories",
     "estimate_release_frequency",
+    "rotate_cid_xcat",
     # Sparse Indicators
     "create_delta_data",
     "calculate_score_on_sparse_indicator",
