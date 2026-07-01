@@ -166,3 +166,14 @@ the residual upside is small. Reassess only if meaningful cost remains after Q4.
 - **T5b** QDF-wrapping overhead (spun out of Q6): `QuantamentalDataFrame(...)` wrapping at
   `make_zn_scores.py` start costs ~22.6% per call (categorical conversion) — points back at
   T1/T2c QDF-construction overhead, not a standalone fix.
+- **T4b** `srr-mixedlm-custom-estimator` — **separate workstream, NOT output-identical** (methodology
+  change; needs SRR-methodology sign-off, not a golden diff). Q5 showed parallelism is the wrong
+  lever: the cost is statsmodels `MixedLM.fit` itself (~749s ≈ 25% of the notebook; control cell 37
+  with `ms_panel_test=False` = 7.3s). Replace the general iterative REML/ML optimizer (optimizer
+  cascade lbfgs→cg + per-fit `summary()`) in `map_pval` with a specialized estimator for the actual
+  RE structure. **Spike before committing:** (1) characterize the exact `MixedLM` spec `map_pval`
+  uses (groups, RE structure, REML vs ML, which statistic is extracted); (2) prototype a specialized
+  REML/GLS; (3) validate p-value agreement vs statsmodels across real panels to a stated tolerance;
+  (4) decide accept-vs-deviate. Cheaper fallbacks: reuse/cache design matrices across segments, or a
+  faster REML backend — but NOT capping the optimizer cascade (changes p-values). Supersedes Q5 if
+  adopted. (Full builder brief to be written once the spec spike lands.)
