@@ -150,7 +150,7 @@ the residual upside is small. Reassess only if meaningful cost remains after Q4.
   (the real `make_zn_scores` lever is the `min`/`max` builtins, not parallelism). Measured on the
   Q4 worktree (Q4 not yet merged).
 
-## Q9 — T4b · `perf/srr-mixedlm-custom-estimator`  — **TODO**  (supersedes Q5; METHODOLOGY CHANGE — not byte-identical)
+## Q9 — T4b · `perf/srr-mixedlm-custom-estimator`  — **IN PROGRESS**  (supersedes Q5; METHODOLOGY CHANGE — not byte-identical)
 Replace statsmodels `MixedLM.fit(reml=False)` in `SignalReturnRelations.map_pval`
 (signal_return_relations.py:931) with a closed-form Sherman–Morrison profile-**ML**/GLS estimator for the
 actual RE structure: `signal ~ 1 + return`, single scalar random intercept grouped by **`real_date`** (NOT
