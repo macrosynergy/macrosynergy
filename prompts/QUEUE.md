@@ -61,21 +61,33 @@ growing frame; `union_categoricals` skipped when `df_add` is object → washes t
   · **macrosynergy pytest:** `tests/unit/management` 269 passed. Reviewer: APPROVE, 0 blockers,
   2 rounds (round 1: empty-base sort regression + unvectorized public `update_tickers` → fixed).
 
-## Q3 — T2 · `perf/ticker-split-vectorize`  — **IN REVIEW** (APPROVED; PR #6 open, awaiting human merge — self-approval guard blocked auto-merge)
+## Q3 — T2 · `perf/ticker-split-vectorize`  — **DONE** (PR #6, squash `cfa0991c`)
 `split_ticker` iterable branch (core.py:44) factorize-on-uniques (Level A) +
 `ticker_df_to_qdf` (df_utils.py:251) split column labels pre-stack (Level B). Output-identical.
 - **Cells:** 13 (`InformationStateChanges.to_qdf`).
 - **Baseline:** cell 13 = 244s / 12079 MiB (`ticker_df_to_qdf` ~133s; `split_ticker` 61.5M calls).
-- **After:** _tbd_ · **Parity:** _tbd_ · **macrosynergy pytest:** _tbd_
+- **After:** micro-benchmark (record.py, `-m perf`): `get_cid_large_list[2000-50]` **−77%**,
+  `get_xcat_large_list[2000-50]` **−74%**, `ticker_df_to_qdf[500-1300]` **−64%** (Level A
+  factorize-on-uniques + Level B label-split, which eliminates the 30M-row `"ticker"` column).
+  Cell-13 wall/peak-RSS macro delta pending external harness. · **Parity:** byte-identical —
+  `test_parity_ticker_split` 2 passed, `SplitTickerDirect` 9 passed, `tests/perf/golden/` unchanged.
+  · **macrosynergy pytest:** integrated tree 480 passed (management+panel). Reviewer: APPROVE,
+  0 blockers, 1 round.
 
-## Q4 — T3 · `perf/reduce-df-fast-dedup`  — **IN REVIEW** (APPROVED; PR #7 open, awaiting human merge — self-approval guard blocked auto-merge)
+## Q4 — T3 · `perf/reduce-df-fast-dedup`  — **DONE** (PR #7, squash `dd7ff3c1`)
 `reduce_df` (df_utils.py:688) object-dtype fallback: skip/fast the terminal all-column
 `drop_duplicates()` (factor-code dedup, or unique-index guard). Output-identical.
 **Fix BOTH implementations (TARGETS §7.3):** object path `df_utils.py::reduce_df`(688) AND the
 categorical/QDF-native twin `qdf/methods.py::reduce_df`(309).
 - **Cells:** 12, 19, 43, 47 (+ inside `linear_composite`/`make_zn_scores`/`NaivePnL`).
 - **Baseline:** cell 12 = 5.6s / 1928 MiB (`drop_duplicates` 3.3s).
-- **After:** _tbd_ · **Parity:** _tbd_ · **macrosynergy pytest:** _tbd_
+- **After:** micro-benchmark (record.py, `-m perf -k small`): `reduce_df_full[obj-small]` **−39%**,
+  `[cat-small]` **−42%**, `reduce_df_filtered[small]` **−23%** (both twins: unique-index guard on
+  `(cid,xcat,real_date)` skips the terminal all-column `drop_duplicates()` on clean panels; runs it
+  unchanged when the key is non-unique). Cell-12 macro delta pending external harness. · **Parity:**
+  byte-identical — `test_parity_reduce_df` 2 passed, `ReduceDfEdgeAPI` 5 passed, `tests/perf/golden/`
+  unchanged. · **macrosynergy pytest:** integrated tree 480 passed. Reviewer: APPROVE, 0 blockers,
+  1 round (nit: no test for key-same/value-differs, but True-branch calls all-column dedup — safe).
 
 ## Q5 — T4 · `perf/srr-parallel-mixedlm`  — **IN REVIEW** (higher risk; APPROVED parity, NO win on this machine — PR #8 HELD OPEN for human decision per instruction; see PR body for 4 findings)
 Parallelize the independent MixedLM panel-test fits in `SignalReturnRelations`
@@ -99,7 +111,7 @@ Investigate hoisting/scoping the repeated full-frame `reduce_df` inside the cell
   2 passed; `tests/perf/golden/` unchanged. Measured on the Q4 worktree (Q4 not yet merged).
   · **Findings spun out → see Stretch (T5a/T5b).**
 
-## Q7 — T6 · `perf/basket-categorical-loc`  — **IN REVIEW** (small, enables QDF-native notebook; APPROVED, PR #9 open, awaiting human merge — self-approval guard blocked auto-merge)
+## Q7 — T6 · `perf/basket-categorical-loc`  — **DONE** (PR #9, squash `0778ea88`)
 `Basket.make_weights` (basket.py:502) `dfw_wgs[fvi:]` raises `InvalidIndexError` on categorical
 input (CategoricalIndex columns). Fix to label slice `dfw_wgs.loc[fvi:]`; audit Basket for similar
 `df[ts:]` patterns. Output-identical. Prerequisite for passing a categorical `dfx` to `Basket`
@@ -110,7 +122,13 @@ input (CategoricalIndex columns). Fix to label slice `dfw_wgs.loc[fvi:]`; audit 
   time. Add a regression test running `Basket` on a categorical `QuantamentalDataFrame`, and add a
   categorical-input case to the shared panel-function test matrix (audit `linear_composite` /
   `make_relative_value` / `panel_calculator` / `make_zn_scores` / `SignalReturnRelations` too).
-- **After:** _tbd_ · **Parity:** _tbd_ · **macrosynergy pytest:** _tbd_
+- **After:** correctness enable (no `-m perf` benchmark for `Basket`). Fix = `dfw_wgs[fvi:]` →
+  `dfw_wgs.loc[fvi:]` (label row slice); categorical `QuantamentalDataFrame` input no longer raises
+  `InvalidIndexError`. Removes cell-27's **+25% peak-RSS object-copy** (macro-confirmed externally).
+  · **Parity:** object-dtype output byte-identical; new `test_categorical_qdf_parity` fails-before /
+  passes-after (reviewer reproduced directly); sibling patterns audited safe; `tests/perf/golden/`
+  unchanged. · **macrosynergy pytest:** integrated tree 480 passed. Reviewer: APPROVE, 0 blockers,
+  1 round.
 
 ## Q8 — T7 · `perf/zn-scores-parallel`  — **DONE (investigation: no change — deferred, not worthwhile after Q4)**
 Add opt-in `n_jobs` to fan the independent per-xcat scorings in `make_zn_scores` (serial default).
