@@ -269,16 +269,30 @@ def ticker_df_to_qdf(df: pd.DataFrame, metric: str = "value") -> QuantamentalDat
     if not isinstance(metric, str):
         raise TypeError("Argument `metric` must be a string.")
 
-    # pivot to long format
-    df = (
-        df.stack(level=0).reset_index().rename(columns={0: metric, "level_1": "ticker"})
+    col_labels = list(df.columns)
+    cids = get_cid(col_labels)
+    xcats = get_xcat(col_labels)
+
+    # Fast Level-B path: split the column labels (unique tickers) once and carry
+    # cid/xcat through the stack, avoiding a full-length "ticker" string column.
+    # Requires unique (cid, xcat) pairs; fall back when duplicates are present.
+    pairs = list(zip(cids, xcats))
+    if len(pairs) == len(set(pairs)):
+        df = df.copy()
+        df.columns = pd.MultiIndex.from_arrays([cids, xcats], names=["cid", "xcat"])
+        out = df.stack(["cid", "xcat"], future_stack=True).reset_index().rename(
+            columns={0: metric}
+        )
+        return standardise_dataframe(df=out)
+
+    # Fallback for rare duplicate-column frames: stack on the flat string column.
+    out = df.stack(level=0).reset_index().rename(
+        columns={0: metric, "level_1": "ticker"}
     )
-
-    df["cid"] = get_cid(df["ticker"])
-    df["xcat"] = get_xcat(df["ticker"])
-    df = df.drop(columns=["ticker"])
-
-    return standardise_dataframe(df=df)
+    out["cid"] = get_cid(list(out["ticker"]))
+    out["xcat"] = get_xcat(list(out["ticker"]))
+    out = out.drop(columns=["ticker"])
+    return standardise_dataframe(df=out)
 
 
 def concat_single_metric_qdfs(
@@ -615,13 +629,87 @@ def update_df(df: pd.DataFrame, df_add: pd.DataFrame, xcat_replace: bool = False
         raise ValueError(error_message)
 
     if not xcat_replace:
-        df = update_tickers(df, df_add)
+        # Fast path: combine sort + dedup in a single factorize+lexsort pass.
+        # concat then sort+dedup together is faster than two separate pandas ops.
+        df = _concat_sort_dedup(df, df_add)
+        return df
 
     else:
         df = update_categories(df, df_add)
 
     # sort same as in `standardise_dataframe`
-    return df.sort_values(by=IDX_COLS_SORT_ORDER).reset_index(drop=True)
+    # Factorize string columns to int codes so the sort operates on integers, not
+    # objects.
+    cid_codes, _ = pd.factorize(df["cid"], sort=True)
+    xcat_codes, _ = pd.factorize(df["xcat"], sort=True)
+    rd_int = df["real_date"].to_numpy(
+        dtype="datetime64[ns]", na_value=np.datetime64("NaT")
+    ).view(np.int64)
+    nat_sentinel = np.datetime64("NaT").view(np.int64)
+    rd_int = np.where(rd_int == nat_sentinel, np.iinfo(np.int64).max, rd_int)
+    # np.lexsort sorts by last key first → (cid, xcat, real_date) ascending
+    order = np.lexsort((rd_int, xcat_codes, cid_codes))
+    return df.take(order).reset_index(drop=True)
+
+
+def _concat_sort_dedup(df: pd.DataFrame, df_add: pd.DataFrame) -> pd.DataFrame:
+    """Concat two QDFs then sort by IDX_COLS_SORT_ORDER and dedup in a single numpy pass.
+
+    Replaces the two-step ``drop_duplicates(..., keep='last') + sort_values(...)`` pattern
+    with one factorize + lexsort pass on integer codes, which is materially faster because:
+    - factorize hashes string columns once into compact int codes (O(n) with small constant);
+    - np.lexsort on integers is faster than pandas sort on object strings;
+    - adjacent-duplicate detection after sort replaces an O(n) hash scan.
+
+    Last-write-wins: after stable lexsort, duplicate (cid, xcat, real_date) triples are
+    adjacent and the LAST occurrence (from df_add) is preserved, matching
+    ``drop_duplicates(keep='last')`` semantics.
+
+    The returned frame has the same dtype and column order as the inputs; no string columns
+    are modified.
+    """
+    if df_add.empty:
+        return df
+
+    # Do NOT short-circuit when df.empty — df_add may be unsorted and must go through
+    # the sort+dedup path to guarantee IDX_COLS_SORT_ORDER output order.
+    if df.empty:
+        combined = df_add.reset_index(drop=True)
+    else:
+        combined = pd.concat([df, df_add], axis=0, ignore_index=True)
+
+    # Factorize with sort=True assigns codes 0,1,...,k-1 in alphabetical order, so
+    # lexsorting on codes gives the same row order as sort_values on the strings.
+    cid_codes, _ = pd.factorize(combined["cid"], sort=True)
+    xcat_codes, _ = pd.factorize(combined["xcat"], sort=True)
+    rd_int = combined["real_date"].to_numpy(
+        dtype="datetime64[ns]", na_value=np.datetime64("NaT")
+    ).view(np.int64)
+    # NaT maps to iinfo(int64).min under the int64 view, which sorts before valid dates,
+    # matching numpy sort but diverging from sort_values(na_position='last').  Replace
+    # NaT sentinels with iinfo max so they sort last — matching the original behaviour.
+    nat_sentinel = np.datetime64("NaT").view(np.int64)
+    rd_int = np.where(rd_int == nat_sentinel, np.iinfo(np.int64).max, rd_int)
+
+    # np.lexsort: last key is primary sort → (cid, xcat, real_date) ascending
+    sort_order = np.lexsort((rd_int, xcat_codes, cid_codes))
+
+    # After stable sort, equal (cid, xcat, date) keys are adjacent.
+    # A row is a duplicate (of the next row) iff all three codes match its successor.
+    cid_s = cid_codes[sort_order]
+    xcat_s = xcat_codes[sort_order]
+    rd_s = rd_int[sort_order]
+    n = len(sort_order)
+    is_dup = np.empty(n, dtype=bool)
+    is_dup[-1] = False
+    is_dup[:-1] = (
+        (cid_s[:-1] == cid_s[1:])
+        & (xcat_s[:-1] == xcat_s[1:])
+        & (rd_s[:-1] == rd_s[1:])
+    )
+    # keep_order: sorted indices minus the duplicates (last occurrence of each key kept)
+    keep_order = sort_order[~is_dup]
+    return combined.take(keep_order).reset_index(drop=True)
 
 
 def update_tickers(df: pd.DataFrame, df_add: pd.DataFrame):
@@ -641,17 +729,7 @@ def update_tickers(df: pd.DataFrame, df_add: pd.DataFrame):
     if not isinstance(df_add, QuantamentalDataFrame):
         raise TypeError("The added DataFrame must be a Quantamental Dataframe.")
 
-    if df.empty:
-        return df_add
-    if df_add.empty:
-        return df
-
-    df = pd.concat([df, df_add], axis=0, ignore_index=True)
-
-    df = df.drop_duplicates(
-        subset=["real_date", "xcat", "cid"], keep="last"
-    ).reset_index(drop=True)
-    return df
+    return _concat_sort_dedup(df, df_add)
 
 
 def update_categories(df: pd.DataFrame, df_add):
@@ -787,10 +865,18 @@ def reduce_df(
 
     df = df[df["cid"].isin(cids)]
 
+    # Fast dedup: if the natural-key columns (cid, xcat, real_date) are already unique,
+    # there can be no full-row duplicates either — skip the expensive all-column
+    # drop_duplicates() entirely.  When duplicates do exist, fall back to the original
+    # drop_duplicates() so that genuine duplicate rows are still removed.
+    _idx_cols = ["cid", "xcat", "real_date"]
+    if df.duplicated(subset=_idx_cols).any():
+        df = df.drop_duplicates()
+
     if out_all:
-        return df.drop_duplicates(), xcats, sorted(cids)
+        return df, xcats, sorted(cids)
     else:
-        return df.drop_duplicates()
+        return df
 
 
 def reduce_df_by_ticker(
