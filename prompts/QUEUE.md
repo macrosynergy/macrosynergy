@@ -150,7 +150,7 @@ the residual upside is small. Reassess only if meaningful cost remains after Q4.
   (the real `make_zn_scores` lever is the `min`/`max` builtins, not parallelism). Measured on the
   Q4 worktree (Q4 not yet merged).
 
-## Q9 — T4b · `perf/srr-mixedlm-custom-estimator`  — **IN PROGRESS**  (supersedes Q5; METHODOLOGY CHANGE — not byte-identical)
+## Q9 — T4b · `perf/srr-mixedlm-custom-estimator`  — **DONE** (PR #10, squash `6a2ae484`)  (supersedes Q5; METHODOLOGY CHANGE — not byte-identical)
 Replace statsmodels `MixedLM.fit(reml=False)` in `SignalReturnRelations.map_pval`
 (signal_return_relations.py:931) with a closed-form Sherman–Morrison profile-**ML**/GLS estimator for the
 actual RE structure: `signal ~ 1 + return`, single scalar random intercept grouped by **`real_date`** (NOT
@@ -166,7 +166,19 @@ cascade + both per-fit `summary()` builds. **Full brief:** `prompts/perf/T4b-srr
 - **Benchmark must drive the `map_pval` path** (`stat="map_pval", type="panel"`) — the existing
   `test_perf_srr_mixedlm.py` benchmarks `stat="accuracy"`, which never calls `map_pval` (the Q5 dead-path trap).
 - **Baseline:** 31=188s, 33=179s, 35=114s, 39=78s, 45=101s, 50=89s (≈749s, all ~7.4 GiB; 50=11.3 GiB).
-- **After:** _pending build._
+- **After:** closed-form Sherman–Morrison profile-**ML** estimator replaces statsmodels `MixedLM.fit`
+  in `map_pval` (1-D bounded `minimize_scalar` on θ=τ²/σ², GLS β, FE SE from the 4×4 observed
+  information; both per-fit `summary()` builds removed; τ²→0 → finite OLS-limit p). Micro-benchmark
+  (record.py, map_pval/panel path): **`[1-1]` ~−50%** (31→16 ms), **`[2-3]` ~−87%** (702→92 ms). Cell
+  wall/RSS macro delta pending external harness. · **Parity (methodology substitute — no golden):**
+  agreement harness `tests/perf/validate_mixedlm_agreement.py` vs statsmodels full-precision
+  `re.pvalues[1]` — max abs diff **2.4e-5** (150-seed sweep + injected near-zero-τ² panels; limit 1e-3),
+  **zero** decision-flips at the 0.9 threshold, identical `nan` set; statsmodels non-converged segments
+  detected & excluded. 1e-8 vs statsmodels proven impossible (statsmodels' own FE-SE floor ~3e-4; slope +
+  residual variance match ~1e-17). No human sign-off (objective report is the gate; LSimonsen 2026-07-01).
+  Real-panel (JPMaQS) validation deferred to follow-up (data unavailable in build env). · **macrosynergy
+  pytest:** `tests/unit/signal` 30 passed; other items' parity goldens 10 passed & unchanged. Reviewer:
+  APPROVE, 0 blockers, 2 rounds (round 1: τ²→0 Hessian-boundary SE bug + self-certifying 5-seed harness → fixed).
 
 > **Notebook-side companion (academy, separate repo/branch):** the cyclical-strength notebook can
 > be made QDF-native (`download(categorical_dataframe=True)` + `.astype(str)`/`observed=True` edits
