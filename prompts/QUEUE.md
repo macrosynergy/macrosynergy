@@ -89,7 +89,7 @@ categorical/QDF-native twin `qdf/methods.py::reduce_df`(309).
   unchanged. · **macrosynergy pytest:** integrated tree 480 passed. Reviewer: APPROVE, 0 blockers,
   1 round (nit: no test for key-same/value-differs, but True-branch calls all-column dedup — safe).
 
-## Q5 — T4 · `perf/srr-parallel-mixedlm`  — **IN REVIEW** (higher risk; APPROVED parity, NO win on this machine — PR #8 HELD OPEN for human decision per instruction; see PR body for 4 findings)
+## Q5 — T4 · `perf/srr-parallel-mixedlm`  — **CLOSED / REJECTED** (PR #8 closed unmerged; parallelism gives no win on target HW — superseded by Stretch T4b)
 Parallelize the independent MixedLM panel-test fits in `SignalReturnRelations`
 (signal_return_relations.py); fold in the `map_pval` double-`summary()` dedup (lines 967/972).
 Serial default; identical table output. **Slice first, fan out the minimum** — parallelize at the
@@ -98,7 +98,11 @@ the small `(y,X,groups)` arrays, not the shared `dfx`. Then **either** threads (
 BLAS, releases the GIL → no extra memory) **or** processes (tiny payloads) work. See TARGETS §3.1.
 - **Cells:** 31, 33, 35, 39, 45, 50.
 - **Baseline:** 31=188s, 33=179s, 35=114s, 39=78s, 45=101s, 50=89s (≈749s, all ~7.4 GiB; 50=11.3 GiB).
-- **After:** _tbd_ · **Parity:** _tbd_ · **macrosynergy pytest:** _tbd_
+- **After:** REJECTED, not merged. Parallelizing the per-`(sig,ret)` fits gave NO win — Windows+OpenBLAS
+  `n_workers=4` ran ~2× slower than serial (BLAS thread contention); the `[2-3]` benchmark tested
+  `stat="accuracy"` (path untouched). Serial default was byte-identical (23/23 SRR + 2/2 MapPvalDirect)
+  but GATE-3 (measurable win) failed. PR #8 closed unmerged; branch/worktree removed. The per-fit
+  MixedLM cost is the real lever → **superseded by Stretch T4b** (custom estimator, methodology change).
 
 ## Q6 — T5 · `perf/zn-scores-reduce`  — **DONE (investigation: no change — subsumed by Q4)**
 Investigate hoisting/scoping the repeated full-frame `reduce_df` inside the cell-19
