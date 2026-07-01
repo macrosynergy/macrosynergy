@@ -189,13 +189,23 @@ class TestMultiPnL(unittest.TestCase):
 
         eval_df = ma_pnl.evaluate_pnls([f"{self.PNL_XCAT_1}/EQXR", "LONG"])
         self.assertFalse(any("correl" in idx for idx in eval_df.index.tolist()))
-        self.assertFalse(any(idx.startswith("p-value >= SR") for idx in eval_df.index))
+        # Default sr_thresholds are [0.25, 0.5, 0.75].
+        self.assertIn("Prob. Sharpe Ratio > 0.25", eval_df.index.tolist())
+        self.assertIn("Prob. Sharpe Ratio > 0.5", eval_df.index.tolist())
+        self.assertIn("Prob. Sharpe Ratio > 0.75", eval_df.index.tolist())
+
+        eval_none = ma_pnl.evaluate_pnls(
+            [f"{self.PNL_XCAT_1}/EQXR", "LONG"], sr_thresholds=[]
+        )
+        self.assertFalse(
+            any(idx.startswith("Prob. Sharpe Ratio >") for idx in eval_none.index)
+        )
 
         eval_with_thresholds = ma_pnl.evaluate_pnls(
             [f"{self.PNL_XCAT_1}/EQXR", "LONG"], sr_thresholds=[0.25, 0.5]
         )
-        self.assertIn("p-value >= SR 0.25", eval_with_thresholds.index.tolist())
-        self.assertIn("p-value >= SR 0.5", eval_with_thresholds.index.tolist())
+        self.assertIn("Prob. Sharpe Ratio > 0.25", eval_with_thresholds.index.tolist())
+        self.assertIn("Prob. Sharpe Ratio > 0.5", eval_with_thresholds.index.tolist())
 
     def test_evaluate_pnls_with_benchmark_adds_rows_all_pnls(self):
         ma_pnl = MultiPnL(bms="AUD_EQXR", df=self.dfd)
@@ -211,8 +221,8 @@ class TestMultiPnL(unittest.TestCase):
         eval_custom = ma_pnl.evaluate_pnls(
             [f"{self.PNL_XCAT_1}/EQXR", "LONG"], sr_thresholds=[0.1]
         )
-        self.assertIn("p-value >= SR 0.1", eval_custom.index.tolist())
-        self.assertNotIn("p-value >= SR 0.25", eval_custom.index.tolist())
+        self.assertIn("Prob. Sharpe Ratio > 0.1", eval_custom.index.tolist())
+        self.assertNotIn("Prob. Sharpe Ratio > 0.25", eval_custom.index.tolist())
 
     def test_evaluate_pnls_sr_thresholds_type_checks(self):
         ma_pnl = MultiPnL()

@@ -279,7 +279,7 @@ class MultiPnL:
         - Sharpe Stability Ratio - HAC-robust t-stat for the mean rolling
           Sharpe ratio (see :func:`sharpe_stability_ratio`); accounts for
           sample size and serial dependence
-        - p-value >= SR {threshold} - one-sided asymptotic probability
+        - Prob. Sharpe Ratio > {threshold} - one-sided asymptotic probability
           that the mean rolling Sharpe ratio is above each threshold in
           ``sr_thresholds``, if provided
         - Traded Months
@@ -298,8 +298,8 @@ class MultiPnL:
             format 'xcat', or 'xcat/return_xcat'.
         sr_thresholds : List[float], optional
             Sharpe ratio thresholds for which one-sided probabilities are
-            reported. Default is None and no threshold probability rows are
-            shown.
+            reported. Default is None, in which case ``[0.25, 0.5, 0.75]`` is
+            used. Pass an empty list to suppress the threshold probability rows.
 
         Returns
         -------
@@ -309,7 +309,7 @@ class MultiPnL:
 
         self._check_pnls_added()
         if sr_thresholds is None:
-            sr_thresholds = []
+            sr_thresholds = [0.25, 0.5, 0.75]
         if not isinstance(sr_thresholds, list):
             raise TypeError("sr_thresholds must be a list of numbers.")
         if not all(
@@ -365,7 +365,7 @@ class MultiPnL:
             for bm in self._bm_dict:
                 stats.append(f"{bm} correl")
         stats.append("Sharpe Stability Ratio")
-        sr_prob_rows = [f"p-value >= SR {float(sr):g}" for sr in sr_thresholds]
+        sr_prob_rows = [f"Prob. Sharpe Ratio > {float(sr):g}" for sr in sr_thresholds]
         stats.extend(sr_prob_rows)
         stats.append("Traded Months")
 

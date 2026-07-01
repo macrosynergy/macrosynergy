@@ -464,16 +464,24 @@ class TestAll(unittest.TestCase):
 
         bm_correl = df_eval.loc[[b + " correl" for b in bms], :]
         self.assertTrue(np.all(bm_correl.sum(axis=1).to_numpy()) == 0)
-        self.assertFalse(any(idx.startswith("p-value >= SR") for idx in df_eval.index))
+        # Default sr_thresholds are [0.25, 0.5, 0.75].
+        self.assertIn("Prob. Sharpe Ratio > 0.25", df_eval.index)
+        self.assertIn("Prob. Sharpe Ratio > 0.5", df_eval.index)
+        self.assertIn("Prob. Sharpe Ratio > 0.75", df_eval.index)
+
+        df_none = pnl.evaluate_pnls(pnl_cats=["PNL_INFL"], sr_thresholds=[])
+        self.assertFalse(
+            any(idx.startswith("Prob. Sharpe Ratio >") for idx in df_none.index)
+        )
 
         df_custom = pnl.evaluate_pnls(
             pnl_cats=["PNL_INFL"], sr_thresholds=[0.1, 1.0]
         )
-        self.assertIn("p-value >= SR 0.1", df_custom.index)
-        self.assertIn("p-value >= SR 1", df_custom.index)
-        self.assertNotIn("p-value >= SR 0.25", df_custom.index)
+        self.assertIn("Prob. Sharpe Ratio > 0.1", df_custom.index)
+        self.assertIn("Prob. Sharpe Ratio > 1", df_custom.index)
+        self.assertNotIn("Prob. Sharpe Ratio > 0.25", df_custom.index)
         self.assertTrue(
-            df_custom.loc["p-value >= SR 0.1"].dropna().between(0.0, 1.0).all()
+            df_custom.loc["Prob. Sharpe Ratio > 0.1"].dropna().between(0.0, 1.0).all()
         )
 
         # test it works with no pnl_cats input
