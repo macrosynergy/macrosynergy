@@ -16,6 +16,7 @@ from .multiple_reg_scatter import multiple_reg_scatter
 from .score_visualisers import ScoreVisualisers
 from .acf import plot_acf, plot_pacf
 from .lagged_corr import plot_lagged_correlation
+from .proxy_pnl_visualisers import transaction_cost_heatmap, sensitivity_plot
 
 __all__ = [
     "view_correlation",
@@ -36,4 +37,6 @@ __all__ = [
     "plot_acf",
     "plot_pacf",
     "plot_lagged_correlation",
+    "transaction_cost_heatmap",
+    "sensitivity_plot",
 ]
