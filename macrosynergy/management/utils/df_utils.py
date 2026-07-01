@@ -865,10 +865,18 @@ def reduce_df(
 
     df = df[df["cid"].isin(cids)]
 
+    # Fast dedup: if the natural-key columns (cid, xcat, real_date) are already unique,
+    # there can be no full-row duplicates either — skip the expensive all-column
+    # drop_duplicates() entirely.  When duplicates do exist, fall back to the original
+    # drop_duplicates() so that genuine duplicate rows are still removed.
+    _idx_cols = ["cid", "xcat", "real_date"]
+    if df.duplicated(subset=_idx_cols).any():
+        df = df.drop_duplicates()
+
     if out_all:
-        return df.drop_duplicates(), xcats, sorted(cids)
+        return df, xcats, sorted(cids)
     else:
-        return df.drop_duplicates()
+        return df
 
 
 def reduce_df_by_ticker(
