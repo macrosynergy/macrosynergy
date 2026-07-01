@@ -2,10 +2,41 @@
 
 > Item: **T4b** · slug: **`srr-mixedlm-custom-estimator`** · depends-on: **none** · **supersedes Q5** (`perf/srr-parallel-mixedlm`)
 > Branch/worktree: `perf/srr-mixedlm-custom-estimator` · Base: `feature/performance`
-> **Separate workstream — NOT output-identical.** This item deliberately does NOT reproduce statsmodels'
+> **Separate workstream — NOT byte-identical.** This item deliberately does NOT reproduce statsmodels'
 > p-values byte-for-byte. Its acceptance gate is *statistical agreement within a stated tolerance*,
-> validated across real panels and **signed off by the SRR methodology owner** — NOT a golden-file diff.
+> validated across synthetic + real panels via an **objective agreement report** — NOT a golden-file diff.
 > This is the crucial difference from every other perf/ item and from Q5.
+
+---
+
+## Settled decisions (READ FIRST — resolves the prior open questions)
+
+Empirical evidence was gathered on 2026-07-01 (closed-form estimator vs statsmodels on realistic
+panel shapes) and the methodology calls were made by the owner (LSimonsen). Do not re-open these:
+
+1. **Tolerance reference = statsmodels FULL-PRECISION `re.pvalues[1]`, NOT the 3-dp `summary()` string.**
+   Pass criterion: `abs(p_custom_fullprec - p_statsmodels_fullprec) <= 1e-3` for every non-nan segment.
+2. **1e-8 is NOT a target — it is physically unachievable against statsmodels, and this was proven:**
+   - The custom closed-form profile-ML/GLS estimator matches statsmodels' **slope `beta1`** and
+     **residual variance `scale`** to ~**1e-17** (machine precision) at the same variance ratio θ.
+   - The *entire* p-value gap (typ. ~1e-5, worst ~**2.6e-4** on a small 50×4 panel) comes from
+     statsmodels' reported **fixed-effect standard error** differing by ~**2.4e-4 relative** from the
+     exact GLS `sqrt([(X'V⁻¹X)⁻¹]₁₁)`. This gap is **irreducible**: tightening statsmodels' optimizer
+     `gtol` from 1e-2 → 1e-10 leaves its p-value unchanged (flat at 0.1785651 on the probe case). So
+     it is a fixed property of statsmodels' SE formula, not a convergence artifact.
+   - Therefore agreement *with statsmodels* is floored at ~3e-4; 1e-3 is comfortably achievable (and
+     tighter on the large real panels). Do not chase sub-1e-3 agreement with statsmodels — it does not exist.
+3. **NO human methodology sign-off gate.** The objective agreement report (tolerance + zero
+   decision-flips + identical `nan` set, below) IS the acceptance evidence. This item is a normal,
+   run-perf-queue-claimable Q-item — no external approval blocks merge.
+4. **ML (`reml=False`) is intentional** — line 961 explicitly overrides the statsmodels default; the
+   estimator uses the ML profile objective, not REML.
+5. **`tau²→0` boundary → finite OLS-limit p-value, NOT nan** (statsmodels returns finite there; match it).
+6. **3-dp rounding is preserved in the RETURNED value** (see spec below) to keep output shape identical;
+   the *validation comparison* is done at full precision. Because the custom value can differ ~1e-4 from
+   statsmodels, the 3-dp rounded result can occasionally flip at a rounding boundary (found 0.17846 vs
+   0.17857 → `0.178` vs `0.179`); such flips are within the accepted 1e-3 tolerance and are **reported**,
+   not hard-failed — the binding gate is the decision-flip count at the 0.9 threshold.
 
 ---
 
@@ -165,31 +196,36 @@ builds.
 ## VALIDATION PLAN  (replaces byte-identical parity — this is the gate that matters)
 
 Because the custom estimator will **not** reproduce statsmodels' p-values exactly, the parity mechanism
-is statistical agreement, proven with a harness and signed off by a human.
+is statistical agreement, proven with a harness (objective tolerance + zero decision-flips + identical
+`nan` set). No human sign-off gate (Settled decision 3).
 
 1. **Build a validation harness** (a script or `-m perf`/opt-in test, kept out of the default suite so it
-   doesn't gate CI on statsmodels timing) that, for a set of **representative real panels**:
+   doesn't gate CI on statsmodels timing) that, for a set of **representative panels**:
    - Constructs the identical `(y = signal, X = [1, return], groups = real_date)` inputs `map_pval` would
-     see (reuse `tests/perf/data.srr_panel` for synthetic coverage **and** at least a few genuine
-     research panels supplied by the methodology owner — synthetic alone is not sufficient sign-off
-     evidence).
-   - Computes p_statsmodels (current `mlm.fit(reml=False)` path) and p_custom for every `(signal, return)`
-     segment, across a range of panel sizes / #dates / #cids, including small-N and near-singular cases.
-   - Emits a report: per-segment `(p_statsmodels, p_custom, abs_diff)`, plus max/mean abs diff, and the
+     see. **Synthetic coverage** = `tests/perf/data.srr_panel` swept across shapes (#dates, #cids,
+     #signals×#returns), including small-N and near-singular cases — always runnable in CI. **Real
+     coverage** = the cyclical-strength notebook panels (rates / equity / FX / vGLB, up to 30 DM/EM cids,
+     weekly; `academy/drafts/surprises/Cyclical strength composite.ipynb`, cells 57/59/61/65/71); these
+     need JPMaQS data (msydevelopers) — capture a stored panel fixture when data access is available and
+     add it to the harness. If data access is unavailable at build time, ship on synthetic coverage and
+     note the real-panel fixture as a follow-up (the tolerance holds tighter on the large real panels).
+   - Computes **p_statsmodels at FULL PRECISION** (`np.asarray(re.pvalues)[1]` from the current
+     `mlm.fit(reml=False)` path — NOT the 3-dp `summary()` string) and **p_custom at full precision** for
+     every `(signal, return)` segment, across a range of panel sizes / #dates / #cids.
+   - Emits a report: per-segment `(p_statsmodels, p_custom, abs_diff)`, max/mean abs diff, the count of
+     **3-dp rounded mismatches** (expected only at rounding boundaries — reported, not fatal), and the
      count of segments where the **significance decision** at the SRR threshold (raw p < 0.1, i.e.
      `1 - p > 0.9`, per `significance_threshold=0.9`) **flips**.
-2. **Stated numeric tolerance (pass criterion):**
-   - **`abs(p_custom - p_statsmodels) <= 1e-3`** for every non-nan segment (i.e. agreement at the 3-dp
-     rounding both paths already expose), **and**
+2. **Stated numeric tolerance (pass criterion, all three BINDING):**
+   - **`abs(p_custom - p_statsmodels) <= 1e-3`** at full precision for every non-nan segment (the ~3e-4
+     statsmodels-SE floor sits well inside this — see Settled decision 2), **and**
    - **zero significance-decision flips** at the 0.9 probability-of-significance threshold across the
      validation panels, **and**
    - `nan` is returned for exactly the same segments as the statsmodels path (identical degenerate set).
    - Segments where statsmodels itself failed to converge / returned `nan` are excluded from the diff but
      must be reported (the custom path must also return `nan` there — see risks).
-3. **Human methodology sign-off gate (BLOCKING):** the harness report must be reviewed and **approved by
-   the owner of the SRR methodology** before this item can merge. Record the approval (who, date, which
-   panels, observed max abs diff) in the PR. This sign-off — not a golden file — is what authorizes the
-   numeric change. If the tolerance cannot be met on any real panel, do **not** ship; report back.
+   - 3-dp rounding-boundary flips (Settled decision 6) are reported but do NOT fail the gate.
+   - If the 1e-3 tolerance or zero-flip criterion cannot be met on any panel, do **not** ship; report back.
 
 ---
 
@@ -213,10 +249,15 @@ is statistical agreement, proven with a harness and signed off by a human.
      --benchmark-json=<scratch>/after.json
    python tests/perf/record.py <baseline-json> <scratch>/after.json
    ```
-   Demonstrate a clear per-fit speedup on both `[1-1]` and `[2-3]` cases and **report the measurement**.
-   The win here is per-fit cost reduction (not parallelism), so even the single-fit `[1-1]` case improves.
-3. **Validation harness passes** its tolerance + decision-flip criteria (above) and the **methodology
-   sign-off is recorded** in the PR.
+   **FIX THE BENCHMARK FIRST.** As written, `test_perf_srr_mixedlm.py` benchmarks
+   `single_statistic_table(stat="accuracy")`, which **never calls `map_pval`** — this is exactly the
+   dead-path measurement that let Q5's `[2-3]` case pass without exercising the fit. The benchmark MUST
+   drive the MixedLM path: use `single_statistic_table(stat="map_pval", type="panel")` (the panel MAP
+   path, as the notebook's `_srr_scalar` does). Re-baseline against the current statsmodels path on that
+   same invocation, then demonstrate a clear per-fit speedup on both `[1-1]` and `[2-3]` and **report the
+   measurement**. The win is per-fit cost reduction (not parallelism), so even single-fit `[1-1]` improves.
+3. **Validation harness passes** its tolerance + zero-decision-flip + identical-`nan`-set criteria (above);
+   the agreement report is attached to the PR. **No human sign-off gate** (Settled decision 3).
 4. **macrosynergy suite:**
    ```bash
    pytest tests/unit/signal --no-cov -n0
@@ -236,11 +277,13 @@ is statistical agreement, proven with a harness and signed off by a human.
   conditions (≤1 cid; singular / undefined SE) with the same warning messages.
 - [ ] Public API of `SignalReturnRelations` / `single_statistic_table` / `map_pval` unchanged;
   `TestMapPvalDirect` (incl. signature tripwire) passes — 2 passed.
-- [ ] Validation harness shows `abs(p_custom - p_statsmodels) <= 1e-3` on every non-nan segment, **zero**
-  significance-decision flips at the 0.9 threshold, and an identical `nan` set — across synthetic **and**
-  real panels.
-- [ ] **Methodology owner has reviewed and approved** the harness report (recorded in the PR).
-- [ ] Benchmark shows a per-fit speedup on `[1-1]` and `[2-3]`; full `tests/unit/signal` suite green.
+- [ ] Validation harness shows `abs(p_custom - p_statsmodels) <= 1e-3` at **full precision** (vs
+  `re.pvalues[1]`, not the 3-dp string) on every non-nan segment, **zero** significance-decision flips at
+  the 0.9 threshold, and an identical `nan` set — across synthetic panels (and real panels if data
+  access is available); any 3-dp boundary flips are reported, not fatal.
+- [ ] Objective agreement report attached to the PR; **no human sign-off gate** required.
+- [ ] Benchmark drives the `map_pval` path (`stat="map_pval", type="panel"`, NOT `stat="accuracy"`) and
+  shows a per-fit speedup on `[1-1]` and `[2-3]`; full `tests/unit/signal` suite green.
 - [ ] `summary()` is built at most once (ideally not at all — read from the fitted result / closed form).
 
 ---
@@ -248,8 +291,9 @@ is statistical agreement, proven with a harness and signed off by a human.
 ## Notes / risks
 
 - **Methodology change, not an optimization.** This is the one perf/ item whose output is intentionally
-  not byte-identical. Treat the tolerance + sign-off as hard gates; if either fails, report back rather
-  than ship. Do not let it be reviewed under the standard golden-file rubric.
+  not byte-identical. Treat the tolerance + zero-decision-flip + identical-`nan`-set criteria as hard
+  gates; if any fails, report back rather than ship. Do not let it be reviewed under the standard
+  golden-file rubric. (No human sign-off gate — Settled decision 3.)
 - **Numerical stability.** The profile likelihood in `theta = tau^2/sigma^2` must be evaluated with the
   closed-form (Sherman–Morrison) inverse/log-det, not dense inversion, to stay both fast and stable.
   Guard `theta` at the boundary `0` (no random effect) — statsmodels returns a finite p-value there, so

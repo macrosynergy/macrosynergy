@@ -150,6 +150,24 @@ the residual upside is small. Reassess only if meaningful cost remains after Q4.
   (the real `make_zn_scores` lever is the `min`/`max` builtins, not parallelism). Measured on the
   Q4 worktree (Q4 not yet merged).
 
+## Q9 — T4b · `perf/srr-mixedlm-custom-estimator`  — **TODO**  (supersedes Q5; METHODOLOGY CHANGE — not byte-identical)
+Replace statsmodels `MixedLM.fit(reml=False)` in `SignalReturnRelations.map_pval`
+(signal_return_relations.py:931) with a closed-form Sherman–Morrison profile-**ML**/GLS estimator for the
+actual RE structure: `signal ~ 1 + return`, single scalar random intercept grouped by **`real_date`** (NOT
+cid), returning the return-slope two-sided p-value (rounded 3dp, as today). Kills the iterative optimizer
+cascade + both per-fit `summary()` builds. **Full brief:** `prompts/perf/T4b-srr-mixedlm-custom-estimator.md`
+(spec + Settled decisions + validation plan).
+- **Cells:** 31, 33, 35, 39, 45, 50 (≈749s ≈ 25% of the notebook; control cell with `ms_panel_test=False` = 7.3s).
+- **NOT a golden-diff item.** GATE substitute = objective agreement harness:
+  `abs(p_custom − p_statsmodels_fullprec) ≤ 1e-3` on every non-nan segment, **zero** significance-decision
+  flips at the 0.9 threshold (raw p<0.1), identical `nan` set. **No human sign-off** (methodology decision
+  made 2026-07-01, LSimonsen). 1e-8 vs statsmodels is impossible — the ~3e-4 floor is statsmodels' own
+  fixed-effect SE, not convergence (slope + residual variance match to ~1e-17).
+- **Benchmark must drive the `map_pval` path** (`stat="map_pval", type="panel"`) — the existing
+  `test_perf_srr_mixedlm.py` benchmarks `stat="accuracy"`, which never calls `map_pval` (the Q5 dead-path trap).
+- **Baseline:** 31=188s, 33=179s, 35=114s, 39=78s, 45=101s, 50=89s (≈749s, all ~7.4 GiB; 50=11.3 GiB).
+- **After:** _pending build._
+
 > **Notebook-side companion (academy, separate repo/branch):** the cyclical-strength notebook can
 > be made QDF-native (`download(categorical_dataframe=True)` + `.astype(str)`/`observed=True` edits
 > to cells 12/13/15 + the cell-27 Basket workaround until T6 lands). Parity-verified, ~16% wall
@@ -170,19 +188,6 @@ the residual upside is small. Reassess only if meaningful cost remains after Q4.
 - **T5b** QDF-wrapping overhead (spun out of Q6): `QuantamentalDataFrame(...)` wrapping at
   `make_zn_scores.py` start costs ~22.6% per call (categorical conversion) — points back at
   T1/T2c QDF-construction overhead, not a standalone fix.
-- **T4b** `srr-mixedlm-custom-estimator` — **separate workstream, NOT output-identical** (methodology
-  change; needs SRR-methodology sign-off, not a golden diff). Q5 showed parallelism is the wrong
-  lever: the cost is statsmodels `MixedLM.fit` itself (~749s ≈ 25% of the notebook; control cell 37
-  with `ms_panel_test=False` = 7.3s). Replace the general iterative REML/ML optimizer (optimizer
-  cascade lbfgs→cg + per-fit `summary()`) in `map_pval` with a specialized estimator for the actual
-  RE structure. **Spike before committing:** (1) characterize the exact `MixedLM` spec `map_pval`
-  uses (groups, RE structure, REML vs ML, which statistic is extracted); (2) prototype a specialized
-  REML/GLS; (3) validate p-value agreement vs statsmodels across real panels to a stated tolerance;
-  (4) decide accept-vs-deviate. Cheaper fallbacks: reuse/cache design matrices across segments, or a
-  faster REML backend — but NOT capping the optimizer cascade (changes p-values). Supersedes Q5 if
-  adopted. **Full brief:** `prompts/perf/T4b-srr-mixedlm-custom-estimator.md` — spec characterized:
-  `signal ~ 1 + return`, single random intercept grouped by `real_date` (NOT cid), ML (`reml=False`),
-  returns the return-slope two-sided p-value @3dp. Open questions for a human before building: (1) which
-  real panels + who is the methodology-sign-off owner; (2) confirm the `1e-3` tolerance bar; (3) confirm
-  ML (not REML) is intentional; (4) desired behaviour at the `tau²→0` variance boundary / on statsmodels
-  non-convergence.
+- **T4b** — **promoted to Q9** (see above). All prior open questions resolved (2026-07-01): tolerance =
+  ≤1e-3 vs statsmodels full-precision p (1e-8 impossible — statsmodels' FE-SE floor ~3e-4); no human
+  sign-off (objective agreement report is the gate); ML intentional; `tau²→0` → finite OLS-limit.
