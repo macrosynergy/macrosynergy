@@ -180,4 +180,9 @@ the residual upside is small. Reassess only if meaningful cost remains after Q4.
   REML/GLS; (3) validate p-value agreement vs statsmodels across real panels to a stated tolerance;
   (4) decide accept-vs-deviate. Cheaper fallbacks: reuse/cache design matrices across segments, or a
   faster REML backend — but NOT capping the optimizer cascade (changes p-values). Supersedes Q5 if
-  adopted. (Full builder brief to be written once the spec spike lands.)
+  adopted. **Full brief:** `prompts/perf/T4b-srr-mixedlm-custom-estimator.md` — spec characterized:
+  `signal ~ 1 + return`, single random intercept grouped by `real_date` (NOT cid), ML (`reml=False`),
+  returns the return-slope two-sided p-value @3dp. Open questions for a human before building: (1) which
+  real panels + who is the methodology-sign-off owner; (2) confirm the `1e-3` tolerance bar; (3) confirm
+  ML (not REML) is intentional; (4) desired behaviour at the `tau²→0` variance boundary / on statsmodels
+  non-convergence.
