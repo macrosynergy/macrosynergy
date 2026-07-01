@@ -269,16 +269,30 @@ def ticker_df_to_qdf(df: pd.DataFrame, metric: str = "value") -> QuantamentalDat
     if not isinstance(metric, str):
         raise TypeError("Argument `metric` must be a string.")
 
-    # pivot to long format
-    df = (
-        df.stack(level=0).reset_index().rename(columns={0: metric, "level_1": "ticker"})
+    col_labels = list(df.columns)
+    cids = get_cid(col_labels)
+    xcats = get_xcat(col_labels)
+
+    # Fast Level-B path: split the column labels (unique tickers) once and carry
+    # cid/xcat through the stack, avoiding a full-length "ticker" string column.
+    # Requires unique (cid, xcat) pairs; fall back when duplicates are present.
+    pairs = list(zip(cids, xcats))
+    if len(pairs) == len(set(pairs)):
+        df = df.copy()
+        df.columns = pd.MultiIndex.from_arrays([cids, xcats], names=["cid", "xcat"])
+        out = df.stack(["cid", "xcat"], future_stack=True).reset_index().rename(
+            columns={0: metric}
+        )
+        return standardise_dataframe(df=out)
+
+    # Fallback for rare duplicate-column frames: stack on the flat string column.
+    out = df.stack(level=0).reset_index().rename(
+        columns={0: metric, "level_1": "ticker"}
     )
-
-    df["cid"] = get_cid(df["ticker"])
-    df["xcat"] = get_xcat(df["ticker"])
-    df = df.drop(columns=["ticker"])
-
-    return standardise_dataframe(df=df)
+    out["cid"] = get_cid(list(out["ticker"]))
+    out["xcat"] = get_xcat(list(out["ticker"]))
+    out = out.drop(columns=["ticker"])
+    return standardise_dataframe(df=out)
 
 
 def concat_single_metric_qdfs(
