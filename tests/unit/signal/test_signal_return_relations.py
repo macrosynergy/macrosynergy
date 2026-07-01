@@ -1085,5 +1085,241 @@ class TestAll(unittest.TestCase):
         matplotlib.use(self.mpl_backend)
 
 
+import inspect
+import statsmodels.api as sm
+
+
+class TestMapPvalEstimator(unittest.TestCase):
+    """
+    Direct unit coverage for ``SignalReturnRelations.map_pval`` and its closed-form
+    ML estimator ``_mixedlm_slope_pval``.
+
+    The model is ``signal ~ 1 + return`` with a single scalar random intercept grouped
+    by ``real_date`` (ML / ``reml=False``). statsmodels ``MixedLM.fit(reml=False)`` is
+    used as the reference oracle: the closed-form estimator must agree with it on the
+    two-sided p-value of the return slope to within 1e-3 on converged panels, and must
+    reproduce its degenerate (nan) behaviour exactly.
+    """
+
+    # ---- helpers -----------------------------------------------------------------
+
+    @staticmethod
+    def _panel(n_cids, n_dates, beta1, tau, sigma, seed, intercept=0.2):
+        """
+        Build (ret_vals, sig_vals) as pd.Series indexed by a (cid, real_date)
+        MultiIndex, from the exact generative model map_pval assumes:
+            signal_it = intercept + beta1 * ret_it + u_date + eps_it,
+            u_date ~ N(0, tau^2),  eps_it ~ N(0, sigma^2).
+        """
+        rng = np.random.default_rng(seed)
+        cids = [f"C{i:02d}" for i in range(n_cids)]
+        dates = pd.bdate_range("2000-01-01", periods=n_dates)
+        u = rng.normal(0.0, tau, n_dates) if tau > 0 else np.zeros(n_dates)
+        ret_vals, sig_vals, idx = [], [], []
+        for di, d in enumerate(dates):
+            for c in cids:
+                r = rng.normal(0.0, 1.0)
+                s = intercept + beta1 * r + u[di] + rng.normal(0.0, sigma)
+                ret_vals.append(r)
+                sig_vals.append(s)
+                idx.append((c, d))
+        mi = pd.MultiIndex.from_tuples(idx, names=["cid", "real_date"])
+        return pd.Series(ret_vals, index=mi), pd.Series(sig_vals, index=mi)
+
+    @staticmethod
+    def _sm_reference(ret_vals, sig_vals):
+        """statsmodels MixedLM oracle. Returns (pval_fullprec, beta1, converged)."""
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            X = sm.add_constant(ret_vals)
+            groups = ret_vals.index.get_level_values("real_date")
+            res = sm.MixedLM(sig_vals, X, groups=groups).fit(reml=False)
+        conv_warn = any("onverg" in str(x.message).lower() for x in w)
+        converged = bool(getattr(res, "converged", True)) and not conv_warn
+        return float(np.asarray(res.pvalues)[1]), float(np.asarray(res.params)[1]), converged
+
+    @staticmethod
+    def _custom_fullprec(ret_vals, sig_vals):
+        """Full-precision (unrounded) custom estimator output: (pval, beta1, se)."""
+        X = sm.add_constant(ret_vals)
+        _, gid = np.unique(
+            ret_vals.index.get_level_values("real_date"), return_inverse=True
+        )
+        b1, se = SignalReturnRelations._mixedlm_slope_pval(
+            np.asarray(sig_vals, dtype=np.float64),
+            np.asarray(X, dtype=np.float64),
+            gid,
+        )
+        if np.isnan(b1) or np.isnan(se) or se <= 0:
+            return np.nan, b1, se
+        z = b1 / se
+        return float(2.0 * (1.0 - stats.norm.cdf(abs(z)))), b1, se
+
+    def setUp(self) -> None:
+        # A minimal valid instance used only as a host for the map_pval method
+        # (map_pval reads no instance state beyond the static estimator helper).
+        cids = ["AUD", "CAD", "GBP"]
+        xcats = ["XR", "CRY"]
+        df_cids = pd.DataFrame(
+            index=cids, columns=["earliest", "latest", "mean_add", "sd_mult"]
+        )
+        df_cids.loc["AUD"] = ["2015-01-01", "2020-12-31", 0, 1]
+        df_cids.loc["CAD"] = ["2015-01-01", "2020-12-31", 0, 1]
+        df_cids.loc["GBP"] = ["2015-01-01", "2020-12-31", 0, 1]
+        df_xcats = pd.DataFrame(
+            index=xcats,
+            columns=["earliest", "latest", "mean_add", "sd_mult", "ar_coef", "back_coef"],
+        )
+        df_xcats.loc["XR"] = ["2015-01-01", "2020-12-31", 0, 1, 0, 0.3]
+        df_xcats.loc["CRY"] = ["2015-01-01", "2020-12-31", 0, 1, 0.5, 0.5]
+        random.seed(1)
+        dfd = make_qdf(df_cids, df_xcats, back_ar=0.5)
+        self.srr = SignalReturnRelations(
+            dfd, rets="XR", sigs="CRY", freqs="M", ms_panel_test=True
+        )
+
+    # ---- API / shape -------------------------------------------------------------
+
+    def test_signature_unchanged(self):
+        params = list(inspect.signature(SignalReturnRelations.map_pval).parameters)
+        self.assertEqual(params, ["self", "ret_vals", "sig_vals"])
+
+    def test_returns_float_in_unit_interval(self):
+        ret, sig = self._panel(6, 120, beta1=0.1, tau=0.7, sigma=1.0, seed=0)
+        pval = self.srr.map_pval(ret, sig)
+        self.assertIsInstance(pval, float)
+        self.assertGreaterEqual(pval, 0.0)
+        self.assertLessEqual(pval, 1.0)
+
+    def test_rounded_to_3dp(self):
+        ret, sig = self._panel(6, 120, beta1=0.1, tau=0.7, sigma=1.0, seed=3)
+        pval = self.srr.map_pval(ret, sig)
+        self.assertEqual(pval, round(pval, 3))
+        full, _, _ = self._custom_fullprec(ret, sig)
+        self.assertAlmostEqual(pval, round(full, 3), places=12)
+
+    def test_determinism(self):
+        ret, sig = self._panel(6, 120, beta1=0.1, tau=0.7, sigma=1.0, seed=7)
+        self.assertEqual(self.srr.map_pval(ret, sig), self.srr.map_pval(ret, sig))
+
+    # ---- statistical agreement with statsmodels ----------------------------------
+
+    def test_slope_matches_statsmodels_to_high_precision(self):
+        # The GLS slope is essentially exact; it must match statsmodels' beta tightly.
+        n_checked = 0
+        for seed in range(10):
+            ret, sig = self._panel(6, 150, beta1=0.15, tau=0.7, sigma=1.0, seed=seed)
+            p_sm, b_sm, conv = self._sm_reference(ret, sig)
+            if not conv:
+                continue
+            _, b_cust, _ = self._custom_fullprec(ret, sig)
+            self.assertAlmostEqual(b_cust, b_sm, places=6, msg=f"seed={seed}")
+            n_checked += 1
+        self.assertGreaterEqual(n_checked, 5)
+
+    def test_pvalue_agrees_with_statsmodels_within_tol(self):
+        # abs(p_custom - p_statsmodels_fullprec) <= 1e-3 on every converged panel.
+        max_diff, n_checked = 0.0, 0
+        for seed in range(25):
+            ret, sig = self._panel(6, 120, beta1=0.1, tau=0.7, sigma=1.0, seed=seed)
+            p_sm, _, conv = self._sm_reference(ret, sig)
+            if not conv:
+                continue
+            p_cust, _, _ = self._custom_fullprec(ret, sig)
+            self.assertFalse(np.isnan(p_cust), msg=f"seed={seed}")
+            diff = abs(p_cust - p_sm)
+            max_diff = max(max_diff, diff)
+            self.assertLessEqual(diff, 1e-3, msg=f"seed={seed}: {p_cust} vs {p_sm}")
+            n_checked += 1
+        self.assertGreaterEqual(n_checked, 15)
+        self.assertLessEqual(max_diff, 1e-3)
+
+    def test_no_significance_decision_flips(self):
+        # Significant iff raw p < 0.1 (prob-of-significance > 0.9). No flips vs oracle.
+        flips, n_checked = 0, 0
+        for seed in range(25):
+            ret, sig = self._panel(6, 120, beta1=0.08, tau=0.6, sigma=1.0, seed=seed)
+            p_sm, _, conv = self._sm_reference(ret, sig)
+            if not conv:
+                continue
+            p_cust, _, _ = self._custom_fullprec(ret, sig)
+            if (p_cust < 0.1) != (p_sm < 0.1):
+                flips += 1
+            n_checked += 1
+        self.assertGreaterEqual(n_checked, 15)
+        self.assertEqual(flips, 0)
+
+    def test_grouping_is_by_date_not_cid(self):
+        # Relabelling the cross-sections (while preserving the per-date structure)
+        # must not change the result, because the random intercept is grouped by date.
+        ret, sig = self._panel(6, 120, beta1=0.1, tau=0.7, sigma=1.0, seed=11)
+        base = self.srr.map_pval(ret, sig)
+        remap = {f"C{i:02d}": f"Z{(5 - i):02d}" for i in range(6)}
+        new_idx = pd.MultiIndex.from_tuples(
+            [(remap[c], d) for c, d in ret.index], names=["cid", "real_date"]
+        )
+        ret2 = pd.Series(ret.to_numpy(), index=new_idx)
+        sig2 = pd.Series(sig.to_numpy(), index=new_idx)
+        self.assertEqual(self.srr.map_pval(ret2, sig2), base)
+
+    def test_strong_relationship_is_significant(self):
+        ret, sig = self._panel(6, 200, beta1=1.0, tau=0.5, sigma=1.0, seed=5)
+        self.assertLess(self.srr.map_pval(ret, sig), 0.01)
+
+    # ---- boundary and degenerate handling ----------------------------------------
+
+    def test_tau2_zero_boundary_is_finite(self):
+        # No genuine per-date effect (tau=0): statsmodels returns a finite (OLS-limit)
+        # p-value at the variance boundary, so the estimator must too -- never nan.
+        for seed in range(6):
+            ret, sig = self._panel(6, 120, beta1=0.1, tau=0.0, sigma=1.0, seed=seed)
+            pval = self.srr.map_pval(ret, sig)
+            self.assertFalse(np.isnan(pval), msg=f"seed={seed}")
+            self.assertGreaterEqual(pval, 0.0)
+            self.assertLessEqual(pval, 1.0)
+            p_sm, _, conv = self._sm_reference(ret, sig)
+            if conv:
+                self.assertLessEqual(abs(pval - round(p_sm, 3)), 1e-3, msg=f"seed={seed}")
+
+    def test_single_cid_returns_nan_with_warning(self):
+        ret, sig = self._panel(1, 120, beta1=0.1, tau=0.7, sigma=1.0, seed=0)
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            pval = self.srr.map_pval(ret, sig)
+        self.assertTrue(np.isnan(pval))
+        self.assertTrue(any("wasn't enough datapoints" in str(x.message) for x in w))
+
+    def test_missing_cid_index_level_returns_nan_with_warning(self):
+        ret, sig = self._panel(6, 120, beta1=0.1, tau=0.7, sigma=1.0, seed=0)
+        # Drop the cid level -> only real_date remains.
+        ret2 = ret.copy()
+        ret2.index = ret.index.get_level_values("real_date")
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            pval = self.srr.map_pval(ret2, sig)
+        self.assertTrue(np.isnan(pval))
+        self.assertTrue(any("wasn't enough datapoints" in str(x.message) for x in w))
+
+    def test_singular_design_returns_nan_with_warning(self):
+        # A constant return column is collinear with the intercept -> singular design.
+        ret, sig = self._panel(6, 120, beta1=0.1, tau=0.7, sigma=1.0, seed=0)
+        ret_const = pd.Series(np.ones(len(ret)), index=ret.index)
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            pval = self.srr.map_pval(ret_const, sig)
+        self.assertTrue(np.isnan(pval))
+        self.assertTrue(len(w) >= 1)
+
+    def test_estimator_helper_returns_nan_pair_on_singular(self):
+        # Direct static-method check: singular X -> (nan, nan).
+        N = 30
+        X = np.column_stack([np.ones(N), np.ones(N)])  # collinear
+        y = np.arange(N, dtype=float)
+        gid = np.repeat(np.arange(6), 5)
+        b1, se = SignalReturnRelations._mixedlm_slope_pval(y, X, gid)
+        self.assertTrue(np.isnan(b1))
+        self.assertTrue(np.isnan(se))
+
+
 if __name__ == "__main__":
     unittest.main()
