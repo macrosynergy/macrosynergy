@@ -124,7 +124,7 @@ def view_table(
         yticklabels=yticklabels,
     )
 
-    if highlight_mask and (annot):
+    if highlight_mask is not None and annot is not False:
         if isinstance(highlight_mask, pd.DataFrame):
             mask_arr = highlight_mask.values
         else:
