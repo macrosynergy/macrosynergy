@@ -10,8 +10,8 @@ import seaborn as sns
 from sklearn import metrics as skm
 from scipy import stats
 from typing import List, Union, Tuple, Dict, Any, Optional, Callable
-import statsmodels.api as sm
 
+from macrosynergy.learning.random_effects import RandomEffects
 from macrosynergy.management.simulate import make_qdf
 from macrosynergy.management.utils import (
     apply_slip as apply_slip_util,
@@ -930,7 +930,15 @@ class SignalReturnRelations:
 
     def map_pval(self, ret_vals, sig_vals) -> float:
         """
-        Calculates the p-value using statsmodels MixedLM.
+        Calculates the p-value of the Macrosynergy Panel (MAP) significance test for
+        the signal-return relationship.
+
+        The test fits a period random-effects panel model ``signal ~ 1 + return`` with
+        a fixed intercept and random effects grouped by ``real_date``, reusing the
+        package's Swamy-Arora feasible-GLS estimator
+        :class:`macrosynergy.learning.random_effects.RandomEffects`. The returned
+        statistic is the two-sided p-value of the fixed-effect slope on the return,
+        rounded to three decimal places.
 
         Parameters
         ----------
@@ -942,7 +950,8 @@ class SignalReturnRelations:
         Returns
         -------
         float
-            p-value of the MixedLM model.
+            p-value of the return slope in the MAP random-effects model, or ``np.nan``
+            if it could not be calculated.
         """
 
         if (
@@ -953,24 +962,47 @@ class SignalReturnRelations:
                 "P-value could not be calculated, since there wasn't enough datapoints."
             )
             return np.nan
-        X = sm.add_constant(ret_vals)
-        y = sig_vals.copy()
-        groups = ret_vals.index.get_level_values("real_date")
-        mlm = sm.MixedLM(y, X, groups=groups)
+
+        # Degeneracy guard: a signal or return column with no genuine variation gives a
+        # rank-deficient design. RandomEffects does NOT raise on this -- an
+        # (near-)constant column drives the fitted slope and its standard error to
+        # machine epsilon, so re.pvals comes out spuriously finite (~0), i.e. a FALSE
+        # significant result. Reject up front on a relative-std test so both the
+        # exactly-constant and near-constant (constant + tiny noise) cases return nan.
+        # Threshold 1e-9 sits far below any legitimate panel's relative variation.
+        for _col in (ret_vals, sig_vals):
+            _v = np.asarray(_col, dtype=np.float64)
+            _std = np.nanstd(_v)
+            _scale = np.nanmean(np.abs(_v)) + 1.0
+            if not np.isfinite(_std) or _std <= 1e-9 * _scale:
+                warnings.warn(
+                    "Singular matrix encountered, so p-value could not be calculated."
+                )
+                return np.nan
+
         try:
-            re = mlm.fit(reml=False)
-        except np.linalg.LinAlgError:
+            # divide="raise"/invalid="raise" turns RandomEffects' internal
+            # divide-by-zero on a degenerate design (only a RuntimeWarning by default)
+            # into a FloatingPointError we can catch rather than returning a bogus 0.
+            with np.errstate(divide="raise", invalid="raise"):
+                re = RandomEffects(group_col="real_date", fit_intercept=True).fit(
+                    ret_vals, sig_vals
+                )
+                # Features are ['const', <return>]; the return slope is the last entry.
+                pval = float(re.pvals.iloc[-1])
+        except (KeyError, ValueError, FloatingPointError, np.linalg.LinAlgError):
+            # Degenerate/singular design (e.g. a constant/collinear column collapses the
+            # intercept, so the 'const' coefficient is absent) -> no slope p-value.
             warnings.warn(
                 "Singular matrix encountered, so p-value could not be calculated."
             )
             return np.nan
-        if re.summary().tables[1].iloc[1, 3] == "":
+        if np.isnan(pval):
             warnings.warn(
                 "P-value could not be calculated, since there wasn't enough datapoints."
             )
             return np.nan
-        pval_string = re.summary().tables[1].iloc[1, 3]
-        return float(pval_string)
+        return round(pval, 3)
 
     def __output_table__(
         self,

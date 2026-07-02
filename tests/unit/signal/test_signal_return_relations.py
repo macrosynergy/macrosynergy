@@ -1746,6 +1746,294 @@ class TestAll(unittest.TestCase):
         matplotlib.use(self.mpl_backend)
 
 
+import statsmodels.api as sm
+from macrosynergy.learning.random_effects import RandomEffects
+
+
+class TestMapPvalEstimator(unittest.TestCase):
+    """
+    Direct unit coverage for ``SignalReturnRelations.map_pval``, which implements the
+    Macrosynergy Panel (MAP) significance test by reusing the package's Swamy-Arora
+    feasible-GLS period random-effects estimator
+    ``macrosynergy.learning.random_effects.RandomEffects``.
+
+    The model is ``signal ~ 1 + return`` with a fixed intercept and random effects
+    grouped by ``real_date``. statsmodels ``MixedLM.fit(reml=False)`` is used only as an
+    independent reference oracle. RandomEffects (Swamy-Arora feasible GLS) and MixedLM
+    (ML) are DIFFERENT estimators, so exact reproduction is not expected: the slope
+    agrees to a few 1e-4, the two-sided slope p-value agrees to a few 1e-3, and -- the
+    property that actually matters -- there are zero significance-decision flips at the
+    0.9 threshold (raw p < 0.1) over the seed sweep.
+    """
+
+    # ---- helpers -----------------------------------------------------------------
+
+    @staticmethod
+    def _panel(n_cids, n_dates, beta1, tau, sigma, seed, intercept=0.2):
+        """
+        Build (ret_vals, sig_vals) as pd.Series indexed by a (cid, real_date)
+        MultiIndex, from the exact generative model map_pval assumes:
+            signal_it = intercept + beta1 * ret_it + u_date + eps_it,
+            u_date ~ N(0, tau^2),  eps_it ~ N(0, sigma^2).
+        """
+        rng = np.random.default_rng(seed)
+        cids = [f"C{i:02d}" for i in range(n_cids)]
+        dates = pd.bdate_range("2000-01-01", periods=n_dates)
+        u = rng.normal(0.0, tau, n_dates) if tau > 0 else np.zeros(n_dates)
+        ret_vals, sig_vals, idx = [], [], []
+        for di, d in enumerate(dates):
+            for c in cids:
+                r = rng.normal(0.0, 1.0)
+                s = intercept + beta1 * r + u[di] + rng.normal(0.0, sigma)
+                ret_vals.append(r)
+                sig_vals.append(s)
+                idx.append((c, d))
+        mi = pd.MultiIndex.from_tuples(idx, names=["cid", "real_date"])
+        return pd.Series(ret_vals, index=mi), pd.Series(sig_vals, index=mi)
+
+    @staticmethod
+    def _sm_reference(ret_vals, sig_vals):
+        """statsmodels MixedLM oracle. Returns (pval_fullprec, beta1, converged)."""
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            X = sm.add_constant(ret_vals)
+            groups = ret_vals.index.get_level_values("real_date")
+            res = sm.MixedLM(sig_vals, X, groups=groups).fit(reml=False)
+        conv_warn = any("onverg" in str(x.message).lower() for x in w)
+        converged = bool(getattr(res, "converged", True)) and not conv_warn
+        return float(np.asarray(res.pvalues)[1]), float(np.asarray(res.params)[1]), converged
+
+    @staticmethod
+    def _re_fullprec(ret_vals, sig_vals):
+        """
+        Full-precision (unrounded) RandomEffects output: (pval, beta1).
+
+        This mirrors what ``map_pval`` computes internally, but WITHOUT the final 3dp
+        rounding, so parity against the statsmodels oracle is not contaminated by
+        rounding error stacked on top of the estimator difference. Orientation matches
+        map_pval: ``fit(X=ret_vals, y=sig_vals)``; the return slope is the last entry.
+        """
+        re = RandomEffects(group_col="real_date", fit_intercept=True).fit(
+            ret_vals, sig_vals
+        )
+        return float(re.pvals.iloc[-1]), float(re.params.iloc[-1])
+
+    def setUp(self) -> None:
+        # A minimal valid instance used only as a host for the map_pval method
+        # (map_pval reads no instance state beyond the static estimator helper).
+        cids = ["AUD", "CAD", "GBP"]
+        xcats = ["XR", "CRY"]
+        df_cids = pd.DataFrame(
+            index=cids, columns=["earliest", "latest", "mean_add", "sd_mult"]
+        )
+        df_cids.loc["AUD"] = ["2015-01-01", "2020-12-31", 0, 1]
+        df_cids.loc["CAD"] = ["2015-01-01", "2020-12-31", 0, 1]
+        df_cids.loc["GBP"] = ["2015-01-01", "2020-12-31", 0, 1]
+        df_xcats = pd.DataFrame(
+            index=xcats,
+            columns=["earliest", "latest", "mean_add", "sd_mult", "ar_coef", "back_coef"],
+        )
+        df_xcats.loc["XR"] = ["2015-01-01", "2020-12-31", 0, 1, 0, 0.3]
+        df_xcats.loc["CRY"] = ["2015-01-01", "2020-12-31", 0, 1, 0.5, 0.5]
+        random.seed(1)
+        dfd = make_qdf(df_cids, df_xcats, back_ar=0.5)
+        self.srr = SignalReturnRelations(
+            dfd, rets="XR", sigs="CRY", freqs="M", ms_panel_test=True
+        )
+
+    # ---- API / shape -------------------------------------------------------------
+
+    def test_signature_unchanged(self):
+        params = list(inspect.signature(SignalReturnRelations.map_pval).parameters)
+        self.assertEqual(params, ["self", "ret_vals", "sig_vals"])
+
+    def test_returns_float_in_unit_interval(self):
+        ret, sig = self._panel(6, 120, beta1=0.1, tau=0.7, sigma=1.0, seed=0)
+        pval = self.srr.map_pval(ret, sig)
+        self.assertIsInstance(pval, float)
+        self.assertGreaterEqual(pval, 0.0)
+        self.assertLessEqual(pval, 1.0)
+
+    def test_rounded_to_3dp(self):
+        ret, sig = self._panel(6, 120, beta1=0.1, tau=0.7, sigma=1.0, seed=3)
+        pval = self.srr.map_pval(ret, sig)
+        self.assertEqual(pval, round(pval, 3))
+        full, _ = self._re_fullprec(ret, sig)
+        self.assertAlmostEqual(pval, round(full, 3), places=12)
+
+    def test_determinism(self):
+        ret, sig = self._panel(6, 120, beta1=0.1, tau=0.7, sigma=1.0, seed=7)
+        self.assertEqual(self.srr.map_pval(ret, sig), self.srr.map_pval(ret, sig))
+
+    # ---- statistical agreement with statsmodels ----------------------------------
+
+    def test_slope_matches_statsmodels_to_high_precision(self):
+        # Both are GLS, so the slope agrees closely. RandomEffects (Swamy-Arora) and
+        # MixedLM (ML) differ in their variance components, so the slopes are not bit
+        # -identical: the measured worst |Delta beta| over this sweep is ~5e-4, so we
+        # assert agreement to within 2e-3 (a comfortable margin above the observed max).
+        n_checked = 0
+        for seed in range(10):
+            ret, sig = self._panel(6, 150, beta1=0.15, tau=0.7, sigma=1.0, seed=seed)
+            p_sm, b_sm, conv = self._sm_reference(ret, sig)
+            if not conv:
+                continue
+            _, b_re = self._re_fullprec(ret, sig)
+            self.assertAlmostEqual(b_re, b_sm, delta=2e-3, msg=f"seed={seed}")
+            n_checked += 1
+        self.assertGreaterEqual(n_checked, 5)
+
+    def test_pvalue_agrees_with_statsmodels_within_tol(self):
+        # ML (statsmodels) vs Swamy-Arora feasible GLS (RandomEffects) on the return
+        # slope's two-sided p-value. These are different estimators, so exact agreement
+        # is not expected. The measured worst |Delta p| over this 25-seed sweep is
+        # ~3.0e-3; we assert <= 5e-3, a sensible margin above the observed max so the
+        # test does not flake on the estimator difference.
+        TOL = 5e-3
+        max_diff, n_checked = 0.0, 0
+        for seed in range(25):
+            ret, sig = self._panel(6, 120, beta1=0.1, tau=0.7, sigma=1.0, seed=seed)
+            p_sm, _, conv = self._sm_reference(ret, sig)
+            if not conv:
+                continue
+            p_re, _ = self._re_fullprec(ret, sig)
+            self.assertFalse(np.isnan(p_re), msg=f"seed={seed}")
+            diff = abs(p_re - p_sm)
+            max_diff = max(max_diff, diff)
+            self.assertLessEqual(diff, TOL, msg=f"seed={seed}: {p_re} vs {p_sm}")
+            n_checked += 1
+        self.assertGreaterEqual(n_checked, 15)
+        self.assertLessEqual(max_diff, TOL)
+
+    def test_no_significance_decision_flips(self):
+        # The property that actually matters: significant iff raw p < 0.1
+        # (prob-of-significance > 0.9). No flips vs the statsmodels oracle. Kept strict.
+        flips, n_checked = 0, 0
+        for seed in range(25):
+            ret, sig = self._panel(6, 120, beta1=0.08, tau=0.6, sigma=1.0, seed=seed)
+            p_sm, _, conv = self._sm_reference(ret, sig)
+            if not conv:
+                continue
+            p_re, _ = self._re_fullprec(ret, sig)
+            if (p_re < 0.1) != (p_sm < 0.1):
+                flips += 1
+            n_checked += 1
+        self.assertGreaterEqual(n_checked, 15)
+        self.assertEqual(flips, 0)
+
+    def test_grouping_is_by_date_not_cid(self):
+        # Relabelling the cross-sections (while preserving the per-date structure)
+        # must not change the result, because the random intercept is grouped by date.
+        ret, sig = self._panel(6, 120, beta1=0.1, tau=0.7, sigma=1.0, seed=11)
+        base = self.srr.map_pval(ret, sig)
+        remap = {f"C{i:02d}": f"Z{(5 - i):02d}" for i in range(6)}
+        new_idx = pd.MultiIndex.from_tuples(
+            [(remap[c], d) for c, d in ret.index], names=["cid", "real_date"]
+        )
+        ret2 = pd.Series(ret.to_numpy(), index=new_idx)
+        sig2 = pd.Series(sig.to_numpy(), index=new_idx)
+        self.assertEqual(self.srr.map_pval(ret2, sig2), base)
+
+    def test_strong_relationship_is_significant(self):
+        ret, sig = self._panel(6, 200, beta1=1.0, tau=0.5, sigma=1.0, seed=5)
+        self.assertLess(self.srr.map_pval(ret, sig), 0.01)
+
+    # ---- boundary and degenerate handling ----------------------------------------
+
+    def test_tau2_zero_boundary_is_finite(self):
+        # No genuine per-date effect (tau=0): statsmodels returns a finite (OLS-limit)
+        # p-value at the variance boundary, so the estimator must too -- never nan.
+        for seed in range(6):
+            ret, sig = self._panel(6, 120, beta1=0.1, tau=0.0, sigma=1.0, seed=seed)
+            pval = self.srr.map_pval(ret, sig)
+            self.assertFalse(np.isnan(pval), msg=f"seed={seed}")
+            self.assertGreaterEqual(pval, 0.0)
+            self.assertLessEqual(pval, 1.0)
+            p_sm, _, conv = self._sm_reference(ret, sig)
+            if conv:
+                # RandomEffects vs MixedLM at the tau=0 variance boundary: allow the
+                # same ~5e-3 estimator-difference margin used elsewhere.
+                self.assertLessEqual(abs(pval - round(p_sm, 3)), 5e-3, msg=f"seed={seed}")
+
+    def test_single_cid_returns_nan_with_warning(self):
+        ret, sig = self._panel(1, 120, beta1=0.1, tau=0.7, sigma=1.0, seed=0)
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            pval = self.srr.map_pval(ret, sig)
+        self.assertTrue(np.isnan(pval))
+        self.assertTrue(any("wasn't enough datapoints" in str(x.message) for x in w))
+
+    def test_missing_cid_index_level_returns_nan_with_warning(self):
+        ret, sig = self._panel(6, 120, beta1=0.1, tau=0.7, sigma=1.0, seed=0)
+        # Drop the cid level -> only real_date remains.
+        ret2 = ret.copy()
+        ret2.index = ret.index.get_level_values("real_date")
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            pval = self.srr.map_pval(ret2, sig)
+        self.assertTrue(np.isnan(pval))
+        self.assertTrue(any("wasn't enough datapoints" in str(x.message) for x in w))
+
+    def test_singular_design_returns_nan_with_warning(self):
+        # A constant return column is collinear with the intercept -> singular design.
+        ret, sig = self._panel(6, 120, beta1=0.1, tau=0.7, sigma=1.0, seed=0)
+        ret_const = pd.Series(np.ones(len(ret)), index=ret.index)
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            pval = self.srr.map_pval(ret_const, sig)
+        self.assertTrue(np.isnan(pval))
+        self.assertTrue(
+            any("Singular matrix encountered" in str(x.message) for x in w)
+        )
+
+    def test_constant_signal_returns_nan_not_false_significance(self):
+        # Regression: an identically-constant SIGNAL has no variation, so there is no
+        # relationship to detect. RandomEffects does not raise here -- the fitted slope
+        # and its standard error both collapse to machine epsilon, so re.pvals would come
+        # out spuriously finite (~0), i.e. a FALSE significant result. map_pval must
+        # instead return nan with the "Singular matrix" warning (matching the statsmodels
+        # MixedLM oracle, which also yields nan on this input).
+        ret, sig = self._panel(6, 120, beta1=0.1, tau=0.7, sigma=1.0, seed=0)
+        sig_const = pd.Series(np.full(len(sig), 3.0), index=sig.index)
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            pval = self.srr.map_pval(ret, sig_const)
+        self.assertTrue(np.isnan(pval))
+        self.assertFalse(pval == 0.0)  # explicitly not a spurious significant p-value
+        self.assertTrue(
+            any("Singular matrix encountered" in str(x.message) for x in w)
+        )
+
+    def test_near_constant_signal_returns_nan(self):
+        # Regression: a signal that is constant + tiny noise is effectively degenerate;
+        # RandomEffects returns a finite (meaningless) p-value on it. The relative-std
+        # guard must reject it -> nan + "Singular matrix" warning.
+        ret, sig = self._panel(6, 120, beta1=0.1, tau=0.7, sigma=1.0, seed=0)
+        rng = np.random.default_rng(123)
+        sig_near = pd.Series(3.0 + 1e-12 * rng.normal(size=len(sig)), index=sig.index)
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            pval = self.srr.map_pval(ret, sig_near)
+        self.assertTrue(np.isnan(pval))
+        self.assertTrue(
+            any("Singular matrix encountered" in str(x.message) for x in w)
+        )
+
+    def test_near_constant_return_returns_nan(self):
+        # Regression: a return that is constant + tiny noise is effectively collinear
+        # with the intercept. Must be rejected -> nan + "Singular matrix" warning.
+        ret, sig = self._panel(6, 120, beta1=0.1, tau=0.7, sigma=1.0, seed=0)
+        rng = np.random.default_rng(321)
+        ret_near = pd.Series(1.0 + 1e-12 * rng.normal(size=len(ret)), index=ret.index)
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            pval = self.srr.map_pval(ret_near, sig)
+        self.assertTrue(np.isnan(pval))
+        self.assertTrue(
+            any("Singular matrix encountered" in str(x.message) for x in w)
+        )
+
+
 def _cid_codes(n: int) -> List[str]:
     # 3-char uppercase codes with no underscore (valid cid). AAA, AAB, ...
     codes = []
