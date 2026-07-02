@@ -884,6 +884,90 @@ class TestAll(unittest.TestCase):
         except:
             self.fail("CategoryRelations failed when using seperator=2012")
 
+    def _quiet_ols_table(self, cr, **kwargs):
+        # ols_table prints the statsmodels summary; capture it to keep test
+        # output clean.
+        buffer = io.StringIO()
+        stdout = sys.stdout
+        sys.stdout = buffer
+        try:
+            return cr.ols_table(**kwargs)
+        finally:
+            sys.stdout = stdout
+
+    def test_ols_table_returns_results(self):
+        import statsmodels.api as sm
+
+        cr = CategoryRelations(
+            self.dfd,
+            xcats=["CRY", "XR"],
+            cids=self.cids,
+            freq="M",
+            lag=1,
+            xcat_aggs=["mean", "mean"],
+        )
+
+        res_pool = self._quiet_ols_table(cr)
+        res_re = self._quiet_ols_table(cr, type="re")
+        self.assertIsNotNone(res_pool)
+        self.assertIsNotNone(res_re)
+
+        df_fit = cr.df.dropna()
+        direct = sm.OLS(df_fit.iloc[:, 1], sm.add_constant(df_fit.iloc[:, 0])).fit()
+        self.assertTrue(
+            np.allclose(np.asarray(res_pool.params), np.asarray(direct.params))
+        )
+
+    def test_ols_table_cov_type(self):
+        import statsmodels.api as sm
+
+        cr = CategoryRelations(
+            self.dfd,
+            xcats=["CRY", "XR"],
+            cids=self.cids,
+            freq="M",
+            lag=1,
+            xcat_aggs=["mean", "mean"],
+        )
+
+        res_iid = self._quiet_ols_table(cr)
+        res_cluster = self._quiet_ols_table(cr, cov_type="cluster")
+        res_dk = self._quiet_ols_table(cr, cov_type="hac-groupsum")
+
+        # Robust estimators change the standard errors, never the coefficients.
+        for res in (res_cluster, res_dk):
+            self.assertTrue(
+                np.allclose(np.asarray(res.params), np.asarray(res_iid.params))
+            )
+            self.assertTrue(np.isfinite(np.asarray(res.bse)).all())
+            self.assertTrue(np.isfinite(np.asarray(res.pvalues)).all())
+        self.assertFalse(
+            np.allclose(np.asarray(res_cluster.bse), np.asarray(res_iid.bse))
+        )
+        self.assertFalse(np.allclose(np.asarray(res_dk.bse), np.asarray(res_iid.bse)))
+
+        # The cross-section clustering default matches a direct statsmodels fit.
+        df_fit = cr.df.dropna()
+        direct = sm.OLS(df_fit.iloc[:, 1], sm.add_constant(df_fit.iloc[:, 0])).fit(
+            cov_type="cluster",
+            cov_kwds={"groups": df_fit.index.get_level_values("cid")},
+        )
+        self.assertTrue(
+            np.allclose(np.asarray(res_cluster.bse), np.asarray(direct.bse))
+        )
+
+    def test_ols_table_cov_type_re_raises(self):
+        cr = CategoryRelations(
+            self.dfd,
+            xcats=["CRY", "XR"],
+            cids=self.cids,
+            freq="M",
+            lag=1,
+            xcat_aggs=["mean", "mean"],
+        )
+        with self.assertRaises(ValueError):
+            self._quiet_ols_table(cr, type="re", cov_type="cluster")
+
 
 if __name__ == "__main__":
     unittest.main()

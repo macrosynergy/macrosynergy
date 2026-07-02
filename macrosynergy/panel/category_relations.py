@@ -970,28 +970,69 @@ class CategoryRelations(object):
         if show_plot:
             plt.show()
 
-    def ols_table(self, type="pool"):
+    def ols_table(self, type="pool", cov_type=None, cov_kwds=None):
         """
-        Print statsmodels regression summaries.
+        Print and return statsmodels regression summaries.
 
         Parameters
         ----------
         type : str
             type of linear regression summary to print. Default is 'pool'. Alternative
             is 're' for period-specific random effects.
+        cov_type : str
+            optional robust covariance estimator for the pooled regression, passed to
+            the statsmodels fit. Panel-aware defaults are provided for two estimators:
+            'cluster' clusters by cross-section, and 'hac-groupsum' / 'nw-groupsum'
+            (Driscoll-Kraay) use the real_date periods with a standard automatic lag
+            choice. Default is None, which keeps the classic (i.i.d.) standard errors.
+            Only available with type='pool'.
+        cov_kwds : dict
+            optional keyword arguments for the covariance estimator, overriding the
+            panel-aware defaults.
+
+        Returns
+        -------
+        The statsmodels results object of the fitted regression.
         """
 
         assert type in ["pool", "re"], "Type must be either 'pool' or 're'."
+        if cov_type is not None and type != "pool":
+            raise ValueError("`cov_type` is only available with type='pool'.")
 
-        x, y = self.df.dropna().iloc[:, 0], self.df.dropna().iloc[:, 1]
+        df_fit = self.df.dropna()
+        x, y = df_fit.iloc[:, 0], df_fit.iloc[:, 1]
         x_fit = sm.add_constant(x)
         groups = self.df.reset_index().real_date
         if type == "pool":
-            fit_results = sm.OLS(y, x_fit).fit()
+            if cov_type is None:
+                fit_results = sm.OLS(y, x_fit).fit()
+            else:
+                kwds = dict(cov_kwds) if cov_kwds else {}
+                fit_kwargs = {}
+                if cov_type == "cluster" and "groups" not in kwds:
+                    kwds["groups"] = df_fit.index.get_level_values("cid")
+                if cov_type in ("hac-groupsum", "nw-groupsum"):
+                    if "time" not in kwds:
+                        kwds["time"] = pd.factorize(
+                            df_fit.index.get_level_values("real_date")
+                        )[0]
+                    if "maxlags" not in kwds:
+                        n_periods = int(np.max(kwds["time"])) + 1
+                        kwds["maxlags"] = max(
+                            1, int(np.floor(4 * (n_periods / 100.0) ** (2.0 / 9.0)))
+                        )
+                    # Group-summed HAC estimators have no small-sample df
+                    # correction; t-based inference yields NaN p-values, so use
+                    # normal-based inference.
+                    fit_kwargs["use_t"] = False
+                fit_results = sm.OLS(y, x_fit).fit(
+                    cov_type=cov_type, cov_kwds=kwds, **fit_kwargs
+                )
         elif type == "re":
             fit_results = sm.MixedLM(y, x_fit, groups).fit(reml=False)
 
         print(fit_results.summary())
+        return fit_results
 
 
 if __name__ == "__main__":
