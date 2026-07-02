@@ -1,10 +1,14 @@
+import inspect
 import unittest
+import unittest as _unittest
 import numpy as np
 import pandas as pd
+import pandas as _pd
 import random
 from typing import List
 import warnings
 from macrosynergy.management.types import QuantamentalDataFrame
+from macrosynergy.management.types import QuantamentalDataFrame as _QDF
 from macrosynergy.compat import PD_2_0_OR_LATER
 from macrosynergy.management.constants import JPMAQS_METRICS
 from macrosynergy.management.utils import (
@@ -12,6 +16,7 @@ from macrosynergy.management.utils import (
     get_xcat,
     qdf_to_ticker_df,
 )
+from macrosynergy.management.utils import reduce_df as _reduce_df
 from macrosynergy.management.types.qdf.methods import (
     get_col_sort_order,
     change_column_format,
@@ -32,6 +37,9 @@ from macrosynergy.management.types.qdf.methods import (
     qdf_from_timeseries,
     create_empty_categorical_qdf,
     concat_qdfs,
+)
+from macrosynergy.management.types.qdf.methods import (
+    _get_tickers_series as _gts,
 )
 
 
@@ -1905,6 +1913,91 @@ class TestQDFInitializationMethods(unittest.TestCase):
         expc_df = qdf_to_string_index(expc_df)
 
         self.assertTrue(qdf.equals(expc_df))
+
+
+class TestGetTickersSeriesEdge(_unittest.TestCase):
+    def _qdf(self, categorical):
+        df = _pd.DataFrame({
+            "cid": ["AUD", "AUD", "GBP"],
+            "xcat": ["XR", "INFL", "XR"],
+            "real_date": _pd.to_datetime(["2020-01-01", "2020-01-02", "2020-01-01"]),
+            "value": [1.0, 2.0, 3.0],
+        })
+        return _QDF(df, categorical=categorical)
+
+    def test_object_branch_returns_series(self):
+        out = _gts(self._qdf(False))
+        self.assertEqual(list(out), ["AUD_XR", "AUD_INFL", "GBP_XR"])
+
+    def test_categorical_branch_returns_ordered_categorical(self):
+        out = _gts(self._qdf(True))
+        self.assertTrue(isinstance(out, _pd.Categorical))
+        self.assertTrue(out.ordered)
+        self.assertEqual(list(out), ["AUD_XR", "AUD_INFL", "GBP_XR"])
+
+    def test_single_row(self):
+        df = _pd.DataFrame({"cid": ["AUD"], "xcat": ["XR"],
+                            "real_date": _pd.to_datetime(["2020-01-01"]), "value": [1.0]})
+        out = _gts(_QDF(df, categorical=True))
+        self.assertEqual(list(out), ["AUD_XR"])
+
+    def test_missing_column_raises(self):
+        with self.assertRaises(ValueError):
+            _gts(self._qdf(True), cid_column="nope")
+
+    def test_signature_unchanged(self):
+        sig = inspect.signature(_gts)
+        self.assertEqual(list(sig.parameters), ["df", "cid_column", "xcat_column"])
+        self.assertEqual(sig.parameters["cid_column"].default, "cid")
+        self.assertEqual(sig.parameters["xcat_column"].default, "xcat")
+
+
+class TestAddTickerColumnAPI(_unittest.TestCase):
+    def test_method_signature_unchanged(self):
+        sig = inspect.signature(_QDF.add_ticker_column)
+        self.assertEqual(list(sig.parameters), ["self"])
+
+    def test_reduce_df_by_ticker_signature_unchanged(self):
+        sig = inspect.signature(_QDF.reduce_df_by_ticker)
+        self.assertEqual(
+            list(sig.parameters), ["self", "tickers", "start", "end", "blacklist"]
+        )
+
+
+class TestReduceDfEdgeAPI(_unittest.TestCase):
+    def _qdf(self):
+        return _pd.DataFrame({
+            "cid": ["AUD", "AUD", "GBP", "GBP"],
+            "xcat": ["XR", "INFL", "XR", "INFL"],
+            "real_date": _pd.to_datetime(["2020-01-01"] * 4),
+            "value": [1.0, 2.0, 3.0, 4.0],
+        })
+
+    def test_filter_by_cids(self):
+        out = _reduce_df(self._qdf(), cids=["AUD"])
+        self.assertEqual(set(out["cid"].unique()), {"AUD"})
+
+    def test_filter_by_xcats_string(self):
+        out = _reduce_df(self._qdf(), xcats="XR")
+        self.assertEqual(set(out["xcat"].unique()), {"XR"})
+
+    def test_out_all_returns_tuple(self):
+        out, xcats, cids = _reduce_df(self._qdf(), out_all=True)
+        self.assertIsInstance(out, _pd.DataFrame)
+        self.assertEqual(sorted(xcats), ["INFL", "XR"])
+
+    def test_non_qdf_raises(self):
+        with self.assertRaises(TypeError):
+            _reduce_df([1, 2, 3])
+
+    def test_signature_unchanged(self):
+        sig = inspect.signature(_reduce_df)
+        self.assertEqual(
+            list(sig.parameters),
+            ["df", "xcats", "cids", "start", "end", "blacklist", "out_all", "intersect"],
+        )
+        self.assertIs(sig.parameters["out_all"].default, False)
+        self.assertIs(sig.parameters["intersect"].default, False)
 
 
 if __name__ == "__main__":
