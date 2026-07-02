@@ -6,6 +6,7 @@ import warnings
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+from matplotlib.colors import is_color_like
 import seaborn as sns
 from sklearn import metrics as skm
 from scipy import stats
@@ -831,7 +832,7 @@ class SignalReturnRelations:
                 s_date = intersection_df.index[0]
                 e_date = intersection_df.index[-1]
 
-                final_df.loc[(cid_name, s_date):(cid_name, e_date), signal] = (
+                final_df.loc[(cid_name, s_date) : (cid_name, e_date), signal] = (
                     intersection_df.to_numpy()
                 )
                 storage.append(final_df)
@@ -1540,6 +1541,8 @@ class SignalReturnRelations:
         xcat_labels: Optional[Dict[str, str]] = None,
         freq_labels: Optional[Dict[str, str]] = None,
         agg_sigs_labels: Optional[Dict[str, str]] = None,
+        emphasize_rows: Optional[Union[List[str], Dict[str, str]]] = None,
+        xcat_row_order: Optional[List[str]] = None,
         min_color: Optional[float] = None,
         max_color: Optional[float] = None,
         figsize: Tuple[float, float] = (14, 8),
@@ -1621,6 +1624,23 @@ class SignalReturnRelations:
             label produced by the constant-level collapse. Aggregations
             not listed in the dict are kept verbatim. Default is None
             (raw codes are shown).
+        emphasize_rows : dict or List[str], optional
+            Signal xcats (as passed to ``sigs``) whose rows are outlined
+            with a box in the heatmap, scorecard-style. Pass a mapping
+            ``{xcat: color}`` to set each box colour (any valid matplotlib
+            colour); a plain list is treated as ``{xcat: "black"}``.
+            Requires ``"xcat"`` in ``rows``; raises ``ValueError`` if set
+            without it, if a name is not among ``sigs``, or if a colour is
+            invalid. Boxing does not reorder the table — use
+            ``xcat_row_order`` for that. Default is None.
+        xcat_row_order : List[str], optional
+            Signal xcats (as passed to ``sigs``) giving the desired
+            top-to-bottom row order. Listed signals are placed in this
+            order; any signals not listed keep their original order above
+            them. Requires ``"xcat"`` in ``rows``; raises ``ValueError``
+            if set without it or if a name is not among ``sigs``. The
+            returned DataFrame reflects the new row order; the statistics
+            are unchanged. Default is None.
         min_color : float, optional
             minimum value of the color scale. Default is None, in which case the minimum
             value of the table is used.
@@ -1745,9 +1765,7 @@ class SignalReturnRelations:
                     "axis_label_levels requires collapse_constant_levels=True."
                 )
             if not all(x in rows_values for x in axis_label_levels):
-                raise ValueError(
-                    f"axis_label_levels must only contain {rows_values}"
-                )
+                raise ValueError(f"axis_label_levels must only contain {rows_values}")
 
         if xcat_labels is not None:
             if signal_name_dict is not None or return_name_dict is not None:
@@ -1760,6 +1778,45 @@ class SignalReturnRelations:
             # downstream reorder.
             signal_name_dict = {s: xcat_labels.get(s, s) for s in self.sigs}
             return_name_dict = {r: xcat_labels.get(r, r) for r in self.rets}
+
+        def _resolve_sig(name: str, label: str) -> str:
+            # Resolve the sig_neg suffix the same way as elsewhere so the
+            # original xcat still matches self.sigs.
+            if name not in self.sigs and f"{name}_NEG" in self.sigs:
+                name = f"{name}_NEG"
+            if name not in self.sigs:
+                raise ValueError(
+                    f"{label} entries must be among sigs {self.sigs}; "
+                    f"got unknown {name!r}."
+                )
+            return name
+
+        if (emphasize_rows is not None or xcat_row_order is not None) and (
+            "xcat" not in rows
+        ):
+            raise ValueError("emphasize_rows / xcat_row_order require 'xcat' in rows.")
+
+        # Map matched signal -> box colour (list form defaults to black).
+        emphasize_colors: Dict[str, str] = {}
+        if emphasize_rows is not None:
+            items = (
+                emphasize_rows.items()
+                if isinstance(emphasize_rows, dict)
+                else [(e, "black") for e in emphasize_rows]
+            )
+            for e, color in items:
+                if not is_color_like(color):
+                    raise ValueError(
+                        f"emphasize_rows colour {color!r} for {e!r} is not a "
+                        "valid matplotlib colour."
+                    )
+                emphasize_colors[_resolve_sig(e, "emphasize_rows")] = color
+
+        row_order_sigs: List[str] = (
+            [_resolve_sig(x, "xcat_row_order") for x in xcat_row_order]
+            if xcat_row_order is not None
+            else []
+        )
 
         rows_dict = {
             "xcat": self.sigs,
@@ -1874,9 +1931,7 @@ class SignalReturnRelations:
                     df_pval.rename(columns=freq_labels_full, inplace=True)
 
         if agg_sigs_labels is not None:
-            agg_sigs_labels_full = {
-                a: agg_sigs_labels.get(a, a) for a in self.agg_sigs
-            }
+            agg_sigs_labels_full = {a: agg_sigs_labels.get(a, a) for a in self.agg_sigs}
             if "agg_sigs" in rows:
                 df_result.rename(index=agg_sigs_labels_full, inplace=True)
                 df_result = self.reindex_multindex_df(
@@ -1891,6 +1946,38 @@ class SignalReturnRelations:
                 df_result.rename(columns=agg_sigs_labels_full, inplace=True)
                 if df_pval is not None:
                     df_pval.rename(columns=agg_sigs_labels_full, inplace=True)
+
+        box_rows: Optional[Dict[int, str]] = None
+        if row_order_sigs or emphasize_colors:
+            # Translate resolved signals through the effective rename so they
+            # still match after signal_name_dict / xcat_labels renamed the index.
+            def _translate(name: str) -> str:
+                return signal_name_dict.get(name, name) if signal_name_dict else name
+
+            signal_level = (
+                df_result.index.get_level_values("Signal")
+                if isinstance(df_result.index, pd.MultiIndex)
+                else df_result.index
+            )
+
+            if row_order_sigs:
+                # Stable-sort listed signals to the given order; unlisted rank
+                # -1 and keep their original order above them.
+                rank_map = {_translate(s): i for i, s in enumerate(row_order_sigs)}
+                rank = [rank_map.get(s, -1) for s in signal_level]
+                order = np.argsort(rank, kind="stable")
+                df_result = df_result.iloc[order]
+                if df_pval is not None:
+                    df_pval = df_pval.iloc[order]
+                signal_level = signal_level[order]
+
+            if emphasize_colors:
+                color_map = {_translate(s): c for s, c in emphasize_colors.items()}
+                box_rows = {
+                    i: color_map[s]
+                    for i, s in enumerate(signal_level)
+                    if s in color_map
+                }
 
         if show_heatmap:
             if not title:
@@ -1977,6 +2064,7 @@ class SignalReturnRelations:
                 xticklabels=xticklabels_to_pass,
                 yticklabels=yticklabels_to_pass,
                 highlight_mask=highlight_mask,
+                box_rows=box_rows,
                 footnote=footnote,
                 footnote_fontsize=footnote_fontsize,
             )
@@ -2267,9 +2355,7 @@ class SignalReturnRelations:
             uniq = idx.get_level_values(level_no).unique()
             if len(uniq) == 1:
                 constant_level_nos.append(level_no)
-                constant_pairs.append(
-                    (str(idx.names[level_no]), str(uniq[0]))
-                )
+                constant_pairs.append((str(idx.names[level_no]), str(uniq[0])))
 
         if not constant_level_nos:
             return None, []
@@ -2526,7 +2612,16 @@ if __name__ == "__main__":
         ret="XRH", xcat="INFL_NEG", freq="Q", agg_sigs="last"
     )
     mrt = sr.multiple_relations_table()
-    sst = sr.single_statistic_table(stat="pearson", show_heatmap=True)
+    # xcat_row_order sets the top-to-bottom row order; emphasize_rows draws a
+    # coloured box around each named signal (grey for the second-last row,
+    # black for the last), scorecard-style.
+    sst = sr.single_statistic_table(
+        stat="pearson",
+        show_heatmap=True,
+        xcat_row_order=["CRY", "INFL", "GROWTH"],
+        emphasize_rows={"INFL": "red", "GROWTH": "black"},
+        title="Pearson (INFL boxed grey, GROWTH boxed black)",
+    )
 
     print(srt)
     print(mrt)
