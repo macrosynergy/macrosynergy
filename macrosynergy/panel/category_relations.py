@@ -416,8 +416,24 @@ class CategoryRelations(object):
                 X = sm.add_constant(X)
                 y = df_i.loc[:, self.xcats[1]]
                 groups = df_i.reset_index().real_date
-                re = sm.MixedLM(y, X, groups).fit(reml=False)  # random effects est
-                pval = float(re.summary().tables[1].iloc[1, 3])
+                try:
+                    re = sm.MixedLM(y, X, groups).fit(reml=False)  # random effects est
+                    # Slope p-value read from the results object directly: full
+                    # precision, independent of the rendered summary-table layout.
+                    # A non-estimable coefficient yields NaN (rendered as "" in the
+                    # summary table, where float("") would raise).
+                    pval = float(np.asarray(re.pvalues)[1])
+                except np.linalg.LinAlgError:
+                    warnings.warn(
+                        "Singular matrix encountered, so the panel-test p-value "
+                        "could not be calculated."
+                    )
+                    pval = np.nan
+                if np.isnan(pval):
+                    warnings.warn(
+                        "Panel-test p-value could not be calculated, since there "
+                        "weren't enough datapoints."
+                    )
             row = [np.round(coeff, 3), np.round(1 - pval, 3)]
             cpl.append(row)
         return cpl

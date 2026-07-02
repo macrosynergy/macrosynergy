@@ -1745,6 +1745,39 @@ class TestAll(unittest.TestCase):
         plt.close("all")
         matplotlib.use(self.mpl_backend)
 
+    def test_output_table_posratio_map_pval(self):
+        # PosRatio for map_pval: a real ratio over the segments where the panel
+        # test exists (years), NaN where it is undefined (single cross-sections).
+        sr = SignalReturnRelations(
+            self.dfd, rets="XR", sigs="CRY", freqs="M", ms_panel_test=True
+        )
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            ytbl = sr.single_relation_table(table_type="years")
+            ctbl = sr.single_relation_table(table_type="cross_section")
+
+        segments = [
+            i
+            for i in ytbl.index
+            if i not in ("Mean", "PosRatio") and "=>" not in str(i)
+        ]
+        map_vals = ytbl.loc[segments, "map_pval"]
+        valid = map_vals.notna()
+        self.assertTrue(valid.any())
+
+        expected = float(
+            ((map_vals < 0.5) & (ytbl.loc[segments, "pearson"] > 0))[valid].mean()
+        )
+        pos_ratio = ytbl.loc["PosRatio", "map_pval"]
+        self.assertFalse(np.isnan(pos_ratio))
+        # single_relation_table rounds the returned table, so compare within
+        # display precision.
+        self.assertAlmostEqual(float(pos_ratio), expected, places=4)
+
+        # Per-cid segments cannot host a panel test: the ratio stays undefined.
+        self.assertTrue(np.isnan(ctbl.loc["PosRatio", "map_pval"]))
+
 
 import statsmodels.api as sm
 from macrosynergy.learning.random_effects import RandomEffects

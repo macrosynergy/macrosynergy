@@ -1090,9 +1090,18 @@ class SignalReturnRelations:
             # Positive correlation with error prob < 50%.
             df_out.loc["PosRatio", below50s] = pos_pvals
             if self.ms_panel_test:
-                map_pval_bool = df_out.loc[css, "map_pval"] < 0.5
-                pos_map_pval = np.mean(np.array(map_pval_bool) * np.nan)
-                df_out.loc["PosRatio", "map_pval"] = pos_map_pval
+                # Positive pearson correlation with panel-test error prob < 50%,
+                # mirroring the pearson_pval/kendall_pval treatment above. The panel
+                # test needs multiple cross-sections, so per-cid segments carry NaN;
+                # the ratio is computed over the segments where the test exists
+                # (yearly segments), and stays NaN where it is undefined (cid segments).
+                map_sig = (df_out.loc[css, "map_pval"] < 0.5) & (
+                    df_out.loc[css, "pearson"] > 0
+                )
+                valid = df_out.loc[css, "map_pval"].notna()
+                df_out.loc["PosRatio", "map_pval"] = (
+                    map_sig[valid].mean() if valid.any() else np.nan
+                )
 
         return df_out.astype("float")
 

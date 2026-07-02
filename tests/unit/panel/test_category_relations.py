@@ -884,6 +884,37 @@ class TestAll(unittest.TestCase):
         except:
             self.fail("CategoryRelations failed when using seperator=2012")
 
+    def test_corr_prob_calc_map_degenerate(self):
+        # A degenerate (perfectly collinear) panel must warn and return a NaN
+        # probability instead of raising from the panel-test fit.
+        n = 6
+        dates = pd.bdate_range("2020-01-01", periods=n)
+        rows = []
+        for cid in ["AAA", "BBB"]:
+            for date, value in zip(dates, np.linspace(1.0, 2.0, n)):
+                rows.append(
+                    {"cid": cid, "xcat": "FF", "real_date": date, "value": value}
+                )
+                rows.append(
+                    {"cid": cid, "xcat": "TT", "real_date": date, "value": value}
+                )
+        degenerate = pd.DataFrame(rows)
+
+        cr = CategoryRelations(
+            degenerate,
+            xcats=["FF", "TT"],
+            cids=["AAA", "BBB"],
+            freq="D",
+            lag=0,
+            xcat_aggs=["last", "last"],
+        )
+
+        with self.assertWarns(UserWarning):
+            out = cr.corr_prob_calc(cr.df, prob_est="map")
+
+        self.assertEqual(len(out), 1)
+        self.assertTrue(np.isnan(out[0][1]))
+
 
 if __name__ == "__main__":
     unittest.main()
