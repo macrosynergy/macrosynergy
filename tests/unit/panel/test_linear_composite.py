@@ -1050,6 +1050,53 @@ class TestAll(unittest.TestCase):
         # All values should be NaN with lag larger than data
         self.assertTrue(result_large_lag["value"].isna().all())
 
+    def test_linear_composite_cid_agg_missing_cids(self):
+        """
+        cid aggregation where several requested cids are removed by a blacklist:
+        the surviving cross-sections must keep their own signs and weights.
+        Regression test for the sign/weight misalignment in #2484.
+        """
+        cids: List[str] = ["AUD", "CAD", "CHF", "GBP", "NZD", "USD"]
+        xcat: str = "XR"
+
+        dfd: pd.DataFrame = make_test_df(
+            cids=cids, xcats=[xcat], start="2000-01-01", end="2000-03-31"
+        )
+        # A distinct constant per cross-section so the composite is predictable.
+        value_map: Dict[str, int] = {
+            "AUD": 1,
+            "CAD": 2,
+            "CHF": 3,
+            "GBP": 4,
+            "NZD": 5,
+            "USD": 6,
+        }
+        dfd["value"] = dfd["cid"].astype(str).map(value_map)
+
+        weights: List[float] = [1, 2, 3, 4, 5, 6]
+        signs: List[float] = [1, -1, 1, -1, 1, -1]
+
+        # Drop four cross-sections entirely; CAD and USD remain.
+        blacklist: Dict[str, List[str]] = {
+            cid: ["2000-01-01", "2000-03-31"] for cid in ["AUD", "CHF", "GBP", "NZD"]
+        }
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            rdf: pd.DataFrame = linear_composite(
+                df=dfd,
+                xcats=xcat,
+                cids=cids,
+                weights=weights,
+                signs=signs,
+                normalize_weights=False,
+                blacklist=blacklist,
+            )
+
+        # CAD: value 2, sign -1, weight 2 -> -4; USD: value 6, sign -1, weight 6 -> -36.
+        expected = 2 * (-1) * 2 + 6 * (-1) * 6
+        self.assertTrue(np.all(rdf["value"].values == expected))
+
 
 if __name__ == "__main__":
     unittest.main()

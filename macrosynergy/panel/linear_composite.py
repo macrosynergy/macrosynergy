@@ -611,13 +611,19 @@ def _check_df_for_missing_cid_data(
                 f"Available categories are {found_xcats}."
             )
 
-    if set(cids) - set(found_cids) != set():
-        for cid in set(cids) - set(found_cids):
-            # Cids has already been removed since it uses
+    missing_cids = set(cids) - set(found_cids)
+    if missing_cids:
+        for cid in sorted(missing_cids):
             warnings.warn(f"cid {cid} not found in `df`. It will be ignored.")
-            signs.pop(cids.index(cid))
-            if isinstance(weights, list):
-                weights.pop(cids.index(cid))
+        # Filter `signs`/`weights` together against the missing set so they stay
+        # positionally aligned with `found_cids` (the same idiom as `_check_args`).
+        # Popping by `cids.index(cid)` while `cids` is not shortened uses a stale
+        # index once more than one cid is missing, removing the wrong element.
+        signs = [signs[i] for i, cid in enumerate(cids) if cid not in missing_cids]
+        if isinstance(weights, list):
+            weights = [
+                weights[i] for i, cid in enumerate(cids) if cid not in missing_cids
+            ]
 
     ctr = 0
     for cidx in found_cids.copy():  # copy to allow modification of `cids`
