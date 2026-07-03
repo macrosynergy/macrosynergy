@@ -32,8 +32,6 @@ def panel_ewm_sum(
     xcats: List[str] = None,
     cids: List[str] = None,
     halflife: Union[int, float, List[Union[int, float]]] = 5,
-    fillna: float = 0.0,
-    mask_leading: bool = True,
     start: str = None,
     end: str = None,
     blacklist: dict = None,
@@ -45,11 +43,16 @@ def panel_ewm_sum(
 
     Unlike :func:`macrosynergy.management.utils.math.ewm_sum` (which returns
     ``ewm().mean()`` scaled by cumulative weights), this uses the pandas
-    ``ewm(halflife).sum()`` definition directly. The input is reindexed to a business-day
-    grid, so ``halflife`` is measured in business days. Any structural gaps introduced by
-    that reindexing (e.g. cross-sections with different date ranges) are filled with
-    ``fillna``; explicit ``NaN`` values in the input ``value`` column are rejected, as a
-    standardised panel is expected to be dense apart from blacklisted ranges.
+    ``ewm(halflife).sum()`` definition directly. Each series is reindexed to a business-day
+    grid, so ``halflife`` is measured in business days.
+
+    The input is expected to be dense on that grid: a standardised panel should have an
+    observation on every business day between a series' first and last release, apart from
+    blacklisted ranges. A ``NaN`` (whether explicit in ``value`` or an implicit gap in the
+    business-day grid) inside a series' observed span therefore signals a data-quality
+    problem and raises a ``ValueError`` rather than being silently filled. The leading and
+    trailing regions outside each series' first/last observation are excluded from the
+    output.
 
     Parameters
     ----------
@@ -62,19 +65,12 @@ def panel_ewm_sum(
         cross-sections to transform. Default is all cross-sections in ``df``.
     halflife : int | float | List
         EWM half-life in business days. A list produces one output category per value.
-    fillna : float
-        value used for structural gaps introduced by reindexing to the business-day grid
-        (i.e. dates a cross-section has no observation for because another cross-section
-        does). Default 0.0 (a business day with no release contributes zero to the moving
-        sum). Explicit ``NaN`` values already present in the input are not filled -- they
-        raise a ``ValueError``.
-    mask_leading : bool
-        if True (default) output before each series' first real observation is excluded
-        from the output entirely (rather than present as NaN).
     start, end : str
         date bounds (ISO). Default None uses the range in ``df``.
     blacklist : dict
-        cross-sections with date ranges to exclude.
+        cross-sections with date ranges to exclude. Blacklisted ranges are the one allowed
+        source of gaps: they are excluded from the moving sum and absent from the output,
+        and never trigger the interior-gap check.
     postfix : str | List[str]
         output category suffix. Default None -> ``f"{h}DXMS"`` per half-life. A single
         string is allowed only for a scalar ``halflife``; a list must match its length.
@@ -88,7 +84,9 @@ def panel_ewm_sum(
     Raises
     ------
     ValueError
-        if the selected input contains explicit ``NaN`` values in the ``value`` column.
+        if a series contains a ``NaN`` (explicit or an implicit business-day gap) within
+        its observed span, i.e. between its first and last observation and outside any
+        blacklisted range.
     """
     cols = ["cid", "xcat", "real_date", "value"]
     assert set(cols).issubset(set(df.columns)), f"df must contain columns: {cols}."
@@ -109,9 +107,10 @@ def panel_ewm_sum(
         assert len(postfix) == len(hls), "postfix list must match halflife length."
         postfixes = list(postfix)
 
-    dfr = reduce_df(
-        qdf, xcats=xcats, cids=cids, start=start, end=end, blacklist=blacklist
-    )
+    # Select without the blacklist first: this is the panel whose density we validate and
+    # whose first/last observation defines each series' output span. The blacklist is the
+    # one sanctioned source of gaps, so it must not make the interior-gap check fire.
+    dfr = reduce_df(qdf, xcats=xcats, cids=cids, start=start, end=end)
     if dfr.empty:
         empty_df = pd.DataFrame(
             {
@@ -123,10 +122,9 @@ def panel_ewm_sum(
         )
         return QuantamentalDataFrame(empty_df, categorical=_as_categorical)
 
-    # A standardised panel is expected to be dense apart from blacklisted ranges (already
-    # stripped by `reduce_df`). An explicit NaN in `value` is therefore a data-quality
-    # signal, not a gap to zero-fill: silently treating it as 0 would corrupt the moving
-    # sum. Reject it up front (this also covers all-NaN series).
+    # Explicit NaNs in `value` are always a data-quality signal (this also makes every
+    # series' first/last valid index well-defined below); implicit business-day gaps are
+    # caught by the interior-span check further down.
     if dfr["value"].isna().any():
         raise ValueError(
             "Input `value` column contains NaN(s). `panel_ewm_sum` expects a dense panel "
@@ -137,22 +135,56 @@ def panel_ewm_sum(
         ticker=dfr["cid"].astype(str) + "_" + dfr["xcat"].astype(str)
     )
     p = dfr.pivot(index="real_date", columns="ticker", values="value")
-    first_valid = {c: p[c].first_valid_index() for c in p.columns}
 
     grid = pd.date_range(p.index.min(), p.index.max(), freq="B")
     p = p.reindex(grid)
     p.index.name = "real_date"
-    p = p.fillna(fillna)
+
+    # Per series the output span is [first observation, last observation]; anything outside
+    # is a leading/trailing region excluded from the output. A missing business day *inside*
+    # that span is a data-quality signal: silently zero-filling it would corrupt the moving
+    # sum, so reject it. Blacklisted ranges are handled separately below and never reach
+    # here.
+    first_valid = {c: p[c].first_valid_index() for c in p.columns}
+    last_valid = {c: p[c].last_valid_index() for c in p.columns}
+    for c in p.columns:
+        span = p[c].loc[first_valid[c] : last_valid[c]]
+        if span.isna().any():
+            gap = span.index[span.isna()][0].date()
+            raise ValueError(
+                f"'{c}' has a gap within its observed span (first missing business day "
+                f"{gap}). `panel_ewm_sum` expects a dense panel apart from blacklisted "
+                "ranges; resolve the missing value(s) first."
+            )
+
+    if blacklist is not None:
+        # Exclude blacklisted (cid, date) cells from the moving sum by dropping them before
+        # the sum -- reindexing then leaves them NaN, which the fill below turns into a
+        # zero contribution, matching blacklist semantics elsewhere in the package. The
+        # span bounds above are kept from the pre-blacklist panel; blacklisted output rows
+        # are dropped at the very end.
+        kept = reduce_df(dfr[cols], blacklist=blacklist).assign(
+            ticker=lambda d: d["cid"].astype(str) + "_" + d["xcat"].astype(str)
+        )
+        p = kept.pivot(index="real_date", columns="ticker", values="value").reindex(
+            index=grid, columns=p.columns
+        )
+        p.index.name = "real_date"
+
+    # Zero-fill the padding (leading/trailing regions and blacklisted cells). These are
+    # masked out or dropped later; filling them keeps the native and fallback ewm routes
+    # numerically identical, since a NaN and a 0 both contribute nothing to the sum.
+    p = p.fillna(0.0)
 
     frames = []
     for h, pf in zip(hls, postfixes):
         out = _ewm_sum(p, h)
-        if mask_leading:
-            for c in out.columns:
-                out.loc[out.index < first_valid[c], c] = np.nan
+        for c in out.columns:
+            outside = (out.index < first_valid[c]) | (out.index > last_valid[c])
+            out.loc[outside, c] = np.nan
         out.columns = [f"{c}_{pf}" for c in out.columns]
-        # `PD_FUTURE_STACK` keeps NaNs on stack across pandas versions; drop the
-        # masked leading rows explicitly so the behaviour does not depend on the
+        # `PD_FUTURE_STACK` keeps NaNs on stack across pandas versions; drop the masked
+        # leading/trailing rows explicitly so the behaviour does not depend on the
         # deprecated `stack(dropna=...)` default.
         tmp = out.stack(**PD_FUTURE_STACK).to_frame("value").reset_index()
         tmp.columns = ["real_date", "ticker", "value"]
@@ -163,9 +195,8 @@ def panel_ewm_sum(
     df_out = pd.concat(frames, axis=0, ignore_index=True)
     qdf_out = QuantamentalDataFrame.from_long_df(df_out, categorical=_as_categorical)
     if blacklist is not None:
-        # The zero-fill/reindex above re-fills blacklisted windows with `fillna`, which
-        # would let the EWM sum decay through -- and reappear in -- excluded dates.
-        # Re-apply the blacklist to the output so blacklisted rows stay absent, matching
-        # blacklist semantics elsewhere in the package (e.g. `reduce_df`, `make_blacklist`).
+        # The zero-fill/reindex above lets the EWM sum decay through -- and reappear in --
+        # blacklisted dates. Re-apply the blacklist to the output so blacklisted rows stay
+        # absent, matching blacklist semantics elsewhere (e.g. `reduce_df`, `make_blacklist`).
         qdf_out = reduce_df(qdf_out, blacklist=blacklist)
     return qdf_out
