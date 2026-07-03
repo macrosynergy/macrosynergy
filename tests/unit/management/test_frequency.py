@@ -1,6 +1,5 @@
 # tests/unit/management/test_frequency.py
 import pandas as pd
-import pytest
 
 from macrosynergy.management.utils import infer_release_frequency
 
@@ -24,10 +23,13 @@ def test_quarterly_to_monthly_break():
     s = _eop_series(list(q) + list(m))
     labels = infer_release_frequency(s, window=3)
 
-    # Early observations are quarterly.
-    assert (labels.iloc[:6] == "Q").all()
-    # Late observations are monthly (allow ~1-2 releases of lag at the break).
-    assert (labels.iloc[-4:] == "M").all()
+    # Early observations (the quarterly era, indices 0-7) are quarterly.
+    assert (labels.iloc[:8] == "Q").all()
+    # Measured lag: the first monthly eop (index 8) still reads "Q" because the
+    # rolling window is still dominated by quarterly spacing; the label settles
+    # to "M" by index 9 -- one release after the break. Bound this tightly so a
+    # regression that pushes the lag out toward ~6 releases fails here.
+    assert (labels.iloc[9:] == "M").all()
 
 
 def test_one_off_irregular_gap_does_not_flip():
