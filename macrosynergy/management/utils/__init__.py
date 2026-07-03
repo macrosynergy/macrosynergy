@@ -61,6 +61,10 @@ from .math import (
     calculate_cumulative_weights,
 )
 
+from .frequency import (
+    infer_release_frequency,
+)
+
 
 __all__ = [
     "core",
@@ -119,4 +123,6 @@ __all__ = [
     "concat_categorical",
     "_insert_as_categorical",
     "forward_fill_wide_df",
+    # Frequency
+    "infer_release_frequency",
 ]
