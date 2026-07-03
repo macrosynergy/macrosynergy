@@ -132,3 +132,39 @@ def test_diverges_from_per_event_calc_on_sparse_panel():
     # On the last release date the two definitions disagree.
     last = pd.Timestamp("2020-03-02")
     assert fast.loc[last] != pytest.approx(per_event.loc[last])
+
+
+def test_cids_and_xcats_subsetting():
+    df = make_test_df(
+        cids=["AUD", "CAD", "GBP"], xcats=["GROWTH", "INFL"],
+        start="2020-01-01", end="2020-03-31",
+    )
+    out = panel_ewm_sum(df, xcats=["GROWTH"], cids=["AUD", "CAD"], halflife=5)
+    assert set(out["xcat"].unique()) == {"GROWTH_5DXMS"}
+    assert set(out["cid"].unique()) == {"AUD", "CAD"}
+
+
+def test_blacklist_excludes_range():
+    df = make_test_df(cids=["AUD"], xcats=["GROWTH"], start="2020-01-01", end="2020-06-30")
+    black = {"AUD": ["2020-03-01", "2020-04-30"]}
+    out = panel_ewm_sum(df, halflife=5, blacklist=black)
+    masked = out[(out["cid"] == "AUD") &
+                 (out["real_date"] >= "2020-03-01") &
+                 (out["real_date"] <= "2020-04-30")]
+    assert masked.empty
+
+
+def test_categorical_round_trip():
+    from macrosynergy.management.types import QuantamentalDataFrame
+    df = make_test_df(cids=["AUD"], xcats=["GROWTH"], start="2020-01-01", end="2020-03-31")
+    qdf = QuantamentalDataFrame(df)  # categorical cid/xcat
+    out = panel_ewm_sum(qdf, halflife=5)
+    assert isinstance(out["cid"].dtype, pd.CategoricalDtype)
+    assert isinstance(out["xcat"].dtype, pd.CategoricalDtype)
+
+
+def test_single_cid_single_xcat():
+    df = make_test_df(cids=["AUD"], xcats=["GROWTH"], start="2020-01-01", end="2020-02-28")
+    out = panel_ewm_sum(df, halflife=3)
+    assert set(out["xcat"].unique()) == {"GROWTH_3DXMS"}
+    assert not out.empty
