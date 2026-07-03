@@ -280,14 +280,20 @@ def ticker_df_to_qdf(df: pd.DataFrame, metric: str = "value") -> QuantamentalDat
     if len(pairs) == len(set(pairs)):
         df = df.copy()
         df.columns = pd.MultiIndex.from_arrays([cids, xcats], names=["cid", "xcat"])
-        out = df.stack(["cid", "xcat"], future_stack=True).reset_index().rename(
-            columns={0: metric}
+        out = (
+            df.stack(["cid", "xcat"], future_stack=True)
+            .reset_index()
+            .rename(columns={0: metric})
         )
+        # future_stack=True keeps missing cells; drop them so a NaN metric (a
+        # non-observation that only exists due to the shared wide index) does not
+        # become an explicit QDF row - matching the fallback path's stack dropna.
+        out = out.dropna(subset=[metric])
         return standardise_dataframe(df=out)
 
     # Fallback for rare duplicate-column frames: stack on the flat string column.
-    out = df.stack(level=0).reset_index().rename(
-        columns={0: metric, "level_1": "ticker"}
+    out = (
+        df.stack(level=0).reset_index().rename(columns={0: metric, "level_1": "ticker"})
     )
     out["cid"] = get_cid(list(out["ticker"]))
     out["xcat"] = get_xcat(list(out["ticker"]))
