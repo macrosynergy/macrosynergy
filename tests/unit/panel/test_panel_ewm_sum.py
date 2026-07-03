@@ -4,7 +4,8 @@ import pandas as pd
 import pytest
 
 from macrosynergy.management.simulate import make_test_df
-from macrosynergy.panel import panel_ewm_sum
+from macrosynergy.management.types import QuantamentalDataFrame
+from macrosynergy.panel import panel_ewm_sum, panel_calculator
 
 
 def test_basic_ewm_sum_and_naming():
@@ -88,9 +89,6 @@ def test_postfix_string_with_list_halflife_raises():
         panel_ewm_sum(df, halflife=[3, 5], postfix="EWMSUM")
 
 
-from macrosynergy.panel import panel_calculator
-
-
 def test_matches_panel_calculator_on_dense_daily_panel():
     # Already-dense daily-B panel: reindex is identity, fillna a no-op in the interior,
     # so panel_ewm_sum must equal the panel_calculator EWM-sum on the shared region.
@@ -153,9 +151,35 @@ def test_blacklist_excludes_range():
                  (out["real_date"] <= "2020-04-30")]
     assert masked.empty
 
+    # Post-window values must reflect that the blacklisted input rows never entered
+    # the computation. Build a reference where those rows are dropped from the input
+    # directly (instead of blacklisted after the fact): the two must agree once the
+    # window has passed, while a plain (non-blacklisted) run -- which keeps the real,
+    # non-zero AUD_GROWTH values through the window -- must diverge from both.
+    in_window = (
+        (df["cid"] == "AUD")
+        & (df["real_date"] >= "2020-03-01")
+        & (df["real_date"] <= "2020-04-30")
+    )
+    df_dropped = df[~in_window]
+
+    ref = panel_ewm_sum(df_dropped, halflife=5).set_index("real_date")["value"]
+    plain = panel_ewm_sum(df, halflife=5).set_index("real_date")["value"]
+    got = out.set_index("real_date")["value"]
+
+    post_window = pd.Timestamp("2020-05-01")
+    assert got.loc[post_window] == pytest.approx(ref.loc[post_window], rel=1e-9)
+    assert got.loc[post_window] != pytest.approx(plain.loc[post_window])
+
+
+def test_empty_selection_returns_empty():
+    df = make_test_df(cids=["AUD"], xcats=["GROWTH"], start="2020-01-01", end="2020-03-31")
+    out = panel_ewm_sum(df, xcats=["NOTHERE"])
+    assert list(out.columns) == ["cid", "xcat", "real_date", "value"]
+    assert out.empty
+
 
 def test_categorical_round_trip():
-    from macrosynergy.management.types import QuantamentalDataFrame
     df = make_test_df(cids=["AUD"], xcats=["GROWTH"], start="2020-01-01", end="2020-03-31")
     qdf = QuantamentalDataFrame(df)  # categorical cid/xcat
     out = panel_ewm_sum(qdf, halflife=5)

@@ -10,6 +10,24 @@ from macrosynergy.management.utils import reduce_df
 from macrosynergy.management.types import QuantamentalDataFrame
 
 
+def _finalize_qdf(df_ordered: pd.DataFrame, is_categorical: bool) -> QuantamentalDataFrame:
+    """
+    Attach QDF metadata to an already column-ordered frame without disturbing that
+    order.
+
+    ``QuantamentalDataFrame.__init__`` re-sorts columns to its canonical
+    ``(real_date, cid, xcat, ...)`` order whenever it is not handed an already-literal
+    ``QuantamentalDataFrame`` instance -- which would silently override the
+    ``cid, xcat, real_date, value`` order this function guarantees to callers.
+    Setting ``InitializedAsCategorical`` directly (the same plain attribute assignment
+    the constructor itself performs) avoids that reorder while still yielding an
+    object that satisfies ``isinstance(..., QuantamentalDataFrame)`` (a structural
+    check) and carries the attribute callers rely on.
+    """
+    df_ordered.InitializedAsCategorical = is_categorical
+    return df_ordered
+
+
 def panel_ewm_sum(
     df: pd.DataFrame,
     xcats: List[str] = None,
@@ -47,7 +65,9 @@ def panel_ewm_sum(
         value used for interior gaps after reindexing to the business-day grid.
         Default 0.0 (a business day with no release contributes zero to the moving sum).
     mask_leading : bool
-        if True (default) output before each series' first real observation is NaN.
+        if True (default) output before each series' first real observation is excluded
+        from the output entirely (rather than present as NaN), since ``stack()`` drops
+        those rows.
     start, end : str
         date bounds (ISO). Default None uses the range in ``df``.
     blacklist : dict
@@ -69,9 +89,9 @@ def panel_ewm_sum(
     _as_categorical = qdf.InitializedAsCategorical
 
     hls = [halflife] if isinstance(halflife, (int, float)) else list(halflife)
-    assert all(isinstance(h, (int, float)) and h > 0 for h in hls), (
-        "halflife must be a positive number or a list of positive numbers."
-    )
+    assert all(
+        isinstance(h, (int, float)) and not isinstance(h, bool) and h > 0 for h in hls
+    ), "halflife must be a positive number or a list of positive numbers."
     if postfix is None:
         postfixes = [f"{h}DXMS" for h in hls]
     elif isinstance(postfix, str):
@@ -85,10 +105,15 @@ def panel_ewm_sum(
         qdf, xcats=xcats, cids=cids, start=start, end=end, blacklist=blacklist
     )
     if dfr.empty:
-        empty_out = QuantamentalDataFrame.from_long_df(
-            pd.DataFrame(columns=cols), categorical=_as_categorical
-        )
-        return empty_out[cols]
+        empty_df = pd.DataFrame(
+            {
+                "cid": pd.Series([], dtype="category" if _as_categorical else "object"),
+                "xcat": pd.Series([], dtype="category" if _as_categorical else "object"),
+                "real_date": pd.Series([], dtype="datetime64[ns]"),
+                "value": pd.Series([], dtype="float64"),
+            }
+        )[cols]
+        return _finalize_qdf(empty_df, _as_categorical)
 
     dfr = dfr.assign(
         ticker=dfr["cid"].astype(str) + "_" + dfr["xcat"].astype(str)
@@ -121,4 +146,4 @@ def panel_ewm_sum(
         # Re-apply the blacklist to the output so blacklisted rows stay absent, matching
         # blacklist semantics elsewhere in the package (e.g. `reduce_df`, `make_blacklist`).
         qdf_out = reduce_df(qdf_out, blacklist=blacklist)
-    return qdf_out[cols]
+    return _finalize_qdf(qdf_out[cols], _as_categorical)
