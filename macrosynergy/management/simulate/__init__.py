@@ -8,10 +8,13 @@ from .simulate_quantamental_data import (
     simulate_returns_and_signals,
 )
 
+from .signals_and_returns import SignalsAndReturnsGenerator
+
 from .simulate_vintage_data import VintageData
 
 
 __all__ = [
+    "SignalsAndReturnsGenerator",
     "make_qdf",
     "make_test_df",
     "dataframe_generator",

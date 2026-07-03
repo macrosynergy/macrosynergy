@@ -5,6 +5,8 @@ import pandas as pd
 import seaborn as sns
 from matplotlib import pyplot as plt
 
+FREQ_TO_DAYS_MAP = {"D": 1, "W": 5, "M": 21, "Q": 63}
+
 
 def transaction_cost_heatmap(
     df: pd.DataFrame,
@@ -134,3 +136,78 @@ def sensitivity_plot(
     ax.set_ylabel(ylabel)
 
     return ax
+
+
+def covariance_estimates_scatterplot(
+    x_vals: np.ndarray,
+    y_vals: np.ndarray,
+    configs: List[dict],
+    title: str = "Bias vs Variance",
+    xlabel: str = "Bias",
+    ylabel: str = "Variance",
+    title_fontsize: int = 14,
+    figsize: Tuple[float, float] = (10, 6),
+) -> None:
+
+    # define point colours, size, and shape
+    hues, styles, sizes = [], [], []
+    for config in configs:
+        hue = "MA" if config["lback_meth"] == "ma" else "XMA"
+        style = " ".join(config["est_freqs"])
+
+        periods = np.array(
+            config["lback_periods"]
+            if "lback_periods" in config
+            else config["half_life"]
+        )
+        size = np.mean(periods)
+
+        hues.append(hue)
+        sizes.append(size)
+        styles.append(style)
+
+    # create a dataframe and plot
+    plot_df = pd.DataFrame(
+        {
+            "x_vals": x_vals,
+            "y_vals": y_vals,
+            "Method": hues,
+            "Freq": styles,
+            "Lookback/Half-life": sizes,
+        }
+    )
+
+    with sns.axes_style("whitegrid"), sns.plotting_context("notebook"):
+        fig, ax = plt.subplots(figsize=figsize)
+
+        sns.scatterplot(
+            data=plot_df,
+            x="x_vals",
+            y="y_vals",
+            hue="Method",
+            style="Freq",
+            size="Lookback/Half-life",
+            sizes=(20, 250),
+            alpha=0.8,
+            edgecolor="white",
+            linewidth=0.6,
+            palette="deep",
+            ax=ax,
+        )
+
+        ax.set_title(title, fontsize=title_fontsize)
+        ax.set_xlabel(xlabel)
+        ax.set_ylabel(ylabel)
+
+        sns.move_legend(
+            ax,
+            "upper left",
+            bbox_to_anchor=(1.02, 1),
+            borderaxespad=0,
+            frameon=True,
+            title=None,
+        )
+
+        sns.despine()
+        plt.tight_layout()
+        plt.show()
