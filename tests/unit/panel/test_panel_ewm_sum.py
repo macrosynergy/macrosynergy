@@ -68,3 +68,21 @@ def test_zero_fill_decays_between_releases():
     bdays = pd.date_range("2020-01-01", "2020-01-09", freq="B")
     expected_09 = 10.0 * alpha_hl ** (len(bdays) - 1)
     assert out.loc["2020-01-09"] == pytest.approx(expected_09, rel=1e-9)
+
+
+def test_multiple_halflives():
+    df = make_test_df(cids=["AUD"], xcats=["GROWTH"], start="2020-01-01", end="2020-03-31")
+    out = panel_ewm_sum(df, halflife=[3, 5])
+    assert set(out["xcat"].unique()) == {"GROWTH_3DXMS", "GROWTH_5DXMS"}
+
+
+def test_postfix_override_scalar():
+    df = make_test_df(cids=["AUD"], xcats=["GROWTH"], start="2020-01-01", end="2020-03-31")
+    out = panel_ewm_sum(df, halflife=5, postfix="EWMSUM")
+    assert set(out["xcat"].unique()) == {"GROWTH_EWMSUM"}
+
+
+def test_postfix_string_with_list_halflife_raises():
+    df = make_test_df(cids=["AUD"], xcats=["GROWTH"], start="2020-01-01", end="2020-03-31")
+    with pytest.raises(AssertionError):
+        panel_ewm_sum(df, halflife=[3, 5], postfix="EWMSUM")
