@@ -173,7 +173,7 @@ def drop_nan_series(
     if type(df) is QuantamentalDataFrame:
         return df.drop_nan_series(column=column, raise_warning=raise_warning)
 
-    if not column in df.columns:
+    if column not in df.columns:
         raise ValueError(f"Column {column} not present in DataFrame.")
 
     if not df[column].isna().any():
@@ -229,7 +229,7 @@ def qdf_to_ticker_df(df: pd.DataFrame, value_column: str = "value") -> pd.DataFr
     if not isinstance(value_column, str):
         raise TypeError("Argument `value_column` must be a string.")
 
-    if not value_column in df.columns:
+    if value_column not in df.columns:
         cols: List[str] = list(set(df.columns) - set(QuantamentalDataFrame.IndexCols))
         if "value" in cols:
             value_column: str = "value"
@@ -613,11 +613,11 @@ def update_df(df: pd.DataFrame, df_add: pd.DataFrame, xcat_replace: bool = False
     df_cols = set(df.columns)
     df_add_cols = set(df_add.columns)
 
-    error_message = f"The base DataFrame must be a Quantamental Dataframe."
+    error_message = "The base DataFrame must be a Quantamental Dataframe."
     if not isinstance(df, QuantamentalDataFrame):
         raise TypeError(error_message)
 
-    error_message = f"The added DataFrame must be a Quantamental Dataframe."
+    error_message = "The added DataFrame must be a Quantamental Dataframe."
     if not isinstance(df_add, QuantamentalDataFrame):
         raise TypeError(error_message)
 
@@ -647,9 +647,11 @@ def update_df(df: pd.DataFrame, df_add: pd.DataFrame, xcat_replace: bool = False
     # objects.
     cid_codes, _ = pd.factorize(df["cid"], sort=True)
     xcat_codes, _ = pd.factorize(df["xcat"], sort=True)
-    rd_int = df["real_date"].to_numpy(
-        dtype="datetime64[ns]", na_value=np.datetime64("NaT")
-    ).view(np.int64)
+    rd_int = (
+        df["real_date"]
+        .to_numpy(dtype="datetime64[ns]", na_value=np.datetime64("NaT"))
+        .view(np.int64)
+    )
     nat_sentinel = np.datetime64("NaT").view(np.int64)
     rd_int = np.where(rd_int == nat_sentinel, np.iinfo(np.int64).max, rd_int)
     # np.lexsort sorts by last key first → (cid, xcat, real_date) ascending
@@ -687,9 +689,11 @@ def _concat_sort_dedup(df: pd.DataFrame, df_add: pd.DataFrame) -> pd.DataFrame:
     # lexsorting on codes gives the same row order as sort_values on the strings.
     cid_codes, _ = pd.factorize(combined["cid"], sort=True)
     xcat_codes, _ = pd.factorize(combined["xcat"], sort=True)
-    rd_int = combined["real_date"].to_numpy(
-        dtype="datetime64[ns]", na_value=np.datetime64("NaT")
-    ).view(np.int64)
+    rd_int = (
+        combined["real_date"]
+        .to_numpy(dtype="datetime64[ns]", na_value=np.datetime64("NaT"))
+        .view(np.int64)
+    )
     # NaT maps to iinfo(int64).min under the int64 view, which sorts before valid dates,
     # matching numpy sort but diverging from sort_values(na_position='last').  Replace
     # NaT sentinels with iinfo max so they sort last — matching the original behaviour.
@@ -1221,9 +1225,10 @@ def categories_df(
         year_groups[f"{group_start_year} - now"] = v
         list_y_groups = list(year_groups.keys())
 
-        translate_ = lambda year: list_y_groups[int((year % start_year) / years)]
         df["real_date"] = pd.to_datetime(df["real_date"], errors="coerce")
-        df["custom_date"] = df["real_date"].dt.year.apply(translate_)
+        df["custom_date"] = df["real_date"].dt.year.apply(
+            lambda year: list_y_groups[int((year % start_year) / years)]
+        )
 
         dfx_list = [df[df["xcat"] == xcats[0]], df[df["xcat"] == xcats[1]]]
         df_agg = list(map(categories_df_aggregation_helper, dfx_list, xcat_aggs))
@@ -1401,7 +1406,6 @@ def _get_edge_dates(
     direction: str = "end",
 ) -> pd.Series:
     assert direction in ["start", "end"], "Direction must be either 'start' or 'end'."
-    datettypes = [pd.Timestamp, str, np.datetime64, datetime.date]
 
     freq = _map_to_business_day_frequency(freq)
 
@@ -1860,7 +1864,9 @@ def _wide_to_long(df: pd.DataFrame, value_name: str = "value") -> pd.DataFrame:
         sorted by cid then real_date, with NaN rows dropped.
     """
     if df.columns.empty:
-        raise ValueError("_wide_to_long: DataFrame has no columns (expected one per cid).")
+        raise ValueError(
+            "_wide_to_long: DataFrame has no columns (expected one per cid)."
+        )
 
     long = (
         df.rename_axis("real_date")
