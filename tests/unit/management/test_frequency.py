@@ -46,3 +46,15 @@ def test_revisions_share_eop_frequency():
     eop = _eop_series(dates + [dates[-1]])                 # a revision of the last eop
     labels = infer_release_frequency(eop)
     assert labels.iloc[-1] == labels.iloc[-2] == "M"
+
+
+def test_snap_boundaries_weekly_monthly_quarterly():
+    # Weekly-ish (7d) -> W; ~30d -> M; ~91d -> Q.
+    weekly = _eop_series(pd.date_range("2020-01-03", periods=10, freq="W-FRI"))
+    assert (infer_release_frequency(weekly) == "W").all()
+
+    # A ~45-day cadence sits between M (30.4) and Q (91.3); in log space it is nearer M.
+    mid = _eop_series(pd.to_datetime(
+        ["2020-01-31", "2020-03-16", "2020-04-30", "2020-06-14"]
+    ))
+    assert (infer_release_frequency(mid) == "M").all()
