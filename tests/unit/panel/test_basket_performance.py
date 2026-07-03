@@ -6,6 +6,7 @@ import sys
 from tests.simulate import dataframe_basket, construct_df, simulate_ar, make_qdf
 from macrosynergy.panel.basket import Basket
 from macrosynergy.management.utils import reduce_df, reduce_df_by_ticker
+from macrosynergy.management.types import QuantamentalDataFrame
 import random
 from macrosynergy.panel.historic_vol import flat_std
 from itertools import chain
@@ -780,6 +781,114 @@ class TestAll(unittest.TestCase):
         weight_equal_dates = list(set(weight_equal["real_date"]))
 
         self.assertTrue(basket_equal_dates == weight_equal_dates)
+
+    def test_categorical_qdf_parity(self):
+        """
+        Regression test: Basket must accept a categorical
+        QuantamentalDataFrame and produce output identical to the
+        object-dtype run.
+
+        Before the basket.py fix (dfw_wgs[fvi:] -> dfw_wgs.loc[fvi:])
+        this test raises InvalidIndexError because pandas probes
+        `fvi in columns` when the columns are a CategoricalIndex.
+        """
+        dfd_obj = self.dfd
+        dfd_cat = QuantamentalDataFrame(dfd_obj.copy(), categorical=True)
+
+        contracts = self.contracts
+        black = self.black
+
+        # Object-dtype basket run.
+        basket_obj = Basket(
+            df=dfd_obj,
+            contracts=contracts,
+            ret="XR_NSA",
+            cry=["CRY_NSA", "CRR_NSA"],
+            blacklist=black,
+        )
+        basket_obj.make_basket(
+            weight_meth="equal", max_weight=0.45, basket_name="GLB_EQUAL"
+        )
+        basket_obj.make_basket(
+            weight_meth="invsd",
+            lback_meth="ma",
+            lback_periods=21,
+            max_weight=0.55,
+            remove_zeros=True,
+            basket_name="GLB_INVERSE",
+        )
+
+        # Categorical QuantamentalDataFrame basket run.
+        # Raised InvalidIndexError before the fix at make_weights line 502.
+        basket_cat = Basket(
+            df=dfd_cat,
+            contracts=contracts,
+            ret="XR_NSA",
+            cry=["CRY_NSA", "CRR_NSA"],
+            blacklist=black,
+        )
+        basket_cat.make_basket(
+            weight_meth="equal", max_weight=0.45, basket_name="GLB_EQUAL"
+        )
+        basket_cat.make_basket(
+            weight_meth="invsd",
+            lback_meth="ma",
+            lback_periods=21,
+            max_weight=0.55,
+            remove_zeros=True,
+            basket_name="GLB_INVERSE",
+        )
+
+        def _normalize_and_sort(df):
+            # Convert categorical string columns to object so sort order
+            # is deterministic regardless of the dtype of the input QDF.
+            df = df.copy()
+            for col in ["cid", "xcat"]:
+                df[col] = df[col].astype(str)
+            return (
+                df.sort_values(["cid", "xcat", "real_date"])
+                .reset_index(drop=True)
+            )
+
+        # return_basket outputs must be value-identical.
+        for bname in ["GLB_EQUAL", "GLB_INVERSE"]:
+            rb_obj = _normalize_and_sort(
+                basket_obj.return_basket(basket_names=bname)
+            )
+            rb_cat = _normalize_and_sort(
+                basket_cat.return_basket(basket_names=bname)
+            )
+            self.assertEqual(
+                rb_obj.shape,
+                rb_cat.shape,
+                f"Shape mismatch for basket '{bname}'",
+            )
+            np.testing.assert_array_almost_equal(
+                rb_obj["value"].to_numpy(),
+                rb_cat["value"].to_numpy(),
+                decimal=10,
+                err_msg=f"Value mismatch for basket '{bname}'",
+            )
+
+        # return_weights outputs must be value-identical.
+        for bname in ["GLB_EQUAL", "GLB_INVERSE"]:
+            rw_obj = _normalize_and_sort(
+                basket_obj.return_weights(basket_names=bname)
+            )
+            rw_cat = _normalize_and_sort(
+                basket_cat.return_weights(basket_names=bname)
+            )
+            self.assertEqual(
+                rw_obj.shape,
+                rw_cat.shape,
+                f"Weight shape mismatch for basket '{bname}'",
+            )
+            np.testing.assert_array_almost_equal(
+                rw_obj["value"].to_numpy(),
+                rw_cat["value"].to_numpy(),
+                decimal=10,
+                err_msg=f"Weight value mismatch for basket '{bname}'",
+            )
 
 
 if __name__ == "__main__":
