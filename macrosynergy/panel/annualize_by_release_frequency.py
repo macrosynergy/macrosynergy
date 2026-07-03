@@ -11,24 +11,6 @@ from macrosynergy.management.utils import infer_release_frequency
 from macrosynergy.management.types import QuantamentalDataFrame
 
 
-def _finalize_qdf(df_ordered: pd.DataFrame, is_categorical: bool) -> QuantamentalDataFrame:
-    """
-    Attach QDF metadata to an already column-ordered frame without disturbing that
-    order.
-
-    ``QuantamentalDataFrame.__init__`` re-sorts columns to its canonical
-    ``(real_date, cid, xcat, ...)`` order whenever it is not handed an already-literal
-    ``QuantamentalDataFrame`` instance -- which would silently override the
-    ``cid, xcat, real_date, value`` order this function guarantees to callers.
-    Setting ``InitializedAsCategorical`` directly (the same plain attribute assignment
-    the constructor itself performs) avoids that reorder while still yielding an
-    object that satisfies ``isinstance(..., QuantamentalDataFrame)`` (a structural
-    check) and carries the attribute callers rely on.
-    """
-    df_ordered.InitializedAsCategorical = is_categorical
-    return df_ordered
-
-
 def annualize_by_release_frequency(
     df: pd.DataFrame,
     xcats: List[str] = None,
@@ -64,9 +46,11 @@ def annualize_by_release_frequency(
 
     Returns
     -------
-    ~pandas.DataFrame
-        standardized QuantamentalDataFrame with columns 'cid', 'xcat', 'real_date',
-        'value'; categories renamed ``{xcat}{postfix}``.
+    QuantamentalDataFrame
+        a standardized QuantamentalDataFrame in canonical column order ('real_date',
+        'cid', 'xcat', 'value'); categories renamed ``{xcat}{postfix}``. This is always
+        a genuine ``QuantamentalDataFrame`` instance, including when the selection is
+        empty.
     """
     cols = ["cid", "xcat", "real_date", "value"]
     if eop_col not in df.columns:
@@ -97,15 +81,21 @@ def annualize_by_release_frequency(
         frames.append(g[cols])
 
     if not frames:
+        # Build directly in canonical (real_date, cid, xcat, value) order -- the same
+        # order QuantamentalDataFrame.from_long_df produces on the non-empty path --
+        # so the return contract does not depend on whether the selection is empty.
+        # cid/xcat start out categorical so that QuantamentalDataFrame's own
+        # `categorical` handling (and its InitializedAsCategorical bookkeeping) mirrors
+        # what from_long_df does internally on the non-empty path.
         empty_df = pd.DataFrame(
             {
-                "cid": pd.Series([], dtype="category" if _as_categorical else "object"),
-                "xcat": pd.Series([], dtype="category" if _as_categorical else "object"),
                 "real_date": pd.Series([], dtype="datetime64[ns]"),
+                "cid": pd.Series([], dtype="category"),
+                "xcat": pd.Series([], dtype="category"),
                 "value": pd.Series([], dtype="float64"),
             }
-        )[cols]
-        return _finalize_qdf(empty_df, _as_categorical)
+        )
+        return QuantamentalDataFrame(empty_df, categorical=_as_categorical)
 
     df_out = pd.concat(frames, axis=0, ignore_index=True)
     return QuantamentalDataFrame.from_long_df(df_out, categorical=_as_categorical)

@@ -3,6 +3,7 @@ import pandas as pd
 import pytest
 
 from macrosynergy.management.constants import ANNUALIZATION_FACTORS
+from macrosynergy.management.types import QuantamentalDataFrame
 from macrosynergy.panel import annualize_by_release_frequency
 
 
@@ -63,9 +64,17 @@ def test_uses_annualization_factors_constant():
 
 def test_empty_selection_returns_empty():
     # A cids/xcats filter matching nothing must not crash on the from_long_df path
-    # (an empty frame there raises "Input DataFrame is empty.").
+    # (an empty frame there raises "Input DataFrame is empty."), and must return the
+    # exact same type and column order as a non-empty call -- the return contract
+    # should not depend on whether the selection is empty.
     dates = pd.date_range("2020-01-31", periods=12, freq="ME")
     df = _qdf_with_eop("AUD", "CPIH", dates, dates, [1.0] * 12)
-    out = annualize_by_release_frequency(df, cids=["USD"])
-    assert list(out.columns) == ["cid", "xcat", "real_date", "value"]
-    assert out.empty
+
+    non_empty_out = annualize_by_release_frequency(df)
+    empty_out = annualize_by_release_frequency(df, cids=["USD"])
+
+    assert list(empty_out.columns) == list(non_empty_out.columns)
+    assert list(empty_out.columns) == ["real_date", "cid", "xcat", "value"]
+    assert isinstance(empty_out, QuantamentalDataFrame)
+    assert type(empty_out) is type(non_empty_out)
+    assert empty_out.empty
