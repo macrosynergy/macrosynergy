@@ -49,9 +49,9 @@ def infer_release_frequency(
     distinct = pd.Series(sorted(pd.unique(eop.dropna())))
     if len(distinct) == 0:
         return pd.Series(index=eop.index, dtype=object)
-    gaps = distinct.diff().dt.days
-    # Seed the first gap with the first observed gap (min_periods=1 covers the rest).
-    gaps.iloc[0] = gaps.dropna().iloc[0] if gaps.dropna().size else np.nan
+    # Seed the leading NaN gap by back-filling from the first observed gap
+    # (min_periods=1 covers the rest); avoids chained-assignment warnings.
+    gaps = distinct.diff().dt.days.bfill()
     smoothed = gaps.rolling(window=window, min_periods=1).median()
 
     def _snap(g):
