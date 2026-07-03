@@ -1,20 +1,23 @@
 import inspect
-import unittest
-from macrosynergy.signal.signal_return_relations import SignalReturnRelations
-from macrosynergy.management.utils import categories_df
-
-from tests.simulate import make_qdf
-from sklearn.metrics import accuracy_score
-from scipy import stats
 import random
-import pandas as pd
-import numpy as np
-from typing import List, Dict
-import matplotlib
-from matplotlib import pyplot as plt
-from unittest.mock import patch
+import unittest
 import warnings
+from typing import Dict, List
+from unittest.mock import patch
 
+import matplotlib
+import numpy as np
+import pandas as pd
+from matplotlib import pyplot as plt
+from scipy import stats
+import statsmodels.api as sm
+from sklearn.metrics import accuracy_score
+
+from macrosynergy.management.utils import categories_df
+from macrosynergy.signal.signal_return_relations import SignalReturnRelations
+from tests.simulate import make_qdf
+
+from macrosynergy.learning.random_effects import RandomEffects
 
 class TestAll(unittest.TestCase):
     def setUp(self) -> None:
@@ -516,7 +519,7 @@ class TestAll(unittest.TestCase):
         try:
             rival_signals: List[str] = ["GROWTH", "INFL"]
             primary_signal: str = "CRY"
-            srr = SignalReturnRelations(
+            _ = SignalReturnRelations(
                 self.dfd,
                 rets="XR",
                 sigs=[primary_signal] + rival_signals,
@@ -524,12 +527,12 @@ class TestAll(unittest.TestCase):
                 blacklist=self.blacklist,
                 slip=100,
             )
-        except:
-            self.fail("SignalReturnRelations init failed")
+        except Exception as e:
+            self.fail(f"SignalReturnRelations init failed: {e}")
 
     def test_accuracy_and_correlation_bars(self):
         plt.close("all")
-        mock_plt = patch("matplotlib.pyplot.show").start()
+        _ = patch("matplotlib.pyplot.show").start()
         mpl_backend = matplotlib.get_backend()
         matplotlib.use("Agg")
 
@@ -694,7 +697,7 @@ class TestAll(unittest.TestCase):
         # Test Negative signs are correctly handled
 
         with self.assertRaises(TypeError):
-            sr_sign_fail = SignalReturnRelations(
+            _ = SignalReturnRelations(
                 df=self.dfd,
                 rets="XR",
                 sigs="CRY",
@@ -706,7 +709,7 @@ class TestAll(unittest.TestCase):
 
         # Ensure that the signs doesn't have a longer length than the number of signals
         with self.assertRaises(ValueError):
-            sr_long_signs = SignalReturnRelations(
+            _ = SignalReturnRelations(
                 df=self.dfd,
                 rets="XR",
                 sigs="CRY",
@@ -1086,6 +1089,54 @@ class TestAll(unittest.TestCase):
         plt.close("all")
         matplotlib.use(self.mpl_backend)
 
+    def test_single_statistic_table_emphasize_rows(self):
+        sr = SignalReturnRelations(
+            df=self.dfd,
+            rets="XR",
+            sigs=["CRY", "INFL", "GROWTH"],
+            freqs="Q",
+            agg_sigs=["last", "mean"],
+            blacklist=self.blacklist,
+            slip=1,
+        )
+
+        base = sr.single_statistic_table(stat="accuracy")
+
+        # xcat_row_order sets the top-to-bottom row order.
+        ordered = sr.single_statistic_table(
+            stat="accuracy", xcat_row_order=["GROWTH", "CRY", "INFL"]
+        )
+        signals = ordered.index.get_level_values("Signal").tolist()
+        self.assertEqual(list(dict.fromkeys(signals)), ["GROWTH", "CRY", "INFL"])
+        # Statistics are unchanged, only reordered.
+        pd.testing.assert_frame_equal(base.sort_index(), ordered.sort_index())
+
+        # emphasize_rows draws boxes but does not reorder.
+        emph = sr.single_statistic_table(
+            stat="accuracy", emphasize_rows={"CRY": "grey"}
+        )
+        pd.testing.assert_frame_equal(base, emph)
+
+        # Requires "xcat" in rows.
+        with self.assertRaises(ValueError):
+            sr.single_statistic_table(
+                stat="accuracy",
+                rows=["agg_sigs"],
+                columns=["xcat", "ret", "freq"],
+                emphasize_rows={"CRY": "grey"},
+            )
+        # Unknown xcats fail loud for both params (can't order/colour a
+        # signal that does not exist).
+        with self.assertRaises(ValueError):
+            sr.single_statistic_table(stat="accuracy", xcat_row_order=["NOPE"])
+        with self.assertRaises(ValueError):
+            sr.single_statistic_table(stat="accuracy", emphasize_rows={"NOPE": "red"})
+        # Invalid colour fails loud.
+        with self.assertRaises(ValueError):
+            sr.single_statistic_table(
+                stat="accuracy", emphasize_rows={"CRY": "not_a_color"}
+            )
+
     def test_single_statistic_table_pval_brackets(self):
         self.mpl_backend: str = matplotlib.get_backend()
         matplotlib.use("Agg")
@@ -1244,12 +1295,8 @@ class TestAll(unittest.TestCase):
 
                 # Constant xcat/agg_sigs collapse into the y-label,
                 # only the varying frequency remains on the y-axis.
-                self.assertEqual(
-                    call_kwargs.get("yticklabels"), ["M", "Q"]
-                )
-                self.assertEqual(
-                    call_kwargs.get("ylabel"), "CRY · last"
-                )
+                self.assertEqual(call_kwargs.get("yticklabels"), ["M", "Q"])
+                self.assertEqual(call_kwargs.get("ylabel"), "CRY · last")
 
             # Default (collapse_constant_levels=False): byte-identical
             # to the historical rendering — no auto y-label, no tick
@@ -1280,12 +1327,8 @@ class TestAll(unittest.TestCase):
                 )
                 mock_view_table.assert_called_once()
                 _, call_kwargs = mock_view_table.call_args
-                self.assertEqual(
-                    call_kwargs.get("yticklabels"), ["row1", "row2"]
-                )
-                self.assertEqual(
-                    call_kwargs.get("ylabel"), "Custom y-label"
-                )
+                self.assertEqual(call_kwargs.get("yticklabels"), ["row1", "row2"])
+                self.assertEqual(call_kwargs.get("ylabel"), "Custom y-label")
 
             # Multiple signals: xcat is no longer constant, so only the
             # still-constant ``agg_sigs`` level collapses. The remaining
@@ -1391,9 +1434,7 @@ class TestAll(unittest.TestCase):
 
         # Every level constant: tick labels left alone, but the
         # constant values are still surfaced for the axis label.
-        mi3 = pd.MultiIndex.from_tuples(
-            [("X", "M")], names=["Signal", "Frequency"]
-        )
+        mi3 = pd.MultiIndex.from_tuples([("X", "M")], names=["Signal", "Frequency"])
         display, constant = sr._collapse_constant_levels(mi3)
         self.assertIsNone(display)
         self.assertEqual(constant, [("Signal", "X"), ("Frequency", "M")])
@@ -1611,7 +1652,9 @@ class TestAll(unittest.TestCase):
                 freq_labels={"M": "Monthly"},
             )
             self.assertEqual(
-                sorted(df_partial.index.get_level_values("Frequency").unique().tolist()),
+                sorted(
+                    df_partial.index.get_level_values("Frequency").unique().tolist()
+                ),
                 ["Monthly", "Q"],
             )
 
@@ -1673,7 +1716,9 @@ class TestAll(unittest.TestCase):
                 ["Carry score"],
             )
             self.assertEqual(
-                sorted(df_combined.index.get_level_values("Frequency").unique().tolist()),
+                sorted(
+                    df_combined.index.get_level_values("Frequency").unique().tolist()
+                ),
                 ["Monthly", "Quarterly"],
             )
 
@@ -1746,8 +1791,6 @@ class TestAll(unittest.TestCase):
         matplotlib.use(self.mpl_backend)
 
 
-import statsmodels.api as sm
-from macrosynergy.learning.random_effects import RandomEffects
 
 
 class TestMapPvalEstimator(unittest.TestCase):
@@ -1801,7 +1844,11 @@ class TestMapPvalEstimator(unittest.TestCase):
             res = sm.MixedLM(sig_vals, X, groups=groups).fit(reml=False)
         conv_warn = any("onverg" in str(x.message).lower() for x in w)
         converged = bool(getattr(res, "converged", True)) and not conv_warn
-        return float(np.asarray(res.pvalues)[1]), float(np.asarray(res.params)[1]), converged
+        return (
+            float(np.asarray(res.pvalues)[1]),
+            float(np.asarray(res.params)[1]),
+            converged,
+        )
 
     @staticmethod
     def _re_fullprec(ret_vals, sig_vals):
@@ -1831,7 +1878,14 @@ class TestMapPvalEstimator(unittest.TestCase):
         df_cids.loc["GBP"] = ["2015-01-01", "2020-12-31", 0, 1]
         df_xcats = pd.DataFrame(
             index=xcats,
-            columns=["earliest", "latest", "mean_add", "sd_mult", "ar_coef", "back_coef"],
+            columns=[
+                "earliest",
+                "latest",
+                "mean_add",
+                "sd_mult",
+                "ar_coef",
+                "back_coef",
+            ],
         )
         df_xcats.loc["XR"] = ["2015-01-01", "2020-12-31", 0, 1, 0, 0.3]
         df_xcats.loc["CRY"] = ["2015-01-01", "2020-12-31", 0, 1, 0.5, 0.5]
@@ -1953,7 +2007,9 @@ class TestMapPvalEstimator(unittest.TestCase):
             if conv:
                 # RandomEffects vs MixedLM at the tau=0 variance boundary: allow the
                 # same ~5e-3 estimator-difference margin used elsewhere.
-                self.assertLessEqual(abs(pval - round(p_sm, 3)), 5e-3, msg=f"seed={seed}")
+                self.assertLessEqual(
+                    abs(pval - round(p_sm, 3)), 5e-3, msg=f"seed={seed}"
+                )
 
     def test_single_cid_returns_nan_with_warning(self):
         ret, sig = self._panel(1, 120, beta1=0.1, tau=0.7, sigma=1.0, seed=0)
@@ -1982,9 +2038,7 @@ class TestMapPvalEstimator(unittest.TestCase):
             warnings.simplefilter("always")
             pval = self.srr.map_pval(ret_const, sig)
         self.assertTrue(np.isnan(pval))
-        self.assertTrue(
-            any("Singular matrix encountered" in str(x.message) for x in w)
-        )
+        self.assertTrue(any("Singular matrix encountered" in str(x.message) for x in w))
 
     def test_constant_signal_returns_nan_not_false_significance(self):
         # Regression: an identically-constant SIGNAL has no variation, so there is no
@@ -2000,9 +2054,7 @@ class TestMapPvalEstimator(unittest.TestCase):
             pval = self.srr.map_pval(ret, sig_const)
         self.assertTrue(np.isnan(pval))
         self.assertFalse(pval == 0.0)  # explicitly not a spurious significant p-value
-        self.assertTrue(
-            any("Singular matrix encountered" in str(x.message) for x in w)
-        )
+        self.assertTrue(any("Singular matrix encountered" in str(x.message) for x in w))
 
     def test_near_constant_signal_returns_nan(self):
         # Regression: a signal that is constant + tiny noise is effectively degenerate;
@@ -2015,9 +2067,7 @@ class TestMapPvalEstimator(unittest.TestCase):
             warnings.simplefilter("always")
             pval = self.srr.map_pval(ret, sig_near)
         self.assertTrue(np.isnan(pval))
-        self.assertTrue(
-            any("Singular matrix encountered" in str(x.message) for x in w)
-        )
+        self.assertTrue(any("Singular matrix encountered" in str(x.message) for x in w))
 
     def test_near_constant_return_returns_nan(self):
         # Regression: a return that is constant + tiny noise is effectively collinear
@@ -2029,9 +2079,7 @@ class TestMapPvalEstimator(unittest.TestCase):
             warnings.simplefilter("always")
             pval = self.srr.map_pval(ret_near, sig)
         self.assertTrue(np.isnan(pval))
-        self.assertTrue(
-            any("Singular matrix encountered" in str(x.message) for x in w)
-        )
+        self.assertTrue(any("Singular matrix encountered" in str(x.message) for x in w))
 
 
 def _cid_codes(n: int) -> List[str]:
