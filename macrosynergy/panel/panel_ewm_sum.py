@@ -115,4 +115,10 @@ def panel_ewm_sum(
 
     df_out = pd.concat(frames, axis=0, ignore_index=True)
     qdf_out = QuantamentalDataFrame.from_long_df(df_out, categorical=_as_categorical)
+    if blacklist is not None:
+        # The zero-fill/reindex above re-fills blacklisted windows with `fillna`, which
+        # would let the EWM sum decay through -- and reappear in -- excluded dates.
+        # Re-apply the blacklist to the output so blacklisted rows stay absent, matching
+        # blacklist semantics elsewhere in the package (e.g. `reduce_df`, `make_blacklist`).
+        qdf_out = reduce_df(qdf_out, blacklist=blacklist)
     return qdf_out[cols]
