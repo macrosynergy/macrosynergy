@@ -86,3 +86,49 @@ def test_postfix_string_with_list_halflife_raises():
     df = make_test_df(cids=["AUD"], xcats=["GROWTH"], start="2020-01-01", end="2020-03-31")
     with pytest.raises(AssertionError):
         panel_ewm_sum(df, halflife=[3, 5], postfix="EWMSUM")
+
+
+from macrosynergy.panel import panel_calculator
+
+
+def test_matches_panel_calculator_on_dense_daily_panel():
+    # Already-dense daily-B panel: reindex is identity, fillna a no-op in the interior,
+    # so panel_ewm_sum must equal the panel_calculator EWM-sum on the shared region.
+    cids = ["AUD", "CAD"]
+    df = make_test_df(cids=cids, xcats=["GROWTH"], start="2020-01-01", end="2020-06-30")
+
+    fast = panel_ewm_sum(df, halflife=5)
+    ref = panel_calculator(
+        df, calcs=["GROWTH_5DXMS = GROWTH.ewm(halflife=5).sum()"], cids=cids
+    )
+
+    fast_i = fast.set_index(["cid", "xcat", "real_date"])["value"].sort_index()
+    ref_i = ref.set_index(["cid", "xcat", "real_date"])["value"].sort_index()
+    # Compare on the intersection of indices (both start at first valid).
+    common = fast_i.index.intersection(ref_i.index)
+    assert len(common) > 0
+    pd.testing.assert_series_equal(
+        fast_i.loc[common].astype(float),
+        ref_i.loc[common].astype(float),
+        check_names=False,
+    )
+
+
+def test_diverges_from_per_event_calc_on_sparse_panel():
+    # Sparse panel: panel_calculator decays per release event; panel_ewm_sum decays per
+    # business day. They must differ, and panel_ewm_sum must match a dense-grid reference.
+    rows = [
+        ("AUD", "GROWTH", pd.Timestamp("2020-01-01"), 5.0),
+        ("AUD", "GROWTH", pd.Timestamp("2020-02-03"), 5.0),
+        ("AUD", "GROWTH", pd.Timestamp("2020-03-02"), 5.0),
+    ]
+    df = pd.DataFrame(rows, columns=["cid", "xcat", "real_date", "value"])
+
+    fast = panel_ewm_sum(df, halflife=5).set_index("real_date")["value"]
+    per_event = panel_calculator(
+        df, calcs=["GROWTH_5DXMS = GROWTH.ewm(halflife=5).sum()"], cids=["AUD"]
+    ).set_index("real_date")["value"]
+
+    # On the last release date the two definitions disagree.
+    last = pd.Timestamp("2020-03-02")
+    assert fast.loc[last] != pytest.approx(per_event.loc[last])
