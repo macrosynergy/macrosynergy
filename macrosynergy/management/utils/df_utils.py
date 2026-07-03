@@ -78,10 +78,10 @@ def standardise_dataframe(df: pd.DataFrame) -> QuantamentalDataFrame:
     # Check if the input DF contains the standard columns
     if not set(df.columns).issuperset(set(idx_cols)):
         fail_str: str = (
-            f"Error : Tried to standardize DataFrame but failed."
-            f"DataFrame not in the correct format. Please ensure "
-            f"that the DataFrame has the following columns: "
-            f"'cid', 'xcat', 'real_date', along with any other "
+            "Error : Tried to standardize DataFrame but failed."
+            "DataFrame not in the correct format. Please ensure "
+            "that the DataFrame has the following columns: "
+            "'cid', 'xcat', 'real_date', along with any other "
             "variables you wish to include (e.g. 'value', 'mop_lag', "
             "'eop_lag', 'grading')."
         )
@@ -93,8 +93,8 @@ def standardise_dataframe(df: pd.DataFrame) -> QuantamentalDataFrame:
             if not set(dft.columns).issuperset(set(idx_cols)):
                 raise ValueError(fail_str)
             df = dft.copy()
-        except:
-            raise ValueError(fail_str)
+        except Exception as e:
+            raise ValueError(fail_str) from e
 
         # check if there is at least one more column
         if len(df.columns) < 4:
@@ -130,7 +130,8 @@ def standardise_dataframe(df: pd.DataFrame) -> QuantamentalDataFrame:
     for col in jpmaqs_metrics + list(non_jpmaqs_metrics):
         try:
             df[col] = df[col].astype(float)
-        except:
+        except Exception as e:
+            logger.warning(f"Failed to convert column {col} to float: {e}")
             pass
 
     assert isinstance(df, QuantamentalDataFrame), "Failed to standardize DataFrame"
