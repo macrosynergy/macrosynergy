@@ -20,8 +20,8 @@ def test_basic_ewm_sum_and_naming():
     assert set(out["xcat"].unique()) == {
         "GROWTH_5DXMS", "INFL_5DXMS",
     }
-    # Value-only standard columns, in order.
-    assert list(out.columns) == ["cid", "xcat", "real_date", "value"]
+    # Value-only standard columns, in canonical QDF order.
+    assert list(out.columns) == ["real_date", "cid", "xcat", "value"]
 
     # Matches a hand-built reference for one series (already dense -> reindex is identity).
     ref = (
@@ -175,8 +175,29 @@ def test_blacklist_excludes_range():
 def test_empty_selection_returns_empty():
     df = make_test_df(cids=["AUD"], xcats=["GROWTH"], start="2020-01-01", end="2020-03-31")
     out = panel_ewm_sum(df, xcats=["NOTHERE"])
-    assert list(out.columns) == ["cid", "xcat", "real_date", "value"]
+    assert list(out.columns) == ["real_date", "cid", "xcat", "value"]
     assert out.empty
+
+
+def test_explicit_nan_in_value_raises():
+    # A standardised panel is expected to be dense apart from blacklisted ranges, so an
+    # explicit NaN in `value` is a data-quality signal, not a gap to zero-fill.
+    df = make_test_df(cids=["AUD"], xcats=["GROWTH"], start="2020-01-01", end="2020-03-31")
+    df.loc[df.index[5], "value"] = np.nan
+    with pytest.raises(ValueError):
+        panel_ewm_sum(df, halflife=5)
+
+
+def test_all_nan_series_raises():
+    # An all-NaN series must not silently vanish (or crash); it raises like any other
+    # explicit-NaN input.
+    rows = [
+        ("AUD", "GROWTH", pd.Timestamp("2020-01-01"), np.nan),
+        ("AUD", "GROWTH", pd.Timestamp("2020-01-10"), np.nan),
+    ]
+    df = pd.DataFrame(rows, columns=["cid", "xcat", "real_date", "value"])
+    with pytest.raises(ValueError):
+        panel_ewm_sum(df, halflife=5)
 
 
 def test_categorical_round_trip():

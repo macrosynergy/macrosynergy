@@ -6,26 +6,22 @@ from typing import List, Optional, Union
 import numpy as np
 import pandas as pd
 
-from macrosynergy.management.utils import reduce_df
+from macrosynergy.compat import PD_EWM_SUM, PD_FUTURE_STACK
+from macrosynergy.management.utils import reduce_df, ewm_sum
 from macrosynergy.management.types import QuantamentalDataFrame
 
 
-def _finalize_qdf(df_ordered: pd.DataFrame, is_categorical: bool) -> QuantamentalDataFrame:
+def _ewm_sum(dfw: pd.DataFrame, halflife: Union[int, float]) -> pd.DataFrame:
     """
-    Attach QDF metadata to an already column-ordered frame without disturbing that
-    order.
+    Exponentially weighted moving sum of a wide (dense) frame.
 
-    ``QuantamentalDataFrame.__init__`` re-sorts columns to its canonical
-    ``(real_date, cid, xcat, ...)`` order whenever it is not handed an already-literal
-    ``QuantamentalDataFrame`` instance -- which would silently override the
-    ``cid, xcat, real_date, value`` order this function guarantees to callers.
-    Setting ``InitializedAsCategorical`` directly (the same plain attribute assignment
-    the constructor itself performs) avoids that reorder while still yielding an
-    object that satisfies ``isinstance(..., QuantamentalDataFrame)`` (a structural
-    check) and carries the attribute callers rely on.
+    Uses the native ``ewm(halflife).sum()`` where available (pandas >= 1.4.0) and
+    otherwise falls back to :func:`macrosynergy.management.utils.math.ewm_sum`, which
+    reconstructs the same values as ``ewm().mean()`` scaled by the cumulative weights.
     """
-    df_ordered.InitializedAsCategorical = is_categorical
-    return df_ordered
+    if PD_EWM_SUM:
+        return dfw.ewm(halflife=halflife).sum()
+    return ewm_sum(dfw, halflife)
 
 
 def panel_ewm_sum(
@@ -46,9 +42,11 @@ def panel_ewm_sum(
 
     Unlike :func:`macrosynergy.management.utils.math.ewm_sum` (which returns
     ``ewm().mean()`` scaled by cumulative weights), this uses the pandas
-    ``ewm(halflife).sum()`` definition directly. Sparse inputs are reindexed to a
-    business-day grid and zero-filled between observations, so ``halflife`` is measured
-    in business days.
+    ``ewm(halflife).sum()`` definition directly. The input is reindexed to a business-day
+    grid, so ``halflife`` is measured in business days. Any structural gaps introduced by
+    that reindexing (e.g. cross-sections with different date ranges) are filled with
+    ``fillna``; explicit ``NaN`` values in the input ``value`` column are rejected, as a
+    standardised panel is expected to be dense apart from blacklisted ranges.
 
     Parameters
     ----------
@@ -62,12 +60,14 @@ def panel_ewm_sum(
     halflife : int | float | List
         EWM half-life in business days. A list produces one output category per value.
     fillna : float
-        value used for interior gaps after reindexing to the business-day grid.
-        Default 0.0 (a business day with no release contributes zero to the moving sum).
+        value used for structural gaps introduced by reindexing to the business-day grid
+        (i.e. dates a cross-section has no observation for because another cross-section
+        does). Default 0.0 (a business day with no release contributes zero to the moving
+        sum). Explicit ``NaN`` values already present in the input are not filled -- they
+        raise a ``ValueError``.
     mask_leading : bool
         if True (default) output before each series' first real observation is excluded
-        from the output entirely (rather than present as NaN), since ``stack()`` drops
-        those rows.
+        from the output entirely (rather than present as NaN).
     start, end : str
         date bounds (ISO). Default None uses the range in ``df``.
     blacklist : dict
@@ -79,8 +79,13 @@ def panel_ewm_sum(
     Returns
     -------
     ~pandas.DataFrame
-        standardized QuantamentalDataFrame with columns 'cid', 'xcat', 'real_date',
+        standardized QuantamentalDataFrame with columns 'real_date', 'cid', 'xcat',
         'value'; new categories named ``{xcat}_{h}DXMS`` (or ``{xcat}_{postfix}``).
+
+    Raises
+    ------
+    ValueError
+        if the selected input contains explicit ``NaN`` values in the ``value`` column.
     """
     cols = ["cid", "xcat", "real_date", "value"]
     assert set(cols).issubset(set(df.columns)), f"df must contain columns: {cols}."
@@ -107,13 +112,23 @@ def panel_ewm_sum(
     if dfr.empty:
         empty_df = pd.DataFrame(
             {
-                "cid": pd.Series([], dtype="category" if _as_categorical else "object"),
-                "xcat": pd.Series([], dtype="category" if _as_categorical else "object"),
                 "real_date": pd.Series([], dtype="datetime64[ns]"),
+                "cid": pd.Series([], dtype="object"),
+                "xcat": pd.Series([], dtype="object"),
                 "value": pd.Series([], dtype="float64"),
             }
-        )[cols]
-        return _finalize_qdf(empty_df, _as_categorical)
+        )
+        return QuantamentalDataFrame(empty_df, categorical=_as_categorical)
+
+    # A standardised panel is expected to be dense apart from blacklisted ranges (already
+    # stripped by `reduce_df`). An explicit NaN in `value` is therefore a data-quality
+    # signal, not a gap to zero-fill: silently treating it as 0 would corrupt the moving
+    # sum. Reject it up front (this also covers all-NaN series).
+    if dfr["value"].isna().any():
+        raise ValueError(
+            "Input `value` column contains NaN(s). `panel_ewm_sum` expects a dense panel "
+            "(gaps only from blacklisted ranges); resolve or drop missing values first."
+        )
 
     dfr = dfr.assign(
         ticker=dfr["cid"].astype(str) + "_" + dfr["xcat"].astype(str)
@@ -128,13 +143,17 @@ def panel_ewm_sum(
 
     frames = []
     for h, pf in zip(hls, postfixes):
-        out = p.ewm(halflife=h).sum()
+        out = _ewm_sum(p, h)
         if mask_leading:
             for c in out.columns:
                 out.loc[out.index < first_valid[c], c] = np.nan
         out.columns = [f"{c}_{pf}" for c in out.columns]
-        tmp = out.stack().to_frame("value").reset_index()
+        # `PD_FUTURE_STACK` keeps NaNs on stack across pandas versions; drop the
+        # masked leading rows explicitly so the behaviour does not depend on the
+        # deprecated `stack(dropna=...)` default.
+        tmp = out.stack(**PD_FUTURE_STACK).to_frame("value").reset_index()
         tmp.columns = ["real_date", "ticker", "value"]
+        tmp = tmp.dropna(subset=["value"])
         tmp[["cid", "xcat"]] = tmp["ticker"].str.split("_", n=1, expand=True)
         frames.append(tmp[cols])
 
@@ -146,4 +165,4 @@ def panel_ewm_sum(
         # Re-apply the blacklist to the output so blacklisted rows stay absent, matching
         # blacklist semantics elsewhere in the package (e.g. `reduce_df`, `make_blacklist`).
         qdf_out = reduce_df(qdf_out, blacklist=blacklist)
-    return _finalize_qdf(qdf_out[cols], _as_categorical)
+    return qdf_out
