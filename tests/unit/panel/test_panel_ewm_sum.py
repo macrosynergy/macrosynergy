@@ -2,10 +2,26 @@
 import numpy as np
 import pandas as pd
 import pytest
+from packaging import version
 
 from macrosynergy.management.simulate import make_test_df
 from macrosynergy.management.types import QuantamentalDataFrame
 from macrosynergy.panel import panel_ewm_sum, panel_calculator
+
+_HAS_EWM_SUM = version.parse(pd.__version__) >= version.parse("1.4.0")
+
+
+def _ewm_sum_reference(values, halflife):
+    """Version-independent EWM sum (adjust=True): ``y_t = x_t + (1-alpha)*y_{t-1}`` with
+    ``1-alpha = 0.5**(1/halflife)``. Equals pandas' native ``ewm().sum()`` and lets the
+    numeric check run (exercising the fallback path) where that method is unavailable."""
+    decay = 0.5 ** (1.0 / halflife)
+    acc = 0.0
+    out = []
+    for v in values:
+        acc = v + decay * acc
+        out.append(acc)
+    return out
 
 
 def test_basic_ewm_sum_and_naming():
@@ -24,11 +40,13 @@ def test_basic_ewm_sum_and_naming():
     assert list(out.columns) == ["real_date", "cid", "xcat", "value"]
 
     # Matches a hand-built reference for one series (already dense -> reindex is identity).
-    ref = (
+    # Use a version-independent recurrence rather than native ``.ewm().sum()`` so this
+    # numeric check also runs on old pandas, where it exercises the fallback path.
+    ser = (
         df[(df["cid"] == "AUD") & (df["xcat"] == "GROWTH")]
         .set_index("real_date")["value"]
-        .ewm(halflife=5).sum()
     )
+    ref = pd.Series(_ewm_sum_reference(ser, 5), index=ser.index)
     got = (
         out[(out["cid"] == "AUD") & (out["xcat"] == "GROWTH_5DXMS")]
         .set_index("real_date")["value"]
@@ -82,6 +100,10 @@ def test_postfix_string_with_list_halflife_raises():
         panel_ewm_sum(df, halflife=[3, 5], postfix="EWMSUM")
 
 
+@pytest.mark.skipif(
+    not _HAS_EWM_SUM,
+    reason="panel_calculator's `.ewm().sum()` needs pandas >= 1.4.0",
+)
 def test_matches_panel_calculator_on_dense_daily_panel():
     # Already-dense daily-B panel: reindex is identity, so panel_ewm_sum must equal the
     # panel_calculator EWM-sum on the shared region.
@@ -96,6 +118,39 @@ def test_matches_panel_calculator_on_dense_daily_panel():
     fast_i = fast.set_index(["cid", "xcat", "real_date"])["value"].sort_index()
     ref_i = ref.set_index(["cid", "xcat", "real_date"])["value"].sort_index()
     # Compare on the intersection of indices (both start at first valid).
+    common = fast_i.index.intersection(ref_i.index)
+    assert len(common) > 0
+    pd.testing.assert_series_equal(
+        fast_i.loc[common].astype(float),
+        ref_i.loc[common].astype(float),
+        check_names=False,
+    )
+
+@pytest.mark.skipif(
+    _HAS_EWM_SUM,
+    reason="complement of the native-method test: runs only where `.ewm().sum()` is "
+    "absent (the py37/pandas<1.4 floor)",
+)
+def test_matches_panel_calculator_on_dense_daily_panel_python37():
+    # py37/old-pandas counterpart to the test above. panel_calculator cannot express
+    # `.ewm().sum()` below pandas 1.4.0, so instead of comparing against it we compare
+    # panel_ewm_sum against the version-independent recurrence oracle applied per series.
+    cids = ["AUD", "CAD"]
+    df = make_test_df(cids=cids, xcats=["GROWTH"], start="2020-01-01", end="2020-06-30")
+
+    fast = panel_ewm_sum(df, halflife=5)
+    fast_i = fast.set_index(["cid", "real_date"])["value"].sort_index()
+
+    ref_parts = []
+    for cid in cids:
+        ser = df[df["cid"] == cid].set_index("real_date")["value"].sort_index()
+        r = pd.Series(_ewm_sum_reference(ser, 5), index=ser.index)
+        r.index = pd.MultiIndex.from_product(
+            [[cid], r.index], names=["cid", "real_date"]
+        )
+        ref_parts.append(r)
+    ref_i = pd.concat(ref_parts).sort_index()
+
     common = fast_i.index.intersection(ref_i.index)
     assert len(common) > 0
     pd.testing.assert_series_equal(
