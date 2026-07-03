@@ -23,11 +23,6 @@ PD_OLD_RESAMPLE: bool = version.parse(pd.__version__) < version.parse("1.5.0")
 
 PD_2_0_OR_LATER: bool = version.parse(pd.__version__) >= version.parse("2.0.0")
 
-# Availability of ExponentialMovingWindow.sum (added in pandas 1.4.0). On older
-# pandas the sum must be reconstructed as ewm().mean() scaled by cumulative weights.
-# https://pandas.pydata.org/docs/whatsnew/v1.4.0.html
-PD_EWM_SUM: bool = version.parse(pd.__version__) >= version.parse("1.4.0")
-
 # Availability of pd.DataFrame.applymap/map
 # https://pandas.pydata.org/pandas-docs/version/2.1/reference/api/pandas.DataFrame.map.html
 PD_NEW_MAP: bool = version.parse(pd.__version__) >= version.parse("2.1.0")

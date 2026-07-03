@@ -6,7 +6,7 @@ from typing import List, Optional, Union
 import numpy as np
 import pandas as pd
 
-from macrosynergy.compat import PD_EWM_SUM, PD_FUTURE_STACK
+from macrosynergy.compat import PD_NEW_MAP, PD_FUTURE_STACK
 from macrosynergy.management.utils import reduce_df, ewm_sum
 from macrosynergy.management.types import QuantamentalDataFrame
 
@@ -15,11 +15,14 @@ def _ewm_sum(dfw: pd.DataFrame, halflife: Union[int, float]) -> pd.DataFrame:
     """
     Exponentially weighted moving sum of a wide (dense) frame.
 
-    Uses the native ``ewm(halflife).sum()`` where available (pandas >= 1.4.0) and
-    otherwise falls back to :func:`macrosynergy.management.utils.math.ewm_sum`, which
-    reconstructs the same values as ``ewm().mean()`` scaled by the cumulative weights.
+    ``ExponentialMovingWindow.sum`` only exists on pandas >= 1.4.0, below the package's
+    1.3.5 floor. Rather than add a dedicated version flag, gate on the existing
+    ``PD_NEW_MAP`` (pandas >= 2.1.0): modern pandas uses the native
+    ``ewm(halflife).sum()``, and anything older falls back to
+    :func:`macrosynergy.management.utils.math.ewm_sum`, which reconstructs the identical
+    values as ``ewm().mean()`` scaled by the cumulative weights.
     """
-    if PD_EWM_SUM:
+    if PD_NEW_MAP:
         return dfw.ewm(halflife=halflife).sum()
     return ewm_sum(dfw, halflife)
 
