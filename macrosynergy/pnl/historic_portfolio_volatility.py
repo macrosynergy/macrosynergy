@@ -3,7 +3,6 @@ Estimation of Historic Portfolio Volatility.
 """
 
 import logging
-import warnings
 
 import functools
 from typing import Dict, List, Optional
@@ -14,7 +13,7 @@ import numpy as np
 import pandas as pd
 from macrosynergy.panel.historic_vol import expo_weights
 from macrosynergy.management.types import NoneType, QuantamentalDataFrame
-from macrosynergy.management.constants import FFILL_LIMITS, ANNUALIZATION_FACTORS
+from macrosynergy.management.constants import ANNUALIZATION_FACTORS
 from macrosynergy.management.utils import (
     _map_to_business_day_frequency,
     get_sops,
@@ -25,6 +24,7 @@ from macrosynergy.management.utils import (
 )
 
 RETURN_SERIES_XCAT = "_PNL_USD1S_ASD"
+FREQ_TO_BDAY_MAP = {"B": 1, "W-FRI": 5, "BME": 21, "BQ": 63, "BA": 252}
 
 
 logger = logging.getLogger(__name__)
@@ -132,43 +132,30 @@ def estimate_variance_covariance(
     return pd.DataFrame(cov_mat, index=piv_ret.columns, columns=piv_ret.columns)
 
 
-def _downsample_returns(
-    piv_df: pd.DataFrame,
-    freq: str = "m",
-) -> pd.DataFrame:
-    # TODO create as a general convert_frequency function
-    # TODO current aggregator is `art` (check definition of name in R code)
-    # TODO test [1] input data is daily and [2] daily gives daily output
+def _downsample_returns(piv_df: pd.DataFrame, freq: str) -> pd.DataFrame:
+    n_bdays = FREQ_TO_BDAY_MAP[freq]
+    piv_df = 1 + piv_df / 100
 
-    freq = _map_to_business_day_frequency(freq)
-    # TODO we should fix why we get the warnings...
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        piv_new_freq: pd.DataFrame = (
-            (1 + piv_df / 100).resample(freq).prod() - 1
-        ) * 100
-        warnings.resetwarnings()
+    first, last = piv_df.index.min(), piv_df.index.max()
+    all_bd = pd.bdate_range(first, last)
+
+    pos = all_bd.searchsorted(piv_df.index, side='right') - 1
+    pos = np.maximum(pos, 0)
+
+    # Backward distance in business days; bucket 0 ends on `last`
+    dist = pos.max() - pos
+    bucket = dist // n_bdays
+
+    # A full bucket must span a complete n_bdays block starting at dist multiples
+    # of n_bdays.The oldest bucket is short whenever pos.max() (total span) isn't
+    # a multiple of n_bdays.Keep only buckets whose block fits entirely within the
+    # available business days.
+    max_full_bucket = (pos.max() + 1) // n_bdays - 1  # highest bucket index with a full n_bdays bdays
+
+    keep = bucket <= max_full_bucket
+    piv_new_freq = 100 * (piv_df[keep].groupby(bucket[keep]).prod() - 1)
+
     return piv_new_freq
-
-
-def get_max_lookback(lb: int, nt: float) -> int:
-    """
-    Calculate the maximum lookback period for a given lookback period and nan tolerance.
-
-    Parameters
-    ----------
-    lb : int
-        the lookback period.
-    nt : float
-        the nan tolerance.
-
-    Returns
-    -------
-    int
-        the maximum lookback period.
-    """
-
-    return int(np.ceil(lb * (1 + nt))) if lb > 0 else 0
 
 
 def _calculate_multi_frequency_vcv_for_period(
@@ -184,15 +171,32 @@ def _calculate_multi_frequency_vcv_for_period(
     remove_zeros: bool,
     lback_min_obs: List[int],
 ) -> pd.DataFrame:
-    window_df = pivot_returns.loc[pivot_returns.index <= rebal_date]
     dict_vcv: Dict[str, pd.DataFrame] = {}
 
     for freq, lb, hl, min_obs in zip(
         est_freqs, lback_periods, half_life, lback_min_obs
     ):
-        piv_ret = _downsample_returns(window_df, freq=freq).iloc[
-            -get_max_lookback(lb=lb, nt=nan_tolerance) :
-        ]
+        lb_bdays = lb * FREQ_TO_BDAY_MAP[freq]
+        first_date = None if lb == -1 else rebal_date - pd.offsets.BDay(lb_bdays)
+        window_df = pivot_returns.loc[first_date : rebal_date]
+
+        # check for nan tolerance violations
+        nan_frac = window_df.isna().mean(axis=0)
+        window_df = window_df[window_df.columns[nan_frac <= nan_tolerance]]
+
+        if window_df.empty:
+            return pd.DataFrame()
+
+        # down sample returns and compute covariance matrix
+        piv_ret = _downsample_returns(window_df, freq=freq)
+
+        if piv_ret.shape[0] < piv_ret.shape[1]:
+            raise ValueError(
+                f"{piv_ret.shape[1] + 1} data points are required to compute a "
+                f"covariance matrix for {piv_ret.shape[1]} fids, but only found "
+                f"{piv_ret.shape[0]}"
+            )
+
         dict_vcv[freq] = estimate_variance_covariance(
             piv_ret=piv_ret,
             lback_periods=lb,
@@ -209,10 +213,8 @@ def _calculate_multi_frequency_vcv_for_period(
 
     # NOTE: in this case Float+NA = Na
     vcv_df: pd.DataFrame = sum(
-        [
-            est_weights[ix] * ANNUALIZATION_FACTORS[freq] * dict_vcv[freq]
-            for ix, freq in enumerate(est_freqs)
-        ]
+        est_weights[ix] * ANNUALIZATION_FACTORS[freq] * dict_vcv[freq]
+        for ix, freq in enumerate(est_freqs)
     )
 
     return vcv_df
@@ -264,35 +266,38 @@ def stack_covariances(
 
 def _get_first_usable_date(
     pivot_returns: pd.DataFrame,
-    pivot_signals: pd.DataFrame,
     rebal_dates: pd.Series,
     est_freqs: List[str],
     lback_periods: List[int],
-    nan_tolerance: float,
 ) -> pd.Series:
     """
-    Find the first rebalance date on which each contract can be positioned.
-    The variance-covariance estimate is built from returns only, so a contract
-    needs `max_lb` business days of return history before it enters the estimate.
+    Find the first rebalance date on which each contract has enough return data to be
+    included in the covariance matrix calculation. If multiple est_freqs, then this is
+    the first date at which enough return data exists so that a matrix can be estimated
+    for all est_freqs.
+
+    When one request a lookback of -1 (all data), the first date when we have twice as
+    many data points as fids. For example, with 5 fids we would need 10 months/weeks/
+    days depending on the est_freq.
     """
-    max_lb = 0
-    # for each frequency and lookback
-    for lb, est_freq in zip(lback_periods, est_freqs):
-        _max_lb = get_max_lookback(lb, nan_tolerance)
-        _max_lb = (
-            FFILL_LIMITS[_map_to_business_day_frequency(est_freq)]
-            if _max_lb == 0
-            else _max_lb
-        )
-        max_lb = _max_lb if _max_lb > max_lb else max_lb
+    n_fids = pivot_returns.shape[1]
 
-    assert set(pivot_returns.columns.tolist()) == set(pivot_signals.columns.tolist())
-    pr_starts = {}
-    for col in pivot_returns.columns.tolist():
-        fstart_ret = pivot_returns[col].first_valid_index() + pd.offsets.BDay(max_lb)
-        pr_starts[col] = rebal_dates[rebal_dates >= fstart_ret].min()
+    max_lback_days = max(
+        2 * n_fids * FREQ_TO_BDAY_MAP[est_freq]
+        if lback_period == -1 else
+        lback_period * FREQ_TO_BDAY_MAP[est_freq]
+        for est_freq, lback_period in zip(est_freqs, lback_periods)
+    )
 
-    return pd.Series(pr_starts, name="real_date")
+    first_valid_dates = {}
+    for fid in pivot_returns.columns.tolist():
+        first_date = pivot_returns[fid].first_valid_index()
+        first_date += pd.offsets.BDay(max_lback_days)
+
+        first_rebal_date = rebal_dates[rebal_dates >= first_date].min()
+        first_valid_dates[fid] = first_rebal_date
+
+    return pd.Series(first_valid_dates, name="real_date")
 
 
 def _calculate_portfolio_volatility(
@@ -329,25 +334,23 @@ def _calculate_portfolio_volatility(
         rebal_dates.shape[0],
     )
 
-    # td = rebal_dates.iloc[-1]
-
     # TODO convert frequencies
     list_vcv: List[pd.DataFrame] = []
     list_pvol: List[Tuple[pd.Timestamp, np.float64]] = []
     first_starts = _get_first_usable_date(
         pivot_returns=pivot_returns,
-        pivot_signals=pivot_signals,
         rebal_dates=rebal_dates,
         est_freqs=est_freqs,
         lback_periods=lback_periods,
-        nan_tolerance=nan_tolerance,
     )
 
     for td in rebal_dates:
         avails = first_starts[first_starts <= td].index.tolist()
         if len(avails) == 0:
             logger.warning(
-                f"No data available for {td} with lookback period of {max(lback_periods)} days."
+                f"Insufficient return data available on rebalancing date: {td} "
+                f"to compute a covariance matrix estimate using a "
+                f"lookback period of {max(lback_periods)} days." # todo fix units
             )
             continue
         vcv_df = _calculate_multi_frequency_vcv_for_period(
@@ -364,10 +367,12 @@ def _calculate_portfolio_volatility(
             lback_min_obs=lback_min_obs,
         )
 
+        if vcv_df.empty:
+            continue
+
         list_vcv.append(stack_covariances(vcv_df=vcv_df, real_date=td))
         vol_tuple = _calc_vol_tuple(
             vcv_df=vcv_df,
-            # signals=signals,
             signals=pivot_signals,
             date=td,
             available_cids=avails,
