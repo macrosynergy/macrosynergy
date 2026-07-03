@@ -59,3 +59,13 @@ def test_uses_annualization_factors_constant():
     df = _qdf_with_eop("AUD", "CPIH", dates, dates, [1.0] * 8)
     out = annualize_by_release_frequency(df)
     assert np.allclose(out["value"].to_numpy(), np.sqrt(1 / ANNUALIZATION_FACTORS["Q"]))
+
+
+def test_empty_selection_returns_empty():
+    # A cids/xcats filter matching nothing must not crash on the from_long_df path
+    # (an empty frame there raises "Input DataFrame is empty.").
+    dates = pd.date_range("2020-01-31", periods=12, freq="ME")
+    df = _qdf_with_eop("AUD", "CPIH", dates, dates, [1.0] * 12)
+    out = annualize_by_release_frequency(df, cids=["USD"])
+    assert list(out.columns) == ["cid", "xcat", "real_date", "value"]
+    assert out.empty
