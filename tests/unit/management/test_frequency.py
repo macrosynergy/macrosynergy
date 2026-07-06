@@ -60,3 +60,15 @@ def test_snap_boundaries_weekly_monthly_quarterly():
         ["2020-01-31", "2020-03-16", "2020-04-30", "2020-06-14"]
     ))
     assert (infer_release_frequency(mid) == "M").all()
+
+
+def test_no_gap_fallback_is_order_independent():
+    # One distinct eop => no measurable gap. The fallback must not depend on the order
+    # freqs is passed in, and must pick the coarsest candidate (here "A"), not freqs[0].
+    single = _eop_series(pd.to_datetime(["2020-01-31"]))
+    assert infer_release_frequency(single).iloc[0] == "A"
+    assert (
+        infer_release_frequency(single, freqs=("D", "W", "M", "Q", "A")).iloc[0]
+        == infer_release_frequency(single, freqs=("A", "Q", "M", "W", "D")).iloc[0]
+        == "A"
+    )

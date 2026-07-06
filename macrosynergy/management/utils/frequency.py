@@ -1,6 +1,7 @@
 """
 Infer per-observation release frequency from the spacing of end-of-period (eop) dates.
 """
+
 from typing import Sequence, Tuple
 
 import numpy as np
@@ -12,6 +13,12 @@ from macrosynergy.management.constants import ANNUALIZATION_FACTORS
 def _reference_days(freqs: Sequence[str]) -> dict:
     # Calendar days per period, derived from periods-per-year. e.g. Q -> 365.25/4.
     return {f: 365.25 / ANNUALIZATION_FACTORS[f] for f in freqs}
+
+
+def _sorted_annualization_factors(annualization_factors: dict) -> list[str]:
+    _out = {f: ANNUALIZATION_FACTORS[f] for f in annualization_factors if len(f) == 1}
+    # slowest first (fewest periods/year): A, Q, M, W, D
+    return sorted(_out, key=_out.get)
 
 
 def infer_release_frequency(
@@ -54,11 +61,24 @@ def infer_release_frequency(
     gaps = distinct.diff().dt.days.bfill()
     smoothed = gaps.rolling(window=window, min_periods=1).median()
 
+    # Canonical slow->fast rank (A=0 ... D=4) over the full frequency set; ranks whatever
+    # subset a caller passes, independent of the order they pass it in.
+    _FREQ_RANK = {
+        f: i for i, f in enumerate(_sorted_annualization_factors(ANNUALIZATION_FACTORS))
+    }
+
+    # Slowest present freq; the fallback and tie-break, ranked by _FREQ_RANK so results
+    # don't depend on the order freqs is passed in.
+    slowest = min(freqs, key=lambda f: _FREQ_RANK[f])
+
     def _snap(g):
+        # No gap to measure (single eop): default to slowest, not a positional freqs[0]
+        # -- leaves an unclassifiable series near-unscaled rather than scaled as daily.
         if pd.isna(g) or g <= 0:
-            return freqs[0]
+            return slowest
         lg = np.log(g)
-        return min(freqs, key=lambda f: abs(lg - log_ref[f]))
+        # Tie-break by slowest freq (rank): deterministic, order-independent.
+        return min(freqs, key=lambda f: (abs(lg - log_ref[f]), _FREQ_RANK[f]))
 
     period_freq = {d: _snap(g) for d, g in zip(distinct, smoothed)}
     return eop.map(period_freq)
