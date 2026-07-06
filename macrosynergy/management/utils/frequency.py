@@ -2,7 +2,7 @@
 Infer per-observation release frequency from the spacing of end-of-period (eop) dates.
 """
 
-from typing import Sequence, Tuple
+from typing import Sequence, Tuple, Dict
 
 import numpy as np
 import pandas as pd
@@ -10,12 +10,12 @@ import pandas as pd
 from macrosynergy.management.constants import ANNUALIZATION_FACTORS
 
 
-def _reference_days(freqs: Sequence[str]) -> dict:
+def _reference_days(freqs: Sequence[str]) -> Dict[str, float]:
     # Calendar days per period, derived from periods-per-year. e.g. Q -> 365.25/4.
     return {f: 365.25 / ANNUALIZATION_FACTORS[f] for f in freqs}
 
 
-def _sorted_annualization_factors(annualization_factors: dict) -> list[str]:
+def _sorted_annualization_factors(annualization_factors: Dict) -> Sequence[str]:
     _out = {f: ANNUALIZATION_FACTORS[f] for f in annualization_factors if len(f) == 1}
     # slowest first (fewest periods/year): A, Q, M, W, D
     return sorted(_out, key=_out.get)
