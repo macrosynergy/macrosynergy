@@ -12,7 +12,7 @@ from macrosynergy.management.types import NoneType, QuantamentalDataFrame
 from macrosynergy.management.utils import (
     is_valid_iso_date,
     reduce_df,
-    estimate_release_frequency,
+    estimate_release_frequency_from_real_date,
 )
 import logging
 
@@ -90,7 +90,7 @@ def _check_estimation_frequency(df_wide: pd.DataFrame, rebal_freq: str) -> pd.Da
         dataframe with the estimated frequency.
     """
 
-    estimated_freq: pd.Series = estimate_release_frequency(df_wide=df_wide)
+    estimated_freq: pd.Series = estimate_release_frequency_from_real_date(df_wide=df_wide)
 
     # for each series in the dataframe, check if the estimated frequency matches the rebal_freq
     for _col in df_wide.columns:

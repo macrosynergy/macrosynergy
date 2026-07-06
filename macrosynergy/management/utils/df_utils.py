@@ -1160,7 +1160,7 @@ def categories_df(
     return dfc.dropna(axis=0, how="all")
 
 
-def estimate_release_frequency(
+def estimate_release_frequency_from_real_date(
     timeseries: Optional[pd.Series] = None,
     df_wide: Optional[pd.DataFrame] = None,
     atol: Optional[float] = None,
@@ -1205,7 +1205,7 @@ def estimate_release_frequency(
             )
 
         return {
-            col: estimate_release_frequency(
+            col: estimate_release_frequency_from_real_date(
                 timeseries=df_wide[col], atol=atol, rtol=rtol
             )
             for col in df_wide.columns

@@ -39,7 +39,7 @@ from .df_utils import (
     get_eops,
     get_sops,
     merge_categories,
-    estimate_release_frequency,
+    estimate_release_frequency_from_real_date,
     concat_categorical,
     _insert_as_categorical,
     forward_fill_wide_df,
@@ -108,7 +108,7 @@ __all__ = [
     "get_eops",
     "get_sops",
     "merge_categories",
-    "estimate_release_frequency",
+    "estimate_release_frequency_from_real_date",
     "rotate_cid_xcat",
     # Sparse Indicators
     "create_delta_data",

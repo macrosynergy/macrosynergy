@@ -32,7 +32,7 @@ from macrosynergy.management.utils import (
     _map_to_business_day_frequency,
     apply_slip,
     merge_categories,
-    estimate_release_frequency,
+    estimate_release_frequency_from_real_date,
     Timer,
     rotate_cid_xcat,
 )
@@ -1721,11 +1721,11 @@ class TestEstimateReleaseFrequency(unittest.TestCase):
         self.df_wide.index.name = "real_date"
 
     def test_single_timeseries_daily(self):
-        result = estimate_release_frequency(timeseries=self.timeseries_daily)
+        result = estimate_release_frequency_from_real_date(timeseries=self.timeseries_daily)
         self.assertEqual(result, "D")
 
     def test_df_wide(self):
-        result = estimate_release_frequency(df_wide=self.df_wide)
+        result = estimate_release_frequency_from_real_date(df_wide=self.df_wide)
         self.assertIsInstance(result, dict)
         self.assertEqual(result["daily"], "D")
         self.assertEqual(result["weekly"], "W")
@@ -1735,49 +1735,49 @@ class TestEstimateReleaseFrequency(unittest.TestCase):
 
     def test_invalid_timeseries_and_df_wide(self):
         with self.assertRaises(ValueError):
-            estimate_release_frequency(
+            estimate_release_frequency_from_real_date(
                 timeseries=self.timeseries_daily, df_wide=self.df_wide
             )
 
     def test_invalid_df_wide_type(self):
         with self.assertRaises(TypeError):
-            estimate_release_frequency(df_wide="not_a_dataframe")
+            estimate_release_frequency_from_real_date(df_wide="not_a_dataframe")
 
     def test_empty_df_wide(self):
         with self.assertRaises(ValueError):
             empty_df = pd.DataFrame()
-            estimate_release_frequency(df_wide=empty_df)
+            estimate_release_frequency_from_real_date(df_wide=empty_df)
 
     def test_invalid_atol_rtol_both_passed(self):
         with self.assertRaises(ValueError):
-            estimate_release_frequency(
+            estimate_release_frequency_from_real_date(
                 timeseries=self.timeseries_daily, atol=0.1, rtol=0.1
             )
 
     def test_invalid_atol_type(self):
         with self.assertRaises(TypeError):
-            estimate_release_frequency(
+            estimate_release_frequency_from_real_date(
                 timeseries=self.timeseries_daily, atol="not_a_number"
             )
 
     def test_invalid_rtol_type(self):
         with self.assertRaises(TypeError):
-            estimate_release_frequency(
+            estimate_release_frequency_from_real_date(
                 timeseries=self.timeseries_daily, rtol="not_a_number"
             )
 
     def test_invalid_rtol_value(self):
         with self.assertRaises(ValueError):
-            estimate_release_frequency(timeseries=self.timeseries_daily, rtol=1.5)
+            estimate_release_frequency_from_real_date(timeseries=self.timeseries_daily, rtol=1.5)
 
     def test_timeseries_with_atol(self):
-        result = estimate_release_frequency(
+        result = estimate_release_frequency_from_real_date(
             timeseries=self.timeseries_monthly, atol=0.01
         )
         self.assertEqual(result, "M")
 
     def test_timeseries_with_rtol(self):
-        result = estimate_release_frequency(
+        result = estimate_release_frequency_from_real_date(
             timeseries=self.timeseries_monthly, rtol=0.01
         )
         self.assertEqual(result, "M")
