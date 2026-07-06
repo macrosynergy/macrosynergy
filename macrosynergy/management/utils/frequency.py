@@ -47,6 +47,12 @@ def infer_release_frequency(
     -------
     pd.Series
         per-observation frequency labels, aligned to the input index.
+
+    Raises
+    ------
+    ValueError
+        if there are fewer than two distinct eop dates, so no gap can be
+        computed to estimate a release frequency.
     """
     eop = pd.to_datetime(eop)
     ref = _reference_days(freqs)
@@ -54,8 +60,11 @@ def infer_release_frequency(
 
     # Distinct, sorted eop periods and their smoothed gaps (in days).
     distinct = pd.Series(sorted(pd.unique(eop.dropna())))
-    if len(distinct) == 0:
-        return pd.Series(index=eop.index, dtype=object)
+    if len(distinct) < 2:
+        raise ValueError(
+            "Not enough values in the timeseries to estimate a release frequency; "
+            "at least two distinct eop dates are required."
+        )
     # Seed the leading NaN gap by back-filling from the first observed gap
     # (min_periods=1 covers the rest); avoids chained-assignment warnings.
     gaps = distinct.diff().dt.days.bfill()
@@ -67,15 +76,7 @@ def infer_release_frequency(
         f: i for i, f in enumerate(_sorted_annualization_factors(ANNUALIZATION_FACTORS))
     }
 
-    # Slowest present freq; the fallback and tie-break, ranked by _FREQ_RANK so results
-    # don't depend on the order freqs is passed in.
-    slowest = min(freqs, key=lambda f: _FREQ_RANK[f])
-
     def _snap(g):
-        # No gap to measure (single eop): default to slowest, not a positional freqs[0]
-        # -- leaves an unclassifiable series near-unscaled rather than scaled as daily.
-        if pd.isna(g) or g <= 0:
-            return slowest
         lg = np.log(g)
         # Tie-break by slowest freq (rank): deterministic, order-independent.
         return min(freqs, key=lambda f: (abs(lg - log_ref[f]), _FREQ_RANK[f]))
