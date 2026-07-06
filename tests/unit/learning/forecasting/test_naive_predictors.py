@@ -7,6 +7,8 @@ import unittest
 from macrosynergy.learning import (
     NaiveRegressor,
 )
+from sklearn.utils.validation import check_is_fitted
+from sklearn.exceptions import NotFittedError
 
 from parameterized import parameterized
 
@@ -163,3 +165,10 @@ class TestNaiveRegressor(unittest.TestCase):
             preds = nr.predict(self.X)
         with self.assertRaises(ValueError):
             preds = nr.predict(self.X["CPI"].values)
+
+    def test_check_is_fitted(self):
+        nr = NaiveRegressor()
+        with self.assertRaises(NotFittedError):
+            check_is_fitted(nr)
+        nr.fit(self.X, self.y)
+        check_is_fitted(nr)  # should not raise

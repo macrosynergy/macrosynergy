@@ -11,6 +11,7 @@ from .make_relative_value import make_relative_value
 from .make_relative_category import make_relative_category
 from .make_zn_scores import make_zn_scores
 from .panel_calculator import panel_calculator
+from .panel_ewm_sum import panel_ewm_sum
 from .panel_imputer import BasePanelImputer, MeanPanelImputer, MedianPanelImputer
 from .view_correlations import correl_matrix
 from .view_grades import heatmap_grades
@@ -37,6 +38,7 @@ __all__ = [
     "make_zn_scores",
     "impute_panel",
     "panel_calculator",
+    "panel_ewm_sum",
     "BasePanelImputer",
     "MeanPanelImputer",
     "MedianPanelImputer",

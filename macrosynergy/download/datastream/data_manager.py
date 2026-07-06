@@ -34,7 +34,7 @@ Typical usage::
 """
 
 import logging
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from typing import Dict, List, Optional, Tuple, Union
 
 import pandas as pd
@@ -57,6 +57,7 @@ DSWS_KIND_TABULAR: int = 0
 MAX_INSTRUMENTS_PER_REQUEST: int = 50
 MAX_DATATYPES_PER_REQUEST: int = 50
 MAX_ITEMS_PER_REQUEST: int = 100
+MONTHLY_QUOTA_PER_USER: int = 10000000
 
 # ---------------------------------------------------------------------------
 # Default metadata fields
@@ -95,6 +96,9 @@ class DatastreamDataManager:
         DSWS child ID.  Used only when *connection* is ``None``.
     password : str, optional
         DSWS password.  Used only when *connection* is ``None``.
+    show_usage_stats : bool, optional
+        When ``True``, current-month DSWS usage statistics are fetched and
+        printed to stdout after every ``get_*`` call.  Defaults to ``False``.
 
     Raises
     ------
@@ -124,6 +128,7 @@ class DatastreamDataManager:
         connection: Optional[DatastreamConnection] = None,
         username: Optional[str] = None,
         password: Optional[str] = None,
+        show_usage_stats: bool = False,
     ) -> None:
         if connection is not None:
             self._connection = connection
@@ -139,11 +144,13 @@ class DatastreamDataManager:
                 "Provide either a DatastreamConnection object via 'connection', "
                 "or supply both 'username' and 'password'."
             )
+        self._show_usage_stats = show_usage_stats
 
     def get_constituents(
         self,
         index_code: str,
         date: Optional[Union[str, datetime]] = None,
+        identifier_field: str = "MNEM",
     ) -> List[str]:
         """Fetch the mnemonic codes for all constituents of a Datastream list.
 
@@ -158,6 +165,8 @@ class DatastreamDataManager:
         date : str or datetime, optional
             Point-in-time date for the constituent snapshot.  ``None`` (default)
             returns the current composition.
+        identifier_field : str, optional
+            The field name for the identifier column.  Defaults to ``"MNEM"`` for backward compatibility, although ``"DSCD"`` is more robust and immutable.
 
         Returns
         -------
@@ -173,13 +182,15 @@ class DatastreamDataManager:
         list_code = index_code if index_code.endswith("|L") else f"{index_code}|L"
         start_date = self._format_date(date) if date is not None else "0D"
 
-        logger.info("Fetching constituents for list '%s' at date '%s'.", list_code, start_date)
+        logger.info(
+            "Fetching constituents for list '%s' at date '%s'.", list_code, start_date
+        )
 
         ds = self._connection.get_connection()
         try:
             result = ds.get_data(
                 tickers=list_code,
-                fields=["MNEM"],
+                fields=[identifier_field],
                 start=start_date,
                 kind=DSWS_KIND_TABULAR,
             )
@@ -194,9 +205,7 @@ class DatastreamDataManager:
         mnemonics: List[str] = []
 
         # Detect error markers in any Value/value column.
-        value_col = next(
-            (c for c in result.columns if c.lower() == "value"), None
-        )
+        value_col = next((c for c in result.columns if c.lower() == "value"), None)
         if value_col and result[value_col].astype(str).str.startswith("$$ER:").any():
             error_sample = result[value_col].astype(str).iloc[0]
             logger.error("API error in constituents response: %s", error_sample)
@@ -204,12 +213,12 @@ class DatastreamDataManager:
                 f"Datastream returned an error for list '{list_code}': {error_sample}"
             )
 
-        # Parse MNEM column — handle three possible shapes:
-        #   1. A 'MNEM' column with one mnemonic per row.
-        #   2. A single 'Value' column with one mnemonic per row.
-        #   3. A 'Value' cell containing comma-separated mnemonics.
-        if "MNEM" in result.columns:
-            raw_values = result["MNEM"].dropna().astype(str).tolist()
+        # Parse the specified identifier column — handle three possible shapes:
+        #   1. A column with one identifier per row.
+        #   2. A single 'Value' column with one identifier per row.
+        #   3. A 'Value' cell containing comma-separated identifiers.
+        if identifier_field in result.columns:
+            raw_values = result[identifier_field].dropna().astype(str).tolist()
         elif value_col:
             raw_values = result[value_col].dropna().astype(str).tolist()
         else:
@@ -228,6 +237,7 @@ class DatastreamDataManager:
             len(unique_sorted),
             list_code,
         )
+        self.log_usage_stats()
         return unique_sorted
 
     def get_metadata(
@@ -270,7 +280,9 @@ class DatastreamDataManager:
         for t_chunk in ticker_chunks:
             row_frames: List[pd.DataFrame] = []
             for f_chunk in field_chunks:
-                ticker_arg = self._format_tickers_arg(t_chunk, multi_field=len(f_chunk) > 1)
+                ticker_arg = self._format_tickers_arg(
+                    t_chunk, multi_field=len(f_chunk) > 1
+                )
                 logger.debug(
                     "get_metadata chunk: tickers=%s, fields=%s", ticker_arg, f_chunk
                 )
@@ -288,6 +300,7 @@ class DatastreamDataManager:
 
         if not frames:
             logger.warning("get_metadata returned no data for tickers=%s.", ticker_list)
+            self.log_usage_stats()
             return pd.DataFrame()
 
         result = pd.concat(frames, axis=0, ignore_index=True)
@@ -297,6 +310,7 @@ class DatastreamDataManager:
             len(ticker_list),
             len(field_list),
         )
+        self.log_usage_stats()
         return result
 
     def get_data(
@@ -350,7 +364,9 @@ class DatastreamDataManager:
 
         for t_chunk in ticker_chunks:
             for f_chunk in field_chunks:
-                ticker_arg = self._format_tickers_arg(t_chunk, multi_field=len(f_chunk) > 1)
+                ticker_arg = self._format_tickers_arg(
+                    t_chunk, multi_field=len(f_chunk) > 1
+                )
                 logger.debug(
                     "get_data chunk: tickers=%s, fields=%s, start=%s, end=%s, freq=%s",
                     ticker_arg,
@@ -372,6 +388,7 @@ class DatastreamDataManager:
 
         if not frames:
             logger.warning("get_data returned no data for tickers=%s.", ticker_list)
+            self.log_usage_stats()
             return pd.DataFrame()
 
         result = pd.concat(frames, axis=1)
@@ -383,6 +400,7 @@ class DatastreamDataManager:
             len(ticker_list),
             len(field_list),
         )
+        self.log_usage_stats()
         return result
 
     # ------------------------------------------------------------------
@@ -531,12 +549,11 @@ class DatastreamDataManager:
             long.columns = ["real_date", "ticker", "field", "currency", "value"]
         else:
             logger.warning(
-                "process_timeseries_data: unexpected column count %d after stack.", n_cols
+                "process_timeseries_data: unexpected column count %d after stack.",
+                n_cols,
             )
             long.columns = (
-                ["real_date"]
-                + [f"level_{i}" for i in range(n_cols - 2)]
-                + ["value"]
+                ["real_date"] + [f"level_{i}" for i in range(n_cols - 2)] + ["value"]
             )
             return {"unknown": long}
 
@@ -565,6 +582,79 @@ class DatastreamDataManager:
     # Private / internal helpers
     # ------------------------------------------------------------------
 
+    def log_usage_stats(self, force: bool = False) -> None:
+        """Fetch and display current-month DSWS usage statistics.
+
+        Issues ``ds.get_data(tickers='STATS', fields=['DS.USERSTATS'], kind=0)``
+        and prints the result to stdout.  Any error is logged as a warning so
+        that the calling ``get_*`` method is never disrupted.
+
+        Can be called directly at any time by passing ``force=True``, regardless
+        of whether ``show_usage_stats`` was set at construction.
+
+        Parameters
+        ----------
+        force : bool, optional
+            When ``True``, fetch and display statistics even if
+            ``show_usage_stats=False``.  Defaults to ``False``.
+        """
+        if not self._show_usage_stats and not force:
+            return
+        try:
+            ds = self._connection.get_connection()
+            stats_df = ds.get_data(
+                tickers="STATS",
+                fields=["DS.USERSTATS"],
+                kind=DSWS_KIND_TABULAR,
+                start=date.today().strftime("%Y-%m-%d"),
+            )
+        except Exception as exc:
+            logger.warning("Could not fetch DSWS usage statistics: %s", exc)
+            return
+
+        if stats_df is None or stats_df.empty:
+            logger.warning("DSWS usage statistics request returned no data.")
+            return
+
+        row = lambda key: stats_df.loc[stats_df["Datatype"] == key, "Value"].iloc[0]
+        try:
+            start_date = row("Start Date")
+            end_date = row("End Date")
+            hits = int(row("Hits"))
+            requests = int(row("Requests"))
+            datatypes = int(row("Datatypes"))
+            datapoints = int(row("Datapoints"))
+        except Exception as exc:
+            logger.warning("Could not parse DSWS usage statistics: %s", exc)
+            return
+
+        pct = datapoints / MONTHLY_QUOTA_PER_USER * 100
+        sep = "-" * 44
+        lines = [
+            "",
+            "DSWS Usage Statistics",
+            f"  Period     : {start_date} to {end_date}",
+            sep,
+            f"  Hits       : {hits:>10,}",
+            f"  Requests   : {requests:>10,}",
+            f"  Datatypes  : {datatypes:>10,}",
+            f"  Datapoints : {datapoints:>10,}  ({pct:.1f}% of monthly quota)",
+            sep,
+        ]
+        output = "\n".join(lines)
+
+        logger.info(output)
+        print(output)
+
+        if pct >= 90:
+            warning = (
+                f"WARNING: DSWS datapoint usage is at {pct:.1f}% of the monthly "
+                f"quota ({datapoints:,} / {MONTHLY_QUOTA_PER_USER:,}). "
+                "Consider reducing requests to avoid hitting the limit."
+            )
+            logger.warning(warning)
+            print(warning)
+
     @staticmethod
     def _normalize_to_list(
         value: Union[str, List[str], Tuple[str, ...]],
@@ -586,9 +676,7 @@ class DatastreamDataManager:
         if isinstance(value, (list, tuple)):
             result: List[str] = []
             for item in value:
-                result.extend(
-                    v.strip() for v in str(item).split(",") if v.strip()
-                )
+                result.extend(v.strip() for v in str(item).split(",") if v.strip())
             return result
         raise TypeError(
             f"_normalize_to_list expects str, list, or tuple; got {type(value).__name__}."
@@ -753,11 +841,9 @@ class DatastreamDataManager:
         )
 
         ticker_chunks = [
-            tickers[i: i + t_size] for i in range(0, len(tickers), t_size)
+            tickers[i : i + t_size] for i in range(0, len(tickers), t_size)
         ]
-        field_chunks = [
-            fields[i: i + f_size] for i in range(0, len(fields), f_size)
-        ]
+        field_chunks = [fields[i : i + f_size] for i in range(0, len(fields), f_size)]
         return ticker_chunks, field_chunks
 
     # ------------------------------------------------------------------
@@ -765,7 +851,30 @@ class DatastreamDataManager:
     # ------------------------------------------------------------------
 
     def __repr__(self) -> str:
-        return (
-            f"DatastreamDataManager("
-            f"connection={self._connection!r})"
-        )
+        return f"DatastreamDataManager(" f"connection={self._connection!r})"
+
+
+def parse_list_name(ln: str) -> date:
+    """
+    Parse a constituent-list name and return the last calendar day of its encoded month.
+
+    List names are expected to end with a four-character suffix "MMYY" where "MM"
+    is a two-digit month and "YY" is a two-digit year. The century is inferred from
+    the leading digit of "YY": '8' or '9' maps to the 1900s; anything else maps
+    to the 2000s.
+
+    Parameters
+    ----------
+    ln : str
+        List name string ending with a four-character date suffix encoding month and
+        year, e.g. "DOW30_list_0124" for January 2024.
+
+    Returns
+    -------
+    datetime.date
+        Last calendar day of the encoded month, e.g. date(2024, 1, 31) for
+        a suffix of "0124".
+    """
+    mm = int(ln[-4:-2])
+    yy = int(ln[-2:]) + 1900 if ln[-2] in (["9", "8"]) else int(ln[-2:]) + 2000
+    return (datetime(yy + mm // 12, mm % 12 + 1, 1) - timedelta(days=1)).date()

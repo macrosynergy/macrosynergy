@@ -57,6 +57,7 @@ class DataFrameTransformer(BaseEstimator, TransformerMixin, MetaEstimatorMixin):
 
         # Fit estimator
         self.transformer.fit(X, y)
+        self.is_fitted_ = True
 
         return self
 
@@ -105,6 +106,24 @@ class DataFrameTransformer(BaseEstimator, TransformerMixin, MetaEstimatorMixin):
                 index = X.index,
             )
         
+    def get_feature_names_out(self, input_features=None):
+        """
+        Get output feature names produced by the wrapped transformer.
+
+        Parameters
+        ----------
+        input_features : None
+            This parameter has no effect and is included for compatibility
+            with the scikit-learn API.
+        """
+        n_out = len(self.transformer.get_feature_names_out())
+        if self.column_names is None:
+            feature_names = np.asarray([f"Factor_{i}" for i in range(n_out)], dtype=str)
+        else:
+            feature_names = np.array(self.column_names[:n_out], dtype=str)
+
+        return feature_names
+
     def __getattr__(self, name):
         """
         Delegate attribute access to the underlying transformer.
