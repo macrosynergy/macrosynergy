@@ -210,6 +210,7 @@ class SignalOptimizer(BasePanelLearner):
         search_type="grid",
         normalize_fold_results=False,
         cv_summary="mean",
+        multi_target_fill = "zero",
         include_train_folds=False,
         min_cids=4,
         min_periods=12 * 3,
@@ -261,6 +262,10 @@ class SignalOptimizer(BasePanelLearner):
             Default is "mean". Options are "mean", "median", "mean-std", "mean/std",
             "mean-std-ge" or a callable function. If no hyperparameter tuning is required,
             this parameter can be disregarded.
+        multi_target_fill : str, optional
+            Method to use to fill in predictions for targets with poor availability in the
+            case of multi-target models. Options are "zero" and "mean". Default is "zero".
+            If no multi-target models are used, this parameter can be disregarded.
         include_train_folds : bool, optional
             Whether to calculate cross-validation statistics on the training folds in 
             additional to the test folds. If True, the cross-validation estimator will be
@@ -309,6 +314,7 @@ class SignalOptimizer(BasePanelLearner):
             Whether to store the correlations between input pipeline features and input
             predictor features. Default is False.
         """
+        # Additional checks
         if not isinstance(store_correlations, bool):
             raise TypeError("The store_correlations argument must be a boolean.")
 
@@ -318,7 +324,15 @@ class SignalOptimizer(BasePanelLearner):
             raise ValueError(
                 "The store_correlations argument is only valid when all models are Scikit-learn Pipelines."
             )
+        if not isinstance(multi_target_fill, str):
+            raise TypeError("The multi_target_fill argument must be a string.")
+        if multi_target_fill not in ["zero", "mean"]:
+            raise ValueError(
+                "The multi_target_fill argument must be either 'zero' or 'mean'."
+            )
+        
         self.store_correlations = store_correlations
+        self.multi_target_fill = multi_target_fill
 
         # Set up outer splitter
         outer_splitter = ExpandingIncrementPanelSplit(
@@ -381,7 +395,25 @@ class SignalOptimizer(BasePanelLearner):
             )
         # Create quantamental dataframe of forecasts
         for idx, forecasts in prediction_data:
-            forecasts_df.loc[idx, :] = forecasts
+            # TODO: add a check that forecasts are in the right format.
+            if self.n_targets == 1:
+                # Usual single output expects numpy array
+                forecasts_df.loc[idx, name] = forecasts
+            elif forecasts.shape[1] == self.n_targets:
+                # Multi output model with same number of targets as response variables
+                if isinstance(forecasts, np.ndarray):
+                    forecasts_df.loc[idx, :] = forecasts 
+                else:
+                    # Dataframe
+                    forecasts_df.loc[idx, :] = forecasts.values
+            else:
+                # Multi output model with less targets than response variables.
+                # This is usually due to excluded assets with insufficient data at training time
+                forecasts_df.loc[idx, [f"{target}_{name}" for target in forecasts.columns]] = forecasts.values
+                if self.multi_target_fill == "zero":
+                    forecasts_df.loc[idx, ~forecasts_df.columns.isin([f"{target}_{name}" for target in forecasts.columns])] = 0
+                elif self.multi_target_fill == "mean":
+                    forecasts_df.loc[idx, ~forecasts_df.columns.isin([f"{target}_{name}" for target in forecasts.columns])] = forecasts.mean(axis=1).values
 
         forecasts_df = forecasts_df.groupby(level=0).ffill().dropna()
 

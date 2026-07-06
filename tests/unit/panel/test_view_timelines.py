@@ -129,6 +129,7 @@ class TestAll(unittest.TestCase):
                     same_y=False,
                     aspect=2,
                     single_chart=True,
+                    y_axis_label="y-axis label"
                 )
 
             view_timelines(
@@ -141,6 +142,7 @@ class TestAll(unittest.TestCase):
                 aspect=2,
                 single_chart=True,
                 legend_fontsize=20,
+                y_axis_label="y-axis label",
             )
 
             dfdr = dfd.copy().set_index("real_date")

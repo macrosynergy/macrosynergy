@@ -11,6 +11,7 @@ import pandas as pd
 import scipy.cluster.hierarchy as sch
 import seaborn as sns
 from matplotlib import pyplot as plt
+from scipy.spatial.distance import pdist
 
 from macrosynergy.management.simulate import make_qdf
 from macrosynergy.management.utils import _map_to_business_day_frequency, reduce_df
@@ -652,7 +653,7 @@ def _cluster_correlations(
     """
 
     # Get pairwise distances of the dataframe's rows.
-    d = sch.distance.pdist(corr)
+    d = pdist(corr)
 
     # Perform hierarchical / agglomerative clustering. The clustering method used is
     # Farthest Point Algorithm.

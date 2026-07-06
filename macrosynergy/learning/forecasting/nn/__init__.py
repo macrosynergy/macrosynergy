@@ -1,3 +1,3 @@
-from .regressors import MLPRegressor
+from .mlp import MLPRegressor
 
 __all__ = ["MLPRegressor"]
