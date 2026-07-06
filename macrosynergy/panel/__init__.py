@@ -21,7 +21,6 @@ from .view_metrics import view_metrics
 from .adjust_weights import adjust_weights
 from .lincomb_adjust import linear_combination_adjustment
 from .cross_asset_effects import cross_asset_effects
-from .annualize_by_release_frequency import annualize_by_release_frequency
 
 __all__ = [
     "Basket",
@@ -50,5 +49,4 @@ __all__ = [
     "adjust_weights",
     "linear_combination_adjustment",
     "cross_asset_effects",
-    "annualize_by_release_frequency",
 ]

@@ -13,7 +13,8 @@ from macrosynergy.management.utils import (
     is_valid_iso_date,
 )
 from macrosynergy.management.types import QuantamentalDataFrame
-
+from macrosynergy.management.constants import ANNUALIZATION_FACTORS
+from macrosynergy.management.utils.frequency import infer_release_frequency
 
 SCORE_BY_OPTIONS = {"diff": "diff", "level": "value"}
 
@@ -324,6 +325,83 @@ class InformationStateChanges(object):
             result,
             _initialized_as_categorical=self._qdf_as_categorical,
         ).to_original_dtypes()
+
+    def annualize_by_release_frequency(
+        self,
+        xcats: List[str] = None,
+        cids: List[str] = None,
+        window: int = 3,
+        freqs: Tuple[str, ...] = ("D", "W", "M", "Q", "A"),
+        postfix: str = "A",
+    ) -> QuantamentalDataFrame:
+        """
+        Annualize each value by a time-varying weight inferred from its release cadence.
+
+        Multiplies each value by ``sqrt(1 / ANNUALIZATION_FACTORS[freq])``, where ``freq``
+        is the contemporaneous release frequency inferred per observation from the ``eop``
+        cadence (see :func:`infer_release_frequency`). The weight is time-varying: a series
+        whose cadence changes (e.g. quarterly -> monthly) is weighted quarterly before the
+        break and monthly after it. The ``eop`` column is emitted internally via
+        ``self.to_qdf(metrics=["eop"])`` -- no DataFrame need be passed.
+
+        Parameters
+        ----------
+        xcats, cids : List[str]
+            categories / cross-sections to transform. Default is all present.
+        window : int
+            rolling-median window passed to ``infer_release_frequency``. Default 3.
+        freqs : Tuple[str, ...]
+            candidate frequency labels. Default ("D", "W", "M", "Q", "A").
+        postfix : str
+            suffix appended to each output category. Default "A".
+
+        Returns
+        -------
+        QuantamentalDataFrame
+            a standardized QuantamentalDataFrame in canonical column order ('real_date',
+            'cid', 'xcat', 'value'); categories renamed ``{xcat}{postfix}``. Always a
+            genuine ``QuantamentalDataFrame`` instance, including when the selection is
+            empty.
+        """
+        cols = ["cid", "xcat", "real_date", "value"]
+        df = self.to_qdf(metrics=["eop"])
+        _as_categorical = QuantamentalDataFrame(df[cols]).InitializedAsCategorical
+
+        # subset on a plain frame to keep the eop column alongside the standard ones.
+        work = df[cols + ["eop"]].copy()
+        work["cid"] = work["cid"].astype(str)
+        work["xcat"] = work["xcat"].astype(str)
+        if xcats is not None:
+            work = work[work["xcat"].isin(xcats)]
+        if cids is not None:
+            work = work[work["cid"].isin(cids)]
+
+        weights = {v: np.sqrt(1 / ANNUALIZATION_FACTORS[v]) for v in freqs}
+
+        frames = []
+        for (cid, xcat), g in work.sort_values("real_date").groupby(["cid", "xcat"]):
+            g = g.copy()
+            freq = infer_release_frequency(g["eop"], window=window, freqs=freqs)
+            g["value"] = g["value"].to_numpy() * freq.map(weights).to_numpy()
+            g["xcat"] = f"{xcat}{postfix}"
+            frames.append(g[cols])
+
+        if not frames:
+            # Build directly in canonical (real_date, cid, xcat, value) order -- the same
+            # order from_long_df produces on the non-empty path -- so the return contract
+            # does not depend on whether the selection is empty.
+            empty_df = pd.DataFrame(
+                {
+                    "real_date": pd.Series([], dtype="datetime64[ns]"),
+                    "cid": pd.Series([], dtype="category"),
+                    "xcat": pd.Series([], dtype="category"),
+                    "value": pd.Series([], dtype="float64"),
+                }
+            )
+            return QuantamentalDataFrame(empty_df, categorical=_as_categorical)
+
+        df_out = pd.concat(frames, axis=0, ignore_index=True)
+        return QuantamentalDataFrame.from_long_df(df_out, categorical=_as_categorical)
 
     def to_dict(
         self, ticker: str

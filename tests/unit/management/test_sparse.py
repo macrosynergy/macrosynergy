@@ -884,5 +884,100 @@ class TestInformationStateChangesScoreBy(unittest.TestCase):
             InformationStateChanges.from_qdf(qdf, score_by="banana")
 
 
+class TestAnnualizeByReleaseFrequency(unittest.TestCase):
+    @staticmethod
+    def _isc(
+        values_by_ticker: Dict[str, np.ndarray], dates: pd.DatetimeIndex
+    ) -> InformationStateChanges:
+        """Build an ISC from per-ticker value series with eop_lag=0 (eop == real_date)."""
+        val = pd.DataFrame(values_by_ticker, index=dates)
+        lag = pd.DataFrame(
+            {t: np.zeros(len(dates)) for t in values_by_ticker}, index=dates
+        )
+        for d in (val, lag):
+            d.index.name, d.columns.name = "real_date", "ticker"
+        qdf = concat_single_metric_qdfs(
+            [
+                ticker_df_to_qdf(val, metric="value"),
+                ticker_df_to_qdf(lag, metric="eop_lag"),
+            ]
+        )
+        return InformationStateChanges.from_qdf(qdf)
+
+    @staticmethod
+    def _base_value(isc: InformationStateChanges, cid: str) -> pd.Series:
+        b = isc.to_qdf(metrics=["eop"])
+        return b[b["cid"] == cid].set_index("real_date")["value"]
+
+    def test_monthly_weight(self):
+        dates = pd.bdate_range("2015-01-01", "2018-12-31", freq="BME")
+        isc = self._isc({"AUD_CPIH": np.arange(len(dates)) + 1.0}, dates)
+
+        out = isc.annualize_by_release_frequency()
+        self.assertIsInstance(out, QuantamentalDataFrame)
+        self.assertEqual(list(out.columns), ["real_date", "cid", "xcat", "value"])
+        self.assertEqual(set(out["xcat"].unique()), {"CPIHA"})
+
+        # monthly cadence -> value * sqrt(1/12) against the object's own to_qdf output.
+        base = self._base_value(isc, "AUD")
+        aligned = (
+            out.set_index("real_date")["value"]
+            .to_frame("out")
+            .join(base.rename("base"))
+            .dropna()
+        )
+        self.assertTrue(np.allclose(aligned["out"], aligned["base"] * np.sqrt(1 / 12)))
+
+    def test_quarterly_weight(self):
+        dates = pd.bdate_range("2010-01-01", "2019-12-31", freq="BQE")
+        isc = self._isc({"AUD_CPIH": np.arange(len(dates)) + 1.0}, dates)
+
+        out = isc.annualize_by_release_frequency()
+        base = self._base_value(isc, "AUD")
+        aligned = (
+            out.set_index("real_date")["value"]
+            .to_frame("out")
+            .join(base.rename("base"))
+            .dropna()
+        )
+        self.assertTrue(np.allclose(aligned["out"], aligned["base"] * np.sqrt(1 / 4)))
+
+    def test_postfix_and_subset(self):
+        dates = pd.bdate_range("2015-01-01", "2018-12-31", freq="BME")
+        isc = self._isc(
+            {
+                "AUD_CPIH": np.arange(len(dates)) + 1.0,
+                "AUD_GDP": np.arange(len(dates)) + 1.0,
+            },
+            dates,
+        )
+        out = isc.annualize_by_release_frequency(xcats=["CPIH"], postfix="_ANN")
+        self.assertEqual(set(out["xcat"].unique()), {"CPIH_ANN"})
+
+    def test_empty_selection_returns_empty_qdf(self):
+        dates = pd.bdate_range("2015-01-01", "2018-12-31", freq="BME")
+        isc = self._isc({"AUD_CPIH": np.arange(len(dates)) + 1.0}, dates)
+
+        full = isc.annualize_by_release_frequency()
+        empty = isc.annualize_by_release_frequency(cids=["USD"])  # matches nothing
+
+        self.assertIsInstance(empty, QuantamentalDataFrame)
+        self.assertIs(type(empty), type(full))
+        self.assertEqual(list(empty.columns), list(full.columns))
+        self.assertEqual(list(empty.columns), ["real_date", "cid", "xcat", "value"])
+        self.assertTrue(empty.empty)
+
+    def test_single_release_raises(self):
+        # A ticker with a single eop period cannot yield a gap -> infer raises, and the
+        # method propagates it rather than silently defaulting a frequency.
+        dates = pd.bdate_range("2015-01-01", "2015-06-30", freq="BME")
+        isc = self._isc({"AUD_CPIH": np.arange(len(dates)) + 1.0}, dates)
+        # collapse every observation onto one eop so there is a single distinct eop.
+        for _tkr, g in isc.items():
+            g["eop"] = g["eop"].iloc[0]
+        with self.assertRaisesRegex(ValueError, "Not enough values"):
+            isc.annualize_by_release_frequency()
+
+
 if __name__ == "__main__":
     unittest.main()
