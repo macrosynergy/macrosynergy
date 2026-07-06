@@ -86,7 +86,7 @@ def sharpe_stability_ratio(
     roll = ret_s.rolling(window=window, min_periods=_min_p)
     z_series = (roll.mean() / roll.std()) * np.sqrt(annualization_factor)
     z = z_series.values.astype(float)
-    z = z[np.isfinite(z)]  # drop NaN and ±inf (e.g. from zero-variance windows)
+    z = z[np.isfinite(z)]  # drop NaN and +/-inf (e.g. from zero-variance windows)
 
     N = len(z)
     if N < 3:
@@ -140,7 +140,7 @@ def _newey_west_heuristic_bandwidth(N: int) -> int:
 
 
 def _andrews_ar1_bandwidth(z: np.ndarray) -> int:
-    """Andrews (1991) AR(1) plug-in bandwidth — adapts to series persistence."""
+    """Andrews (1991) AR(1) plug-in bandwidth - adapts to series persistence."""
     N = len(z)
     if N < 3:
         return 1

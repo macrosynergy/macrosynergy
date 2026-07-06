@@ -20,7 +20,7 @@ tracker <https://github.com/macrosynergy/macrosynergy/issues/new/choose>`__.
 
 If you are reporting a bug, please include as much information as
 possible to help us reproduce the issue. This includes environment
-details (e.g. operating system, Python version, dependency versions
+details (e.g. operating system, Python version, dependency versions
 (``pip freeze``)) error messages, and a minimal reproducible example.
 
 Feature Requests
@@ -43,16 +43,16 @@ The package has the 3 primary branches:
 
 ::
 
-   develop ← feature/<feature_name>
-           ← bugfix/<bugfix_name>
+   develop <- feature/<feature_name>
+           <- bugfix/<bugfix_name>
 
-   test ← develop
+   test <- develop
 
-   main ← hotfix/<hotfix_name>
-        ← test
+   main <- hotfix/<hotfix_name>
+        <- test
 
    ...
-   develop ← version++ ← main
+   develop <- version++ <- main
 
 New Features
 ~~~~~~~~~~~~
@@ -62,7 +62,7 @@ created from the ``develop`` branch. The feature branch should be named
 
 ::
 
-   develop ← feature/<feature_name>
+   develop <- feature/<feature_name>
 
 Once the feature is complete, a pull request should be raised against
 the ``develop`` branch. See the `Pull Requests
@@ -75,7 +75,7 @@ Bugfixes also be made against the ``develop`` branch.
 
 ::
 
-   develop ← bugfix/<bugfix_name>
+   develop <- bugfix/<bugfix_name>
 
 Hotfixes
 ~~~~~~~~
@@ -92,7 +92,7 @@ release.**
 
 ::
 
-   main ← hotfix/<hotfix_name>
+   main <- hotfix/<hotfix_name>
 
 CI/CD related changes
 ~~~~~~~~~~~~~~~~~~~~~
@@ -104,7 +104,7 @@ tasks:
 
    chore/<chore_name>
 
-Make sure to use “Chore” as the type of the pull request. (See `Pull
+Make sure to use "Chore" as the type of the pull request. (See `Pull
 Requests/Title Conventions <#title-conventions>`__)
 
 Pull Requests
@@ -230,7 +230,7 @@ The following apply to contributors outside the Macrosynergy team:
 
 5. Contributors may not make any modifications to the unit tests,
    integration tests, dependencies, or any CI/CD configuration
-   (e.g. GitHub Actions, Codecov, etc.)
+   (e.g. GitHub Actions, Codecov, etc.)
 
 6. Contributors may not modify any static files such as the static
    documentation pages, the ``README.md`` file, and the ``LICENSE``

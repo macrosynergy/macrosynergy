@@ -414,7 +414,7 @@ class TestAll(unittest.TestCase):
 
         # Test Case 1
 
-        # for every unique cid, xcat pair add a column "vx" which is just an integer 0→n ,
+        # for every unique cid, xcat pair add a column "vx" which is just an integer 0->n ,
         # where n is the number of unique dates for that cid, xcat pair
         df["vx"] = (
             df.groupby(["cid", "xcat"])["real_date"].rank(method="dense").astype(int)
@@ -1299,7 +1299,7 @@ class TestAll(unittest.TestCase):
                 self.assertEqual(call_kwargs.get("ylabel"), "CRY · last")
 
             # Default (collapse_constant_levels=False): byte-identical
-            # to the historical rendering — no auto y-label, no tick
+            # to the historical rendering - no auto y-label, no tick
             # collapse passed to ``view_table``.
             with patch("macrosynergy.visuals.view_table") as mock_view_table:
                 sr.single_statistic_table(
@@ -1383,7 +1383,7 @@ class TestAll(unittest.TestCase):
                 self.assertIsNone(call_kwargs.get("ylabel"))
                 self.assertIsNone(call_kwargs.get("yticklabels"))
 
-            # The returned DataFrame keeps its original MultiIndex — the
+            # The returned DataFrame keeps its original MultiIndex - the
             # collapse is display-only.
             df_returned = sr.single_statistic_table(
                 stat="kendall",
@@ -1637,7 +1637,7 @@ class TestAll(unittest.TestCase):
                 sorted(df_full.index.get_level_values("Aggregation").unique().tolist()),
                 ["Last", "Mean"],
             )
-            # Values are unchanged — only the labels move.
+            # Values are unchanged - only the labels move.
             np.testing.assert_array_equal(
                 np.sort(df_default.values.ravel()),
                 np.sort(df_full.values.ravel()),

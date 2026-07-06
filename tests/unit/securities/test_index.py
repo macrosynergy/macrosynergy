@@ -107,9 +107,9 @@ class TestBuildReconstitutionMembership(unittest.TestCase):
         bdays = mem_wide.index
         jan_bdays = bdays[bdays.month == 1]
         feb_bdays = bdays[bdays.month == 2]
-        # BBB was 0 on Jan 2 (first bday of Jan) → 0 for all January
+        # BBB was 0 on Jan 2 (first bday of Jan) -> 0 for all January
         self.assertTrue((result.loc[jan_bdays, "BBB"] == 0).all())
-        # BBB was 1 on Feb 3 (first bday of Feb) → 1 for all February
+        # BBB was 1 on Feb 3 (first bday of Feb) -> 1 for all February
         self.assertTrue((result.loc[feb_bdays, "BBB"] == 1).all())
 
     def test_result_has_same_shape_and_index(self):
@@ -122,7 +122,7 @@ class TestBuildReconstitutionMembership(unittest.TestCase):
     def test_always_member_unchanged(self):
         mem_wide = self._make_membership_wide()
         result = _build_reconstitution_membership(mem_wide, "M")
-        # AAA is 1 on every first bday → stays 1 for every day
+        # AAA is 1 on every first bday -> stays 1 for every day
         self.assertTrue((result["AAA"] == 1).all())
 
     def test_all_days_in_period_get_same_value(self):
@@ -372,12 +372,12 @@ class TestComputeExcessReturns(unittest.TestCase):
         returns, index_returns = self._single_stock_data()
         daily = compute_excess_returns(returns, index_returns)
         monthly = compute_excess_returns(returns, index_returns, output_freq="M")
-        # Jan–Mar 2020 → 3 monthly rows vs ~65 daily rows
+        # Jan-Mar 2020 -> 3 monthly rows vs ~65 daily rows
         self.assertEqual(len(monthly), 3)
         self.assertLess(len(monthly), len(daily))
 
     def test_output_freq_compounds_correctly(self):
-        # One month, constant returns → verify ratio compounding over N business days.
+        # One month, constant returns -> verify ratio compounding over N business days.
         bdays = pd.bdate_range("2020-01-01", "2020-01-31")
         n = len(bdays)
         returns, index_returns = self._single_stock_data(

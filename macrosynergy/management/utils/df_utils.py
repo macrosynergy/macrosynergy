@@ -1723,7 +1723,7 @@ def forward_fill_wide_df(df, blacklist=None, n=1):
 
 def _long_to_wide(df: pd.DataFrame, value_col: str) -> pd.DataFrame:
     """
-    Pivot a long-format panel to wide format (dates × cids).
+    Pivot a long-format panel to wide format (dates x cids).
 
     Parameters
     ----------
@@ -1796,7 +1796,7 @@ def rotate_cid_xcat(
     - "to_xcats": for each row, replaces "cid" with a per-stock xcat derived
       from xcat_template (substituting the cid value into the "{cid}"
       placeholder) and sets "cid" to fixed_value.
-    - "to_cids": the inverse — extracts the stock identifier from "xcat"
+    - "to_cids": the inverse - extracts the stock identifier from "xcat"
       using the template as a regex, writes it into "cid", and replaces "xcat"
       with fixed_value.
 

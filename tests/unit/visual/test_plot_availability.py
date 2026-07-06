@@ -168,7 +168,7 @@ class TestPlotAvailability(unittest.TestCase):
             self.fail(f"view_availability raised {e} for all-zeros ticker")
 
     # ------------------------------------------------------------------
-    # Validation — df
+    # Validation - df
     # ------------------------------------------------------------------
 
     def test_invalid_df_not_qdf(self):
@@ -196,7 +196,7 @@ class TestPlotAvailability(unittest.TestCase):
             view_availability(df)
 
     # ------------------------------------------------------------------
-    # Validation — n_ticks
+    # Validation - n_ticks
     # ------------------------------------------------------------------
 
     def test_invalid_n_ticks_zero(self):
@@ -216,7 +216,7 @@ class TestPlotAvailability(unittest.TestCase):
             view_availability(self.df, n_ticks="ten")
 
     # ------------------------------------------------------------------
-    # Validation — kwargs dicts
+    # Validation - kwargs dicts
     # ------------------------------------------------------------------
 
     def test_invalid_kwargs_dict_type(self):

@@ -1609,17 +1609,17 @@ class SignalReturnRelations:
             ``xcats``. Internally split by membership in ``self.sigs`` /
             ``self.rets`` and routed through ``signal_name_dict`` /
             ``return_name_dict``; xcats not listed in the dict are kept
-            verbatim. Mutually exclusive with the two legacy kwargs — pass
+            verbatim. Mutually exclusive with the two legacy kwargs - pass
             either ``xcat_labels`` or ``signal_name_dict`` /
             ``return_name_dict``, not both. Default is None (no rename).
         freq_labels : dict, optional
-            Mapping from frequency code (``"M"``, ``"Q"``, …) to the
+            Mapping from frequency code (``"M"``, ``"Q"``, ...) to the
             display label used on the heatmap and in the auto axis label
             produced by the constant-level collapse. Frequencies not
             listed in the dict are kept verbatim. Default is None
             (raw codes are shown).
         agg_sigs_labels : dict, optional
-            Mapping from aggregation code (``"last"``, ``"mean"``, …) to
+            Mapping from aggregation code (``"last"``, ``"mean"``, ...) to
             the display label used on the heatmap and in the auto axis
             label produced by the constant-level collapse. Aggregations
             not listed in the dict are kept verbatim. Default is None
@@ -1631,7 +1631,7 @@ class SignalReturnRelations:
             colour); a plain list is treated as ``{xcat: "black"}``.
             Requires ``"xcat"`` in ``rows``; raises ``ValueError`` if set
             without it, if a name is not among ``sigs``, or if a colour is
-            invalid. Boxing does not reorder the table — use
+            invalid. Boxing does not reorder the table - use
             ``xcat_row_order`` for that. Default is None.
         xcat_row_order : List[str], optional
             Signal xcats (as passed to ``sigs``) giving the desired
@@ -1655,7 +1655,7 @@ class SignalReturnRelations:
             number of decimals to round the primary statistic to in the heatmap
             annotations. Default is 3.
         pval_stat : str, optional
-            name of a p-value statistic — typically ``"kendall_pval"``,
+            name of a p-value statistic - typically ``"kendall_pval"``,
             ``"pearson_pval"`` or ``"map_pval"`` (the Macrosynergy Panel
             test). When set, each heatmap cell shows the **probability of
             significance**, ``1 - pval_stat``, in brackets beneath the
@@ -2123,15 +2123,15 @@ class SignalReturnRelations:
             ``xcats``. Internally split by membership in ``self.sigs`` /
             ``self.rets`` and routed through ``signal_name_dict`` /
             ``return_name_dict``; xcats not listed in the dict are kept
-            verbatim. Mutually exclusive with the two legacy kwargs — pass
+            verbatim. Mutually exclusive with the two legacy kwargs - pass
             either ``xcat_labels`` or ``signal_name_dict`` /
             ``return_name_dict``, not both. Default is None (no rename).
         freq_labels : dict, optional
-            Mapping from frequency code (``"M"``, ``"Q"``, …) to its
+            Mapping from frequency code (``"M"``, ``"Q"``, ...) to its
             display label. Frequencies not listed in the dict are kept
             verbatim. Default is None.
         agg_sigs_labels : dict, optional
-            Mapping from aggregation code (``"last"``, ``"mean"``, …) to
+            Mapping from aggregation code (``"last"``, ``"mean"``, ...) to
             its display label. Aggregations not listed in the dict are
             kept verbatim. Default is None.
         min_color : float, optional
@@ -2148,7 +2148,7 @@ class SignalReturnRelations:
             number of decimals to round the primary statistic to in the heatmap
             annotations. Default is 3.
         pval_stat : str, optional
-            name of a p-value statistic — typically ``"kendall_pval"``,
+            name of a p-value statistic - typically ``"kendall_pval"``,
             ``"pearson_pval"`` or ``"map_pval"`` (the Macrosynergy Panel
             test). When set, each heatmap cell shows the **probability of
             significance**, ``1 - pval_stat``, in brackets beneath the
@@ -2233,15 +2233,15 @@ class SignalReturnRelations:
             ``xcats``. Internally split by membership in ``self.sigs`` /
             ``self.rets`` and routed through ``signal_name_dict`` /
             ``return_name_dict``; xcats not listed in the dict are kept
-            verbatim. Mutually exclusive with the two legacy kwargs — pass
+            verbatim. Mutually exclusive with the two legacy kwargs - pass
             either ``xcat_labels`` or ``signal_name_dict`` /
             ``return_name_dict``, not both. Default is None (no rename).
         freq_labels : dict, optional
-            Mapping from frequency code (``"M"``, ``"Q"``, …) to its
+            Mapping from frequency code (``"M"``, ``"Q"``, ...) to its
             display label. Frequencies not listed in the dict are kept
             verbatim. Default is None.
         agg_sigs_labels : dict, optional
-            Mapping from aggregation code (``"last"``, ``"mean"``, …) to
+            Mapping from aggregation code (``"last"``, ``"mean"``, ...) to
             its display label. Aggregations not listed in the dict are
             kept verbatim. Default is None.
         min_color : float, optional
@@ -2258,7 +2258,7 @@ class SignalReturnRelations:
             number of decimals to round the primary statistic to in the heatmap
             annotations. Default is 3.
         pval_stat : str, optional
-            name of a p-value statistic — typically ``"kendall_pval"``,
+            name of a p-value statistic - typically ``"kendall_pval"``,
             ``"pearson_pval"`` or ``"map_pval"`` (the Macrosynergy Panel
             test). When set, each heatmap cell shows the **probability of
             significance**, ``1 - pval_stat``, in brackets beneath the
@@ -2340,7 +2340,7 @@ class SignalReturnRelations:
             ``display_labels`` is a list of tick labels with constant levels
             removed, joined by ``" · "`` when more than one level survives.
             It is ``None`` when no collapse applies (plain ``Index``, single
-            level, no constant levels, or all levels constant — in which
+            level, no constant levels, or all levels constant - in which
             case the existing tick labels are kept). ``constant_pairs`` is
             an ordered list of ``(level_name, value)`` for each collapsed
             level, suitable for filtering and joining into an auto axis

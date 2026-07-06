@@ -24,7 +24,7 @@ def extend_history(
 
     .. deprecated::
         `extend_history` is deprecated and will be removed in a future release. Use
-        `merge_categories` instead — it provides per-date hierarchy fill plus the same
+        `merge_categories` instead - it provides per-date hierarchy fill plus the same
         `backfill`/`start` options.
 
     Parameters
