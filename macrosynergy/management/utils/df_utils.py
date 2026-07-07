@@ -2,27 +2,25 @@
 Utility functions for working with DataFrames.
 """
 
-from macrosynergy.management.types import QuantamentalDataFrame
-from macrosynergy.management.constants import FREQUENCY_MAP, FFILL_LIMITS, DAYS_PER_FREQ
-
+import functools
 import logging
-import warnings
-from typing import Iterable, List, Optional, Union, Dict
 import re
+import warnings
 from numbers import Number
+from typing import Dict, Iterable, List, Optional, Union
 
 import numpy as np
 import pandas as pd
-import datetime
+
 import macrosynergy.management.constants as ms_constants
+from macrosynergy.compat import PD_OLD_RESAMPLE, RESAMPLE_NUMERIC_ONLY
+from macrosynergy.management.types import QuantamentalDataFrame
 from macrosynergy.management.utils.core import (
+    _map_to_business_day_frequency,
     get_cid,
     get_xcat,
-    _map_to_business_day_frequency,
     is_valid_iso_date,
 )
-from macrosynergy.compat import RESAMPLE_NUMERIC_ONLY, PD_OLD_RESAMPLE
-import functools
 
 logger = logging.getLogger(__name__)
 
@@ -80,10 +78,10 @@ def standardise_dataframe(df: pd.DataFrame) -> QuantamentalDataFrame:
     # Check if the input DF contains the standard columns
     if not set(df.columns).issuperset(set(idx_cols)):
         fail_str: str = (
-            f"Error : Tried to standardize DataFrame but failed."
-            f"DataFrame not in the correct format. Please ensure "
-            f"that the DataFrame has the following columns: "
-            f"'cid', 'xcat', 'real_date', along with any other "
+            "Error : Tried to standardize DataFrame but failed."
+            "DataFrame not in the correct format. Please ensure "
+            "that the DataFrame has the following columns: "
+            "'cid', 'xcat', 'real_date', along with any other "
             "variables you wish to include (e.g. 'value', 'mop_lag', "
             "'eop_lag', 'grading')."
         )
@@ -95,8 +93,8 @@ def standardise_dataframe(df: pd.DataFrame) -> QuantamentalDataFrame:
             if not set(dft.columns).issuperset(set(idx_cols)):
                 raise ValueError(fail_str)
             df = dft.copy()
-        except:
-            raise ValueError(fail_str)
+        except Exception as e:
+            raise ValueError(fail_str) from e
 
         # check if there is at least one more column
         if len(df.columns) < 4:
@@ -132,7 +130,8 @@ def standardise_dataframe(df: pd.DataFrame) -> QuantamentalDataFrame:
     for col in jpmaqs_metrics + list(non_jpmaqs_metrics):
         try:
             df[col] = df[col].astype(float)
-        except:
+        except Exception as e:
+            logger.warning(f"Failed to convert column {col} to float: {e}")
             pass
 
     assert isinstance(df, QuantamentalDataFrame), "Failed to standardize DataFrame"
@@ -174,7 +173,7 @@ def drop_nan_series(
     if type(df) is QuantamentalDataFrame:
         return df.drop_nan_series(column=column, raise_warning=raise_warning)
 
-    if not column in df.columns:
+    if column not in df.columns:
         raise ValueError(f"Column {column} not present in DataFrame.")
 
     if not df[column].isna().any():
@@ -230,7 +229,7 @@ def qdf_to_ticker_df(df: pd.DataFrame, value_column: str = "value") -> pd.DataFr
     if not isinstance(value_column, str):
         raise TypeError("Argument `value_column` must be a string.")
 
-    if not value_column in df.columns:
+    if value_column not in df.columns:
         cols: List[str] = list(set(df.columns) - set(QuantamentalDataFrame.IndexCols))
         if "value" in cols:
             value_column: str = "value"
@@ -269,16 +268,36 @@ def ticker_df_to_qdf(df: pd.DataFrame, metric: str = "value") -> QuantamentalDat
     if not isinstance(metric, str):
         raise TypeError("Argument `metric` must be a string.")
 
-    # pivot to long format
-    df = (
+    col_labels = list(df.columns)
+    cids = get_cid(col_labels)
+    xcats = get_xcat(col_labels)
+
+    # Fast Level-B path: split the column labels (unique tickers) once and carry
+    # cid/xcat through the stack, avoiding a full-length "ticker" string column.
+    # Requires unique (cid, xcat) pairs; fall back when duplicates are present.
+    pairs = list(zip(cids, xcats))
+    if len(pairs) == len(set(pairs)):
+        df = df.copy()
+        df.columns = pd.MultiIndex.from_arrays([cids, xcats], names=["cid", "xcat"])
+        out = (
+            df.stack(["cid", "xcat"], future_stack=True)
+            .reset_index()
+            .rename(columns={0: metric})
+        )
+        # future_stack=True keeps missing cells; drop them so a NaN metric (a
+        # non-observation that only exists due to the shared wide index) does not
+        # become an explicit QDF row - matching the fallback path's stack dropna.
+        out = out.dropna(subset=[metric])
+        return standardise_dataframe(df=out)
+
+    # Fallback for rare duplicate-column frames: stack on the flat string column.
+    out = (
         df.stack(level=0).reset_index().rename(columns={0: metric, "level_1": "ticker"})
     )
-
-    df["cid"] = get_cid(df["ticker"])
-    df["xcat"] = get_xcat(df["ticker"])
-    df = df.drop(columns=["ticker"])
-
-    return standardise_dataframe(df=df)
+    out["cid"] = get_cid(list(out["ticker"]))
+    out["xcat"] = get_xcat(list(out["ticker"]))
+    out = out.drop(columns=["ticker"])
+    return standardise_dataframe(df=out)
 
 
 def concat_single_metric_qdfs(
@@ -787,10 +806,18 @@ def reduce_df(
 
     df = df[df["cid"].isin(cids)]
 
+    # Fast dedup: if the natural-key columns (cid, xcat, real_date) are already unique,
+    # there can be no full-row duplicates either — skip the expensive all-column
+    # drop_duplicates() entirely.  When duplicates do exist, fall back to the original
+    # drop_duplicates() so that genuine duplicate rows are still removed.
+    _idx_cols = ["cid", "xcat", "real_date"]
+    if df.duplicated(subset=_idx_cols).any():
+        df = df.drop_duplicates()
+
     if out_all:
-        return df.drop_duplicates(), xcats, sorted(cids)
+        return df, xcats, sorted(cids)
     else:
-        return df.drop_duplicates()
+        return df
 
 
 def reduce_df_by_ticker(
@@ -1130,9 +1157,10 @@ def categories_df(
         year_groups[f"{group_start_year} - now"] = v
         list_y_groups = list(year_groups.keys())
 
-        translate_ = lambda year: list_y_groups[int((year % start_year) / years)]
         df["real_date"] = pd.to_datetime(df["real_date"], errors="coerce")
-        df["custom_date"] = df["real_date"].dt.year.apply(translate_)
+        df["custom_date"] = df["real_date"].dt.year.apply(
+            lambda year: list_y_groups[int((year % start_year) / years)]
+        )
 
         dfx_list = [df[df["xcat"] == xcats[0]], df[df["xcat"] == xcats[1]]]
         df_agg = list(map(categories_df_aggregation_helper, dfx_list, xcat_aggs))
@@ -1310,7 +1338,6 @@ def _get_edge_dates(
     direction: str = "end",
 ) -> pd.Series:
     assert direction in ["start", "end"], "Direction must be either 'start' or 'end'."
-    datettypes = [pd.Timestamp, str, np.datetime64, datetime.date]
 
     freq = _map_to_business_day_frequency(freq)
 
@@ -1769,7 +1796,9 @@ def _wide_to_long(df: pd.DataFrame, value_name: str = "value") -> pd.DataFrame:
         sorted by cid then real_date, with NaN rows dropped.
     """
     if df.columns.empty:
-        raise ValueError("_wide_to_long: DataFrame has no columns (expected one per cid).")
+        raise ValueError(
+            "_wide_to_long: DataFrame has no columns (expected one per cid)."
+        )
 
     long = (
         df.rename_axis("real_date")
