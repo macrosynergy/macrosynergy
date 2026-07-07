@@ -5,6 +5,7 @@ import warnings
 import numpy as np
 
 from typing import List, Dict, Set, Any
+from macrosynergy.compat import PD_NEW_DATE_FREQ
 from macrosynergy.management.types import QuantamentalDataFrame
 from macrosynergy.management.simulate import make_test_df
 from macrosynergy.management.utils import (
@@ -885,6 +886,11 @@ class TestInformationStateChangesScoreBy(unittest.TestCase):
 
 
 class TestAnnualizeByReleaseFrequency(unittest.TestCase):
+    # pandas >=2.2 renamed the business period-end aliases (BM->BME, BQ->BQE); pick per
+    # version so the date ranges are identical on the old pandas pinned for Python 3.7.
+    _BME = "BME" if PD_NEW_DATE_FREQ else "BM"
+    _BQE = "BQE" if PD_NEW_DATE_FREQ else "BQ"
+
     @staticmethod
     def _isc(
         values_by_ticker: Dict[str, np.ndarray], dates: pd.DatetimeIndex
@@ -910,7 +916,7 @@ class TestAnnualizeByReleaseFrequency(unittest.TestCase):
         return b[b["cid"] == cid].set_index("real_date")["value"]
 
     def test_monthly_weight(self):
-        dates = pd.bdate_range("2015-01-01", "2018-12-31", freq="BME")
+        dates = pd.bdate_range("2015-01-01", "2018-12-31", freq=self._BME)
         isc = self._isc({"AUD_CPIH": np.arange(len(dates)) + 1.0}, dates)
 
         out = isc.annualize_by_release_frequency()
@@ -929,7 +935,7 @@ class TestAnnualizeByReleaseFrequency(unittest.TestCase):
         self.assertTrue(np.allclose(aligned["out"], aligned["base"] * np.sqrt(1 / 12)))
 
     def test_quarterly_weight(self):
-        dates = pd.bdate_range("2010-01-01", "2019-12-31", freq="BQE")
+        dates = pd.bdate_range("2010-01-01", "2019-12-31", freq=self._BQE)
         isc = self._isc({"AUD_CPIH": np.arange(len(dates)) + 1.0}, dates)
 
         out = isc.annualize_by_release_frequency()
@@ -943,7 +949,7 @@ class TestAnnualizeByReleaseFrequency(unittest.TestCase):
         self.assertTrue(np.allclose(aligned["out"], aligned["base"] * np.sqrt(1 / 4)))
 
     def test_postfix_and_subset(self):
-        dates = pd.bdate_range("2015-01-01", "2018-12-31", freq="BME")
+        dates = pd.bdate_range("2015-01-01", "2018-12-31", freq=self._BME)
         isc = self._isc(
             {
                 "AUD_CPIH": np.arange(len(dates)) + 1.0,
@@ -955,7 +961,7 @@ class TestAnnualizeByReleaseFrequency(unittest.TestCase):
         self.assertEqual(set(out["xcat"].unique()), {"CPIH_ANN"})
 
     def test_empty_selection_returns_empty_qdf(self):
-        dates = pd.bdate_range("2015-01-01", "2018-12-31", freq="BME")
+        dates = pd.bdate_range("2015-01-01", "2018-12-31", freq=self._BME)
         isc = self._isc({"AUD_CPIH": np.arange(len(dates)) + 1.0}, dates)
 
         full = isc.annualize_by_release_frequency()
@@ -970,7 +976,7 @@ class TestAnnualizeByReleaseFrequency(unittest.TestCase):
     def test_single_release_raises(self):
         # A ticker with a single eop period cannot yield a gap -> infer raises, and the
         # method propagates it rather than silently defaulting a frequency.
-        dates = pd.bdate_range("2015-01-01", "2015-06-30", freq="BME")
+        dates = pd.bdate_range("2015-01-01", "2015-06-30", freq=self._BME)
         isc = self._isc({"AUD_CPIH": np.arange(len(dates)) + 1.0}, dates)
         # collapse every observation onto one eop so there is a single distinct eop.
         for _tkr, g in isc.items():
