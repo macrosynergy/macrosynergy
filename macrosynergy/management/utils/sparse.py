@@ -160,12 +160,8 @@ class InformationStateChanges(object):
         df: QuantamentalDataFrame,
         norm: bool = True,
         score_by: str = "diff",
-        zscore_freq_weighted_args: Dict = dict(
-            xcats=None,
-            cids=None,
-            window=3,
-            freqs=("D", "W", "M", "Q", "A"),
-        ),
+        zscore_freq_window: int = 3,
+        zscore_freqs_allowed: Tuple[str, ...] = ("D", "W", "M", "Q", "A"),
         **kwargs,
     ) -> "InformationStateChanges":
         """
@@ -187,10 +183,10 @@ class InformationStateChanges(object):
             based on the difference between the information state changes. If "level", the
             score is calculated based on the value ('level') of the information state
             change.
-        zscore_freq_weighted_args : Dict
-            A dictionary of arguments to pass to the `annualize_by_release_frequency`
-            method. See :func:`InformationStateChanges.annualize_by_release_frequency()`
-            for more information.
+        zscore_freq_window: int
+            rolling-median window passed to ``infer_release_frequency``. Default 3.
+        zscore_freqs_allowed: Tuple[str, ...]
+            candidate frequency labels. Default ("D", "W", "M", "Q", "A").
         **kwargs : Any
             Additional keyword arguments to pass to the `calculate_score` method. Please refer
             to :func:`InformationStateChanges.calculate_score()` for more information.
@@ -222,7 +218,9 @@ class InformationStateChanges(object):
 
         if norm:
             isc.calculate_score(score_by=score_by, **kwargs)
-            isc.annualize_by_release_frequency(**zscore_freq_weighted_args)
+            isc.annualize_by_release_frequency(
+                window=zscore_freq_window, freqs=zscore_freqs_allowed
+            )
         return isc
 
     @classmethod
@@ -340,10 +338,8 @@ class InformationStateChanges(object):
 
     def annualize_by_release_frequency(
         self,
-        xcats: List[str] = None,
-        cids: List[str] = None,
-        window: int = 3,
-        freqs: Tuple[str, ...] = ("D", "W", "M", "Q", "A"),
+        zscore_freq_window: int = 3,
+        zscore_freqs_allowed: Tuple[str, ...] = ("D", "W", "M", "Q", "A"),
     ) -> QuantamentalDataFrame:
         """
         Annualize each value by a time-varying weight inferred from its release cadence.
@@ -352,44 +348,38 @@ class InformationStateChanges(object):
         is the contemporaneous release frequency inferred per observation from the ``eop``
         cadence (see :func:`infer_release_frequency`). The weight is time-varying: a series
         whose cadence changes (e.g. quarterly -> monthly) is weighted quarterly before the
-        break and monthly after it. The ``eop`` column is emitted internally via
-        ``self.to_qdf(metrics=["eop"])`` -- no DataFrame need be passed.
+        break and monthly after it.
 
         Parameters
         ----------
-        xcats, cids : List[str]
-            categories / cross-sections to transform. Default is all present.
-        window : int
+        zscore_freq_window : int
             rolling-median window passed to ``infer_release_frequency``. Default 3.
-        freqs : Tuple[str, ...]
+        zscore_freqs_allowed : Tuple[str, ...]
             candidate frequency labels. Default ("D", "W", "M", "Q", "A").
-        postfix : str
-            suffix appended to each output category. Default "A".
-
-        Returns
-        -------
-        QuantamentalDataFrame
-            a standardized QuantamentalDataFrame in canonical column order ('real_date',
-            'cid', 'xcat', 'value'); categories renamed ``{xcat}{postfix}``. Always a
-            genuine ``QuantamentalDataFrame`` instance, including when the selection is
-            empty.
         """
         tickers_to_calc = list(self.isc_dict.keys())
-        if cids is not None:
-            tickers_to_calc = [t for t in tickers_to_calc if get_cid(t) in cids]
-        if xcats is not None:
-            tickers_to_calc = [t for t in tickers_to_calc if get_xcat(t) in xcats]
-        weights = {v: np.sqrt(1 / ANNUALIZATION_FACTORS[v]) for v in freqs}
+        weights = {
+            v: np.sqrt(1 / ANNUALIZATION_FACTORS[v]) for v in zscore_freqs_allowed
+        }
 
-        for ticker_key, dfx in self.isc_dict.items():
+        for ticker_key in self.isc_dict.keys():
             if ticker_key not in tickers_to_calc:
                 continue
-            if "zscore" not in dfx.columns:
+            if "zscore" not in self.isc_dict[ticker_key].columns:
                 warnings.warn(f"No 'zscore' calculate for {ticker_key}")
                 continue
-            freq = infer_release_frequency(dfx["eop"], window=window, freqs=freqs)
-            dfx["infered_freq"] = pd.Categorical(freq, categories=freqs, ordered=True)
-            dfx["zscore_fw"] = dfx["zscore"].to_numpy() * freq.map(weights).to_numpy()
+            freq = infer_release_frequency(
+                self.isc_dict[ticker_key]["eop"],
+                window=zscore_freq_window,
+                freqs=zscore_freqs_allowed,
+            )
+            self.isc_dict[ticker_key]["infered_freq"] = pd.Categorical(
+                freq, categories=zscore_freqs_allowed, ordered=True
+            )
+            self.isc_dict[ticker_key]["zscore_fw"] = (
+                self.isc_dict[ticker_key]["zscore"].to_numpy()
+                * freq.map(weights).to_numpy()
+            )
 
     def to_dict(
         self, ticker: str
