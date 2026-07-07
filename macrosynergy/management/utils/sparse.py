@@ -10,6 +10,7 @@ from macrosynergy.management.utils import (
     ticker_df_to_qdf,
     concat_single_metric_qdfs,
     get_xcat,
+    get_cid,
     is_valid_iso_date,
 )
 from macrosynergy.management.types import QuantamentalDataFrame
@@ -159,6 +160,12 @@ class InformationStateChanges(object):
         df: QuantamentalDataFrame,
         norm: bool = True,
         score_by: str = "diff",
+        zscore_freq_weighted_args: Dict = dict(
+            xcats=None,
+            cids=None,
+            window=3,
+            freqs=("D", "W", "M", "Q", "A"),
+        ),
         **kwargs,
     ) -> "InformationStateChanges":
         """
@@ -180,8 +187,12 @@ class InformationStateChanges(object):
             based on the difference between the information state changes. If "level", the
             score is calculated based on the value ('level') of the information state
             change.
+        zscore_freq_weighted_args : Dict
+            A dictionary of arguments to pass to the `annualize_by_release_frequency`
+            method. See :func:`InformationStateChanges.annualize_by_release_frequency()`
+            for more information.
         **kwargs : Any
-            Additional keyword arguments to pass to the `calculate_score` Please refer
+            Additional keyword arguments to pass to the `calculate_score` method. Please refer
             to :func:`InformationStateChanges.calculate_score()` for more information.
 
         Returns
@@ -211,6 +222,7 @@ class InformationStateChanges(object):
 
         if norm:
             isc.calculate_score(score_by=score_by, **kwargs)
+            isc.annualize_by_release_frequency(**zscore_freq_weighted_args)
         return isc
 
     @classmethod
@@ -332,7 +344,6 @@ class InformationStateChanges(object):
         cids: List[str] = None,
         window: int = 3,
         freqs: Tuple[str, ...] = ("D", "W", "M", "Q", "A"),
-        postfix: str = "A",
     ) -> QuantamentalDataFrame:
         """
         Annualize each value by a time-varying weight inferred from its release cadence.
@@ -363,45 +374,22 @@ class InformationStateChanges(object):
             genuine ``QuantamentalDataFrame`` instance, including when the selection is
             empty.
         """
-        cols = ["cid", "xcat", "real_date", "value"]
-        df = self.to_qdf(metrics=["eop"])
-        _as_categorical = QuantamentalDataFrame(df[cols]).InitializedAsCategorical
-
-        # subset on a plain frame to keep the eop column alongside the standard ones.
-        work = df[cols + ["eop"]].copy()
-        work["cid"] = work["cid"].astype(str)
-        work["xcat"] = work["xcat"].astype(str)
-        if xcats is not None:
-            work = work[work["xcat"].isin(xcats)]
+        tickers_to_calc = list(self.isc_dict.keys())
         if cids is not None:
-            work = work[work["cid"].isin(cids)]
-
+            tickers_to_calc = [t for t in tickers_to_calc if get_cid(t) in cids]
+        if xcats is not None:
+            tickers_to_calc = [t for t in tickers_to_calc if get_xcat(t) in xcats]
         weights = {v: np.sqrt(1 / ANNUALIZATION_FACTORS[v]) for v in freqs}
 
-        frames = []
-        for (cid, xcat), g in work.sort_values("real_date").groupby(["cid", "xcat"]):
-            g = g.copy()
-            freq = infer_release_frequency(g["eop"], window=window, freqs=freqs)
-            g["value"] = g["value"].to_numpy() * freq.map(weights).to_numpy()
-            g["xcat"] = f"{xcat}{postfix}"
-            frames.append(g[cols])
-
-        if not frames:
-            # Build directly in canonical (real_date, cid, xcat, value) order -- the same
-            # order from_long_df produces on the non-empty path -- so the return contract
-            # does not depend on whether the selection is empty.
-            empty_df = pd.DataFrame(
-                {
-                    "real_date": pd.Series([], dtype="datetime64[ns]"),
-                    "cid": pd.Series([], dtype="category"),
-                    "xcat": pd.Series([], dtype="category"),
-                    "value": pd.Series([], dtype="float64"),
-                }
-            )
-            return QuantamentalDataFrame(empty_df, categorical=_as_categorical)
-
-        df_out = pd.concat(frames, axis=0, ignore_index=True)
-        return QuantamentalDataFrame.from_long_df(df_out, categorical=_as_categorical)
+        for ticker_key, dfx in self.isc_dict.items():
+            if ticker_key not in tickers_to_calc:
+                continue
+            if "zscore" not in dfx.columns:
+                warnings.warn(f"No 'zscore' calculate for {ticker_key}")
+                continue
+            freq = infer_release_frequency(dfx["eop"], window=window, freqs=freqs)
+            dfx["infered_freq"] = pd.Categorical(freq, categories=freqs, ordered=True)
+            dfx["zscore_fw"] = dfx["zscore"].to_numpy() * freq.map(weights).to_numpy()
 
     def to_dict(
         self, ticker: str
@@ -1366,6 +1354,18 @@ def sparse_to_dense(
     tdf = _get_metric_df_from_isc(isc=isc, metric=value_column, date_range=dtrange)
     tdf = _remove_insignificant_values(tdf, threshold=1e-12)
 
+    all_metrics_found = []
+    for k, v in isc.items():
+        if not isinstance(v, pd.DataFrame):
+            raise ValueError(f"Value for ticker {k} is not a DataFrame")
+        if value_column not in v.columns:
+            raise ValueError(
+                f"Value column '{value_column}' not found in DataFrame for ticker {k}"
+            )
+        all_metrics_found.extend(v.columns)
+
+    all_non_value_metrics = sorted(set(all_metrics_found) - {value_column})
+
     wins_lower, wins_upper = None, None
     if thresh is not None:
         if isinstance(thresh, tuple):
@@ -1389,7 +1389,7 @@ def sparse_to_dense(
         )
     sm_qdfs: List[QuantamentalDataFrame] = [ticker_df_to_qdf(tdf)]
     if metrics is None:
-        metrics = []
+        metrics = all_non_value_metrics
     for metric_name in metrics:
         wdf = _get_metric_df_from_isc(
             isc=isc, metric=metric_name, date_range=dtrange, fill="ffill"
@@ -1638,14 +1638,15 @@ if __name__ == "__main__":
     # isc = InformationStateChanges.from_isc_df(df, ticker=ticker, iis=True)
     # print(isc)
 
-    from macrosynergy.download import JPMaQSDownload
+    from macrosynergy.download import DataQueryFileAPIClient
     from macrosynergy.management import InformationStateChanges
 
     tickers = ["USD_GDPPC_SA", "GBP_GDPPC_SA"]
 
-    with JPMaQSDownload() as jpmaqs:
-        df = jpmaqs.download(tickers=tickers, metrics="all")
+    with DataQueryFileAPIClient() as jpmaqs:
+        df = jpmaqs.download(tickers=tickers, metrics=None)
 
-    isc = InformationStateChanges.from_qdf(df[["cid", "xcat", "real_date", "value"]])
-    iqdf = isc.to_qdf()
+    isc = InformationStateChanges.from_qdf(df)
+    out_qdf = isc.to_qdf(value_column="zscore_fw", postfix="_ZScoreFW")
+
     print(list(isc.keys()))
