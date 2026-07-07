@@ -1638,13 +1638,13 @@ if __name__ == "__main__":
     # isc = InformationStateChanges.from_isc_df(df, ticker=ticker, iis=True)
     # print(isc)
 
-    from macrosynergy.download import DataQueryFileAPIClient
+    from macrosynergy.download import JPMaQSDownload
     from macrosynergy.management import InformationStateChanges
 
     tickers = ["USD_GDPPC_SA", "GBP_GDPPC_SA"]
 
-    with DataQueryFileAPIClient() as jpmaqs:
-        df = jpmaqs.download(tickers=tickers, metrics=None)
+    with JPMaQSDownload() as jpmaqs:
+        df = jpmaqs.download(tickers=tickers, metrics="all")
 
     isc = InformationStateChanges.from_qdf(df)
     out_qdf = isc.to_qdf(value_column="zscore_fw", postfix="_ZScoreFW")
