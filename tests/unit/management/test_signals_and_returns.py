@@ -138,6 +138,71 @@ class TestSimulateSignalsAndReturns:
         np.testing.assert_allclose(returns.mean().to_numpy(), drift, atol=5e-4)
 
 
+def realized_ic(signals: pd.DataFrame, returns: pd.DataFrame) -> np.ndarray:
+    return np.array(
+        [
+            np.corrcoef(
+                signals[signal_name].to_numpy()[:-1],
+                returns[return_name].to_numpy()[1:],
+            )[0, 1]
+            for signal_name, return_name in zip(SIGNAL_NAMES, RETURN_NAMES)
+        ]
+    )
+
+
+class TestIcMagnitudeGamma:
+    @pytest.mark.parametrize("gamma", [1.0, 2.0])
+    @pytest.mark.parametrize("target_ic", [0.05, 0.2])
+    def test_realized_ic_hits_target(self, gamma: float, target_ic: float) -> None:
+        generator = make_generator(
+            signal_ic=target_ic, ic_magnitude_gamma=gamma, vol_of_vol=0.0
+        )
+        signals, returns, _ = simulate(generator, n_periods=20_000)
+
+        np.testing.assert_allclose(realized_ic(signals, returns), target_ic, atol=0.03)
+
+    @pytest.mark.parametrize("seed", range(10))
+    def test_small_sample_calibration_matches_constant_ic_baseline(
+        self, seed: int
+    ) -> None:
+        # At n=500 the realized IC is dominated by sampling noise even for the
+        # exact gamma == 0 construction. The gamma calibration must not add
+        # distortion on top of that baseline (e.g. sign-flipped ICs from a
+        # noise-corrupted rescale) — same seed, same noise, same realized IC.
+        def realized_with(gamma: float) -> np.ndarray:
+            generator = make_generator(
+                signal_ic=0.05, ic_magnitude_gamma=gamma, vol_of_vol=0.0
+            )
+            signals, returns, _ = simulate(generator, n_periods=500, seed=seed)
+            return realized_ic(signals, returns)
+
+        np.testing.assert_allclose(realized_with(1.0), realized_with(0.0), atol=0.03)
+
+    def test_larger_signals_are_more_reliable_predictors(self) -> None:
+        generator = make_generator(
+            signal_ic=0.1, ic_magnitude_gamma=2.0, vol_of_vol=0.0
+        )
+        signals, returns, _ = simulate(generator, n_periods=20_000)
+
+        signal = signals[SIGNAL_NAMES[0]].to_numpy()[:-1]
+        next_return = returns[RETURN_NAMES[0]].to_numpy()[1:]
+        magnitude = np.abs(signal)
+        small = magnitude <= np.quantile(magnitude, 1 / 3)
+        large = magnitude >= np.quantile(magnitude, 2 / 3)
+
+        ic_small = np.corrcoef(signal[small], next_return[small])[0, 1]
+        ic_large = np.corrcoef(signal[large], next_return[large])[0, 1]
+        assert ic_large > ic_small
+
+    def test_zero_target_ic_yields_uninformative_signals(self) -> None:
+        generator = make_generator(
+            signal_ic=0.0, ic_magnitude_gamma=1.0, vol_of_vol=0.0
+        )
+        signals, returns, _ = simulate(generator, n_periods=20_000)
+
+        np.testing.assert_allclose(realized_ic(signals, returns), 0.0, atol=0.03)
+
+
 class TestDefaultCorrelationMatrix:
     def test_default_corr_is_a_valid_correlation_matrix(self) -> None:
         generator = SignalsAndReturnsGenerator(n_fids=4)

@@ -5,6 +5,7 @@ import pandas as pd
 
 from macrosynergy.management.constants import ANNUALIZATION_FACTORS
 from macrosynergy.management.types import QuantamentalDataFrame
+from scipy.special import gamma as gamma_fn
 
 
 def _simulate_signals_and_returns(
@@ -21,6 +22,7 @@ def _simulate_signals_and_returns(
     signal_names: Optional[List[str]] = None,
     return_names: Optional[List[str]] = None,
     freq: str = "B",
+    ic_magnitude_gamma: float = 0.0,
     seed: Optional[int] = None,
 ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """
@@ -65,6 +67,16 @@ def _simulate_signals_and_returns(
     freq : str
         Pandas frequency for the date index. Defaults to 'B' (business days).
         Use 'D' for calendar days.
+    ic_magnitude_gamma : float
+        Controls how much predictive strength scales with signal magnitude.
+        0.0 (default) reproduces the original constant-IC behaviour exactly:
+        every signal value is equally reliable. With gamma > 0 the local IC
+        grows like |signal|^gamma, so larger-magnitude signals are more
+        reliable predictors, while the *overall* corr(signal_t, return_t+1)
+        still targets `signal_ic`. The scaling constant is seeded analytically
+        from the Gaussian absolute moment E[|s|^gamma] and refined by a
+        slope estimate measured on the simulated sample, so the realized IC
+        matches the target up to sampling noise (as in the gamma == 0 case).
     seed : int, optional
         RNG seed for reproducibility.
 
@@ -125,11 +137,60 @@ def _simulate_signals_and_returns(
     s = np.zeros(n_fids)
     eps = rng.standard_normal((n_periods, n_fids))
     for t in range(n_periods):
-        s = a * s + np.sqrt(1.0 - a**2) * eps[t]
+        s = a * s + np.sqrt(1.0 - a ** 2) * eps[t]
         persistent[t] = s  # unit-variance AR(1), independent of z
 
-    # Combine so that corr(signals[t], z[t]) == ic, keeping unit variance.
-    aligned = ic * z + np.sqrt(1.0 - ic**2) * persistent
+    # Combine so that corr(signals[t], z[t+1]) == ic, keeping the mix stable.
+    # If ic_magnitude_gamma == 0 this is the original constant-IC mix. Otherwise
+    # the local IC b(s) = k * |s|^gamma scales predictiveness with magnitude:
+    # larger-|signal| observations become more reliable predictors.
+    #
+    # Because b depends only on s and s is independent of z,
+    #   corr(aligned, z) ~= E[b(s)] = k * E[|s|^gamma],
+    # so k is seeded from the Gaussian absolute moment
+    #   E[|s|^p] = 2^(p/2) * Gamma((p+1)/2) / sqrt(pi),  p = gamma.
+    #
+    # The seed is then refined against the sample. The measured IC of the mix
+    # is slope * k plus a noise intercept: the spurious sample correlation
+    # between `persistent` and z, present even at k = 0. Measuring that
+    # intercept separately and differencing isolates the slope, and
+    # k = ic / slope targets the population IC. A plain ratio rescale
+    # (k * ic / measured) misattributes the intercept to the slope and flips
+    # the sign of k whenever small-sample noise dominates the seed pass.
+    if ic_magnitude_gamma == 0.0:
+        b = ic
+        aligned = b * z + np.sqrt(1.0 - b ** 2) * persistent
+    elif ic == 0.0:
+        aligned = persistent
+    else:
+        p = ic_magnitude_gamma
+        gaussian_abs_moment = (
+            2.0 ** (p / 2.0) * gamma_fn((p + 1.0) / 2.0) / np.sqrt(np.pi)
+        )
+        k = ic / gaussian_abs_moment
+        shape = np.abs(persistent) ** ic_magnitude_gamma
+
+        def measured_ic(mix: np.ndarray) -> np.ndarray:
+            # Same-time corr with z over the periods the emitted signals
+            # cover (aligned[0] is dropped by the roll, z[0] predicts nothing).
+            return np.array(
+                [np.corrcoef(mix[1:, j], z[1:, j])[0, 1] for j in range(n_fids)]
+            )
+
+        b = np.clip(k * shape, -0.999, 0.999)
+        seed_mix = b * z + np.sqrt(1.0 - b ** 2) * persistent
+        noise_intercept = measured_ic(persistent)  # what k = 0 would measure
+        slope = (measured_ic(seed_mix) - noise_intercept) / k
+
+        # slope ~= E[|s|^gamma] > 0; fall back to the analytic seed in the
+        # pathological case where the sample estimate is unusable.
+        slope_is_usable = np.isfinite(slope) & (slope > 0.0)
+        k_adj = np.where(
+            slope_is_usable, ic / np.where(slope_is_usable, slope, 1.0), k
+        )
+        b = np.clip(k_adj * shape, -0.999, 0.999)
+        aligned = b * z + np.sqrt(1.0 - b ** 2) * persistent
+
     # aligned[t] is correlated with z[t]. We want signals[t] to predict
     # returns[t+1], i.e. signals[t] must carry information about z[t+1].
     # Shift backward by one so signals[t] = aligned[t+1].
@@ -164,6 +225,7 @@ class SignalsAndReturnsGenerator:
         vol_persistence: float = 0.94,
         vol_of_vol: float = 0.15,
         mean_return: float = 0.0,
+        ic_magnitude_gamma: float = 0.0,
     ) -> None:
         self.n_fids = n_fids
         self.corr = None if corr is None else np.asarray(corr, dtype=float)
@@ -173,6 +235,7 @@ class SignalsAndReturnsGenerator:
         self.vol_persistence = vol_persistence
         self.vol_of_vol = vol_of_vol
         self.mean_return = mean_return
+        self.ic_magnitude_gamma = ic_magnitude_gamma
 
         if corr is None:
             rng = np.random.default_rng(0)
@@ -208,6 +271,7 @@ class SignalsAndReturnsGenerator:
             vol_persistence=self.vol_persistence,
             vol_of_vol=self.vol_of_vol,
             mean_return=self.mean_return,
+            ic_magnitude_gamma=self.ic_magnitude_gamma,
             freq=freq,
             end_date=end_date,
             signal_names=signal_names,
@@ -236,7 +300,7 @@ class SignalsAndReturnsGenerator:
     def quantamental_returns(self) -> pd.DataFrame:
         """convert returns to a quantemental dataframe"""
         self._require_simulated()
-        return QuantamentalDataFrame.from_wide(self.returns)
+        return QuantamentalDataFrame.from_wide(100 * self.returns)
 
     def quantamental_returns_and_signals(self):
         signals = self.quantamental_signals()
