@@ -1,9 +1,10 @@
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Optional, Any
 
 import numpy as np
 import pandas as pd
 import seaborn as sns
 from matplotlib import pyplot as plt
+from matplotlib.figure import Figure
 
 FREQ_TO_DAYS_MAP = {"D": 1, "W": 5, "M": 21, "Q": 63}
 
@@ -150,31 +151,12 @@ def covariance_estimates_scatterplot(
 ) -> None:
 
     # define point colours, size, and shape
-    hues, styles, sizes = [], [], []
-    for config in configs:
-        hue = "MA" if config["lback_meth"] == "ma" else "XMA"
-        style = " ".join(config["est_freqs"])
-
-        periods = np.array(
-            config["lback_periods"]
-            if "lback_periods" in config
-            else config["half_life"]
-        )
-        size = np.mean(periods)
-
-        hues.append(hue)
-        sizes.append(size)
-        styles.append(style)
+    style = [config["lback_meth"].upper() for config in configs]
+    hue = [" ".join(config["est_freqs"]) for config in configs]
 
     # create a dataframe and plot
     plot_df = pd.DataFrame(
-        {
-            "x_vals": x_vals,
-            "y_vals": y_vals,
-            "Method": hues,
-            "Freq": styles,
-            "Lookback/Half-life": sizes,
-        }
+        {"x_vals": x_vals, "y_vals": y_vals, "Method": style, "Freq": hue}
     )
 
     with sns.axes_style("whitegrid"), sns.plotting_context("notebook"):
@@ -184,9 +166,8 @@ def covariance_estimates_scatterplot(
             data=plot_df,
             x="x_vals",
             y="y_vals",
-            hue="Method",
-            style="Freq",
-            size="Lookback/Half-life",
+            hue="Freq",
+            style="Method",
             sizes=(20, 250),
             alpha=0.8,
             edgecolor="white",
@@ -211,3 +192,61 @@ def covariance_estimates_scatterplot(
         sns.despine()
         plt.tight_layout()
         plt.show()
+
+
+def notional_positions_scatterplot(
+    pos_dfs: List[pd.DataFrame],
+    sig_df: pd.DataFrame,
+    df_labels: List[str],
+    title: str = "",
+    xlabel: str = "",
+    ylabel: str = "",
+    title_fontsize: int = 14,
+    sharex: bool = True,
+    sharey: bool = False,
+    n_cols: int = 3,
+    figsize: Tuple[float, float] = (15, 5),
+    point_size: float = 5,
+) -> Tuple[plt.Figure, Any]:
+    with sns.axes_style("whitegrid"), sns.plotting_context("notebook"):
+        fig, axes = plt.subplots(
+            nrows=1 + (len(pos_dfs) // (n_cols + 1)),
+            ncols=n_cols,
+            figsize=figsize,
+            sharex=sharex,
+            sharey=sharey,
+        )
+        axes = np.atleast_2d(axes)
+
+        piv_sig = sig_df.pivot(index="real_date", columns="cid", values="value")
+        x_vals = piv_sig.abs().sum(axis=1)  # signals
+
+        for i in range(len(pos_dfs)):
+            piv_pos = pos_dfs[i].pivot(index="real_date", columns="cid", values="value")
+            y_vals = piv_pos.abs().sum(axis=1) # positions
+
+            ax = axes[i // n_cols, i % n_cols]
+            sns.scatterplot(
+                x=x_vals,
+                y=y_vals,
+                ax=ax,
+                s=point_size,
+            )
+
+            ax.set_title(df_labels[i], fontsize=10, fontweight="bold")
+            ax.set_xlabel("")
+            ax.set_ylabel("")
+
+        if title:
+            fig.suptitle(title, fontsize=title_fontsize)
+
+        if ylabel:
+            fig.supylabel(ylabel, fontsize=11)
+        if xlabel:
+            fig.supxlabel(xlabel, fontsize=11)
+
+        fig.tight_layout()
+
+    return fig, axes
+
+
