@@ -10,7 +10,6 @@ from macrosynergy.management.utils import (
     ticker_df_to_qdf,
     concat_single_metric_qdfs,
     get_xcat,
-    get_cid,
     is_valid_iso_date,
 )
 from macrosynergy.management.types import QuantamentalDataFrame
@@ -219,7 +218,8 @@ class InformationStateChanges(object):
         if norm:
             isc.calculate_score(score_by=score_by, **kwargs)
             isc.annualize_by_release_frequency(
-                window=zscore_freq_window, freqs=zscore_freqs_allowed
+                zscore_freq_window=zscore_freq_window,
+                zscore_freqs_allowed=zscore_freqs_allowed,
             )
         return isc
 
