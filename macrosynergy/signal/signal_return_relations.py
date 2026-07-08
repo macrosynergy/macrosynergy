@@ -19,6 +19,8 @@ from macrosynergy.management.utils import (
     reduce_df,
     categories_df,
     update_df,
+    get_cid,
+    get_xcat,
 )
 from macrosynergy.management.types import QuantamentalDataFrame
 import macrosynergy.visuals as msv
@@ -209,10 +211,9 @@ class SignalReturnRelations:
             raise TypeError(f"<bool> object expected and not {type(cosp)}.")
 
         if isinstance(cids, str):
-            self.cids = [cids]
-        else:
-            self.cids = cids
+            cids = [cids]
 
+        self.cids = cids
         self.rets = rets
         self.slip = slip
         self.agg_sigs = agg_sigs
@@ -254,7 +255,7 @@ class SignalReturnRelations:
             self.signs = sig_neg if isinstance(sig_neg, list) else [sig_neg]
 
         for sign in self.signs:
-            if not sign in [False, True]:
+            if sign not in [False, True]:
                 raise TypeError("Sign must be either False or True.")
 
         if len(self.signs) != len(self.sigs):
@@ -287,7 +288,21 @@ class SignalReturnRelations:
 
         self.sigs = new_sigs
 
+        self.df = QuantamentalDataFrame(self.df)
+
         self.original_df = self.df.copy()
+
+        all_found_tickers = self.df.list_tickers()
+
+        sigs_found, rets_found = {}, {}
+        for tk in all_found_tickers:
+            cid, xcat = get_cid(tk), get_xcat(tk)
+            if xcat in self.sigs:
+                sigs_found[cid] = sigs_found.get(cid, []) + [tk]
+            if xcat in self.rets:
+                rets_found[cid] = rets_found.get(cid, []) + [tk]
+        # keep only cids that have at least one sig AND one ret
+        self.cids = sorted(set(sigs_found) & set(rets_found))
 
     def __rival_sigs__(self, ret, sigs=None):
         """
@@ -832,7 +847,7 @@ class SignalReturnRelations:
                 s_date = intersection_df.index[0]
                 e_date = intersection_df.index[-1]
 
-                final_df.loc[(cid_name, s_date) : (cid_name, e_date), signal] = (
+                final_df.loc[(cid_name, s_date):(cid_name, e_date), signal] = (
                     intersection_df.to_numpy()
                 )
                 storage.append(final_df)

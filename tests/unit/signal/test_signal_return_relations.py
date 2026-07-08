@@ -200,6 +200,29 @@ class TestAll(unittest.TestCase):
             self.dfd, rets="XR", sigs=signal, freqs="D", blacklist=self.blacklist
         )
 
+    def test_cids_require_sig_and_ret(self):
+        # Every cross-section retained in self.cids must have both a signal and a
+        # return present in the data. Cross-sections carrying only one of the two are
+        # dropped from self.cids.
+        signal = "CRY"
+        return_ = "XR"
+
+        # Leave AUD with the signal only, and CAD with the return only.
+        test_df = self.dfd.copy()
+        test_df = test_df[
+            ~(
+                ((test_df["cid"] == "AUD") & (test_df["xcat"] == return_))
+                | ((test_df["cid"] == "CAD") & (test_df["xcat"] == signal))
+            )
+        ]
+
+        srr = SignalReturnRelations(
+            test_df, sigs=signal, rets=return_, freqs="D", blacklist=self.blacklist
+        )
+
+        # AUD (signal only) and CAD (return only) are excluded; no cid is duplicated.
+        self.assertEqual(srr.cids, ["GBP", "NZD", "USD"])
+
     def test__slice_df__(self):
         # Method used to confirm that the segmentation of the original DataFrame is
         # being applied correctly: either cross-sectional or yearly basis. Therefore, if
