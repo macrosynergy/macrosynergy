@@ -437,14 +437,19 @@ class InformationStateChanges(object):
                     raise ValueError(
                         "`thresh` must be a number or a tuple of two numbers."
                     )
-                self.isc_dict[ticker_key]["zscore"] = self.isc_dict[ticker_key][
-                    "zscore"
-                ].clip(lower=wins_lower, upper=wins_upper)
 
-            self.isc_dict[ticker_key]["zscore_fw"] = (
-                self.isc_dict[ticker_key]["zscore"].to_numpy()
-                * freq.map(weights).to_numpy()
-            )
+                self.isc_dict[ticker_key]["zscore_fw"] = (
+                    self.isc_dict[ticker_key]["zscore"]
+                    .clip(lower=wins_lower, upper=wins_upper)
+                    .to_numpy()
+                    * freq.map(weights).to_numpy()
+                )
+
+            else:
+                self.isc_dict[ticker_key]["zscore_fw"] = (
+                    self.isc_dict[ticker_key]["zscore"].to_numpy()
+                    * freq.map(weights).to_numpy()
+                )
 
     def to_dict(
         self, ticker: str
