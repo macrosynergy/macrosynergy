@@ -3,17 +3,22 @@ from collections.abc import KeysView, ValuesView, ItemsView
 from numbers import Number
 import json
 import warnings
-import pandas as pd
+from collections.abc import ItemsView, KeysView, ValuesView
+from numbers import Number
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+
 import numpy as np
+import pandas as pd
+
+from macrosynergy.management.constants import ANNUALIZATION_FACTORS
+from macrosynergy.management.types import QuantamentalDataFrame
 from macrosynergy.management.utils import (
-    qdf_to_ticker_df,
-    ticker_df_to_qdf,
     concat_single_metric_qdfs,
     get_xcat,
     is_valid_iso_date,
+    qdf_to_ticker_df,
+    ticker_df_to_qdf,
 )
-from macrosynergy.management.types import QuantamentalDataFrame
-from macrosynergy.management.constants import ANNUALIZATION_FACTORS
 from macrosynergy.management.utils.frequency import infer_release_frequency
 
 SCORE_BY_OPTIONS = {"diff": "diff", "level": "value"}
