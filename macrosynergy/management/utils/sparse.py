@@ -1,6 +1,3 @@
-from typing import Dict, List, Any, Union, Optional, Callable, Tuple
-from collections.abc import KeysView, ValuesView, ItemsView
-from numbers import Number
 import json
 import warnings
 from collections.abc import ItemsView, KeysView, ValuesView
@@ -163,6 +160,7 @@ class InformationStateChanges(object):
         cls: "InformationStateChanges",
         df: QuantamentalDataFrame,
         norm: bool = True,
+        annualize_by_release_frequency: Optional[bool] = None,
         score_by: str = "diff",
         zscore_freq_window: int = 3,
         zscore_freqs_allowed: Tuple[str, ...] = ("D", "W", "M", "Q", "A"),
@@ -182,15 +180,21 @@ class InformationStateChanges(object):
             provided.
         norm : bool
             If True, calculate the score for the information state changes.
+        annualize_by_release_frequency : bool
+            If True, annualize the score by the inferred release frequency. Default is None,
+            where it follows the behaviour of ``norm`` (i.e. ``annualize_by_release_frequency``
+            is set to ``True`` if ``norm`` is ``True`` and ``False`` otherwise).
         score_by : str
             The method to use for scoring. If "diff" (default), the score is calculated
             based on the difference between the information state changes. If "level", the
             score is calculated based on the value ('level') of the information state
             change.
         zscore_freq_window: int
-            rolling-median window passed to ``infer_release_frequency``. Default 3.
+            rolling-median window passed to ``infer_release_frequency`` as part of
+            ``annualize_by_release_frequency``. Default 3.
         zscore_freqs_allowed: Tuple[str, ...]
-            candidate frequency labels. Default ("D", "W", "M", "Q", "A").
+            candidate frequency labels for ``infer_release_frequency`` as part of
+            ``annualize_by_release_frequency``. Default ("D", "W", "M", "Q", "A").
         **kwargs : Any
             Additional keyword arguments to pass to the `calculate_score` method. Please refer
             to :func:`InformationStateChanges.calculate_score()` for more information.
@@ -220,12 +224,29 @@ class InformationStateChanges(object):
         isc.isc_dict = isc_dict
         isc.density_stats_df = density_stats_df
 
+        if not isinstance(norm, bool):
+            raise ValueError("`norm` must be a boolean")
+        if not isinstance(annualize_by_release_frequency, (bool, type(None))):
+            raise ValueError(
+                "`annualize_by_release_frequency` must be a boolean or None"
+            )
+
+        if annualize_by_release_frequency is None:
+            annualize_by_release_frequency = norm
+        if annualize_by_release_frequency and not norm:
+            warnings.warn(
+                "`annualize_by_release_frequency` can only run when `norm` is True. "
+                "Setting `norm=True`."
+            )
+            norm = True
         if norm:
             isc.calculate_score(score_by=score_by, **kwargs)
-            isc.annualize_by_release_frequency(
-                zscore_freq_window=zscore_freq_window,
-                zscore_freqs_allowed=zscore_freqs_allowed,
-            )
+
+            if annualize_by_release_frequency:
+                isc.annualize_by_release_frequency(
+                    zscore_freq_window=zscore_freq_window,
+                    zscore_freqs_allowed=zscore_freqs_allowed,
+                )
         return isc
 
     @classmethod
@@ -310,7 +331,8 @@ class InformationStateChanges(object):
             A postfix to append to the xcat column. Default is None.
         metrics : List[str]
             A list of metrics to include in the DataFrame. Default is ["eop", "grading"].
-            Use `metrics=None` to disregard any non-value columns.
+            Use `metrics=None` to include all available (non-value) metrics; use
+            `metrics=[]` to include none (the value column only).
         thresh : Union[Tuple[float, float], float]
             A float or a tuple of two floats to winsorise the data to. Default is None.
             If a single float is provided, it is used for both lower and upper bounds,
@@ -361,6 +383,13 @@ class InformationStateChanges(object):
             rolling-median window passed to ``infer_release_frequency``. Default 3.
         zscore_freqs_allowed : Tuple[str, ...]
             candidate frequency labels. Default ("D", "W", "M", "Q", "A").
+
+        Notes
+        -----
+        Tickers without a ``zscore`` column, or whose release frequency cannot be
+        inferred (fewer than two distinct ``eop`` dates), are warned about and skipped
+        rather than raising - so this stays safe on the default ``from_qdf(norm=True)``
+        path even when some tickers have too few releases to weight.
         """
         tickers_to_calc = list(self.isc_dict.keys())
         weights = {
@@ -373,11 +402,18 @@ class InformationStateChanges(object):
             if "zscore" not in self.isc_dict[ticker_key].columns:
                 warnings.warn(f"No 'zscore' calculate for {ticker_key}")
                 continue
-            freq = infer_release_frequency(
-                self.isc_dict[ticker_key]["eop"],
-                window=zscore_freq_window,
-                freqs=zscore_freqs_allowed,
-            )
+            try:
+                freq = infer_release_frequency(
+                    self.isc_dict[ticker_key]["eop"],
+                    window=zscore_freq_window,
+                    freqs=zscore_freqs_allowed,
+                )
+            except ValueError as exc:
+                warnings.warn(
+                    f"Cannot infer release frequency for {ticker_key}; "
+                    f"skipping frequency-weighted zscore ({exc})"
+                )
+                continue
             self.isc_dict[ticker_key]["infered_freq"] = pd.Categorical(
                 freq, categories=zscore_freqs_allowed, ordered=True
             )
@@ -1326,7 +1362,8 @@ def sparse_to_dense(
         A postfix to append to the xcat column. Default is None.
     metrics : Optional[List[str]]
         A list of metrics to include in the DataFrame. Default is ["eop", "grading"].
-        Use `metrics=None` to disregard any non-value columns.
+        Use `metrics=None` to include all available (non-value) metrics; use
+        `metrics=[]` to include none (the value column only).
     thresh : Union[Tuple[float, float], float]
         A float or a tuple of two floats to winsorise the data to. Default is None.
         If a single float is provided, it is used for both lower and upper bounds,
