@@ -470,7 +470,10 @@ class TestAll(unittest.TestCase):
         self.assertIn("Prob. Sharpe Ratio > 0.75", df_eval.index)
 
         self.assertIn("Max Draw Recovery (months)", df_eval.index)
-        recovery = df_eval.loc["Max Draw Recovery (months)"].dropna()
+        recovery = df_eval.loc["Max Draw Recovery (months)"]
+        # Never NaN: 0 if there was no drawdown, Traded Months if the worst
+        # drawdown never recovered by the end of the sample.
+        self.assertFalse(recovery.isna().any())
         self.assertTrue((recovery >= 0).all())
 
         df_none = pnl.evaluate_pnls(pnl_cats=["PNL_INFL"], sr_thresholds=[])
