@@ -1752,7 +1752,7 @@ class SignalReturnRelations:
 
         self.df = self.original_df.copy()
 
-        if  stat not in self.metrics:
+        if stat not in self.metrics:
             raise ValueError(f"Stat must be one of {self.metrics}")
 
         if pval_stat is not None:
@@ -1772,7 +1772,7 @@ class SignalReturnRelations:
         type_values = ["panel", "mean_years", "mean_cids", "pr_years", "pr_cids"]
         rows_values = ["xcat", "ret", "freq", "agg_sigs"]
 
-        if  type  not in type_values:
+        if type not in type_values:
             raise ValueError(f"Type must be one of {type_values}")
 
         if not all([x in rows_values for x in rows]):
