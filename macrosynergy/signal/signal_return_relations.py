@@ -3,27 +3,30 @@ Module for analysing and visualizing signal and a return series.
 """
 
 import warnings
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
-from matplotlib.colors import is_color_like
 import seaborn as sns
-from sklearn import metrics as skm
+from matplotlib.colors import is_color_like
 from scipy import stats
-from typing import List, Union, Tuple, Dict, Any, Optional, Callable
+from sklearn import metrics as skm
 
+import macrosynergy.visuals as msv
 from macrosynergy.learning.random_effects import RandomEffects
-from macrosynergy.management.simulate import make_qdf
+from macrosynergy.management.simulate import make_qdf, make_test_df
+from macrosynergy.management.types import QuantamentalDataFrame
 from macrosynergy.management.utils import (
     apply_slip as apply_slip_util,
-    reduce_df,
+)
+from macrosynergy.management.utils import (
     categories_df,
-    update_df,
     get_cid,
     get_xcat,
+    reduce_df,
+    update_df,
 )
-from macrosynergy.management.types import QuantamentalDataFrame
-import macrosynergy.visuals as msv
 
 # Ensure warnings are printed
 warnings.simplefilter("always")
