@@ -306,7 +306,7 @@ class SignalReturnRelations:
         self.cids = sorted(set(sigs_found) & set(rets_found))
 
         self.df = self.df.reduce_df(cids=self.cids, blacklist=self.blacklist)
-        self.original_df = self.df.copy()
+        self.original_df = QuantamentalDataFrame(self.df.copy())
         self.cids_used_in_last_calculation = None
 
     def __rival_sigs__(self, ret, sigs=None):
