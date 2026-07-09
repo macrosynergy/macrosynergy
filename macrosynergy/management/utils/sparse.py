@@ -367,6 +367,7 @@ class InformationStateChanges(object):
         self,
         zscore_freq_window: int = 3,
         zscore_freqs_allowed: Tuple[str, ...] = ("D", "W", "M", "Q", "A"),
+        thresh: Union[Tuple[float, float], float] = None,
     ) -> QuantamentalDataFrame:
         """
         Annualize each value by a time-varying weight inferred from its release cadence.
@@ -383,6 +384,10 @@ class InformationStateChanges(object):
             rolling-median window passed to ``infer_release_frequency``. Default 3.
         zscore_freqs_allowed : Tuple[str, ...]
             candidate frequency labels. Default ("D", "W", "M", "Q", "A").
+        thresh : Union[Tuple[float, float], float]
+            Winsorise the zscore before weighting. Default None (no winsorisation).
+            A scalar clips to ``(-thresh, thresh)``; a tuple clips to its
+            ``(min, max)``, so order does not matter.
 
         Notes
         -----
@@ -417,10 +422,34 @@ class InformationStateChanges(object):
             self.isc_dict[ticker_key]["infered_freq"] = pd.Categorical(
                 freq, categories=zscore_freqs_allowed, ordered=True
             )
-            self.isc_dict[ticker_key]["zscore_fw"] = (
-                self.isc_dict[ticker_key]["zscore"].to_numpy()
-                * freq.map(weights).to_numpy()
-            )
+            if thresh is not None:
+                if isinstance(thresh, tuple):
+                    if (len(thresh) != 2) or not all(
+                        isinstance(x, Number) for x in thresh
+                    ):
+                        raise ValueError(
+                            "If `thresh` is a tuple, it must contain two numeric values."
+                        )
+                    wins_lower, wins_upper = min(thresh), max(thresh)
+                elif isinstance(thresh, Number):
+                    wins_lower, wins_upper = -abs(thresh), abs(thresh)
+                else:
+                    raise ValueError(
+                        "`thresh` must be a number or a tuple of two numbers."
+                    )
+
+                self.isc_dict[ticker_key]["zscore_fw"] = (
+                    self.isc_dict[ticker_key]["zscore"]
+                    .clip(lower=wins_lower, upper=wins_upper)
+                    .to_numpy()
+                    * freq.map(weights).to_numpy()
+                )
+
+            else:
+                self.isc_dict[ticker_key]["zscore_fw"] = (
+                    self.isc_dict[ticker_key]["zscore"].to_numpy()
+                    * freq.map(weights).to_numpy()
+                )
 
     def to_dict(
         self, ticker: str
@@ -1405,9 +1434,9 @@ def sparse_to_dense(
                 raise ValueError(
                     "If `thresh` is a tuple, it must contain two numeric values."
                 )
-            wins_lower, wins_upper = thresh
+            wins_lower, wins_upper = min(thresh), max(thresh)
         elif isinstance(thresh, Number):
-            wins_lower, wins_upper = -thresh, thresh
+            wins_lower, wins_upper = -abs(thresh), abs(thresh)
         else:
             raise ValueError("`thresh` must be a number or a tuple of two numbers.")
 
@@ -1601,7 +1630,7 @@ def _calculate_score_on_sparse_indicator_for_class(
     custom_method_kwargs: Dict = {},
     volatility_forecast: bool = True,
     score_by: str = "diff",
-    threshold: float = 1e-12,
+    # threshold: float = 1e-12,
 ):
     """
     Calculate score on sparse indicator for a class. Effectively a re-implementation of
