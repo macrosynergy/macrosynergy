@@ -494,6 +494,101 @@ class TestAll(unittest.TestCase):
         except Exception as e:
             self.fail(f"evaluate_pnls raised {e} unexpectedly")
 
+    def test_evaluate_pnls_pretty(self):
+        from IPython.display import HTML
+
+        ret = "EQXR"
+        sigs = ["CRY", "GROWTH", "INFL"]
+
+        # A single benchmark, so evaluate_pnls_pretty can unambiguously
+        # give the "<bm> correl" row the friendly "Benchmark correlation"
+        # name under the default groups.
+        pnl_single_bm = NaivePnL(
+            self.dfd,
+            ret=ret,
+            sigs=sigs,
+            cids=self.cids,
+            start="2000-01-01",
+            blacklist=self.blacklist,
+            bms=["USD_DUXR"],
+        )
+        pnl_single_bm.make_pnl(
+            sig="INFL", sig_op="zn_score_pan", rebal_freq="monthly",
+            vol_scale=5, min_obs=250, pnl_name="PNL_HEAD",
+        )
+        pnl_single_bm.make_pnl(
+            sig="INFL", sig_op="zn_score_pan", sig_neg=True, rebal_freq="monthly",
+            vol_scale=5, min_obs=250, pnl_name="PNL_BENCH",
+        )
+
+        result = pnl_single_bm.evaluate_pnls_pretty(
+            headline="PNL_HEAD", bench="PNL_BENCH"
+        )
+        self.assertIsInstance(result, HTML)
+        html = result.data
+        # Default groups: 3 performance + 5 risk & drawdown + 5 robustness rows.
+        for metric in (
+            "Return %",
+            "Sharpe Ratio",
+            "Sortino Ratio",
+            "St. Dev. %",
+            "Peak to Trough Draw %",
+            "Top 5% Monthly PnL Share",
+            "Benchmark correlation",
+            "Max Draw Recovery (months)",
+            "Sharpe Stability Ratio",
+            "Prob. Sharpe Ratio > 0.25",
+            "Prob. Sharpe Ratio > 0.5",
+            "Prob. Sharpe Ratio > 0.75",
+            "Traded Months",
+        ):
+            self.assertIn(metric, html)
+
+        # Custom groups restrict rows to exactly what was asked for, in the
+        # order given, and don't require an `order` override to do so.
+        custom = pnl_single_bm.evaluate_pnls_pretty(
+            headline="PNL_HEAD",
+            bench="PNL_BENCH",
+            groups={"Performance": ["Sharpe Ratio", "Return %"]},
+        )
+        self.assertIn("Sharpe Ratio", custom.data)
+        self.assertIn("Return %", custom.data)
+        self.assertNotIn("Sortino Ratio", custom.data)
+
+        # A `groups`/`order` request for a metric that truly doesn't exist
+        # still raises, even though the default-groups path silently drops
+        # a missing benchmark correlation row (tested below via a
+        # no-benchmark instance).
+        with self.assertRaises(KeyError):
+            pnl_single_bm.evaluate_pnls_pretty(
+                headline="PNL_HEAD",
+                bench="PNL_BENCH",
+                groups={"X": ["Not A Real Metric"]},
+            )
+
+        # No benchmark configured: default groups silently drop the
+        # correlation row rather than raising.
+        pnl_no_bm = NaivePnL(
+            self.dfd,
+            ret=ret,
+            sigs=sigs,
+            cids=self.cids,
+            start="2000-01-01",
+            blacklist=self.blacklist,
+        )
+        pnl_no_bm.make_pnl(
+            sig="INFL", sig_op="zn_score_pan", rebal_freq="monthly",
+            vol_scale=5, min_obs=250, pnl_name="PNL_HEAD",
+        )
+        pnl_no_bm.make_pnl(
+            sig="INFL", sig_op="zn_score_pan", sig_neg=True, rebal_freq="monthly",
+            vol_scale=5, min_obs=250, pnl_name="PNL_BENCH",
+        )
+        no_bm_result = pnl_no_bm.evaluate_pnls_pretty(
+            headline="PNL_HEAD", bench="PNL_BENCH"
+        )
+        self.assertNotIn("Benchmark correlation", no_bm_result.data)
+
     def test_make_long_pnl(self):
         ret = "EQXR"
         sigs = ["CRY", "GROWTH", "INFL"]

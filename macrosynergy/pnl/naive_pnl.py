@@ -13,6 +13,7 @@ import matplotlib.ticker as mticker
 import numpy as np
 import pandas as pd
 import seaborn as sns
+from IPython.display import HTML
 
 from macrosynergy import PYTHON_3_8_OR_LATER
 from macrosynergy.management.simulate import make_qdf
@@ -24,6 +25,7 @@ from macrosynergy.management.utils import (
 from macrosynergy.management.types import QuantamentalDataFrame
 from macrosynergy.panel.make_zn_scores import make_zn_scores
 from macrosynergy.pnl.sharpe_stability_ratio import sharpe_stability_ratio
+from macrosynergy.pnl.pnl_table import DEFAULT_METRIC_GROUPS, pnl_table_html
 from macrosynergy.signal import SignalReturnRelations
 
 
@@ -1555,6 +1557,125 @@ class NaivePnL:
             df = df[label_dict.values()]
 
         return df
+
+    def evaluate_pnls_pretty(
+        self,
+        headline: Union[str, List[str]],
+        bench: str,
+        headline_label: Optional[Union[str, List[str]]] = None,
+        bench_label: Optional[str] = None,
+        groups: Optional[Dict[str, List[str]]] = None,
+        order: Optional[Dict[str, List[str]]] = None,
+        pnl_cids: List[str] = ["ALL"],
+        start: Optional[str] = None,
+        end: Optional[str] = None,
+        sr_thresholds: Optional[List[float]] = None,
+        title: str = "Naive PnL statistics",
+        subtitle: str = "",
+    ) -> HTML:
+        """
+        Presentation-ready HTML rendering of ``evaluate_pnls()`` -- a
+        grouped, ledger-style table suitable for pasting into Word (File >
+        Open the written-out HTML) or a WordPress "Custom HTML" block.
+        Wraps ``evaluate_pnls()``; does not compute anything new itself.
+
+        Parameters
+        ----------
+        headline : str or List[str]
+            PnL categor(y/ies) to show as the (non-benchmark) column(s), in
+            display order.
+        bench : str
+            PnL category to show as the benchmark column.
+        headline_label, bench_label : str or List[str], optional
+            Column header labels. Default: the category names themselves.
+        groups : dict of {section title: [metric names]}, optional
+            Row layout and order, e.g. ``{"Performance": ["Return %", ...]}``.
+            Default: 3 performance, 5 risk & drawdown, 5 robustness metrics
+            (the standard cut). Raises ``KeyError`` if a requested metric
+            isn't a row produced by ``evaluate_pnls()``.
+        order : dict of {section title: [metric names in desired order]}, optional
+            Override just the row order within a section from ``groups``,
+            without redeclaring which metrics belong to it.
+        pnl_cids, start, end, sr_thresholds : see ``evaluate_pnls()``.
+        title, subtitle : str
+            Header text shown above the table.
+
+        Returns
+        -------
+        IPython.display.HTML
+            Displays inline in a notebook; ``.data`` holds the raw HTML
+            string (e.g. to ``Path(...).write_text(...)`` for Word/WordPress).
+        """
+        headlines = headline if isinstance(headline, list) else [headline]
+        if headline_label is None:
+            headline_labels = headlines
+        elif isinstance(headline_label, list):
+            headline_labels = headline_label
+        else:
+            headline_labels = (
+                [headline_label] if len(headlines) == 1 else headlines
+            )
+        bench_label = bench_label if bench_label is not None else bench
+
+        using_default_groups = groups is None
+        groups = groups if groups is not None else DEFAULT_METRIC_GROUPS
+        order = order or {}
+
+        resolved = {}
+        for section, metrics in groups.items():
+            if section in order:
+                if set(order[section]) != set(metrics):
+                    raise ValueError(
+                        f"order[{section!r}] must contain exactly {metrics}"
+                    )
+                resolved[section] = order[section]
+            else:
+                resolved[section] = metrics
+
+        tbr = self.evaluate_pnls(
+            pnl_cats=[*headlines, bench],
+            pnl_cids=pnl_cids,
+            start=start,
+            end=end,
+            sr_thresholds=sr_thresholds,
+        )
+
+        # Give a single benchmark correlation row a friendly name; a no-op
+        # unless `groups`/`order` reference "Benchmark correlation".
+        correl_rows = [i for i in tbr.index if i.endswith(" correl")]
+        if len(correl_rows) == 1:
+            tbr = tbr.rename(index={correl_rows[0]: "Benchmark correlation"})
+
+        all_metrics = [m for metrics in resolved.values() for m in metrics]
+
+        # Using the *default* groups without a benchmark configured on this
+        # instance: drop the correlation row rather than raising, since it
+        # only makes sense once a benchmark has been set. An explicitly
+        # passed `groups` still raises on a missing metric below.
+        if using_default_groups and "Benchmark correlation" not in tbr.index:
+            resolved = {
+                section: [m for m in metrics if m != "Benchmark correlation"]
+                for section, metrics in resolved.items()
+            }
+            all_metrics = [m for metrics in resolved.values() for m in metrics]
+
+        missing = [m for m in all_metrics if m not in tbr.index]
+        if missing:
+            raise KeyError(f"Unknown metric(s) requested: {missing}")
+
+        html = pnl_table_html(
+            tbr,
+            list(resolved.items()),
+            headlines,
+            bench,
+            headline_labels,
+            bench_label,
+            whole_number_metrics={"Traded Months", "Max Draw Recovery (months)"}
+            & set(all_metrics),
+            title=title,
+            subtitle=subtitle,
+        )
+        return HTML(html)
 
     def print_pnl_names(self):
         """
