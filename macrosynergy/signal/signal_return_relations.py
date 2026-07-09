@@ -3,27 +3,30 @@ Module for analysing and visualizing signal and a return series.
 """
 
 import warnings
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
-from matplotlib.colors import is_color_like
 import seaborn as sns
-from sklearn import metrics as skm
+from matplotlib.colors import is_color_like
 from scipy import stats
-from typing import List, Union, Tuple, Dict, Any, Optional, Callable
+from sklearn import metrics as skm
 
+import macrosynergy.visuals as msv
 from macrosynergy.learning.random_effects import RandomEffects
-from macrosynergy.management.simulate import make_qdf
+from macrosynergy.management.simulate import make_qdf, make_test_df
+from macrosynergy.management.types import QuantamentalDataFrame
 from macrosynergy.management.utils import (
     apply_slip as apply_slip_util,
-    reduce_df,
+)
+from macrosynergy.management.utils import (
     categories_df,
-    update_df,
     get_cid,
     get_xcat,
+    reduce_df,
+    update_df,
 )
-from macrosynergy.management.types import QuantamentalDataFrame
-import macrosynergy.visuals as msv
 
 # Ensure warnings are printed
 warnings.simplefilter("always")
@@ -131,7 +134,7 @@ class SignalReturnRelations:
                 raise TypeError(f"List or string expected and not {type(cids)}.")
             else:
                 if not all(isinstance(cid, str) for cid in cids):
-                    raise TypeError(f"List of strings expected for cids.")
+                    raise TypeError("List of strings expected for cids.")
 
         required_columns = ["cid", "xcat", "real_date", "value"]
 
@@ -156,7 +159,7 @@ class SignalReturnRelations:
             seen = set()
             self.freqs = []
             for f in freqs:
-                if not f in self.dic_freq.keys():
+                if f not in self.dic_freq.keys():
                     raise ValueError(freq_error)
                 else:
                     if f not in seen:
@@ -167,7 +170,7 @@ class SignalReturnRelations:
                             f"Frequency {f} is repeated, dropping repeated frequency."
                         )
         else:
-            if not freqs in self.dic_freq.keys():
+            if freqs not in self.dic_freq.keys():
                 raise ValueError(freq_error)
             else:
                 self.freqs = [freqs]
@@ -290,8 +293,6 @@ class SignalReturnRelations:
 
         self.df = QuantamentalDataFrame(self.df)
 
-        self.original_df = self.df.copy()
-
         all_found_tickers = self.df.list_tickers()
 
         sigs_found, rets_found = {}, {}
@@ -303,6 +304,10 @@ class SignalReturnRelations:
                 rets_found[cid] = rets_found.get(cid, []) + [tk]
         # keep only cids that have at least one sig AND one ret
         self.cids = sorted(set(sigs_found) & set(rets_found))
+
+        self.df = self.df.reduce_df(cids=self.cids, blacklist=self.blacklist)
+        self.original_df = QuantamentalDataFrame(self.df.copy())
+        self.cids_used_in_last_calculation = None
 
     def __rival_sigs__(self, ret, sigs=None):
         """
@@ -441,7 +446,7 @@ class SignalReturnRelations:
         self.manipulate_df(xcats=sigs + [ret], freq=freq, agg_sig=agg_sig)
 
         for i in range(len(sigs)):
-            if not sigs[i] in self.sigs:
+            if sigs[i] not in self.sigs:
                 sigs[i] = sigs[i] + "_NEG"
 
         if view == "cross_section":
@@ -587,7 +592,7 @@ class SignalReturnRelations:
             agg_sig=self.agg_sigs[0],
         )
         for i in range(len(sigs)):
-            if not sigs[i] in self.sigs:
+            if sigs[i] not in self.sigs:
                 sigs[i] = sigs[i] + "_NEG"
         if type == "cross_section":
             df_xs = self.__output_table__(cs_type="cids", ret=ret, sig=sigs[0])
@@ -799,7 +804,9 @@ class SignalReturnRelations:
             xcat_aggs=[agg_sig, "sum"],
         )
         self.df = df
-        self.cids = list(np.sort(self.df.index.get_level_values(0).unique()))
+        self.cids_used_in_last_calculation = list(
+            np.sort(self.df.index.get_level_values(0).unique())
+        )
 
     def __communal_sample__(self, df: pd.DataFrame, signal: str, ret: str):
         """
@@ -847,7 +854,7 @@ class SignalReturnRelations:
                 s_date = intersection_df.index[0]
                 e_date = intersection_df.index[-1]
 
-                final_df.loc[(cid_name, s_date):(cid_name, e_date), signal] = (
+                final_df.loc[(cid_name, s_date) : (cid_name, e_date), signal] = (
                     intersection_df.to_numpy()
                 )
                 storage.append(final_df)
@@ -971,7 +978,7 @@ class SignalReturnRelations:
         """
 
         if (
-            not "cid" in ret_vals.index.names
+            "cid" not in ret_vals.index.names
             or ret_vals.index.get_level_values("cid").nunique() <= 1
         ):
             warnings.warn(
@@ -1370,11 +1377,11 @@ class SignalReturnRelations:
 
         self.manipulate_df(xcats=xcat, freq=freq, agg_sig=agg_sigs)
 
-        if not sig in self.sigs:
+        if sig not in self.sigs:
             sig = sig + "_NEG"
 
         if table_type is not None:
-            if not table_type in ["summary", "years", "cross_section"]:
+            if table_type not in ["summary", "years", "cross_section"]:
                 raise ValueError("Invalid table type")
 
         if table_type == "years":
@@ -1480,19 +1487,19 @@ class SignalReturnRelations:
             freqs = [freqs]
 
         for rets_elem in rets:
-            if not rets_elem in self.xcats:
+            if rets_elem not in self.xcats:
                 raise ValueError(f"{rets_elem} is not a valid return category")
 
         for xcats_elem in xcats:
-            if not xcats_elem in self.xcats:
+            if xcats_elem not in self.xcats:
                 raise ValueError(f"{xcats_elem} is not a valid signal category")
 
         for freqs_elem in freqs:
-            if not freqs_elem in self.freqs:
+            if freqs_elem not in self.freqs:
                 raise ValueError(f"{freqs_elem} is not a valid frequency")
 
         for agg_sigs_elem in agg_sigs:
-            if not agg_sigs_elem in self.agg_sigs:
+            if agg_sigs_elem not in self.agg_sigs:
                 raise ValueError(f"{agg_sigs_elem} is not a valid aggregation method")
 
         xcats = [x for x in xcats if x in self.sigs]
@@ -1745,7 +1752,7 @@ class SignalReturnRelations:
 
         self.df = self.original_df.copy()
 
-        if not stat in self.metrics:
+        if stat not in self.metrics:
             raise ValueError(f"Stat must be one of {self.metrics}")
 
         if pval_stat is not None:
@@ -1765,7 +1772,7 @@ class SignalReturnRelations:
         type_values = ["panel", "mean_years", "mean_cids", "pr_years", "pr_cids"]
         rows_values = ["xcat", "ret", "freq", "agg_sigs"]
 
-        if not type in type_values:
+        if type not in type_values:
             raise ValueError(f"Type must be one of {type_values}")
 
         if not all([x in rows_values for x in rows]):
