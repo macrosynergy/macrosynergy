@@ -293,8 +293,6 @@ class SignalReturnRelations:
 
         self.df = QuantamentalDataFrame(self.df)
 
-        self.original_df = self.df.copy()
-
         all_found_tickers = self.df.list_tickers()
 
         sigs_found, rets_found = {}, {}
@@ -307,7 +305,7 @@ class SignalReturnRelations:
         # keep only cids that have at least one sig AND one ret
         self.cids = sorted(set(sigs_found) & set(rets_found))
 
-        self.df = self.df.reduce_df(cids=self.cids)
+        self.df = self.df.reduce_df(cids=self.cids, blacklist=self.blacklist)
         self.original_df = self.df.copy()
 
     def __rival_sigs__(self, ret, sigs=None):
