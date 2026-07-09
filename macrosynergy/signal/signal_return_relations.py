@@ -307,6 +307,9 @@ class SignalReturnRelations:
         # keep only cids that have at least one sig AND one ret
         self.cids = sorted(set(sigs_found) & set(rets_found))
 
+        self.df = self.df.reduce_df(cids=self.cids)
+        self.original_df = self.df.copy()
+
     def __rival_sigs__(self, ret, sigs=None):
         """
         Helper function used to produce the panel-level table for the additional signals.
