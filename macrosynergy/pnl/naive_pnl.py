@@ -27,6 +27,33 @@ from macrosynergy.pnl.sharpe_stability_ratio import sharpe_stability_ratio
 from macrosynergy.signal import SignalReturnRelations
 
 
+def _max_drawdown_recovery_months(cum_pnl: pd.Series) -> float:
+    """Trading days from the peak preceding the worst drawdown to its full
+    recovery, expressed in months of 21 trading days -- the same convention
+    used for ``Max 21-Day Draw %``. Returns NaN if the drawdown has not
+    recovered by the end of the sample.
+    """
+    s = cum_pnl.dropna()
+    if s.empty:
+        return float("nan")
+
+    high_watermark = s.cummax()
+    drawdown = high_watermark - s
+    trough_pos = int(np.argmax(drawdown.values))
+    if drawdown.iloc[trough_pos] == 0:
+        return 0.0
+
+    peak_level = high_watermark.iloc[trough_pos]
+    peak_pos = int(np.where(s.values[: trough_pos + 1] == peak_level)[0][-1])
+
+    recovered = np.where(s.values[trough_pos:] >= peak_level)[0]
+    if len(recovered) == 0:
+        return float("nan")
+    recovery_pos = trough_pos + int(recovered[0])
+
+    return (recovery_pos - peak_pos) / 21
+
+
 class NaivePnL:
     """
     Computes and collects illustrative PnLs with limited signal options and disregarding
@@ -1344,6 +1371,8 @@ class NaivePnL:
             - Sharpe Stability Ratio - HAC-robust t-stat for the mean rolling
               Sharpe ratio (see ``sharpe_stability_ratio``); accounts for
               sample size and serial dependence
+            - Max Draw Recovery (months) - time from the peak preceding the
+              worst drawdown to its full recovery, in 21-trading-day months
             - Prob. Sharpe Ratio > {threshold} - one-sided asymptotic
               probability that the mean rolling Sharpe ratio is above each
               threshold in ``sr_thresholds``, if provided
@@ -1442,6 +1471,7 @@ class NaivePnL:
                 stats.insert(len(stats) - 1, f"{bm} correl")
 
         stats.insert(len(stats) - 1, "Sharpe Stability Ratio")
+        stats.insert(len(stats) - 1, "Max Draw Recovery (months)")
         sr_prob_rows = [f"Prob. Sharpe Ratio > {float(sr):g}" for sr in sr_thresholds]
         for row in sr_prob_rows:
             stats.insert(len(stats) - 1, row)
@@ -1494,6 +1524,9 @@ class NaivePnL:
                 window=252,
                 benchmark_sr=0.0,
                 annualization_factor=252,
+            )
+            df.loc["Max Draw Recovery (months)", col] = _max_drawdown_recovery_months(
+                cum_pnl[col]
             )
             for sr, row in zip(sr_thresholds, sr_prob_rows):
                 df.loc[row, col] = sharpe_stability_ratio(
