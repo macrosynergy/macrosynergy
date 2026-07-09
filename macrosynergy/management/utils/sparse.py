@@ -385,10 +385,10 @@ class InformationStateChanges(object):
         zscore_freqs_allowed : Tuple[str, ...]
             candidate frequency labels. Default ("D", "W", "M", "Q", "A").
         thresh : Union[Tuple[float, float], float]
-            A float or a tuple of two floats to winsorise the data to. Default is None.
-            If a single float is provided, it is used for both lower and upper bounds,
-            as `(-thresh, thresh)`. If a tuple is provided, it is used as
-            `(thresh[0], thresh[1])`.
+            Winsorise the zscore before weighting. Default None (no winsorisation).
+            A scalar clips to ``(-thresh, thresh)``; a tuple clips to its
+            ``(min, max)``, so order does not matter.
+
         Notes
         -----
         Tickers without a ``zscore`` column, or whose release frequency cannot be
@@ -430,9 +430,9 @@ class InformationStateChanges(object):
                         raise ValueError(
                             "If `thresh` is a tuple, it must contain two numeric values."
                         )
-                    wins_lower, wins_upper = thresh
+                    wins_lower, wins_upper = min(thresh), max(thresh)
                 elif isinstance(thresh, Number):
-                    wins_lower, wins_upper = -thresh, thresh
+                    wins_lower, wins_upper = -abs(thresh), abs(thresh)
                 else:
                     raise ValueError(
                         "`thresh` must be a number or a tuple of two numbers."
@@ -1434,9 +1434,9 @@ def sparse_to_dense(
                 raise ValueError(
                     "If `thresh` is a tuple, it must contain two numeric values."
                 )
-            wins_lower, wins_upper = thresh
+            wins_lower, wins_upper = min(thresh), max(thresh)
         elif isinstance(thresh, Number):
-            wins_lower, wins_upper = -thresh, thresh
+            wins_lower, wins_upper = -abs(thresh), abs(thresh)
         else:
             raise ValueError("`thresh` must be a number or a tuple of two numbers.")
 
