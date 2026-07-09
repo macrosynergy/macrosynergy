@@ -307,6 +307,7 @@ class SignalReturnRelations:
 
         self.df = self.df.reduce_df(cids=self.cids, blacklist=self.blacklist)
         self.original_df = self.df.copy()
+        self.cids_used_in_last_calculation = None
 
     def __rival_sigs__(self, ret, sigs=None):
         """
@@ -803,7 +804,9 @@ class SignalReturnRelations:
             xcat_aggs=[agg_sig, "sum"],
         )
         self.df = df
-        self.cids = list(np.sort(self.df.index.get_level_values(0).unique()))
+        self.cids_used_in_last_calculation = list(
+            np.sort(self.df.index.get_level_values(0).unique())
+        )
 
     def __communal_sample__(self, df: pd.DataFrame, signal: str, ret: str):
         """
