@@ -152,7 +152,7 @@ def cov_estimators_bias_variance(
     )
 
     results = []
-    for seed in rng.integers(low=0, high=1000, size=n_iter):
+    for seed in rng.integers(low=0, high=10000, size=n_iter):
         data_generator.simulate_signals_and_returns(
             n_periods=n_periods,
             end_date=end_date,
@@ -227,7 +227,7 @@ if __name__ == "__main__":
         return_names=[f"CID{i}_FXXR" for i in range(5)],
         fid_names=[f"CID{i}_FX" for i in range(5)],
         configs=cov_est_configs,
-        n_iter=25,
+        n_iter=5,
         seed=40,
     )
 
