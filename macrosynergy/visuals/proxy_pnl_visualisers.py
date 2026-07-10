@@ -1,10 +1,13 @@
-from typing import Dict, List, Tuple, Optional, Any
+from numbers import Number
+from typing import Dict, List, Tuple, Optional, Any, Union
 
 import numpy as np
 import pandas as pd
 import seaborn as sns
+import matplotlib as mpl
 from matplotlib import pyplot as plt
-from matplotlib.figure import Figure
+
+from macrosynergy.management import reduce_df
 
 FREQ_TO_DAYS_MAP = {"D": 1, "W": 5, "M": 21, "Q": 63}
 
@@ -151,12 +154,44 @@ def covariance_estimates_scatterplot(
 ) -> None:
 
     # define point colours, size, and shape
-    style = [config["lback_meth"].upper() for config in configs]
-    hue = [" ".join(config["est_freqs"]) for config in configs]
+    z = {"D": 1, "W": 5, "M": 21}
+    styles, hues, effective_lbacks = [], [], []
+    for config in configs:
+        style = config["lback_meth"].upper()
+        hue = "-".join(config["est_freqs"])
+
+        est_freqs = config["est_freqs"]
+        if style == "XMA":
+            half_life = np.array(config["half_life"])
+            lam = 2 ** (-1 / half_life)
+            eff_lback = (1 + lam) / (1 - lam)
+        else:
+            eff_lback = np.array(config["lback_periods"])
+
+        if len(est_freqs) > 1:
+            weights = np.array(config["est_weights"], dtype=np.float32)
+            weights /= np.sum(weights)
+        else:
+            weights = np.ones(len(est_freqs), dtype=np.float32)
+
+        eff_lback = np.average(
+            [z[freq] * per for freq, per in zip(est_freqs, eff_lback)],
+            weights=weights,
+        ).round()
+
+        styles.append(style)
+        hues.append(hue)
+        effective_lbacks.append(eff_lback)
 
     # create a dataframe and plot
     plot_df = pd.DataFrame(
-        {"x_vals": x_vals, "y_vals": y_vals, "Method": style, "Freq": hue}
+        {
+            "x_vals": x_vals,
+            "y_vals": y_vals,
+            "Method": styles,
+            "Freq": hues,
+            "Effective lookback": effective_lbacks,
+        }
     )
 
     with sns.axes_style("whitegrid"), sns.plotting_context("notebook"):
@@ -168,6 +203,7 @@ def covariance_estimates_scatterplot(
             y="y_vals",
             hue="Freq",
             style="Method",
+            size="Effective lookback",
             sizes=(20, 250),
             alpha=0.8,
             edgecolor="white",
@@ -249,4 +285,97 @@ def notional_positions_scatterplot(
 
     return fig, axes
 
+
+def proxy_pnl_plot(
+    pnl_df: pd.DataFrame,
+    portfolio_names: Optional[List[str]] = None,
+    portfolio_labels: Optional[List[str]] = None,
+    background_vals: Optional[pd.Series] = None,
+    aum: Optional[Number] = None,
+    y_label: str = "",
+    x_label: str = "",
+    title: str = "",
+    legend_title: str = "Portfolio",
+    title_fontsize: int = 20,
+    legend_fontsize: int = 10,
+    label_fontsize: int = 12,
+    tick_fontsize: int = 12,
+    cumsum: bool = True,
+    line_width: int = 1,
+    figsize: Tuple[float, float] = (12, 7),
+) -> Tuple[plt.Figure, Any]:
+    # checks
+    for arg, type, val in [
+        ("pnl_df", pd.DataFrame, pnl_df),
+    ]:
+        if not isinstance(val, type):
+            raise TypeError()
+
+    # reduce pnl_df to cids/xcats of interest
+    pnl_df = reduce_df(pnl_df, cids=portfolio_names)
+    if pnl_df.empty:
+        raise ValueError()
+
+    # aggregate and put on desired scale
+    pnl_df["value"] = pnl_df.groupby("cid")["value"].cumsum() if cumsum else pnl_df
+    if aum is not None:
+        pnl_df["value"] = 100 * pnl_df["value"] / aum
+
+    sns.set_theme(
+        style="whitegrid",
+        palette="colorblind",
+        rc={"figure.figsize": figsize}
+    )
+
+    # lineplot
+    fig, ax = plt.subplots()
+    sns.lineplot(
+        data=pnl_df,
+        x="real_date",
+        y="value",
+        hue="cid",
+        estimator=None,
+        lw=line_width,
+        ax=ax,
+    )
+    plt.title(title, fontsize=title_fontsize)
+    plt.legend(
+        labels=portfolio_labels,
+        title=legend_title,
+        title_fontsize=legend_fontsize,
+        fontsize=legend_fontsize,
+    )
+    plt.xlabel(x_label, fontsize=label_fontsize)
+    plt.ylabel(y_label, fontsize=label_fontsize)
+    ax.tick_params(axis="both", labelsize=tick_fontsize)
+    plt.axhline(y=0, color="black", linestyle="--", lw=1)
+
+    # optionally shade the background
+    if background_vals is not None:
+        cmap = plt.get_cmap("viridis")
+        norm = mpl.colors.Normalize(vmin=background_vals.min(), vmax=background_vals.max())
+
+        # Shade each interval between dates
+        for i in range(background_vals.shape[0] - 1):
+            start = background_vals.index[i]
+            end = background_vals.index[i + 1]
+            value = background_vals[i]
+
+            ax.axvspan(
+                start,
+                end,
+                color=cmap(norm(value)),
+                alpha=0.2,
+                zorder=0
+            )
+
+        sm = mpl.cm.ScalarMappable(norm=norm, cmap=cmap)
+        sm.set_array([])
+
+        cbar = fig.colorbar(sm, ax=ax)
+        cbar.set_label("Signal strength")
+
+    plt.show()
+
+    return fig, ax
 

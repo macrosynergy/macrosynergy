@@ -44,9 +44,9 @@ class FIExtractor(BaseEstimator, MetaEstimatorMixin, RegressorMixin):
         self.estimator.fit(X, y)
 
         if hasattr(self.estimator, "coef_"):
-            self.feature_importances_ = np.abs(self.estimator.coef_.flatten()) / np.sum(
-                np.abs(self.estimator.coef_)
-            )
+            numerator = np.abs(self.estimator.coef_.flatten())
+            denominator = np.abs(self.estimator.coef_).sum()
+            self.feature_importances_ = np.nan if np.isclose(denominator, 0) else numerator / denominator
         elif hasattr(self.estimator, "feature_importances_"):
             self.feature_importances_ = self.estimator.feature_importances_.flatten() / np.sum(
                 self.estimator.feature_importances_
