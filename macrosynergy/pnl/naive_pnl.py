@@ -24,6 +24,11 @@ from macrosynergy.management.utils import (
 from macrosynergy.management.types import QuantamentalDataFrame
 from macrosynergy.panel.make_zn_scores import make_zn_scores
 from macrosynergy.pnl.sharpe_stability_ratio import sharpe_stability_ratio
+from macrosynergy.pnl.pnl_table import (
+    DEFAULT_PNL_METRIC_GROUPS,
+    HTMLTable,
+    pnl_table_html,
+)
 from macrosynergy.signal import SignalReturnRelations
 
 
@@ -1322,6 +1327,173 @@ class NaivePnL:
         else:
             plt.show()
 
+    @staticmethod
+    def _max_drawdown_recovery_months(cum_pnl: pd.Series, return_ongoing: bool = False):
+        """
+        Trading days from the peak preceding the worst drawdown to its full
+        recovery, expressed in months of 21 trading days - the same
+        convention used for "Max 21-Day Draw %" elsewhere in
+        ``evaluate_pnls()``.
+
+        Parameters
+        ----------
+        cum_pnl : pd.Series
+            Cumulative PnL series (e.g. ``dfw[col].cumsum()``). NaNs are
+            dropped.
+        return_ongoing : bool, default False
+            If True, return a ``(months, ongoing)`` tuple instead of just
+            ``months``, where ``ongoing`` is True when the worst drawdown
+            hadn't recovered by the end of the sample - i.e. ``months``
+            reflects an open, still-running drawdown rather than a
+            completed recovery.
+
+        Returns
+        -------
+        float, or (float, bool) if ``return_ongoing``
+            Recovery time in months. 0 if the series never had a drawdown
+            at all. If the worst drawdown hasn't recovered by the end of
+            the sample, the elapsed time from its preceding peak to the
+            last observation - i.e. how long that drawdown has been
+            running so far, not the length of the whole trading history.
+            NaN if ``cum_pnl`` has no non-NaN observations.
+        """
+        s = cum_pnl.dropna()
+        if s.empty:
+            months, ongoing = float("nan"), False
+        else:
+            high_watermark = s.cummax()
+            drawdown = high_watermark - s
+            trough_pos = int(np.argmax(drawdown.values))
+            if drawdown.iloc[trough_pos] == 0:
+                months, ongoing = 0.0, False
+            else:
+                peak_level = high_watermark.iloc[trough_pos]
+                peak_pos = int(
+                    np.where(s.values[: trough_pos + 1] == peak_level)[0][-1]
+                )
+
+                recovered = np.where(s.values[trough_pos:] >= peak_level)[0]
+                if len(recovered) == 0:
+                    months, ongoing = (len(s) - 1 - peak_pos) / 21, True
+                else:
+                    recovery_pos = trough_pos + int(recovered[0])
+                    months, ongoing = (recovery_pos - peak_pos) / 21, False
+
+        return (months, ongoing) if return_ongoing else months
+
+    def _stats_from_wide(self, dfw: pd.DataFrame, sr_thresholds: List[float]):
+        """
+        Core of ``evaluate_pnls()``: the stats table for an already-pivoted
+        wide returns frame (index date, columns return series). Factored
+        out so ``evaluate_pnls_html()`` can compute the exact same stats
+        for a raw ``bms`` benchmark ticker series - which isn't a
+        registered PnL category and so can't go through ``evaluate_pnls()``
+        itself - without duplicating the computation.
+
+        Returns
+        -------
+        (pd.DataFrame, dict)
+            The stats DataFrame (indexed like ``evaluate_pnls()``'s
+            output), and a ``{column: bool}`` map of which columns' "Max
+            Draw Recovery (months)" figure is an ongoing, unrecovered
+            drawdown.
+        """
+        stats = [
+            "Return %",
+            "St. Dev. %",
+            "Sharpe Ratio",
+            "Sortino Ratio",
+            "Max 21-Day Draw %",
+            "Max 6-Month Draw %",
+            "Peak to Trough Draw %",
+            "Top 5% Monthly PnL Share",
+            "Traded Months",
+        ]
+
+        # If benchmark tickers have been passed into the Class and if the tickers are
+        # present in self.dfd.
+        benchmark_tickers = []
+
+        if self.bm_bool and bool(self._bm_dict):
+            benchmark_tickers = list(self._bm_dict.keys())
+            for bm in benchmark_tickers:
+                stats.insert(len(stats) - 1, f"{bm} correl")
+
+        stats.insert(len(stats) - 1, "Sharpe Stability Ratio")
+        stats.insert(len(stats) - 1, "Max Draw Recovery (months)")
+        sr_prob_rows = [f"Prob. Sharpe Ratio > {float(sr):g}" for sr in sr_thresholds]
+        for row in sr_prob_rows:
+            stats.insert(len(stats) - 1, row)
+
+        df = pd.DataFrame(columns=dfw.columns, index=stats)
+
+        df.iloc[0, :] = dfw.mean(axis=0) * 261
+        df.iloc[1, :] = dfw.std(axis=0) * np.sqrt(261)
+        df.iloc[2, :] = df.iloc[0, :] / df.iloc[1, :]
+        dsd = dfw.apply(lambda x: np.sqrt(np.sum(x[x < 0] ** 2) / len(x))) * np.sqrt(
+            261
+        )
+        df.iloc[3, :] = df.iloc[0, :] / dsd
+        df.iloc[4, :] = dfw.rolling(21).sum().min()
+        df.iloc[5, :] = dfw.rolling(6 * 21).sum().min()
+
+        cum_pnl = dfw.cumsum()
+        high_watermark = cum_pnl.cummax()
+        drawdown = high_watermark - cum_pnl
+
+        df.iloc[6, :] = -drawdown.max()
+
+        mfreq = _map_to_business_day_frequency("M")
+        monthly_pnl = dfw.resample(mfreq).sum()
+        total_pnl = monthly_pnl.sum(axis=0)
+        top_5_percent_cutoff = int(np.ceil(len(monthly_pnl) * 0.05))
+        top_months = pd.DataFrame(columns=monthly_pnl.columns)
+        for column in monthly_pnl.columns:
+            top_months[column] = (
+                monthly_pnl[column]
+                .nlargest(top_5_percent_cutoff)
+                .reset_index(drop=True)
+            )
+
+        df.iloc[7, :] = top_months.sum() / total_pnl
+
+        traded_months = dfw.notna().resample(mfreq).sum().ne(0).sum()
+
+        if len(benchmark_tickers) > 0:
+            bm_df = pd.concat(list(self._bm_dict.values()), axis=1)
+            for i, bm in enumerate(benchmark_tickers):
+                index = dfw.index.intersection(bm_df.index)
+                correlation = dfw.loc[index].corrwith(
+                    bm_df.loc[index].iloc[:, i], axis=0, method="pearson", drop=True
+                )
+                df.loc[f"{bm} correl", :] = correlation
+
+        dd_recovery_ongoing = {}
+        for col in dfw.columns:
+            df.loc["Sharpe Stability Ratio", col] = sharpe_stability_ratio(
+                dfw[col].dropna(),
+                window=252,
+                benchmark_sr=0.0,
+                annualization_factor=252,
+            )
+            recovery_months, ongoing = self._max_drawdown_recovery_months(
+                cum_pnl[col], return_ongoing=True
+            )
+            df.loc["Max Draw Recovery (months)", col] = recovery_months
+            dd_recovery_ongoing[col] = ongoing
+            for sr, row in zip(sr_thresholds, sr_prob_rows):
+                df.loc[row, col] = sharpe_stability_ratio(
+                    dfw[col].dropna(),
+                    window=252,
+                    benchmark_sr=float(sr),
+                    annualization_factor=252,
+                    probability=True,
+                )
+
+        df.loc["Traded Months", :] = traded_months
+
+        return df, dd_recovery_ongoing
+
     def evaluate_pnls(
         self,
         pnl_cats: Optional[List[str]] = None,
@@ -1344,6 +1516,10 @@ class NaivePnL:
             - Sharpe Stability Ratio - HAC-robust t-stat for the mean rolling
               Sharpe ratio (see ``sharpe_stability_ratio``); accounts for
               sample size and serial dependence
+            - Max Draw Recovery (months) - time from the peak preceding the
+              worst drawdown to its full recovery, in 21-trading-day months;
+              0 if there was never a drawdown, or Traded Months if the worst
+              drawdown hasn't recovered by the end of the sample
             - Prob. Sharpe Ratio > {threshold} - one-sided asymptotic
               probability that the mean rolling Sharpe ratio is above each
               threshold in ``sr_thresholds``, if provided
@@ -1420,91 +1596,9 @@ class NaivePnL:
         )
 
         groups = "xcat" if len(pnl_cids) == 1 else "cid"
-        stats = [
-            "Return %",
-            "St. Dev. %",
-            "Sharpe Ratio",
-            "Sortino Ratio",
-            "Max 21-Day Draw %",
-            "Max 6-Month Draw %",
-            "Peak to Trough Draw %",
-            "Top 5% Monthly PnL Share",
-            "Traded Months",
-        ]
-
-        # If benchmark tickers have been passed into the Class and if the tickers are
-        # present in self.dfd.
-        benchmark_tickers = []
-
-        if self.bm_bool and bool(self._bm_dict):
-            benchmark_tickers = list(self._bm_dict.keys())
-            for bm in benchmark_tickers:
-                stats.insert(len(stats) - 1, f"{bm} correl")
-
-        stats.insert(len(stats) - 1, "Sharpe Stability Ratio")
-        sr_prob_rows = [f"Prob. Sharpe Ratio > {float(sr):g}" for sr in sr_thresholds]
-        for row in sr_prob_rows:
-            stats.insert(len(stats) - 1, row)
-
         dfw = dfx.pivot(index="real_date", columns=groups, values="value")
-        df = pd.DataFrame(columns=dfw.columns, index=stats)
 
-        df.iloc[0, :] = dfw.mean(axis=0) * 261
-        df.iloc[1, :] = dfw.std(axis=0) * np.sqrt(261)
-        df.iloc[2, :] = df.iloc[0, :] / df.iloc[1, :]
-        dsd = dfw.apply(lambda x: np.sqrt(np.sum(x[x < 0] ** 2) / len(x))) * np.sqrt(
-            261
-        )
-        df.iloc[3, :] = df.iloc[0, :] / dsd
-        df.iloc[4, :] = dfw.rolling(21).sum().min()
-        df.iloc[5, :] = dfw.rolling(6 * 21).sum().min()
-
-        cum_pnl = dfw.cumsum()
-        high_watermark = cum_pnl.cummax()
-        drawdown = high_watermark - cum_pnl
-
-        df.iloc[6, :] = -drawdown.max()
-
-        mfreq = _map_to_business_day_frequency("M")
-        monthly_pnl = dfw.resample(mfreq).sum()
-        total_pnl = monthly_pnl.sum(axis=0)
-        top_5_percent_cutoff = int(np.ceil(len(monthly_pnl) * 0.05))
-        top_months = pd.DataFrame(columns=monthly_pnl.columns)
-        for column in monthly_pnl.columns:
-            top_months[column] = (
-                monthly_pnl[column]
-                .nlargest(top_5_percent_cutoff)
-                .reset_index(drop=True)
-            )
-
-        df.iloc[7, :] = top_months.sum() / total_pnl
-
-        if len(benchmark_tickers) > 0:
-            bm_df = pd.concat(list(self._bm_dict.values()), axis=1)
-            for i, bm in enumerate(benchmark_tickers):
-                index = dfw.index.intersection(bm_df.index)
-                correlation = dfw.loc[index].corrwith(
-                    bm_df.loc[index].iloc[:, i], axis=0, method="pearson", drop=True
-                )
-                df.loc[f"{bm} correl", :] = correlation
-
-        for col in dfw.columns:
-            df.loc["Sharpe Stability Ratio", col] = sharpe_stability_ratio(
-                dfw[col].dropna(),
-                window=252,
-                benchmark_sr=0.0,
-                annualization_factor=252,
-            )
-            for sr, row in zip(sr_thresholds, sr_prob_rows):
-                df.loc[row, col] = sharpe_stability_ratio(
-                    dfw[col].dropna(),
-                    window=252,
-                    benchmark_sr=float(sr),
-                    annualization_factor=252,
-                    probability=True,
-                )
-
-        df.loc["Traded Months", :] = dfw.notna().resample(mfreq).sum().ne(0).sum()
+        df, dd_recovery_ongoing = self._stats_from_wide(dfw, sr_thresholds)
 
         if label_dict is not None:
             if not isinstance(label_dict, dict):
@@ -1518,10 +1612,310 @@ class NaivePnL:
                     "label_dict must have the same number of keys as columns in the "
                     "DataFrame."
                 )
+            dd_recovery_ongoing = {
+                label_dict.get(c, c): v for c, v in dd_recovery_ongoing.items()
+            }
             df.rename(columns=label_dict, inplace=True)
             df = df[label_dict.values()]
 
+        # Consumed by evaluate_pnls_pretty() right after calling this method,
+        # to mark an unrecovered "Max Draw Recovery (months)" figure as an
+        # open/ongoing drawdown rather than a completed recovery - without
+        # adding a visible row/column to this DataFrame's public shape.
+        self._last_dd_recovery_ongoing = dd_recovery_ongoing
+
         return df
+
+    def evaluate_pnls_html(
+        self,
+        headline: Union[str, List[str]],
+        bench: Optional[Union[str, List[str]]] = None,
+        headline_label: Optional[Union[str, List[str]]] = None,
+        bench_label: Optional[Union[str, List[str]]] = None,
+        groups: Optional[Dict[str, List[str]]] = None,
+        order: Optional[Dict[str, List[str]]] = None,
+        row_labels: Optional[Dict[str, Union[str, List[str]]]] = None,
+        pnl_cids: List[str] = ["ALL"],
+        start: Optional[str] = None,
+        end: Optional[str] = None,
+        sr_thresholds: Optional[List[float]] = None,
+        title: str = "Naive PnL statistics",
+        subtitle: str = "10% vol target | daily rebalance | gross of costs",
+        custom_css: Optional[str] = None,
+        footnotes: bool = True,
+    ) -> HTMLTable:
+        """
+        Presentation-ready HTML rendering of the ``evaluate_pnls()``
+        statistics table - a grouped, ledger-style layout for reports and
+        notebooks, or for saving to an HTML file to open in Word or embed
+        in a web page. The statistics shown are those computed by
+        ``evaluate_pnls()``, selected and grouped for presentation.
+
+        Parameters
+        ----------
+        headline : str or List[str]
+            PnL categor(y/ies) to show as the (non-benchmark) column(s), in
+            display order.
+        bench : str or List[str], optional
+            PnL categor(y/ies) to show as benchmark column(s), styled
+            distinctly (muted) from the headline column(s), in display
+            order. Default is None, in which case the benchmark ticker(s)
+            passed as ``bms`` to the constructor are used - the same
+            benchmark(s) shown in the correlation row(s). Raises
+            ``ValueError`` if omitted when no ``bms`` were configured.
+        headline_label, bench_label : str or List[str], optional
+            Column header labels. Default is the category names themselves.
+            If ``bench`` is a list, ``bench_label`` must be a matching list
+            (or omitted).
+        groups : dict of {section title: [metric names]}, optional
+            Section headings and the metrics listed under each, in order,
+            e.g. ``{"Performance": ["Return %", "Sharpe Ratio"]}``. Default
+            is None, in which case a standard set of performance, risk &
+            drawdown, and robustness metrics is used. Raises ``KeyError``
+            if a requested metric is not one of the rows produced by
+            ``evaluate_pnls()``.
+        order : dict of {section title: [metric names in desired order]}, optional
+            Override just the row order within a section from ``groups``,
+            without redeclaring which metrics belong to it.
+        row_labels : dict of {row name: display label or [labels]}, optional
+            Rename individual rows for display, without changing which rows
+            are selected by ``groups``/``order``. Keys are matched against
+            the row names produced by ``evaluate_pnls()``, e.g.
+            ``{"St. Dev. %": "Vol %"}``.
+
+            The special key ``"Benchmark correlation"`` relabels the
+            benchmark-correlation row(s) - named after the benchmark
+            ticker, e.g. ``"USD_DUXR correl"`` - without having to spell
+            the ticker(s) out:
+
+            - a single label, e.g. ``{"Benchmark correlation": "Benchmark
+              correlation"}``, is applied to the row when one benchmark is
+              configured. With several benchmarks, the label is suffixed
+              with a number ("Benchmark correlation 1", "... 2", ...) so
+              each row keeps a distinct name.
+            - a list of labels, one per benchmark in the order ``bms`` was
+              passed to the constructor, e.g. ``{"Benchmark correlation":
+              ["5Y", "2Y"]}``. Must match the number of benchmarks exactly.
+        pnl_cids, start, end, sr_thresholds : see ``evaluate_pnls()``.
+        title, subtitle : str
+            Header text shown above the table. ``subtitle`` defaults to
+            "10% vol target | daily rebalance | gross of costs" - override
+            it if this instance's PnLs don't share that configuration (e.g.
+            a different ``vol_scale`` or ``rebal_freq`` in ``make_pnl()``).
+        custom_css : str, optional
+            Extra CSS appended after the table's own stylesheet to
+            customize its appearance. Because it comes last, a rule
+            targeting one of the table's classes overrides the default
+            without needing ``!important``, e.g.
+            ``custom_css=".pnl-title { color: #7a1f1f; }"``. See
+            ``pnl_table_html`` for the classes that can be targeted.
+        footnotes : bool, default True
+            Whether to render the explanatory footnotes below the table
+            (see Notes). Set to ``False`` to suppress them - the
+            underlying "+" prefix on cells is unaffected, only the
+            footnote text is toggled.
+
+        Returns
+        -------
+        HTMLTable
+            The formatted table. Displays inline when returned from a
+            notebook cell; its ``.data`` attribute holds the raw HTML
+            string, e.g. to save with
+            ``Path("table.html").write_text(...)`` for use in Word or on a
+            web page.
+
+        Notes
+        -----
+        A "Max Draw Recovery (months)" figure is prefixed with "+" wherever
+        the worst drawdown hadn't recovered by the end of the sample - it
+        reads as "at least this many months and still running", not a
+        completed recovery time. "Top 5% Monthly PnL Share" is top-5%-months
+        PnL divided by total PnL, so it reads negative whenever total PnL is
+        negative. Both get an explanatory footnote below the table whenever
+        they occur (subject to ``footnotes``).
+        """
+        headlines = headline if isinstance(headline, list) else [headline]
+        if headline_label is None:
+            headline_labels = headlines
+        elif isinstance(headline_label, list):
+            headline_labels = headline_label
+        else:
+            headline_labels = [headline_label] if len(headlines) == 1 else headlines
+
+        if bench is None:
+            if not getattr(self, "_bm_dict", None):
+                raise ValueError(
+                    "bench must be provided, or configure bms=... on the "
+                    "NaivePnL constructor to default to those benchmark "
+                    "ticker(s)."
+                )
+            benches = list(self._bm_dict.keys())
+        else:
+            benches = bench if isinstance(bench, list) else [bench]
+        if bench_label is None:
+            bench_labels = benches
+        elif isinstance(bench_label, list):
+            bench_labels = bench_label
+        else:
+            bench_labels = [bench_label] if len(benches) == 1 else benches
+        if len(bench_labels) != len(benches):
+            raise ValueError(
+                f"bench_label must match bench 1:1 ({len(benches)} "
+                f"benchmark(s)), got {len(bench_labels)} label(s)."
+            )
+
+        using_default_groups = groups is None
+        groups = groups if groups is not None else DEFAULT_PNL_METRIC_GROUPS
+        order = order or {}
+
+        resolved = {}
+        for section, metrics in groups.items():
+            if section in order:
+                if set(order[section]) != set(metrics):
+                    raise ValueError(
+                        f"order[{section!r}] must contain exactly {metrics}"
+                    )
+                resolved[section] = order[section]
+            else:
+                resolved[section] = metrics
+
+        # A bench entry is either a real PnL category (goes through
+        # evaluate_pnls() as usual) or a raw bms ticker defaulted-in above
+        # (not a registered PnL, so it can't go through evaluate_pnls()'s
+        # pnl_names check - computed directly from its own return series
+        # via the same stats routine instead).
+        bench_pnl_names = [b for b in benches if b in self.pnl_names]
+        bench_bm_tickers = [b for b in benches if b not in self.pnl_names]
+        unknown_bench = [b for b in bench_bm_tickers if b not in self._bm_dict]
+        if unknown_bench:
+            raise ValueError(
+                f"bench {unknown_bench} is neither a defined PnL category "
+                f"({self.pnl_names}) nor a configured bms ticker "
+                f"({list(self._bm_dict.keys())})."
+            )
+
+        tbr = self.evaluate_pnls(
+            pnl_cats=[*headlines, *bench_pnl_names],
+            pnl_cids=pnl_cids,
+            start=start,
+            end=end,
+            sr_thresholds=sr_thresholds,
+        )
+
+        # Columns whose "Max Draw Recovery (months)" figure is an open, not
+        # yet completed drawdown as of the last observation - flagged with
+        # a "+" prefix below rather than read as a finished recovery time.
+        dd_recovery_ongoing = dict(getattr(self, "_last_dd_recovery_ongoing", {}))
+
+        if bench_bm_tickers:
+            dfw_bm = pd.concat([self._bm_dict[t] for t in bench_bm_tickers], axis=1)
+            if start is not None:
+                dfw_bm = dfw_bm.loc[dfw_bm.index >= pd.Timestamp(start)]
+            if end is not None:
+                dfw_bm = dfw_bm.loc[dfw_bm.index <= pd.Timestamp(end)]
+            stats_bm, ongoing_bm = self._stats_from_wide(
+                dfw_bm,
+                sr_thresholds if sr_thresholds is not None else [0.25, 0.5, 0.75],
+            )
+            dd_recovery_ongoing.update(ongoing_bm)
+            tbr = pd.concat([tbr, stats_bm], axis=1)
+
+        recovery_row_label = "Max Draw Recovery (months)"
+
+        # "Benchmark correlation" in `groups`/`order` is a placeholder for
+        # whichever real f"{bm} correl" row(s) `evaluate_pnls()` produced;
+        # expand it in place rather than renaming tbr, so tbr keeps the
+        # ticker-based naming used everywhere else in the package.
+        correl_rows = [i for i in tbr.index if i.endswith(" correl")]
+        if correl_rows:
+            resolved = {
+                section: [
+                    r
+                    for m in metrics
+                    for r in (correl_rows if m == "Benchmark correlation" else [m])
+                ]
+                for section, metrics in resolved.items()
+            }
+
+        all_metrics = [m for metrics in resolved.values() for m in metrics]
+
+        # Using the *default* groups without a benchmark configured on this
+        # instance: drop the correlation row rather than raising, since it
+        # only makes sense once a benchmark has been set. An explicitly
+        # passed `groups` still raises on a missing metric below.
+        if using_default_groups and not correl_rows:
+            resolved = {
+                section: [m for m in metrics if m != "Benchmark correlation"]
+                for section, metrics in resolved.items()
+            }
+            all_metrics = [m for metrics in resolved.values() for m in metrics]
+
+        missing = [m for m in all_metrics if m not in tbr.index]
+        if missing:
+            raise KeyError(f"Unknown metric(s) requested: {missing}")
+
+        if row_labels:
+            row_labels = dict(row_labels)
+            recovery_row_label = row_labels.get(recovery_row_label, recovery_row_label)
+            if "Benchmark correlation" in row_labels:
+                label = row_labels.pop("Benchmark correlation")
+                if isinstance(label, list):
+                    if len(label) != len(correl_rows):
+                        raise ValueError(
+                            f"row_labels['Benchmark correlation'] has "
+                            f"{len(label)} label(s) but {len(correl_rows)} "
+                            f"benchmark(s) are configured."
+                        )
+                    suffixed = label
+                elif len(correl_rows) <= 1:
+                    # A single benchmark can safely share the generic label;
+                    # two or more would collide into the same row name
+                    # (pandas doesn't allow duplicate index values here), so
+                    # number them instead of dropping back to the real
+                    # ticker names.
+                    suffixed = [label] * len(correl_rows)
+                else:
+                    suffixed = [f"{label} {i}" for i in range(1, len(correl_rows) + 1)]
+                for r, lbl in zip(correl_rows, suffixed):
+                    row_labels.setdefault(r, lbl)
+            tbr = tbr.rename(index=row_labels)
+            resolved = {
+                section: [row_labels.get(m, m) for m in metrics]
+                for section, metrics in resolved.items()
+            }
+            all_metrics = [m for metrics in resolved.values() for m in metrics]
+
+        plus_cols = [col for col, ongoing in dd_recovery_ongoing.items() if ongoing]
+
+        # Resolve through any row_labels renaming so a renamed "Traded
+        # Months"/"Max Draw Recovery (months)"/"Top 5% Monthly PnL Share"
+        # row keeps its whole-number formatting/negative-share footnote
+        # instead of silently losing them.
+        traded_months_label = "Traded Months"
+        top5_row_label = "Top 5% Monthly PnL Share"
+        if row_labels:
+            traded_months_label = row_labels.get(
+                traded_months_label, traded_months_label
+            )
+            top5_row_label = row_labels.get(top5_row_label, top5_row_label)
+
+        html = pnl_table_html(
+            tbr,
+            list(resolved.items()),
+            headlines,
+            benches,
+            headline_labels,
+            bench_labels,
+            whole_number_metrics={traded_months_label, recovery_row_label}
+            & set(all_metrics),
+            plus_prefix={recovery_row_label: plus_cols} if plus_cols else None,
+            negative_share_row=top5_row_label,
+            footnotes=footnotes,
+            title=title,
+            subtitle=subtitle,
+            custom_css=custom_css,
+        )
+        return HTMLTable(html)
 
     def print_pnl_names(self):
         """
