@@ -10,6 +10,7 @@ from typing import List, Dict
 import matplotlib
 from matplotlib import pyplot as plt
 from macrosynergy.management.types import QuantamentalDataFrame
+from macrosynergy.pnl.pnl_table import HTMLTable
 
 
 class TestAll(unittest.TestCase):
@@ -482,9 +483,7 @@ class TestAll(unittest.TestCase):
             any(idx.startswith("Prob. Sharpe Ratio >") for idx in df_none.index)
         )
 
-        df_custom = pnl.evaluate_pnls(
-            pnl_cats=["PNL_INFL"], sr_thresholds=[0.1, 1.0]
-        )
+        df_custom = pnl.evaluate_pnls(pnl_cats=["PNL_INFL"], sr_thresholds=[0.1, 1.0])
         self.assertIn("Prob. Sharpe Ratio > 0.1", df_custom.index)
         self.assertIn("Prob. Sharpe Ratio > 1", df_custom.index)
         self.assertNotIn("Prob. Sharpe Ratio > 0.25", df_custom.index)
@@ -508,7 +507,7 @@ class TestAll(unittest.TestCase):
         # Rises 21 days to a peak, falls for 21 days to a trough, then
         # climbs back past the prior peak over another 21 days. Recovery is
         # measured from the *peak*, not the trough, so this is 42 trading
-        # days -- 2 months -- end to end.
+        # days - 2 months - end to end.
         up = np.arange(1, 22, dtype=float)
         down = up[-1] - np.arange(1, 22, dtype=float)
         recover = down[-1] + np.arange(1, 22, dtype=float)
@@ -518,14 +517,14 @@ class TestAll(unittest.TestCase):
         # 21 days up to a peak, then 21 days down, ending underwater with no
         # recovery. The drawdown has only been running since the peak (21
         # trading days = 1 month), regardless of how much history preceded
-        # the peak -- it must NOT fall back to the whole traded history.
+        # the peak - it must NOT fall back to the whole traded history.
         down_no_recovery = up[-1] - np.arange(1, 22, dtype=float)
         cum_pnl = pd.Series(np.concatenate([up, down_no_recovery]))
         self.assertEqual(recovery_months(cum_pnl), 1.0)
         self.assertEqual(recovery_months(cum_pnl, return_ongoing=True), (1.0, True))
 
         # Peak reached a quarter of the way through a 4-month series, then
-        # underwater for the remaining three quarters with no recovery --
+        # underwater for the remaining three quarters with no recovery -
         # the ongoing drawdown should read as ~3 months, not the full 4.
         long_down_no_recovery = up[-1] - np.arange(1, 64, dtype=float)
         cum_pnl = pd.Series(np.concatenate([up, long_down_no_recovery]))
@@ -536,7 +535,7 @@ class TestAll(unittest.TestCase):
         self.assertTrue(np.isnan(recovery_months(cum_pnl)))
 
     def test_evaluate_pnls_pretty(self):
-        from IPython.display import HTML
+        from macrosynergy.pnl.pnl_table import HTMLTable
 
         ret = "EQXR"
         sigs = ["CRY", "GROWTH", "INFL"]
@@ -553,18 +552,29 @@ class TestAll(unittest.TestCase):
             bms=["USD_DUXR"],
         )
         pnl_single_bm.make_pnl(
-            sig="INFL", sig_op="zn_score_pan", rebal_freq="monthly",
-            vol_scale=5, min_obs=250, pnl_name="PNL_HEAD",
+            sig="INFL",
+            sig_op="zn_score_pan",
+            rebal_freq="monthly",
+            vol_scale=5,
+            min_obs=250,
+            pnl_name="PNL_HEAD",
         )
         pnl_single_bm.make_pnl(
-            sig="INFL", sig_op="zn_score_pan", sig_neg=True, rebal_freq="monthly",
-            vol_scale=5, min_obs=250, pnl_name="PNL_BENCH",
+            sig="INFL",
+            sig_op="zn_score_pan",
+            sig_neg=True,
+            rebal_freq="monthly",
+            vol_scale=5,
+            min_obs=250,
+            pnl_name="PNL_BENCH",
         )
 
         result = pnl_single_bm.evaluate_pnls_html(
             headline="PNL_HEAD", bench="PNL_BENCH"
         )
-        self.assertIsInstance(result, HTML)
+        self.assertIsInstance(result, HTMLTable)
+        # Renders inline in a notebook via the standard rich-display hook.
+        self.assertEqual(result._repr_html_(), result.data)
         html = result.data
         # Default groups: 3 performance + 5 risk & drawdown + 5 robustness rows.
         for metric in (
@@ -617,12 +627,21 @@ class TestAll(unittest.TestCase):
             bms=["EUR_DUXR", "USD_DUXR"],
         )
         pnl_multi_bm.make_pnl(
-            sig="INFL", sig_op="zn_score_pan", rebal_freq="monthly",
-            vol_scale=5, min_obs=250, pnl_name="PNL_HEAD",
+            sig="INFL",
+            sig_op="zn_score_pan",
+            rebal_freq="monthly",
+            vol_scale=5,
+            min_obs=250,
+            pnl_name="PNL_HEAD",
         )
         pnl_multi_bm.make_pnl(
-            sig="INFL", sig_op="zn_score_pan", sig_neg=True, rebal_freq="monthly",
-            vol_scale=5, min_obs=250, pnl_name="PNL_BENCH",
+            sig="INFL",
+            sig_op="zn_score_pan",
+            sig_neg=True,
+            rebal_freq="monthly",
+            vol_scale=5,
+            min_obs=250,
+            pnl_name="PNL_BENCH",
         )
         anon_multi = pnl_multi_bm.evaluate_pnls_html(
             headline="PNL_HEAD",
@@ -657,8 +676,12 @@ class TestAll(unittest.TestCase):
         # Multiple benchmark *portfolios*: bench/bench_label accept lists,
         # each rendered as its own muted column.
         pnl_multi_bm.make_pnl(
-            sig="INFL", sig_op="zn_score_pan", rebal_freq="monthly",
-            vol_scale=5, min_obs=250, pnl_name="PNL_BENCH2",
+            sig="INFL",
+            sig_op="zn_score_pan",
+            rebal_freq="monthly",
+            vol_scale=5,
+            min_obs=250,
+            pnl_name="PNL_BENCH2",
         )
         multi_bench = pnl_multi_bm.evaluate_pnls_html(
             headline="PNL_HEAD",
@@ -709,12 +732,21 @@ class TestAll(unittest.TestCase):
             blacklist=self.blacklist,
         )
         pnl_no_bm.make_pnl(
-            sig="INFL", sig_op="zn_score_pan", rebal_freq="monthly",
-            vol_scale=5, min_obs=250, pnl_name="PNL_HEAD",
+            sig="INFL",
+            sig_op="zn_score_pan",
+            rebal_freq="monthly",
+            vol_scale=5,
+            min_obs=250,
+            pnl_name="PNL_HEAD",
         )
         pnl_no_bm.make_pnl(
-            sig="INFL", sig_op="zn_score_pan", sig_neg=True, rebal_freq="monthly",
-            vol_scale=5, min_obs=250, pnl_name="PNL_BENCH",
+            sig="INFL",
+            sig_op="zn_score_pan",
+            sig_neg=True,
+            rebal_freq="monthly",
+            vol_scale=5,
+            min_obs=250,
+            pnl_name="PNL_BENCH",
         )
         no_bm_result = pnl_no_bm.evaluate_pnls_html(
             headline="PNL_HEAD", bench="PNL_BENCH"
@@ -730,14 +762,29 @@ class TestAll(unittest.TestCase):
         # show neither.
         dates = pd.bdate_range("2010-01-01", periods=100)
         values = np.concatenate([np.ones(50), -np.ones(50)])
-        df = pd.concat([
-            pd.DataFrame({"cid": "USD", "xcat": "XR", "real_date": dates, "value": values}),
-            pd.DataFrame({"cid": "USD", "xcat": "SIG", "real_date": dates, "value": np.ones(100)}),
-        ])
+        df = pd.concat(
+            [
+                pd.DataFrame(
+                    {"cid": "USD", "xcat": "XR", "real_date": dates, "value": values}
+                ),
+                pd.DataFrame(
+                    {
+                        "cid": "USD",
+                        "xcat": "SIG",
+                        "real_date": dates,
+                        "value": np.ones(100),
+                    }
+                ),
+            ]
+        )
         pnl = NaivePnL(df, ret="XR", sigs=["SIG"], cids=["USD"], start="2010-01-01")
         pnl.make_pnl(
-            sig="SIG", sig_op="raw", rebal_freq="daily", vol_scale=None,
-            min_obs=1, pnl_name="PNL",
+            sig="SIG",
+            sig_op="raw",
+            rebal_freq="daily",
+            vol_scale=None,
+            min_obs=1,
+            pnl_name="PNL",
         )
         ongoing_result = pnl.evaluate_pnls_html(
             headline="PNL",
@@ -764,39 +811,53 @@ class TestAll(unittest.TestCase):
             no_footnote_result.data,
         )
 
-        recovered_values = np.concatenate(
-            [np.ones(20), -np.ones(20), np.ones(20)]
+        recovered_values = np.concatenate([np.ones(20), -np.ones(20), np.ones(20)])
+        df_recovered = pd.concat(
+            [
+                pd.DataFrame(
+                    {
+                        "cid": "USD",
+                        "xcat": "XR",
+                        "real_date": pd.bdate_range("2010-01-01", periods=60),
+                        "value": recovered_values,
+                    }
+                ),
+                pd.DataFrame(
+                    {
+                        "cid": "USD",
+                        "xcat": "SIG",
+                        "real_date": pd.bdate_range("2010-01-01", periods=60),
+                        "value": np.ones(60),
+                    }
+                ),
+            ]
         )
-        df_recovered = pd.concat([
-            pd.DataFrame({
-                "cid": "USD", "xcat": "XR", "real_date": pd.bdate_range("2010-01-01", periods=60),
-                "value": recovered_values,
-            }),
-            pd.DataFrame({
-                "cid": "USD", "xcat": "SIG", "real_date": pd.bdate_range("2010-01-01", periods=60),
-                "value": np.ones(60),
-            }),
-        ])
         pnl_recovered = NaivePnL(
             df_recovered, ret="XR", sigs=["SIG"], cids=["USD"], start="2010-01-01"
         )
         pnl_recovered.make_pnl(
-            sig="SIG", sig_op="raw", rebal_freq="daily", vol_scale=None,
-            min_obs=1, pnl_name="PNL",
+            sig="SIG",
+            sig_op="raw",
+            rebal_freq="daily",
+            vol_scale=None,
+            min_obs=1,
+            pnl_name="PNL",
         )
         recovered_result = pnl_recovered.evaluate_pnls_html(
             headline="PNL",
             bench="PNL",
             groups={"Risk & drawdown": ["Max Draw Recovery (months)"]},
         )
-        self.assertNotIn("+", recovered_result.data.split("<tbody>")[1].split("</tbody>")[0])
+        self.assertNotIn(
+            "+", recovered_result.data.split("<tbody>")[1].split("</tbody>")[0]
+        )
         self.assertNotIn(
             "drawdown had not yet recovered as of the last observation",
             recovered_result.data,
         )
 
         # Renaming "Max Draw Recovery (months)"/"Traded Months" via
-        # row_labels must not lose their whole-number rounding -- the cells
+        # row_labels must not lose their whole-number rounding - the cells
         # should still read as clean integers, not 2-decimal values.
         renamed_result = pnl.evaluate_pnls_html(
             headline="PNL",
@@ -821,8 +882,6 @@ class TestAll(unittest.TestCase):
         self.assertNotIn("pnl-num-split", tbody)
 
     def test_evaluate_pnls_pretty_custom_css(self):
-        from IPython.display import HTML
-
         ret = "EQXR"
         sigs = ["CRY", "GROWTH", "INFL"]
         pnl = NaivePnL(
@@ -834,20 +893,31 @@ class TestAll(unittest.TestCase):
             blacklist=self.blacklist,
         )
         pnl.make_pnl(
-            sig="INFL", sig_op="zn_score_pan", rebal_freq="monthly",
-            vol_scale=5, min_obs=250, pnl_name="PNL_HEAD",
+            sig="INFL",
+            sig_op="zn_score_pan",
+            rebal_freq="monthly",
+            vol_scale=5,
+            min_obs=250,
+            pnl_name="PNL_HEAD",
         )
         pnl.make_pnl(
-            sig="INFL", sig_op="zn_score_pan", sig_neg=True, rebal_freq="monthly",
-            vol_scale=5, min_obs=250, pnl_name="PNL_BENCH",
+            sig="INFL",
+            sig_op="zn_score_pan",
+            sig_neg=True,
+            rebal_freq="monthly",
+            vol_scale=5,
+            min_obs=250,
+            pnl_name="PNL_BENCH",
         )
 
         default_html = pnl.evaluate_pnls_html(headline="PNL_HEAD", bench="PNL_BENCH")
         custom = ".pnl-title { color: #7a1f1f; } .pnl-value-bench { color: #ff00ff; }"
         custom_html = pnl.evaluate_pnls_html(
-            headline="PNL_HEAD", bench="PNL_BENCH", custom_css=custom,
+            headline="PNL_HEAD",
+            bench="PNL_BENCH",
+            custom_css=custom,
         )
-        self.assertIsInstance(custom_html, HTML)
+        self.assertIsInstance(custom_html, HTMLTable)
 
         # The custom block is injected verbatim, after the default
         # stylesheet, so equal-specificity selectors are overridden by
@@ -877,12 +947,16 @@ class TestAll(unittest.TestCase):
             bms=["EUR_DUXR", "USD_DUXR"],
         )
         pnl_multi_bm.make_pnl(
-            sig="INFL", sig_op="zn_score_pan", rebal_freq="monthly",
-            vol_scale=5, min_obs=250, pnl_name="PNL_HEAD",
+            sig="INFL",
+            sig_op="zn_score_pan",
+            rebal_freq="monthly",
+            vol_scale=5,
+            min_obs=250,
+            pnl_name="PNL_HEAD",
         )
 
         # Omitting bench= entirely defaults to the raw bms tickers as their
-        # own columns -- same benchmarks used for the correlation rows,
+        # own columns - same benchmarks used for the correlation rows,
         # without needing a synthetic "long only" PnL.
         result = pnl_multi_bm.evaluate_pnls_html(headline="PNL_HEAD")
         self.assertIn("EUR_DUXR", result.data)
@@ -893,12 +967,20 @@ class TestAll(unittest.TestCase):
         # No bench and no bms configured at all: clear error, not a
         # confusing failure deep in evaluate_pnls().
         pnl_no_bm = NaivePnL(
-            self.dfd, ret=ret, sigs=sigs, cids=self.cids,
-            start="2000-01-01", blacklist=self.blacklist,
+            self.dfd,
+            ret=ret,
+            sigs=sigs,
+            cids=self.cids,
+            start="2000-01-01",
+            blacklist=self.blacklist,
         )
         pnl_no_bm.make_pnl(
-            sig="INFL", sig_op="zn_score_pan", rebal_freq="monthly",
-            vol_scale=5, min_obs=250, pnl_name="PNL_HEAD",
+            sig="INFL",
+            sig_op="zn_score_pan",
+            rebal_freq="monthly",
+            vol_scale=5,
+            min_obs=250,
+            pnl_name="PNL_HEAD",
         )
         with self.assertRaises(ValueError):
             pnl_no_bm.evaluate_pnls_html(headline="PNL_HEAD")
@@ -918,33 +1000,48 @@ class TestAll(unittest.TestCase):
         # Strong negative drift overall, with one very strong positive
         # month: total PnL ends up negative while the best (top-5%) month
         # is positive, so "Top 5% Monthly PnL Share" (top-5%-months PnL /
-        # total PnL) comes out negative -- the case the footnote explains.
+        # total PnL) comes out negative - the case the footnote explains.
         dates = pd.bdate_range("2010-01-01", periods=300)
         rng = np.random.default_rng(7)
         values = rng.normal(-0.01, 0.003, len(dates))
         values[10:31] += 0.03
-        df = pd.concat([
-            pd.DataFrame({"cid": "USD", "xcat": "XR", "real_date": dates, "value": values}),
-            pd.DataFrame({"cid": "USD", "xcat": "SIG", "real_date": dates, "value": np.ones(len(dates))}),
-        ])
+        df = pd.concat(
+            [
+                pd.DataFrame(
+                    {"cid": "USD", "xcat": "XR", "real_date": dates, "value": values}
+                ),
+                pd.DataFrame(
+                    {
+                        "cid": "USD",
+                        "xcat": "SIG",
+                        "real_date": dates,
+                        "value": np.ones(len(dates)),
+                    }
+                ),
+            ]
+        )
         pnl = NaivePnL(df, ret="XR", sigs=["SIG"], cids=["USD"], start="2010-01-01")
         pnl.make_pnl(
-            sig="SIG", sig_op="raw", rebal_freq="daily", vol_scale=None,
-            min_obs=1, pnl_name="PNL",
+            sig="SIG",
+            sig_op="raw",
+            rebal_freq="daily",
+            vol_scale=None,
+            min_obs=1,
+            pnl_name="PNL",
         )
         raw = pnl.evaluate_pnls(pnl_cats=["PNL"])
         self.assertLess(raw.loc["Top 5% Monthly PnL Share", "PNL"], 0)
 
         result = pnl.evaluate_pnls_html(
-            headline="PNL", bench="PNL",
+            headline="PNL",
+            bench="PNL",
             groups={"Robustness": ["Top 5% Monthly PnL Share"]},
         )
-        self.assertIn(
-            "Top 5% Monthly PnL Share is top-5%-months PnL", result.data
-        )
+        self.assertIn("Top 5% Monthly PnL Share is top-5%-months PnL", result.data)
 
         no_footnote_result = pnl.evaluate_pnls_html(
-            headline="PNL", bench="PNL",
+            headline="PNL",
+            bench="PNL",
             groups={"Robustness": ["Top 5% Monthly PnL Share"]},
             footnotes=False,
         )
