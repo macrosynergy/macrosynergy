@@ -189,6 +189,23 @@ class TestMultiPnL(unittest.TestCase):
 
         eval_df = ma_pnl.evaluate_pnls([f"{self.PNL_XCAT_1}/EQXR", "LONG"])
         self.assertFalse(any("correl" in idx for idx in eval_df.index.tolist()))
+        # Default sr_thresholds are [0.25, 0.5, 0.75].
+        self.assertIn("Prob. Sharpe Ratio > 0.25", eval_df.index.tolist())
+        self.assertIn("Prob. Sharpe Ratio > 0.5", eval_df.index.tolist())
+        self.assertIn("Prob. Sharpe Ratio > 0.75", eval_df.index.tolist())
+
+        eval_none = ma_pnl.evaluate_pnls(
+            [f"{self.PNL_XCAT_1}/EQXR", "LONG"], sr_thresholds=[]
+        )
+        self.assertFalse(
+            any(idx.startswith("Prob. Sharpe Ratio >") for idx in eval_none.index)
+        )
+
+        eval_with_thresholds = ma_pnl.evaluate_pnls(
+            [f"{self.PNL_XCAT_1}/EQXR", "LONG"], sr_thresholds=[0.25, 0.5]
+        )
+        self.assertIn("Prob. Sharpe Ratio > 0.25", eval_with_thresholds.index.tolist())
+        self.assertIn("Prob. Sharpe Ratio > 0.5", eval_with_thresholds.index.tolist())
 
     def test_evaluate_pnls_with_benchmark_adds_rows_all_pnls(self):
         ma_pnl = MultiPnL(bms="AUD_EQXR", df=self.dfd)
@@ -200,6 +217,20 @@ class TestMultiPnL(unittest.TestCase):
         self.assertIn("AUD_EQXR correl", eval_df.index.tolist())
         self.assertIn(f"{self.PNL_XCAT_1}/EQXR", eval_df.columns.tolist())
         self.assertIn("LONG", eval_df.columns.tolist())
+
+        eval_custom = ma_pnl.evaluate_pnls(
+            [f"{self.PNL_XCAT_1}/EQXR", "LONG"], sr_thresholds=[0.1]
+        )
+        self.assertIn("Prob. Sharpe Ratio > 0.1", eval_custom.index.tolist())
+        self.assertNotIn("Prob. Sharpe Ratio > 0.25", eval_custom.index.tolist())
+
+    def test_evaluate_pnls_sr_thresholds_type_checks(self):
+        ma_pnl = MultiPnL()
+        ma_pnl.add_pnl(self.pnl1, [self.PNL_XCAT_1])
+
+        for argval in [1, "A", ["A"]]:
+            with self.assertRaises(TypeError):
+                ma_pnl.evaluate_pnls(sr_thresholds=argval)
 
     def test_benchmark_row_position(self):
         ma_pnl = MultiPnL(bms="AUD_EQXR", df=self.dfd)
