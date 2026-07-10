@@ -1,6 +1,6 @@
 import numpy as np
 import pandas as pd
-from typing import List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union
 import seaborn as sns
 import matplotlib.pyplot as plt
 
@@ -20,6 +20,7 @@ def view_table(
     fmt: str = ".2f",
     return_fig: bool = False,
     highlight_mask: Optional[Union[np.ndarray, pd.DataFrame]] = None,
+    box_rows: Optional[Dict[int, str]] = None,
     footnote: Optional[str] = None,
     footnote_fontsize: int = 10,
 ) -> Optional[plt.Figure]:
@@ -61,6 +62,12 @@ def view_table(
         DataFrame or 2D array of the same shape as ``df``. Cells where the
         mask is True have their annotation text rendered in black and bold.
         Has no effect when ``annot`` is False.
+    box_rows : Dict[int, str], optional
+        Mapping of zero-based row position to box (edge) colour. Each
+        row is outlined with a box (no fill), drawn above the heatmap and
+        spanning all columns. Contiguous positions sharing the same
+        colour are merged into a single rectangle, so a group of rows
+        reads as one boxed block, scorecard-style. Default is None.
     footnote : str, optional
         Free-text caption rendered below the heatmap, useful for noting the
         statistical test, the panel scope, or how to read the annotations.
@@ -117,7 +124,7 @@ def view_table(
         yticklabels=yticklabels,
     )
 
-    if highlight_mask is not None and not (annot is False):
+    if highlight_mask is not None and annot is not False:
         if isinstance(highlight_mask, pd.DataFrame):
             mask_arr = highlight_mask.values
         else:
@@ -132,6 +139,30 @@ def view_table(
             if bool(hi):
                 txt.set_color("black")
                 txt.set_weight("bold")
+
+    if box_rows:
+        # Merge contiguous same-colour positions into runs so one block reads
+        # as a single box. Heatmap row i spans y in [i, i + 1] across all cols.
+        items = sorted((int(r), c) for r, c in box_rows.items())
+        runs: List[Tuple[int, int, str]] = []
+        for r, c in items:
+            if runs and c == runs[-1][2] and r == runs[-1][1] + 1:
+                runs[-1] = (runs[-1][0], r, c)
+            else:
+                runs.append((r, r, c))
+        for start, end, color in runs:
+            ax.add_patch(
+                plt.Rectangle(
+                    (0, start),
+                    df.shape[1],
+                    end - start + 1,
+                    fill=False,
+                    edgecolor=color,
+                    lw=2.5,
+                    clip_on=False,
+                    zorder=5,
+                )
+            )
 
     ax.set(xlabel=xlabel, ylabel=ylabel)
     ax.set_title(title, fontsize=title_fontsize)

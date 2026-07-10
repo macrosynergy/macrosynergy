@@ -499,7 +499,7 @@ class Basket(object):
         # Remove leading NA rows.
 
         fvi = max(dfw_wgs.first_valid_index(), self.dfw_ret.first_valid_index())
-        dfw_wgs = dfw_wgs[fvi:]
+        dfw_wgs = dfw_wgs.loc[fvi:]
 
         # Impose cap on cross-section weights.
 

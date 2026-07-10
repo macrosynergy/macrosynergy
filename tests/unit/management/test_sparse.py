@@ -1,37 +1,39 @@
+import json
+import random
+import string
 import unittest
 import unittest.mock
-import pandas as pd
 import warnings
-import numpy as np
+from typing import Any, Dict, List, Set
 
-from typing import List, Dict, Set, Any
-from macrosynergy.management.types import QuantamentalDataFrame
+import numpy as np
+import pandas as pd
+
+from macrosynergy.compat import PD_NEW_DATE_FREQ
 from macrosynergy.management.simulate import make_test_df
+from macrosynergy.management.types import QuantamentalDataFrame
 from macrosynergy.management.utils import (
     concat_single_metric_qdfs,
-    ticker_df_to_qdf,
-    is_valid_iso_date,
-    qdf_to_ticker_df,
     get_cid,
     get_xcat,
+    is_valid_iso_date,
+    qdf_to_ticker_df,
+    ticker_df_to_qdf,
 )
 from macrosynergy.management.utils.sparse import (
     InformationStateChanges,
     VolatilityEstimationMethods,
-    create_delta_data,
-    calculate_score_on_sparse_indicator,
-    infer_frequency,
-    _remove_insignificant_values,
-    weight_from_frequency,
-    _isc_dict_to_frames,
     _get_metric_df_from_isc,
+    _isc_dict_to_frames,
+    _remove_insignificant_values,
+    calculate_score_on_sparse_indicator,
+    create_delta_data,
+    infer_frequency,
     temporal_aggregator_exponential,
     temporal_aggregator_mean,
     temporal_aggregator_period,
+    weight_from_frequency,
 )
-import random
-import string
-import json
 
 FREQ_STR_MAP = {
     "B": "daily",
@@ -493,12 +495,19 @@ class TestInformationStateChanges(unittest.TestCase):
 
     def test_isc_to_qdf_metrics(self) -> None:
         df = get_long_format_data(end="2012-01-01")
-        ## Test that the grading is not output when not asked for
-        tdf = InformationStateChanges.from_qdf(df).to_qdf(metrics=None, postfix="$%A")
-        self.assertTrue("value" in tdf.columns)
-        self.assertTrue("eop" not in tdf.columns)
-        self.assertTrue("eop_lag" not in tdf.columns)
-        self.assertTrue("grading" not in tdf.columns)
+        # metrics=None emits ALL available (non-value) metrics; metrics=[] emits none.
+        tdf_all = InformationStateChanges.from_qdf(df).to_qdf(
+            metrics=None, postfix="$%A"
+        )
+        self.assertTrue("value" in tdf_all.columns)
+        self.assertTrue("eop" in tdf_all.columns)
+        self.assertTrue("eop_lag" in tdf_all.columns)
+        self.assertTrue("grading" in tdf_all.columns)
+
+        tdf_none = InformationStateChanges.from_qdf(df).to_qdf(
+            metrics=[], postfix="$%A"
+        )
+        self.assertEqual(list(tdf_none.columns), ["real_date", "cid", "xcat", "value"])
 
     def test_isc_to_qdf_winsorise(self) -> None:
         df = get_long_format_data(end="2012-01-01")
@@ -509,6 +518,11 @@ class TestInformationStateChanges(unittest.TestCase):
         win_df = isc.to_qdf(metrics=None, thresh=(-0.01, 0.1))
         self.assertFalse((win_df["value"] > 0.1).any())
         self.assertFalse((win_df["value"] < -0.01).any())
+
+        # a negative scalar clips by its magnitude: thresh=-0.1 == thresh=0.1.
+        neg = isc.to_qdf(metrics=None, thresh=-0.1)
+        pos = isc.to_qdf(metrics=None, thresh=0.1)
+        self.assertTrue(np.allclose(neg["value"], pos["value"]))
 
         with self.assertRaises(ValueError):
             isc.to_qdf(metrics=None, thresh="banana")
@@ -826,10 +840,12 @@ class TestInformationStateChanges(unittest.TestCase):
     def test_to_qdf_error_missing_eop_lag(self):
         df = make_test_df(start="2012-01-01", end="2012-01-06")
         with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
             isc: InformationStateChanges = InformationStateChanges.from_qdf(df)
-            self.assertTrue(len(w) == 1)
-            expected = "`df` does not contain an `eop_lag` column"
-            self.assertTrue(expected in str(w[-1].message))
+        # from_qdf may now also warn that some tickers have too few eop to weight, so
+        # assert the eop_lag warning is among the warnings rather than the only one.
+        expected = "`df` does not contain an `eop_lag` column"
+        self.assertTrue(any(expected in str(x.message) for x in w))
 
         try:
             isc.to_qdf()
@@ -882,6 +898,251 @@ class TestInformationStateChangesScoreBy(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             InformationStateChanges.from_qdf(qdf, score_by="banana")
+
+
+class TestAnnualizeByReleaseFrequency(unittest.TestCase):
+    # pandas >=2.2 renamed the business period-end aliases (BM->BME, BQ->BQE); pick per
+    # version so the date ranges are identical on the old pandas pinned for Python 3.7.
+    _BME = "BME" if PD_NEW_DATE_FREQ else "BM"
+    _BQE = "BQE" if PD_NEW_DATE_FREQ else "BQ"
+
+    @staticmethod
+    def _qdf(
+        values_by_ticker: Dict[str, np.ndarray], dates: pd.DatetimeIndex
+    ) -> QuantamentalDataFrame:
+        """Build a QDF (value + eop_lag=0 so eop == real_date) from per-ticker series."""
+        val = pd.DataFrame(values_by_ticker, index=dates)
+        lag = pd.DataFrame(
+            {t: np.zeros(len(dates)) for t in values_by_ticker}, index=dates
+        )
+        for d in (val, lag):
+            d.index.name, d.columns.name = "real_date", "ticker"
+        return concat_single_metric_qdfs(
+            [
+                ticker_df_to_qdf(val, metric="value"),
+                ticker_df_to_qdf(lag, metric="eop_lag"),
+            ]
+        )
+
+    @classmethod
+    def _isc(
+        cls, values_by_ticker: Dict[str, np.ndarray], dates: pd.DatetimeIndex
+    ) -> InformationStateChanges:
+        """Build an ISC from per-ticker value series with eop_lag=0 (eop == real_date)."""
+        return InformationStateChanges.from_qdf(cls._qdf(values_by_ticker, dates))
+
+    @staticmethod
+    def _rw(n: int, seed: int) -> np.ndarray:
+        """Deterministic random-walk values. A constant-diff ramp (e.g. arange+1) has a
+        zero rolling-std and yields an ``inf`` zscore, which makes a
+        ``zscore_fw == zscore * weight`` check pass vacuously (inf == inf); a random walk
+        gives finite, non-zero zscores so the weight is actually exercised."""
+        return 100.0 + np.random.RandomState(seed).normal(size=n).cumsum()
+
+    def _assert_weighted(self, df: pd.DataFrame, factor: int) -> None:
+        z, zfw = df["zscore"], df["zscore_fw"]
+        finite = np.isfinite(z) & (z != 0)
+        self.assertGreater(int(finite.sum()), 0)  # guard: never a vacuous check
+        self.assertTrue(np.allclose(zfw[finite], z[finite] * np.sqrt(1 / factor)))
+
+    def _assert_clipped_weighted(
+        self, df: pd.DataFrame, factor: int, lower: float, upper: float
+    ) -> None:
+        # zscore_fw == winsorised(zscore) * weight; guard that clipping actually bites.
+        z, zfw = df["zscore"], df["zscore_fw"]
+        finite = np.isfinite(z) & (z != 0)
+        self.assertGreater(int(finite.sum()), 0)
+        self.assertTrue(((z[finite] < lower) | (z[finite] > upper)).any())
+        clipped = z[finite].clip(lower=lower, upper=upper)
+        self.assertTrue(np.allclose(zfw[finite], clipped * np.sqrt(1 / factor)))
+
+    def test_monthly_weight(self):
+        dates = pd.bdate_range("2015-01-01", "2018-12-31", freq=self._BME)
+        isc = self._isc({"AUD_CPIH": self._rw(len(dates), 42)}, dates)
+
+        isc.annualize_by_release_frequency()
+        # monthly cadence -> zscore_fw = zscore * sqrt(1/12), written onto the ISC.
+        self._assert_weighted(isc.isc_dict["AUD_CPIH"], 12)
+
+    def test_quarterly_weight(self):
+        dates = pd.bdate_range("2010-01-01", "2019-12-31", freq=self._BQE)
+        isc = self._isc({"AUD_CPIH": self._rw(len(dates), 7)}, dates)
+
+        isc.annualize_by_release_frequency()
+        # quarterly cadence -> zscore_fw = zscore * sqrt(1/4).
+        self._assert_weighted(isc.isc_dict["AUD_CPIH"], 4)
+
+    def test_multiple_tickers(self):
+        dates = pd.bdate_range("2015-01-01", "2018-12-31", freq=self._BME)
+        isc = self._isc(
+            {"AUD_CPIH": self._rw(len(dates), 1), "AUD_GDP": self._rw(len(dates), 2)},
+            dates,
+        )
+        isc.annualize_by_release_frequency()
+        for tkr in ("AUD_CPIH", "AUD_GDP"):
+            self._assert_weighted(isc.isc_dict[tkr], 12)
+
+    def test_time_varying_weight_across_cadence_break(self):
+        # marquee behaviour: a series whose release cadence changes is weighted by the
+        # CONTEMPORANEOUS frequency -- quarterly before the break, monthly after it.
+        brk = pd.bdate_range("2008-01-01", "2015-12-31", freq=self._BQE).union(
+            pd.bdate_range("2016-01-01", "2019-12-31", freq=self._BME)
+        )
+        isc = self._isc({"USD_CPIH": self._rw(len(brk), 7)}, brk)
+        isc.annualize_by_release_frequency()
+        df = isc.isc_dict["USD_CPIH"]
+
+        freq = df["infered_freq"]
+        pre = freq[freq.index <= "2015-12-31"].dropna().astype(str).unique()
+        post = freq[freq.index >= "2016-06-01"].dropna().astype(str).unique()
+        self.assertEqual(set(pre), {"Q"})
+        self.assertEqual(set(post), {"M"})
+
+        # each point uses its own frequency's weight; no single global weight matches.
+        weights = {"Q": np.sqrt(1 / 4), "M": np.sqrt(1 / 12)}
+        w = freq.astype(str).map(weights)
+        z, zfw = df["zscore"], df["zscore_fw"]
+        finite = np.isfinite(z) & (z != 0)
+        self.assertGreater(int(finite.sum()), 0)
+        self.assertTrue(np.allclose(zfw[finite], z[finite] * w[finite]))
+        self.assertFalse(np.allclose(zfw[finite], z[finite] * np.sqrt(1 / 4)))
+        self.assertFalse(np.allclose(zfw[finite], z[finite] * np.sqrt(1 / 12)))
+
+    def test_insufficient_eop_warns_and_skips(self):
+        # A ticker whose release frequency cannot be inferred (a constant series collapses
+        # to a single eop) must not crash the default norm=True from_qdf path: it is warned
+        # about and skipped, while well-formed tickers are still weighted.
+        dates = pd.bdate_range("2015-01-01", "2018-12-31", freq=self._BME)
+        with self.assertWarnsRegex(UserWarning, "Cannot infer release frequency"):
+            isc = self._isc(
+                {
+                    "AUD_CPIH": self._rw(len(dates), 3),
+                    "AUD_GDP": np.full(len(dates), 5.0),
+                },
+                dates,
+            )
+        self.assertNotIn("zscore_fw", isc.isc_dict["AUD_GDP"].columns)
+        self.assertIn("zscore_fw", isc.isc_dict["AUD_CPIH"].columns)
+
+    def test_annualize_warnings_captured(self):
+        # Inspect the two skip-and-warn guards via catch_warnings:
+        #   - a ticker with no 'zscore' column, and
+        #   - a ticker whose release frequency can't be inferred (<2 distinct eop).
+        # Built without the auto-weighting so the explicit call's warnings are captured clean.
+        dates = pd.bdate_range("2015-01-01", "2018-12-31", freq=self._BME)
+        qdf = self._qdf(
+            {
+                "AUD_CPIH": self._rw(
+                    len(dates), 3
+                ),  # well-formed -> weighted, no warning
+                "AUD_GDP": np.full(
+                    len(dates), 5.0
+                ),  # constant -> single eop -> uninferable
+                "AUD_RATE": self._rw(
+                    len(dates), 4
+                ),  # 'zscore' dropped -> no-zscore guard
+            },
+            dates,
+        )
+        # norm=False -> minimal ISC; score explicitly so the guards are the only warnings.
+        isc = InformationStateChanges.from_qdf(qdf, norm=False)
+        isc.calculate_score()
+        del isc.isc_dict["AUD_RATE"]["zscore"]
+
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            isc.annualize_by_release_frequency()
+
+        msgs = [str(rec.message) for rec in w]
+        self.assertTrue(all(issubclass(rec.category, UserWarning) for rec in w))
+        self.assertTrue(any("No 'zscore'" in m and "AUD_RATE" in m for m in msgs))
+        self.assertTrue(
+            any("Cannot infer release frequency" in m and "AUD_GDP" in m for m in msgs)
+        )
+        # weighted ticker unaffected; both flagged tickers skipped (no zscore_fw).
+        self.assertIn("zscore_fw", isc.isc_dict["AUD_CPIH"].columns)
+        self.assertNotIn("zscore_fw", isc.isc_dict["AUD_GDP"].columns)
+        self.assertNotIn("zscore_fw", isc.isc_dict["AUD_RATE"].columns)
+
+    def test_from_qdf_respects_annualize_flag(self):
+        # annualize_by_release_frequency=None (default) follows `norm`; an explicit bool
+        # overrides. from_qdf must only invoke the weighting when this resolves to True.
+        dates = pd.bdate_range("2015-01-01", "2018-12-31", freq=self._BME)
+        qdf = self._qdf({"AUD_CPIH": self._rw(len(dates), 3)}, dates)
+
+        def _called(norm, flag):
+            with unittest.mock.patch.object(
+                InformationStateChanges, "annualize_by_release_frequency"
+            ) as m:
+                InformationStateChanges.from_qdf(
+                    qdf, norm=norm, annualize_by_release_frequency=flag
+                )
+            return m.called
+
+        # default (None) follows norm -- norm=False now yields a minimal ISC, no weighting
+        self.assertTrue(_called(norm=True, flag=None))
+        self.assertFalse(_called(norm=False, flag=None))
+        # explicit bool overrides on the norm=True path
+        self.assertTrue(_called(norm=True, flag=True))
+        self.assertFalse(_called(norm=True, flag=False))
+        self.assertFalse(_called(norm=False, flag=False))
+
+        # norm=False + explicit True -> forced to norm=True (with a warning) then called
+        with unittest.mock.patch.object(
+            InformationStateChanges, "annualize_by_release_frequency"
+        ) as m:
+            with self.assertWarnsRegex(UserWarning, "can only run when"):
+                InformationStateChanges.from_qdf(
+                    qdf, norm=False, annualize_by_release_frequency=True
+                )
+        self.assertTrue(m.called)
+
+    def test_from_qdf_validates_norm_and_flag(self):
+        dates = pd.bdate_range("2015-01-01", "2018-12-31", freq=self._BME)
+        qdf = self._qdf({"AUD_CPIH": self._rw(len(dates), 3)}, dates)
+        with self.assertRaises(ValueError):
+            InformationStateChanges.from_qdf(qdf, norm="yes")
+        with self.assertRaises(ValueError):
+            InformationStateChanges.from_qdf(qdf, annualize_by_release_frequency="yes")
+
+    def test_thresh_scalar_winsorises_symmetrically(self):
+        # a scalar clips to (-|thresh|, |thresh|); its sign is irrelevant.
+        dates = pd.bdate_range("2015-01-01", "2018-12-31", freq=self._BME)
+        for t in (1.0, -1.0):
+            isc = self._isc({"AUD_CPIH": self._rw(len(dates), 42)}, dates)
+            isc.annualize_by_release_frequency(thresh=t)
+            self._assert_clipped_weighted(isc.isc_dict["AUD_CPIH"], 12, -1.0, 1.0)
+
+    def test_thresh_tuple_lopsided(self):
+        # asymmetric bounds (one tighter than the other) must both be honoured as given.
+        dates = pd.bdate_range("2015-01-01", "2018-12-31", freq=self._BME)
+        for lower, upper in ((-0.5, 2.0), (-2.0, 0.5)):
+            isc = self._isc({"AUD_CPIH": self._rw(len(dates), 42)}, dates)
+            isc.annualize_by_release_frequency(thresh=(lower, upper))
+            self._assert_clipped_weighted(isc.isc_dict["AUD_CPIH"], 12, lower, upper)
+
+    def test_thresh_tuple_unordered_is_sorted(self):
+        # min/max normalises the tuple: an inverted (high, low) clips as (low, high).
+        dates = pd.bdate_range("2015-01-01", "2018-12-31", freq=self._BME)
+        isc = self._isc({"AUD_CPIH": self._rw(len(dates), 42)}, dates)
+        isc.annualize_by_release_frequency(thresh=(2.0, -0.5))
+        self._assert_clipped_weighted(isc.isc_dict["AUD_CPIH"], 12, -0.5, 2.0)
+
+    def test_thresh_leaves_zscore_untouched(self):
+        # winsorisation feeds zscore_fw only; the stored zscore column stays intact.
+        dates = pd.bdate_range("2015-01-01", "2018-12-31", freq=self._BME)
+        isc = self._isc({"AUD_CPIH": self._rw(len(dates), 42)}, dates)
+        z_before = isc.isc_dict["AUD_CPIH"]["zscore"].copy()
+        isc.annualize_by_release_frequency(thresh=0.5)
+        pd.testing.assert_series_equal(isc.isc_dict["AUD_CPIH"]["zscore"], z_before)
+
+    def test_thresh_invalid_raises(self):
+        # wrong tuple length/contents, or a non-numeric non-tuple, must raise ValueError.
+        dates = pd.bdate_range("2015-01-01", "2018-12-31", freq=self._BME)
+        for bad in [(1.0,), (1.0, 2.0, 3.0), ("a", "b"), "banana", [1.0, 2.0]]:
+            isc = self._isc({"AUD_CPIH": self._rw(len(dates), 42)}, dates)
+            with self.assertRaises(ValueError):
+                isc.annualize_by_release_frequency(thresh=bad)
 
 
 if __name__ == "__main__":

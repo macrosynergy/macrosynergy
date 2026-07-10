@@ -50,6 +50,20 @@ class TestSharpeStabilityRatio(unittest.TestCase):
         ssr_05 = sharpe_stability_ratio(self.stable, benchmark_sr=0.5)
         self.assertGreater(ssr_0, ssr_05)
 
+    def test_probability_is_between_zero_and_one(self):
+        prob = sharpe_stability_ratio(self.stable, benchmark_sr=0.25, probability=True)
+        self.assertGreaterEqual(prob, 0.0)
+        self.assertLessEqual(prob, 1.0)
+
+    def test_higher_benchmark_lowers_probability(self):
+        prob_0 = sharpe_stability_ratio(
+            self.stable, benchmark_sr=0.0, probability=True
+        )
+        prob_05 = sharpe_stability_ratio(
+            self.stable, benchmark_sr=0.5, probability=True
+        )
+        self.assertGreater(prob_0, prob_05)
+
     # --- Edge cases ---
 
     def test_short_series_returns_nan(self):
