@@ -13,7 +13,6 @@ import matplotlib.ticker as mticker
 import numpy as np
 import pandas as pd
 import seaborn as sns
-from IPython.display import HTML
 
 from macrosynergy import PYTHON_3_8_OR_LATER
 from macrosynergy.management.simulate import make_qdf
@@ -25,7 +24,11 @@ from macrosynergy.management.utils import (
 from macrosynergy.management.types import QuantamentalDataFrame
 from macrosynergy.panel.make_zn_scores import make_zn_scores
 from macrosynergy.pnl.sharpe_stability_ratio import sharpe_stability_ratio
-from macrosynergy.pnl.pnl_table import DEFAULT_METRIC_GROUPS, pnl_table_html
+from macrosynergy.pnl.pnl_table import (
+    DEFAULT_PNL_METRIC_GROUPS,
+    HTMLTable,
+    pnl_table_html,
+)
 from macrosynergy.signal import SignalReturnRelations
 
 
@@ -1910,7 +1913,7 @@ class NaivePnL:
             subtitle=subtitle,
             custom_css=custom_css,
         )
-        return HTML(html)
+        return HTMLTable(html)
 
     def print_pnl_names(self):
         """
