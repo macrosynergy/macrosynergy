@@ -1539,11 +1539,12 @@ class NaivePnL:
     def evaluate_pnls_pretty(
         self,
         headline: Union[str, List[str]],
-        bench: str,
+        bench: Union[str, List[str]],
         headline_label: Optional[Union[str, List[str]]] = None,
-        bench_label: Optional[str] = None,
+        bench_label: Optional[Union[str, List[str]]] = None,
         groups: Optional[Dict[str, List[str]]] = None,
         order: Optional[Dict[str, List[str]]] = None,
+        row_labels: Optional[Dict[str, Union[str, List[str]]]] = None,
         pnl_cids: List[str] = ["ALL"],
         start: Optional[str] = None,
         end: Optional[str] = None,
@@ -1562,10 +1563,14 @@ class NaivePnL:
         headline : str or List[str]
             PnL categor(y/ies) to show as the (non-benchmark) column(s), in
             display order.
-        bench : str
-            PnL category to show as the benchmark column.
+        bench : str or List[str]
+            PnL categor(y/ies) to show as the benchmark column(s) (muted
+            styling), in display order. A single benchmark portfolio still
+            works exactly as before; pass a list to show several.
         headline_label, bench_label : str or List[str], optional
             Column header labels. Default: the category names themselves.
+            If ``bench`` is a list, ``bench_label`` must be a matching list
+            (or omitted).
         groups : dict of {section title: [metric names]}, optional
             Row layout and order, e.g. ``{"Performance": ["Return %", ...]}``.
             Default: 3 performance, 5 risk & drawdown, 5 robustness metrics
@@ -1574,6 +1579,26 @@ class NaivePnL:
         order : dict of {section title: [metric names in desired order]}, optional
             Override just the row order within a section from ``groups``,
             without redeclaring which metrics belong to it.
+        row_labels : dict of {row name: display label or [labels]}, optional
+            Rename specific rows for display without changing which row is
+            selected by ``groups``/``order``. The key ``"Benchmark
+            correlation"`` is a shorthand for *every* resolved benchmark
+            correlation row:
+
+            - a single str, e.g. ``{"Benchmark correlation": "Benchmark
+              correlation"}``, relabels a real ``f"{bm} correl"`` row back
+              to the generic name without ever having to spell out the
+              ticker. With multiple benchmarks configured, each row instead
+              gets the label suffixed with a number (``"Benchmark
+              correlation 1"``, ``"... 2"``, ...) since two rows can't
+              share one display name.
+            - a list of str, one per benchmark in the order ``bms`` was
+              passed to the constructor, e.g. ``{"Benchmark correlation":
+              ["5Y", "2Y"]}`` for a two-benchmark instance. Must match
+              ``len(bms)`` exactly.
+
+            Any other key is matched against the real row name, e.g.
+            ``{"St. Dev. %": "Vol %"}``.
         pnl_cids, start, end, sr_thresholds : see ``evaluate_pnls()``.
         title, subtitle : str
             Header text shown above the table. ``subtitle`` defaults to
@@ -1596,7 +1621,19 @@ class NaivePnL:
             headline_labels = (
                 [headline_label] if len(headlines) == 1 else headlines
             )
-        bench_label = bench_label if bench_label is not None else bench
+
+        benches = bench if isinstance(bench, list) else [bench]
+        if bench_label is None:
+            bench_labels = benches
+        elif isinstance(bench_label, list):
+            bench_labels = bench_label
+        else:
+            bench_labels = [bench_label] if len(benches) == 1 else benches
+        if len(bench_labels) != len(benches):
+            raise ValueError(
+                f"bench_label must match bench 1:1 ({len(benches)} "
+                f"benchmark(s)), got {len(bench_labels)} label(s)."
+            )
 
         using_default_groups = groups is None
         groups = groups if groups is not None else DEFAULT_METRIC_GROUPS
@@ -1614,18 +1651,27 @@ class NaivePnL:
                 resolved[section] = metrics
 
         tbr = self.evaluate_pnls(
-            pnl_cats=[*headlines, bench],
+            pnl_cats=[*headlines, *benches],
             pnl_cids=pnl_cids,
             start=start,
             end=end,
             sr_thresholds=sr_thresholds,
         )
 
-        # Give a single benchmark correlation row a friendly name; a no-op
-        # unless `groups`/`order` reference "Benchmark correlation".
+        # "Benchmark correlation" in `groups`/`order` is a placeholder for
+        # whichever real f"{bm} correl" row(s) `evaluate_pnls()` produced;
+        # expand it in place rather than renaming tbr, so tbr keeps the
+        # ticker-based naming used everywhere else in the package.
         correl_rows = [i for i in tbr.index if i.endswith(" correl")]
-        if len(correl_rows) == 1:
-            tbr = tbr.rename(index={correl_rows[0]: "Benchmark correlation"})
+        if correl_rows:
+            resolved = {
+                section: [
+                    r
+                    for m in metrics
+                    for r in (correl_rows if m == "Benchmark correlation" else [m])
+                ]
+                for section, metrics in resolved.items()
+            }
 
         all_metrics = [m for metrics in resolved.values() for m in metrics]
 
@@ -1633,7 +1679,7 @@ class NaivePnL:
         # instance: drop the correlation row rather than raising, since it
         # only makes sense once a benchmark has been set. An explicitly
         # passed `groups` still raises on a missing metric below.
-        if using_default_groups and "Benchmark correlation" not in tbr.index:
+        if using_default_groups and not correl_rows:
             resolved = {
                 section: [m for m in metrics if m != "Benchmark correlation"]
                 for section, metrics in resolved.items()
@@ -1644,13 +1690,43 @@ class NaivePnL:
         if missing:
             raise KeyError(f"Unknown metric(s) requested: {missing}")
 
+        if row_labels:
+            row_labels = dict(row_labels)
+            if "Benchmark correlation" in row_labels:
+                label = row_labels.pop("Benchmark correlation")
+                if isinstance(label, list):
+                    if len(label) != len(correl_rows):
+                        raise ValueError(
+                            f"row_labels['Benchmark correlation'] has "
+                            f"{len(label)} label(s) but {len(correl_rows)} "
+                            f"benchmark(s) are configured."
+                        )
+                    suffixed = label
+                elif len(correl_rows) <= 1:
+                    # A single benchmark can safely share the generic label;
+                    # two or more would collide into the same row name
+                    # (pandas doesn't allow duplicate index values here), so
+                    # number them instead of dropping back to the real
+                    # ticker names.
+                    suffixed = [label] * len(correl_rows)
+                else:
+                    suffixed = [f"{label} {i}" for i in range(1, len(correl_rows) + 1)]
+                for r, lbl in zip(correl_rows, suffixed):
+                    row_labels.setdefault(r, lbl)
+            tbr = tbr.rename(index=row_labels)
+            resolved = {
+                section: [row_labels.get(m, m) for m in metrics]
+                for section, metrics in resolved.items()
+            }
+            all_metrics = [m for metrics in resolved.values() for m in metrics]
+
         html = pnl_table_html(
             tbr,
             list(resolved.items()),
             headlines,
-            bench,
+            benches,
             headline_labels,
-            bench_label,
+            bench_labels,
             whole_number_metrics={"Traded Months", "Max Draw Recovery (months)"}
             & set(all_metrics),
             title=title,

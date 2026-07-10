@@ -1,6 +1,7 @@
 from tests.simulate import make_qdf
 from macrosynergy.pnl.naive_pnl import NaivePnL, create_results_dataframe
 from macrosynergy.management.utils import reduce_df
+import re
 import unittest
 from unittest.mock import patch
 import numpy as np
@@ -503,9 +504,8 @@ class TestAll(unittest.TestCase):
         ret = "EQXR"
         sigs = ["CRY", "GROWTH", "INFL"]
 
-        # A single benchmark, so evaluate_pnls_pretty can unambiguously
-        # give the "<bm> correl" row the friendly "Benchmark correlation"
-        # name under the default groups.
+        # A single benchmark, so the "Benchmark correlation" placeholder in
+        # the default groups resolves to the one real "USD_DUXR correl" row.
         pnl_single_bm = NaivePnL(
             self.dfd,
             ret=ret,
@@ -537,7 +537,7 @@ class TestAll(unittest.TestCase):
             "St. Dev. %",
             "Peak to Trough Draw %",
             "Top 5% Monthly PnL Share",
-            "Benchmark correlation",
+            "USD_DUXR correl",
             "Max Draw Recovery (months)",
             "Sharpe Stability Ratio",
             "Prob. Sharpe Ratio > 0.25",
@@ -546,6 +546,98 @@ class TestAll(unittest.TestCase):
             "Traded Months",
         ):
             self.assertIn(metric, html)
+
+        # row_labels: "Benchmark correlation" as a key is shorthand for every
+        # resolved correlation row, so this anonymizes the ticker without the
+        # caller ever naming it.
+        anon = pnl_single_bm.evaluate_pnls_pretty(
+            headline="PNL_HEAD",
+            bench="PNL_BENCH",
+            row_labels={"Benchmark correlation": "Benchmark correlation"},
+        )
+        self.assertIn("Benchmark correlation", anon.data)
+        self.assertNotIn("USD_DUXR correl", anon.data)
+
+        # An arbitrary row can also be relabeled by its real name.
+        relabeled = pnl_single_bm.evaluate_pnls_pretty(
+            headline="PNL_HEAD",
+            bench="PNL_BENCH",
+            row_labels={"St. Dev. %": "Vol %"},
+        )
+        self.assertIn("Vol %", relabeled.data)
+        self.assertNotIn("St. Dev. %", relabeled.data)
+
+        # Multiple benchmarks: the "Benchmark correlation" shorthand can't
+        # give two rows the same label (duplicate index -> ambiguous lookup
+        # in pnl_table_html), so it numbers them instead of colliding.
+        pnl_multi_bm = NaivePnL(
+            self.dfd,
+            ret=ret,
+            sigs=sigs,
+            cids=self.cids,
+            start="2000-01-01",
+            blacklist=self.blacklist,
+            bms=["EUR_DUXR", "USD_DUXR"],
+        )
+        pnl_multi_bm.make_pnl(
+            sig="INFL", sig_op="zn_score_pan", rebal_freq="monthly",
+            vol_scale=5, min_obs=250, pnl_name="PNL_HEAD",
+        )
+        pnl_multi_bm.make_pnl(
+            sig="INFL", sig_op="zn_score_pan", sig_neg=True, rebal_freq="monthly",
+            vol_scale=5, min_obs=250, pnl_name="PNL_BENCH",
+        )
+        anon_multi = pnl_multi_bm.evaluate_pnls_pretty(
+            headline="PNL_HEAD",
+            bench="PNL_BENCH",
+            row_labels={"Benchmark correlation": "Benchmark correlation"},
+        )
+        self.assertIn("Benchmark correlation 1", anon_multi.data)
+        self.assertIn("Benchmark correlation 2", anon_multi.data)
+        self.assertNotIn("EUR_DUXR correl", anon_multi.data)
+        self.assertNotIn("USD_DUXR correl", anon_multi.data)
+
+        # A list lets each benchmark get its own explicit label, in the
+        # order `bms` was passed to the constructor (EUR_DUXR, USD_DUXR).
+        explicit_multi = pnl_multi_bm.evaluate_pnls_pretty(
+            headline="PNL_HEAD",
+            bench="PNL_BENCH",
+            row_labels={"Benchmark correlation": ["EUR leg", "USD leg"]},
+        )
+        self.assertIn("EUR leg", explicit_multi.data)
+        self.assertIn("USD leg", explicit_multi.data)
+        self.assertNotIn("EUR_DUXR correl", explicit_multi.data)
+        self.assertNotIn("USD_DUXR correl", explicit_multi.data)
+
+        # Wrong-length list raises rather than silently mismatching/dropping.
+        with self.assertRaises(ValueError):
+            pnl_multi_bm.evaluate_pnls_pretty(
+                headline="PNL_HEAD",
+                bench="PNL_BENCH",
+                row_labels={"Benchmark correlation": ["Only one label"]},
+            )
+
+        # Multiple benchmark *portfolios*: bench/bench_label accept lists,
+        # each rendered as its own muted column.
+        pnl_multi_bm.make_pnl(
+            sig="INFL", sig_op="zn_score_pan", rebal_freq="monthly",
+            vol_scale=5, min_obs=250, pnl_name="PNL_BENCH2",
+        )
+        multi_bench = pnl_multi_bm.evaluate_pnls_pretty(
+            headline="PNL_HEAD",
+            bench=["PNL_BENCH", "PNL_BENCH2"],
+            bench_label=["Passive A", "Passive B"],
+        )
+        self.assertIn("Passive A", multi_bench.data)
+        self.assertIn("Passive B", multi_bench.data)
+
+        # bench_label length must match bench.
+        with self.assertRaises(ValueError):
+            pnl_multi_bm.evaluate_pnls_pretty(
+                headline="PNL_HEAD",
+                bench=["PNL_BENCH", "PNL_BENCH2"],
+                bench_label=["Only one label"],
+            )
 
         # Custom groups restrict rows to exactly what was asked for, in the
         # order given, and don't require an `order` override to do so.
@@ -590,7 +682,8 @@ class TestAll(unittest.TestCase):
         no_bm_result = pnl_no_bm.evaluate_pnls_pretty(
             headline="PNL_HEAD", bench="PNL_BENCH"
         )
-        self.assertNotIn("Benchmark correlation", no_bm_result.data)
+        self.assertNotIn("USD_DUXR correl", no_bm_result.data)
+        self.assertIsNone(re.search(r" correl</td>", no_bm_result.data))
 
     def test_make_long_pnl(self):
         ret = "EQXR"

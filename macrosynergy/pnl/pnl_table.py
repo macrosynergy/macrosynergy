@@ -5,7 +5,7 @@ separate from ``NaivePnL`` so the stats/rendering concerns stay decoupled;
 ``evaluate_pnls`` and hands its output to ``pnl_table_html``.
 """
 
-from typing import Dict, List, Sequence, Tuple
+from typing import Dict, List, Sequence, Tuple, Union
 
 import pandas as pd
 
@@ -75,9 +75,9 @@ def pnl_table_html(
     tbr: pd.DataFrame,
     groups: List[Tuple[str, List[str]]],
     headlines: List[str],
-    bench: str,
+    bench: Union[str, List[str]],
     headline_labels: List[str],
-    bench_label: str,
+    bench_label: Union[str, List[str]],
     whole_number_metrics: Sequence[str] = (),
     title: str = "Naive PnL statistics",
     subtitle: str = "",
@@ -85,8 +85,9 @@ def pnl_table_html(
     """Render a grouped ledger-style HTML table from an already-computed
     ``evaluate_pnls()`` DataFrame. Every strategy column (however many there
     are) shares one identical color and weight -- they're all "the compared
-    time series" -- and only the benchmark column is visually distinct
-    (muted), regardless of how many strategy columns there are.
+    time series" -- and every benchmark column (however many there are) is
+    visually distinct (muted), regardless of how many strategy columns
+    there are.
 
     Parameters
     ----------
@@ -99,10 +100,12 @@ def pnl_table_html(
     headlines : list of str
         ``tbr`` columns to show as the (non-benchmark) strategy columns, in
         display order.
-    bench : str
-        ``tbr`` column to show as the benchmark (muted) column.
-    headline_labels, bench_label : list of str, str
-        Column header labels, matching ``headlines`` 1:1, and for ``bench``.
+    bench : str or list of str
+        ``tbr`` column(s) to show as the benchmark (muted) column(s), in
+        display order.
+    headline_labels, bench_label : list of str, str or list of str
+        Column header labels, matching ``headlines`` 1:1, and ``bench``
+        1:1 (a bare str is only valid when ``bench`` is a single column).
     whole_number_metrics : sequence of str, default ()
         Metric names formatted with no decimal places (e.g. "Traded
         Months") instead of two.
@@ -114,8 +117,10 @@ def pnl_table_html(
     str
         A self-contained HTML string.
     """
-    cols = [*headlines, bench]
-    col_colors = [_INK2] * len(headlines) + [_MUTED]
+    benches = bench if isinstance(bench, list) else [bench]
+    bench_labels = bench_label if isinstance(bench_label, list) else [bench_label]
+    cols = [*headlines, *benches]
+    col_colors = [_INK2] * len(headlines) + [_MUTED] * len(benches)
 
     def num_cell(metric, col, color):
         v = tbr.loc[metric, col]
@@ -145,7 +150,7 @@ def pnl_table_html(
             )
             row_i += 1
 
-    header_labels = [*headline_labels, bench_label]
+    header_labels = [*headline_labels, *bench_labels]
     header_cells = "".join(
         f'<th style="text-align:center;padding:8px 20px;font-size:11.5px;letter-spacing:.04em;'
         f'text-transform:uppercase;color:{_INK};font-weight:700;border-bottom:1px solid {_INK};">{lbl}</th>'
