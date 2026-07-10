@@ -1331,7 +1331,7 @@ class NaivePnL:
     def _max_drawdown_recovery_months(cum_pnl: pd.Series, return_ongoing: bool = False):
         """
         Trading days from the peak preceding the worst drawdown to its full
-        recovery, expressed in months of 21 trading days -- the same
+        recovery, expressed in months of 21 trading days - the same
         convention used for "Max 21-Day Draw %" elsewhere in
         ``evaluate_pnls()``.
 
@@ -1343,7 +1343,7 @@ class NaivePnL:
         return_ongoing : bool, default False
             If True, return a ``(months, ongoing)`` tuple instead of just
             ``months``, where ``ongoing`` is True when the worst drawdown
-            hadn't recovered by the end of the sample -- i.e. ``months``
+            hadn't recovered by the end of the sample - i.e. ``months``
             reflects an open, still-running drawdown rather than a
             completed recovery.
 
@@ -1353,7 +1353,7 @@ class NaivePnL:
             Recovery time in months. 0 if the series never had a drawdown
             at all. If the worst drawdown hasn't recovered by the end of
             the sample, the elapsed time from its preceding peak to the
-            last observation -- i.e. how long that drawdown has been
+            last observation - i.e. how long that drawdown has been
             running so far, not the length of the whole trading history.
             NaN if ``cum_pnl`` has no non-NaN observations.
         """
@@ -1385,10 +1385,10 @@ class NaivePnL:
         """
         Core of ``evaluate_pnls()``: the stats table for an already-pivoted
         wide returns frame (index date, columns return series). Factored
-        out so ``evaluate_pnls_pretty()`` can compute the exact same stats
-        for a raw ``bms`` benchmark ticker series -- which isn't a
+        out so ``evaluate_pnls_html()`` can compute the exact same stats
+        for a raw ``bms`` benchmark ticker series - which isn't a
         registered PnL category and so can't go through ``evaluate_pnls()``
-        itself -- without duplicating the computation.
+        itself - without duplicating the computation.
 
         Returns
         -------
@@ -1620,7 +1620,7 @@ class NaivePnL:
 
         # Consumed by evaluate_pnls_pretty() right after calling this method,
         # to mark an unrecovered "Max Draw Recovery (months)" figure as an
-        # open/ongoing drawdown rather than a completed recovery -- without
+        # open/ongoing drawdown rather than a completed recovery - without
         # adding a visible row/column to this DataFrame's public shape.
         self._last_dd_recovery_ongoing = dd_recovery_ongoing
 
@@ -1640,15 +1640,16 @@ class NaivePnL:
         end: Optional[str] = None,
         sr_thresholds: Optional[List[float]] = None,
         title: str = "Naive PnL statistics",
-        subtitle: str = "10% vol target · daily rebalance · gross of costs",
+        subtitle: str = "10% vol target | daily rebalance | gross of costs",
         custom_css: Optional[str] = None,
         footnotes: bool = True,
-    ) -> HTML:
+    ) -> HTMLTable:
         """
-        Presentation-ready HTML rendering of ``evaluate_pnls()`` -- a
-        grouped, ledger-style table suitable for pasting into Word (File >
-        Open the written-out HTML) or a WordPress "Custom HTML" block.
-        Wraps ``evaluate_pnls()``; does not compute anything new itself.
+        Presentation-ready HTML rendering of the ``evaluate_pnls()``
+        statistics table - a grouped, ledger-style layout for reports and
+        notebooks, or for saving to an HTML file to open in Word or embed
+        in a web page. The statistics shown are those computed by
+        ``evaluate_pnls()``, selected and grouped for presentation.
 
         Parameters
         ----------
@@ -1656,75 +1657,77 @@ class NaivePnL:
             PnL categor(y/ies) to show as the (non-benchmark) column(s), in
             display order.
         bench : str or List[str], optional
-            PnL categor(y/ies) to show as the benchmark column(s) (muted
-            styling), in display order. A single benchmark portfolio still
-            works exactly as before; pass a list to show several. If
-            omitted, defaults to the raw ``bms`` ticker(s) passed to the
-            constructor -- the same benchmark(s) used for the correlation
-            row(s) -- shown as their own PnL-style columns rather than
-            requiring a synthetic "long only" PnL. Raises ``ValueError`` if
-            omitted and no ``bms`` were configured.
+            PnL categor(y/ies) to show as benchmark column(s), styled
+            distinctly (muted) from the headline column(s), in display
+            order. Default is None, in which case the benchmark ticker(s)
+            passed as ``bms`` to the constructor are used - the same
+            benchmark(s) shown in the correlation row(s). Raises
+            ``ValueError`` if omitted when no ``bms`` were configured.
         headline_label, bench_label : str or List[str], optional
-            Column header labels. Default: the category names themselves.
+            Column header labels. Default is the category names themselves.
             If ``bench`` is a list, ``bench_label`` must be a matching list
             (or omitted).
         groups : dict of {section title: [metric names]}, optional
-            Row layout and order, e.g. ``{"Performance": ["Return %", ...]}``.
-            Default: 3 performance, 5 risk & drawdown, 5 robustness metrics
-            (the standard cut). Raises ``KeyError`` if a requested metric
-            isn't a row produced by ``evaluate_pnls()``.
+            Section headings and the metrics listed under each, in order,
+            e.g. ``{"Performance": ["Return %", "Sharpe Ratio"]}``. Default
+            is None, in which case a standard set of performance, risk &
+            drawdown, and robustness metrics is used. Raises ``KeyError``
+            if a requested metric is not one of the rows produced by
+            ``evaluate_pnls()``.
         order : dict of {section title: [metric names in desired order]}, optional
             Override just the row order within a section from ``groups``,
             without redeclaring which metrics belong to it.
         row_labels : dict of {row name: display label or [labels]}, optional
-            Rename specific rows for display without changing which row is
-            selected by ``groups``/``order``. The key ``"Benchmark
-            correlation"`` is a shorthand for *every* resolved benchmark
-            correlation row:
-
-            - a single str, e.g. ``{"Benchmark correlation": "Benchmark
-              correlation"}``, relabels a real ``f"{bm} correl"`` row back
-              to the generic name without ever having to spell out the
-              ticker. With multiple benchmarks configured, each row instead
-              gets the label suffixed with a number (``"Benchmark
-              correlation 1"``, ``"... 2"``, ...) since two rows can't
-              share one display name.
-            - a list of str, one per benchmark in the order ``bms`` was
-              passed to the constructor, e.g. ``{"Benchmark correlation":
-              ["5Y", "2Y"]}`` for a two-benchmark instance. Must match
-              ``len(bms)`` exactly.
-
-            Any other key is matched against the real row name, e.g.
+            Rename individual rows for display, without changing which rows
+            are selected by ``groups``/``order``. Keys are matched against
+            the row names produced by ``evaluate_pnls()``, e.g.
             ``{"St. Dev. %": "Vol %"}``.
+
+            The special key ``"Benchmark correlation"`` relabels the
+            benchmark-correlation row(s) - named after the benchmark
+            ticker, e.g. ``"USD_DUXR correl"`` - without having to spell
+            the ticker(s) out:
+
+            - a single label, e.g. ``{"Benchmark correlation": "Benchmark
+              correlation"}``, is applied to the row when one benchmark is
+              configured. With several benchmarks, the label is suffixed
+              with a number ("Benchmark correlation 1", "... 2", ...) so
+              each row keeps a distinct name.
+            - a list of labels, one per benchmark in the order ``bms`` was
+              passed to the constructor, e.g. ``{"Benchmark correlation":
+              ["5Y", "2Y"]}``. Must match the number of benchmarks exactly.
         pnl_cids, start, end, sr_thresholds : see ``evaluate_pnls()``.
         title, subtitle : str
             Header text shown above the table. ``subtitle`` defaults to
-            "10% vol target · daily rebalance · gross of costs" -- override
+            "10% vol target | daily rebalance | gross of costs" - override
             it if this instance's PnLs don't share that configuration (e.g.
             a different ``vol_scale`` or ``rebal_freq`` in ``make_pnl()``).
         custom_css : str, optional
-            Raw CSS injected right after the table's own default
-            stylesheet, so same-specificity selectors override the
-            defaults without ``!important``. See ``pnl_table_html`` for the
-            full list of overridable classes (``.pnl-title``,
-            ``.pnl-value-bench``, ``.pnl-footnote``, etc.), e.g.
-            ``custom_css=".pnl-title { color: #7a1f1f; }"``.
+            Extra CSS appended after the table's own stylesheet to
+            customize its appearance. Because it comes last, a rule
+            targeting one of the table's classes overrides the default
+            without needing ``!important``, e.g.
+            ``custom_css=".pnl-title { color: #7a1f1f; }"``. See
+            ``pnl_table_html`` for the classes that can be targeted.
         footnotes : bool, default True
             Whether to render the explanatory footnotes below the table
-            (see Notes). Set to ``False`` to suppress them -- the
+            (see Notes). Set to ``False`` to suppress them - the
             underlying "+" prefix on cells is unaffected, only the
             footnote text is toggled.
 
         Returns
         -------
-        IPython.display.HTML
-            Displays inline in a notebook; ``.data`` holds the raw HTML
-            string (e.g. to ``Path(...).write_text(...)`` for Word/WordPress).
+        HTMLTable
+            The formatted table. Displays inline when returned from a
+            notebook cell; its ``.data`` attribute holds the raw HTML
+            string, e.g. to save with
+            ``Path("table.html").write_text(...)`` for use in Word or on a
+            web page.
 
         Notes
         -----
         A "Max Draw Recovery (months)" figure is prefixed with "+" wherever
-        the worst drawdown hadn't recovered by the end of the sample -- it
+        the worst drawdown hadn't recovered by the end of the sample - it
         reads as "at least this many months and still running", not a
         completed recovery time. "Top 5% Monthly PnL Share" is top-5%-months
         PnL divided by total PnL, so it reads negative whenever total PnL is
@@ -1737,9 +1740,7 @@ class NaivePnL:
         elif isinstance(headline_label, list):
             headline_labels = headline_label
         else:
-            headline_labels = (
-                [headline_label] if len(headlines) == 1 else headlines
-            )
+            headline_labels = [headline_label] if len(headlines) == 1 else headlines
 
         if bench is None:
             if not getattr(self, "_bm_dict", None):
@@ -1764,7 +1765,7 @@ class NaivePnL:
             )
 
         using_default_groups = groups is None
-        groups = groups if groups is not None else DEFAULT_METRIC_GROUPS
+        groups = groups if groups is not None else DEFAULT_PNL_METRIC_GROUPS
         order = order or {}
 
         resolved = {}
@@ -1781,7 +1782,7 @@ class NaivePnL:
         # A bench entry is either a real PnL category (goes through
         # evaluate_pnls() as usual) or a raw bms ticker defaulted-in above
         # (not a registered PnL, so it can't go through evaluate_pnls()'s
-        # pnl_names check -- computed directly from its own return series
+        # pnl_names check - computed directly from its own return series
         # via the same stats routine instead).
         bench_pnl_names = [b for b in benches if b in self.pnl_names]
         bench_bm_tickers = [b for b in benches if b not in self.pnl_names]
@@ -1802,20 +1803,19 @@ class NaivePnL:
         )
 
         # Columns whose "Max Draw Recovery (months)" figure is an open, not
-        # yet completed drawdown as of the last observation -- flagged with
+        # yet completed drawdown as of the last observation - flagged with
         # a "+" prefix below rather than read as a finished recovery time.
         dd_recovery_ongoing = dict(getattr(self, "_last_dd_recovery_ongoing", {}))
 
         if bench_bm_tickers:
-            dfw_bm = pd.concat(
-                [self._bm_dict[t] for t in bench_bm_tickers], axis=1
-            )
+            dfw_bm = pd.concat([self._bm_dict[t] for t in bench_bm_tickers], axis=1)
             if start is not None:
                 dfw_bm = dfw_bm.loc[dfw_bm.index >= pd.Timestamp(start)]
             if end is not None:
                 dfw_bm = dfw_bm.loc[dfw_bm.index <= pd.Timestamp(end)]
             stats_bm, ongoing_bm = self._stats_from_wide(
-                dfw_bm, sr_thresholds if sr_thresholds is not None else [0.25, 0.5, 0.75]
+                dfw_bm,
+                sr_thresholds if sr_thresholds is not None else [0.25, 0.5, 0.75],
             )
             dd_recovery_ongoing.update(ongoing_bm)
             tbr = pd.concat([tbr, stats_bm], axis=1)
@@ -1894,7 +1894,9 @@ class NaivePnL:
         traded_months_label = "Traded Months"
         top5_row_label = "Top 5% Monthly PnL Share"
         if row_labels:
-            traded_months_label = row_labels.get(traded_months_label, traded_months_label)
+            traded_months_label = row_labels.get(
+                traded_months_label, traded_months_label
+            )
             top5_row_label = row_labels.get(top5_row_label, top5_row_label)
 
         html = pnl_table_html(
