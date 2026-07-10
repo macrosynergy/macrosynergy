@@ -1,15 +1,30 @@
-"""Presentation-ready HTML rendering of an ``evaluate_pnls()`` statistics
-table -- grouped sections, tabular-number alignment, no computation. Kept
-separate from ``NaivePnL`` so the stats/rendering concerns stay decoupled;
-``NaivePnL.evaluate_pnls_pretty`` is the thin wrapper that calls
-``evaluate_pnls`` and hands its output to ``pnl_table_html``.
+"""
+Presentation-ready HTML rendering of ``NaivePnL.evaluate_pnls()`` statistics
+as a grouped, ledger-style table for reports and notebooks.
 """
 
 from typing import Dict, List, Optional, Sequence, Tuple, Union
 
 import pandas as pd
 
-DEFAULT_METRIC_GROUPS: Dict[str, List[str]] = {
+
+class HTMLTable:
+    """
+    The HTML table returned by ``NaivePnL.evaluate_pnls_html()``.
+
+    Displays as a formatted table when returned as the last line of a
+    notebook cell. The raw HTML is available as ``.data``, e.g. to save it
+    to a file with ``Path("table.html").write_text(table.data)``.
+    """
+
+    def __init__(self, data: str):
+        self.data = data
+
+    def _repr_html_(self) -> str:
+        return self.data
+
+
+DEFAULT_PNL_METRIC_GROUPS: Dict[str, List[str]] = {
     "Performance": ["Return %", "Sharpe Ratio", "Sortino Ratio"],
     "Risk & drawdown": [
         "St. Dev. %",
@@ -30,7 +45,7 @@ DEFAULT_METRIC_GROUPS: Dict[str, List[str]] = {
 # INK matches the macrosynergy package's default LinePlot/view_timeseries
 # color: Plotter.__init__ calls sns.set_theme(style="darkgrid",
 # palette="colorblind"), and seaborn's "colorblind" palette's first swatch is
-# #0173b2 -- the blue every unstyled macrosynergy time series chart uses.
+# #0173b2 - the blue every unstyled macrosynergy time series chart uses.
 _INK, _INK2, _MUTED = "#0174b2c6", "#52514e", "#898781"
 _BAND, _ZEBRA = "#f4f3ef", "#faf9f6"
 _NUM_FIELD_W = "7ch"  # 4ch integer slot + 3ch fraction slot
@@ -40,11 +55,13 @@ _NUM_FIELD_W = "7ch"  # 4ch integer slot + 3ch fraction slot
 # bundled default, DejaVu Sans. Matched here, with a system-font fallback for
 # renderers (e.g. browsers) that don't have DejaVu Sans registered.
 _TEXT_FONT = "'DejaVu Sans', system-ui, -apple-system, 'Segoe UI', sans-serif"
-_MONO_FONT = "'DejaVu Sans Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace"
+_MONO_FONT = (
+    "'DejaVu Sans Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace"
+)
 
 # Every visual rule lives here, addressed by class, so a caller-supplied
-# `custom_css` block -- injected in a second <style> tag right after this one
-# -- can override any of it: same selector, later in source order, wins.
+# `custom_css` block - injected in a second <style> tag right after this one
+# - can override any of it: same selector, later in source order, wins.
 _DEFAULT_CSS = f"""
 .pnl-wrap {{ font-family:{_TEXT_FONT}; width:fit-content; min-width:640px; max-width:100%;
   background:#fff; border:1px solid {_INK}; border-radius:2px; overflow:hidden; }}
@@ -86,7 +103,7 @@ def _decimal_aligned(s: str) -> str:
     # Decimal values: split "int.frac" so the "." lands in a fixed column
     # across every row, the way a LaTeX `&`-aligned tabular column would.
     # Whole numbers (no ".") have no fraction slot to sit in, so instead
-    # they're right-aligned across the *whole* field -- landing their last
+    # they're right-aligned across the *whole* field - landing their last
     # digit on the same column as the last fractional digit of the decimal
     # rows, rather than at the (nonexistent) decimal point.
     int_part, dot, frac_part = s.partition(".")
@@ -115,12 +132,10 @@ def pnl_table_html(
     subtitle: str = "",
     custom_css: Optional[str] = None,
 ) -> str:
-    """Render a grouped ledger-style HTML table from an already-computed
-    ``evaluate_pnls()`` DataFrame. Every strategy column (however many there
-    are) shares one identical color and weight -- they're all "the compared
-    time series" -- and every benchmark column (however many there are) is
-    visually distinct (muted), regardless of how many strategy columns
-    there are.
+    """Render a grouped, ledger-style HTML table from an already-computed
+    ``evaluate_pnls()`` statistics DataFrame. All headline (strategy)
+    columns share one style; all benchmark columns are shown in a distinct,
+    muted style.
 
     Parameters
     ----------
@@ -156,35 +171,35 @@ def pnl_table_html(
     footnotes : bool, default True
         Whether to render the explanatory footnotes above (for "+" and/or
         ``negative_share_row``) at all. The underlying "+" prefix on cells
-        is unaffected -- this only toggles the footnote text.
+        is unaffected - this only toggles the footnote text.
     title, subtitle : str
         Header text shown above the table.
     custom_css : str, optional
         Raw CSS injected in a second ``<style>`` block, right after the
-        table's own default stylesheet -- same-specificity selectors win by
+        table's own default stylesheet - same-specificity selectors win by
         source order, so rules targeting the classes below override the
         defaults without needing ``!important``:
 
-        - ``.pnl-wrap`` -- outer container (font, border, background).
+        - ``.pnl-wrap`` - outer container (font, border, background).
           Sizes to fit its content (``width:fit-content``) between a
           640px minimum and its embedding page's width as a maximum, so
           extra columns or long labels widen the box rather than being
-          clipped or forcing a scrollbar -- keeping the whole table
+          clipped or forcing a scrollbar - keeping the whole table
           selectable in one paste, e.g. into Word.
-        - ``.pnl-title``, ``.pnl-subtitle`` -- header text above the table
-        - ``.pnl-table`` -- the ``<table>`` element itself
-        - ``.pnl-thead-row``, ``.pnl-th-corner``, ``.pnl-th`` -- header row
+        - ``.pnl-title``, ``.pnl-subtitle`` - header text above the table
+        - ``.pnl-table`` - the ``<table>`` element itself
+        - ``.pnl-thead-row``, ``.pnl-th-corner``, ``.pnl-th`` - header row
           background and column-header cells
-        - ``.pnl-group-cell`` -- section title bars (e.g. "Risk & drawdown")
-        - ``.pnl-row-even``, ``.pnl-row-odd`` -- zebra-striped data rows
-        - ``.pnl-label`` -- the metric-name cell of a data row
-        - ``.pnl-value``, ``.pnl-value-strategy``, ``.pnl-value-bench`` --
+        - ``.pnl-group-cell`` - section title bars (e.g. "Risk & drawdown")
+        - ``.pnl-row-even``, ``.pnl-row-odd`` - zebra-striped data rows
+        - ``.pnl-label`` - the metric-name cell of a data row
+        - ``.pnl-value``, ``.pnl-value-strategy``, ``.pnl-value-bench`` -
           numeric cells; the latter two color strategy vs. benchmark
           columns differently
         - ``.pnl-num``, ``.pnl-num-split``, ``.pnl-num-int``,
-          ``.pnl-num-frac`` -- decimal-point alignment of the numbers
+          ``.pnl-num-frac`` - decimal-point alignment of the numbers
           themselves
-        - ``.pnl-footnote`` -- the "+"/negative-share explanation
+        - ``.pnl-footnote`` - the "+"/negative-share explanation
           footnotes, if shown
 
     Returns
@@ -233,9 +248,7 @@ def pnl_table_html(
             row_i += 1
 
     header_labels = [*headline_labels, *bench_labels]
-    header_cells = "".join(
-        f'<th class="pnl-th">{lbl}</th>' for lbl in header_labels
-    )
+    header_cells = "".join(f'<th class="pnl-th">{lbl}</th>' for lbl in header_labels)
 
     footnote_lines = []
     if footnotes and used_plus:
@@ -244,7 +257,7 @@ def pnl_table_html(
         )
     if footnotes and used_negative_share:
         footnote_lines.append(
-            f"{negative_share_row} is top-5%-months PnL ÷ total PnL, so it "
+            f"{negative_share_row} is top-5%-months PnL / total PnL, so it "
             "reads negative when total PnL itself is negative"
         )
     footnote = (
