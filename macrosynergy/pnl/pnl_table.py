@@ -109,6 +109,8 @@ def pnl_table_html(
     bench_label: Union[str, List[str]],
     whole_number_metrics: Sequence[str] = (),
     plus_prefix: Dict[str, Sequence[str]] = None,
+    negative_share_row: Optional[str] = None,
+    footnotes: bool = True,
     title: str = "Naive PnL statistics",
     subtitle: str = "",
     custom_css: Optional[str] = None,
@@ -143,7 +145,18 @@ def pnl_table_html(
     plus_prefix : dict of {row name: [column names]}, optional
         Cells to prefix with "+" (e.g. an unrecovered drawdown still in
         progress). A footnote explaining the "+" is appended below the
-        table whenever this marks at least one cell.
+        table whenever this marks at least one cell (subject to
+        ``footnotes``).
+    negative_share_row : str, optional
+        Row name to check for negative values (e.g. "Top 5% Monthly PnL
+        Share", which reads negative whenever total PnL is negative, since
+        it's top-5%-months PnL divided by total PnL). A footnote explaining
+        this is appended below the table whenever that row has a negative
+        cell (subject to ``footnotes``).
+    footnotes : bool, default True
+        Whether to render the explanatory footnotes above (for "+" and/or
+        ``negative_share_row``) at all. The underlying "+" prefix on cells
+        is unaffected -- this only toggles the footnote text.
     title, subtitle : str
         Header text shown above the table.
     custom_css : str, optional
@@ -171,7 +184,8 @@ def pnl_table_html(
         - ``.pnl-num``, ``.pnl-num-split``, ``.pnl-num-int``,
           ``.pnl-num-frac`` -- decimal-point alignment of the numbers
           themselves
-        - ``.pnl-footnote`` -- the "+" explanation footnote, if shown
+        - ``.pnl-footnote`` -- the "+"/negative-share explanation
+          footnotes, if shown
 
     Returns
     -------
@@ -186,10 +200,13 @@ def pnl_table_html(
     )
     plus_prefix = plus_prefix or {}
     used_plus = False
+    used_negative_share = False
 
     def num_cell(metric, col, value_class):
-        nonlocal used_plus
+        nonlocal used_plus, used_negative_share
         v = tbr.loc[metric, col]
+        if metric == negative_share_row and v == v and v < 0:
+            used_negative_share = True
         fmt = _fmt(metric, v, whole_number_metrics)
         if fmt and col in plus_prefix.get(metric, ()):
             used_plus = True
@@ -220,10 +237,19 @@ def pnl_table_html(
         f'<th class="pnl-th">{lbl}</th>' for lbl in header_labels
     )
 
+    footnote_lines = []
+    if footnotes and used_plus:
+        footnote_lines.append(
+            "+ drawdown had not yet recovered as of the last observation"
+        )
+    if footnotes and used_negative_share:
+        footnote_lines.append(
+            f"{negative_share_row} is top-5%-months PnL ÷ total PnL, so it "
+            "reads negative when total PnL itself is negative"
+        )
     footnote = (
-        '<div class="pnl-footnote">'
-        "+ drawdown had not yet recovered as of the last observation</div>"
-        if used_plus
+        f'<div class="pnl-footnote">{"<br>".join(footnote_lines)}</div>'
+        if footnote_lines
         else ""
     )
 

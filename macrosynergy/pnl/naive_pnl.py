@@ -1570,7 +1570,7 @@ class NaivePnL:
 
         return df
 
-    def evaluate_pnls_pretty(
+    def evaluate_pnls_html(
         self,
         headline: Union[str, List[str]],
         bench: Optional[Union[str, List[str]]] = None,
@@ -1586,6 +1586,7 @@ class NaivePnL:
         title: str = "Naive PnL statistics",
         subtitle: str = "10% vol target · daily rebalance · gross of costs",
         custom_css: Optional[str] = None,
+        footnotes: bool = True,
     ) -> HTML:
         """
         Presentation-ready HTML rendering of ``evaluate_pnls()`` -- a
@@ -1652,6 +1653,11 @@ class NaivePnL:
             full list of overridable classes (``.pnl-title``,
             ``.pnl-value-bench``, ``.pnl-footnote``, etc.), e.g.
             ``custom_css=".pnl-title { color: #7a1f1f; }"``.
+        footnotes : bool, default True
+            Whether to render the explanatory footnotes below the table
+            (see Notes). Set to ``False`` to suppress them -- the
+            underlying "+" prefix on cells is unaffected, only the
+            footnote text is toggled.
 
         Returns
         -------
@@ -1664,8 +1670,10 @@ class NaivePnL:
         A "Max Draw Recovery (months)" figure is prefixed with "+" wherever
         the worst drawdown hadn't recovered by the end of the sample -- it
         reads as "at least this many months and still running", not a
-        completed recovery time. A footnote explaining the "+" is added
-        below the table whenever at least one cell uses it.
+        completed recovery time. "Top 5% Monthly PnL Share" is top-5%-months
+        PnL divided by total PnL, so it reads negative whenever total PnL is
+        negative. Both get an explanatory footnote below the table whenever
+        they occur (subject to ``footnotes``).
         """
         headlines = headline if isinstance(headline, list) else [headline]
         if headline_label is None:
@@ -1824,11 +1832,14 @@ class NaivePnL:
         plus_cols = [col for col, ongoing in dd_recovery_ongoing.items() if ongoing]
 
         # Resolve through any row_labels renaming so a renamed "Traded
-        # Months"/"Max Draw Recovery (months)" row keeps its whole-number
-        # formatting instead of silently falling back to 2 decimals.
+        # Months"/"Max Draw Recovery (months)"/"Top 5% Monthly PnL Share"
+        # row keeps its whole-number formatting/negative-share footnote
+        # instead of silently losing them.
         traded_months_label = "Traded Months"
+        top5_row_label = "Top 5% Monthly PnL Share"
         if row_labels:
             traded_months_label = row_labels.get(traded_months_label, traded_months_label)
+            top5_row_label = row_labels.get(top5_row_label, top5_row_label)
 
         html = pnl_table_html(
             tbr,
@@ -1840,6 +1851,8 @@ class NaivePnL:
             whole_number_metrics={traded_months_label, recovery_row_label}
             & set(all_metrics),
             plus_prefix={recovery_row_label: plus_cols} if plus_cols else None,
+            negative_share_row=top5_row_label,
+            footnotes=footnotes,
             title=title,
             subtitle=subtitle,
             custom_css=custom_css,

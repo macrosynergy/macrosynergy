@@ -524,7 +524,7 @@ class TestAll(unittest.TestCase):
             vol_scale=5, min_obs=250, pnl_name="PNL_BENCH",
         )
 
-        result = pnl_single_bm.evaluate_pnls_pretty(
+        result = pnl_single_bm.evaluate_pnls_html(
             headline="PNL_HEAD", bench="PNL_BENCH"
         )
         self.assertIsInstance(result, HTML)
@@ -550,7 +550,7 @@ class TestAll(unittest.TestCase):
         # row_labels: "Benchmark correlation" as a key is shorthand for every
         # resolved correlation row, so this anonymizes the ticker without the
         # caller ever naming it.
-        anon = pnl_single_bm.evaluate_pnls_pretty(
+        anon = pnl_single_bm.evaluate_pnls_html(
             headline="PNL_HEAD",
             bench="PNL_BENCH",
             row_labels={"Benchmark correlation": "Benchmark correlation"},
@@ -559,7 +559,7 @@ class TestAll(unittest.TestCase):
         self.assertNotIn("USD_DUXR correl", anon.data)
 
         # An arbitrary row can also be relabeled by its real name.
-        relabeled = pnl_single_bm.evaluate_pnls_pretty(
+        relabeled = pnl_single_bm.evaluate_pnls_html(
             headline="PNL_HEAD",
             bench="PNL_BENCH",
             row_labels={"St. Dev. %": "Vol %"},
@@ -587,7 +587,7 @@ class TestAll(unittest.TestCase):
             sig="INFL", sig_op="zn_score_pan", sig_neg=True, rebal_freq="monthly",
             vol_scale=5, min_obs=250, pnl_name="PNL_BENCH",
         )
-        anon_multi = pnl_multi_bm.evaluate_pnls_pretty(
+        anon_multi = pnl_multi_bm.evaluate_pnls_html(
             headline="PNL_HEAD",
             bench="PNL_BENCH",
             row_labels={"Benchmark correlation": "Benchmark correlation"},
@@ -599,7 +599,7 @@ class TestAll(unittest.TestCase):
 
         # A list lets each benchmark get its own explicit label, in the
         # order `bms` was passed to the constructor (EUR_DUXR, USD_DUXR).
-        explicit_multi = pnl_multi_bm.evaluate_pnls_pretty(
+        explicit_multi = pnl_multi_bm.evaluate_pnls_html(
             headline="PNL_HEAD",
             bench="PNL_BENCH",
             row_labels={"Benchmark correlation": ["EUR leg", "USD leg"]},
@@ -611,7 +611,7 @@ class TestAll(unittest.TestCase):
 
         # Wrong-length list raises rather than silently mismatching/dropping.
         with self.assertRaises(ValueError):
-            pnl_multi_bm.evaluate_pnls_pretty(
+            pnl_multi_bm.evaluate_pnls_html(
                 headline="PNL_HEAD",
                 bench="PNL_BENCH",
                 row_labels={"Benchmark correlation": ["Only one label"]},
@@ -623,7 +623,7 @@ class TestAll(unittest.TestCase):
             sig="INFL", sig_op="zn_score_pan", rebal_freq="monthly",
             vol_scale=5, min_obs=250, pnl_name="PNL_BENCH2",
         )
-        multi_bench = pnl_multi_bm.evaluate_pnls_pretty(
+        multi_bench = pnl_multi_bm.evaluate_pnls_html(
             headline="PNL_HEAD",
             bench=["PNL_BENCH", "PNL_BENCH2"],
             bench_label=["Passive A", "Passive B"],
@@ -633,7 +633,7 @@ class TestAll(unittest.TestCase):
 
         # bench_label length must match bench.
         with self.assertRaises(ValueError):
-            pnl_multi_bm.evaluate_pnls_pretty(
+            pnl_multi_bm.evaluate_pnls_html(
                 headline="PNL_HEAD",
                 bench=["PNL_BENCH", "PNL_BENCH2"],
                 bench_label=["Only one label"],
@@ -641,7 +641,7 @@ class TestAll(unittest.TestCase):
 
         # Custom groups restrict rows to exactly what was asked for, in the
         # order given, and don't require an `order` override to do so.
-        custom = pnl_single_bm.evaluate_pnls_pretty(
+        custom = pnl_single_bm.evaluate_pnls_html(
             headline="PNL_HEAD",
             bench="PNL_BENCH",
             groups={"Performance": ["Sharpe Ratio", "Return %"]},
@@ -655,7 +655,7 @@ class TestAll(unittest.TestCase):
         # a missing benchmark correlation row (tested below via a
         # no-benchmark instance).
         with self.assertRaises(KeyError):
-            pnl_single_bm.evaluate_pnls_pretty(
+            pnl_single_bm.evaluate_pnls_html(
                 headline="PNL_HEAD",
                 bench="PNL_BENCH",
                 groups={"X": ["Not A Real Metric"]},
@@ -679,7 +679,7 @@ class TestAll(unittest.TestCase):
             sig="INFL", sig_op="zn_score_pan", sig_neg=True, rebal_freq="monthly",
             vol_scale=5, min_obs=250, pnl_name="PNL_BENCH",
         )
-        no_bm_result = pnl_no_bm.evaluate_pnls_pretty(
+        no_bm_result = pnl_no_bm.evaluate_pnls_html(
             headline="PNL_HEAD", bench="PNL_BENCH"
         )
         self.assertNotIn("USD_DUXR correl", no_bm_result.data)
@@ -702,7 +702,7 @@ class TestAll(unittest.TestCase):
             sig="SIG", sig_op="raw", rebal_freq="daily", vol_scale=None,
             min_obs=1, pnl_name="PNL",
         )
-        ongoing_result = pnl.evaluate_pnls_pretty(
+        ongoing_result = pnl.evaluate_pnls_html(
             headline="PNL",
             bench="PNL",
             groups={"Risk & drawdown": ["Max Draw Recovery (months)"]},
@@ -711,6 +711,20 @@ class TestAll(unittest.TestCase):
         self.assertIn(
             "drawdown had not yet recovered as of the last observation",
             ongoing_result.data,
+        )
+
+        # footnotes=False suppresses the explanatory text but keeps the "+"
+        # prefix on the cell itself.
+        no_footnote_result = pnl.evaluate_pnls_html(
+            headline="PNL",
+            bench="PNL",
+            groups={"Risk & drawdown": ["Max Draw Recovery (months)"]},
+            footnotes=False,
+        )
+        self.assertIn("+2", no_footnote_result.data)
+        self.assertNotIn(
+            "drawdown had not yet recovered as of the last observation",
+            no_footnote_result.data,
         )
 
         recovered_values = np.concatenate(
@@ -733,7 +747,7 @@ class TestAll(unittest.TestCase):
             sig="SIG", sig_op="raw", rebal_freq="daily", vol_scale=None,
             min_obs=1, pnl_name="PNL",
         )
-        recovered_result = pnl_recovered.evaluate_pnls_pretty(
+        recovered_result = pnl_recovered.evaluate_pnls_html(
             headline="PNL",
             bench="PNL",
             groups={"Risk & drawdown": ["Max Draw Recovery (months)"]},
@@ -747,7 +761,7 @@ class TestAll(unittest.TestCase):
         # Renaming "Max Draw Recovery (months)"/"Traded Months" via
         # row_labels must not lose their whole-number rounding -- the cells
         # should still read as clean integers, not 2-decimal values.
-        renamed_result = pnl.evaluate_pnls_pretty(
+        renamed_result = pnl.evaluate_pnls_html(
             headline="PNL",
             bench="PNL",
             groups={
@@ -791,9 +805,9 @@ class TestAll(unittest.TestCase):
             vol_scale=5, min_obs=250, pnl_name="PNL_BENCH",
         )
 
-        default_html = pnl.evaluate_pnls_pretty(headline="PNL_HEAD", bench="PNL_BENCH")
+        default_html = pnl.evaluate_pnls_html(headline="PNL_HEAD", bench="PNL_BENCH")
         custom = ".pnl-title { color: #7a1f1f; } .pnl-value-bench { color: #ff00ff; }"
-        custom_html = pnl.evaluate_pnls_pretty(
+        custom_html = pnl.evaluate_pnls_html(
             headline="PNL_HEAD", bench="PNL_BENCH", custom_css=custom,
         )
         self.assertIsInstance(custom_html, HTML)
@@ -809,7 +823,7 @@ class TestAll(unittest.TestCase):
 
         # Passing no custom_css must render identically to before (no
         # regression in the default look from the class-based refactor).
-        without_custom = pnl.evaluate_pnls_pretty(headline="PNL_HEAD", bench="PNL_BENCH")
+        without_custom = pnl.evaluate_pnls_html(headline="PNL_HEAD", bench="PNL_BENCH")
         self.assertEqual(default_html.data, without_custom.data)
 
     def test_evaluate_pnls_pretty_bench_defaults_to_bms(self):
@@ -833,7 +847,7 @@ class TestAll(unittest.TestCase):
         # Omitting bench= entirely defaults to the raw bms tickers as their
         # own columns -- same benchmarks used for the correlation rows,
         # without needing a synthetic "long only" PnL.
-        result = pnl_multi_bm.evaluate_pnls_pretty(headline="PNL_HEAD")
+        result = pnl_multi_bm.evaluate_pnls_html(headline="PNL_HEAD")
         self.assertIn("EUR_DUXR", result.data)
         self.assertIn("USD_DUXR", result.data)
         self.assertIn("EUR_DUXR correl", result.data)
@@ -850,18 +864,56 @@ class TestAll(unittest.TestCase):
             vol_scale=5, min_obs=250, pnl_name="PNL_HEAD",
         )
         with self.assertRaises(ValueError):
-            pnl_no_bm.evaluate_pnls_pretty(headline="PNL_HEAD")
+            pnl_no_bm.evaluate_pnls_html(headline="PNL_HEAD")
 
         # Explicit bench= naming an actual bms ticker (not a PnL name) also
         # works, going through the same raw-ticker stats path. USD_DUXR
         # still gets a correlation row (evaluate_pnls() always reports
         # correlation against every configured bms ticker, independent of
         # which one is shown as the bench column) but isn't a column.
-        explicit_ticker = pnl_multi_bm.evaluate_pnls_pretty(
+        explicit_ticker = pnl_multi_bm.evaluate_pnls_html(
             headline="PNL_HEAD", bench="EUR_DUXR"
         )
         headers = re.findall(r'<th class="pnl-th">([^<]+)</th>', explicit_ticker.data)
         self.assertEqual(headers, ["PNL_HEAD", "EUR_DUXR"])
+
+    def test_evaluate_pnls_pretty_negative_top5_share(self):
+        # Strong negative drift overall, with one very strong positive
+        # month: total PnL ends up negative while the best (top-5%) month
+        # is positive, so "Top 5% Monthly PnL Share" (top-5%-months PnL /
+        # total PnL) comes out negative -- the case the footnote explains.
+        dates = pd.bdate_range("2010-01-01", periods=300)
+        rng = np.random.default_rng(7)
+        values = rng.normal(-0.01, 0.003, len(dates))
+        values[10:31] += 0.03
+        df = pd.concat([
+            pd.DataFrame({"cid": "USD", "xcat": "XR", "real_date": dates, "value": values}),
+            pd.DataFrame({"cid": "USD", "xcat": "SIG", "real_date": dates, "value": np.ones(len(dates))}),
+        ])
+        pnl = NaivePnL(df, ret="XR", sigs=["SIG"], cids=["USD"], start="2010-01-01")
+        pnl.make_pnl(
+            sig="SIG", sig_op="raw", rebal_freq="daily", vol_scale=None,
+            min_obs=1, pnl_name="PNL",
+        )
+        raw = pnl.evaluate_pnls(pnl_cats=["PNL"])
+        self.assertLess(raw.loc["Top 5% Monthly PnL Share", "PNL"], 0)
+
+        result = pnl.evaluate_pnls_html(
+            headline="PNL", bench="PNL",
+            groups={"Robustness": ["Top 5% Monthly PnL Share"]},
+        )
+        self.assertIn(
+            "Top 5% Monthly PnL Share is top-5%-months PnL", result.data
+        )
+
+        no_footnote_result = pnl.evaluate_pnls_html(
+            headline="PNL", bench="PNL",
+            groups={"Robustness": ["Top 5% Monthly PnL Share"]},
+            footnotes=False,
+        )
+        self.assertNotIn(
+            "Top 5% Monthly PnL Share is top-5%-months PnL", no_footnote_result.data
+        )
 
     def test_make_long_pnl(self):
         ret = "EQXR"
