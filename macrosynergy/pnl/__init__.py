@@ -8,7 +8,6 @@ from macrosynergy.pnl.proxy_pnl_calc import proxy_pnl_calc
 from macrosynergy.pnl.transaction_costs import TransactionCosts
 from macrosynergy.pnl.proxy_pnl import ProxyPnL
 from macrosynergy.pnl.sharpe_stability_ratio import sharpe_stability_ratio
-from macrosynergy.pnl.pnl_table import DEFAULT_METRIC_GROUPS, pnl_table_html
 
 __all__ = [
     "NaivePnL",
@@ -21,6 +20,4 @@ __all__ = [
     "TransactionCosts",
     "ProxyPnL",
     "sharpe_stability_ratio",
-    "DEFAULT_METRIC_GROUPS",
-    "pnl_table_html",
 ]
