@@ -498,6 +498,43 @@ class TestAll(unittest.TestCase):
         except Exception as e:
             self.fail(f"evaluate_pnls raised {e} unexpectedly")
 
+    def test_max_drawdown_recovery_months(self):
+        recovery_months = NaivePnL._max_drawdown_recovery_months
+
+        # No drawdown at all.
+        cum_pnl = pd.Series(np.arange(1, 101, dtype=float))
+        self.assertEqual(recovery_months(cum_pnl), 0.0)
+
+        # Rises 21 days to a peak, falls for 21 days to a trough, then
+        # climbs back past the prior peak over another 21 days. Recovery is
+        # measured from the *peak*, not the trough, so this is 42 trading
+        # days -- 2 months -- end to end.
+        up = np.arange(1, 22, dtype=float)
+        down = up[-1] - np.arange(1, 22, dtype=float)
+        recover = down[-1] + np.arange(1, 22, dtype=float)
+        cum_pnl = pd.Series(np.concatenate([up, down, recover]))
+        self.assertEqual(recovery_months(cum_pnl), 2.0)
+
+        # 21 days up to a peak, then 21 days down, ending underwater with no
+        # recovery. The drawdown has only been running since the peak (21
+        # trading days = 1 month), regardless of how much history preceded
+        # the peak -- it must NOT fall back to the whole traded history.
+        down_no_recovery = up[-1] - np.arange(1, 22, dtype=float)
+        cum_pnl = pd.Series(np.concatenate([up, down_no_recovery]))
+        self.assertEqual(recovery_months(cum_pnl), 1.0)
+        self.assertEqual(recovery_months(cum_pnl, return_ongoing=True), (1.0, True))
+
+        # Peak reached a quarter of the way through a 4-month series, then
+        # underwater for the remaining three quarters with no recovery --
+        # the ongoing drawdown should read as ~3 months, not the full 4.
+        long_down_no_recovery = up[-1] - np.arange(1, 64, dtype=float)
+        cum_pnl = pd.Series(np.concatenate([up, long_down_no_recovery]))
+        self.assertEqual(recovery_months(cum_pnl), 3.0)
+
+        # No non-NaN observations.
+        cum_pnl = pd.Series([], dtype=float)
+        self.assertTrue(np.isnan(recovery_months(cum_pnl)))
+
     def test_evaluate_pnls_pretty(self):
         from IPython.display import HTML
 

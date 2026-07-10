@@ -25,7 +25,6 @@ from macrosynergy.management.utils import (
 from macrosynergy.management.types import QuantamentalDataFrame
 from macrosynergy.panel.make_zn_scores import make_zn_scores
 from macrosynergy.pnl.sharpe_stability_ratio import sharpe_stability_ratio
-from macrosynergy.pnl.max_drawdown_recovery_months import max_drawdown_recovery_months
 from macrosynergy.pnl.pnl_table import DEFAULT_METRIC_GROUPS, pnl_table_html
 from macrosynergy.signal import SignalReturnRelations
 
@@ -1325,6 +1324,60 @@ class NaivePnL:
         else:
             plt.show()
 
+    @staticmethod
+    def _max_drawdown_recovery_months(cum_pnl: pd.Series, return_ongoing: bool = False):
+        """
+        Trading days from the peak preceding the worst drawdown to its full
+        recovery, expressed in months of 21 trading days -- the same
+        convention used for "Max 21-Day Draw %" elsewhere in
+        ``evaluate_pnls()``.
+
+        Parameters
+        ----------
+        cum_pnl : pd.Series
+            Cumulative PnL series (e.g. ``dfw[col].cumsum()``). NaNs are
+            dropped.
+        return_ongoing : bool, default False
+            If True, return a ``(months, ongoing)`` tuple instead of just
+            ``months``, where ``ongoing`` is True when the worst drawdown
+            hadn't recovered by the end of the sample -- i.e. ``months``
+            reflects an open, still-running drawdown rather than a
+            completed recovery.
+
+        Returns
+        -------
+        float, or (float, bool) if ``return_ongoing``
+            Recovery time in months. 0 if the series never had a drawdown
+            at all. If the worst drawdown hasn't recovered by the end of
+            the sample, the elapsed time from its preceding peak to the
+            last observation -- i.e. how long that drawdown has been
+            running so far, not the length of the whole trading history.
+            NaN if ``cum_pnl`` has no non-NaN observations.
+        """
+        s = cum_pnl.dropna()
+        if s.empty:
+            months, ongoing = float("nan"), False
+        else:
+            high_watermark = s.cummax()
+            drawdown = high_watermark - s
+            trough_pos = int(np.argmax(drawdown.values))
+            if drawdown.iloc[trough_pos] == 0:
+                months, ongoing = 0.0, False
+            else:
+                peak_level = high_watermark.iloc[trough_pos]
+                peak_pos = int(
+                    np.where(s.values[: trough_pos + 1] == peak_level)[0][-1]
+                )
+
+                recovered = np.where(s.values[trough_pos:] >= peak_level)[0]
+                if len(recovered) == 0:
+                    months, ongoing = (len(s) - 1 - peak_pos) / 21, True
+                else:
+                    recovery_pos = trough_pos + int(recovered[0])
+                    months, ongoing = (recovery_pos - peak_pos) / 21, False
+
+        return (months, ongoing) if return_ongoing else months
+
     def _stats_from_wide(self, dfw: pd.DataFrame, sr_thresholds: List[float]):
         """
         Core of ``evaluate_pnls()``: the stats table for an already-pivoted
@@ -1420,7 +1473,7 @@ class NaivePnL:
                 benchmark_sr=0.0,
                 annualization_factor=252,
             )
-            recovery_months, ongoing = max_drawdown_recovery_months(
+            recovery_months, ongoing = self._max_drawdown_recovery_months(
                 cum_pnl[col], return_ongoing=True
             )
             df.loc["Max Draw Recovery (months)", col] = recovery_months
