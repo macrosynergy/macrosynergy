@@ -874,11 +874,30 @@ class DataQueryFileAPIClient:
         if is_small_file:
             request_wrapper_stream_bytes_to_disk(**download_args)
         else:
-            SegmentedFileDownloader(
-                **download_args,
-                max_file_retries=max_retries,
-                start_download=True,
-            )
+            try:
+                request_wrapper_stream_bytes_to_disk(**download_args)
+            except Exception as e:
+                logger.warning(
+                    f"Initial download attempt failed for {file_name}: {e}. "
+                    f"Retrying with segmented download..."
+                )
+                try:
+
+                    SegmentedFileDownloader(
+                        **download_args,
+                        max_file_retries=max_retries,
+                        start_download=True,
+                    )
+                except Exception as seg_e:
+                    logger.error(
+                        f"Segmented download also failed for {file_name}: {seg_e}. "
+                        f"Cleaning up partial file and raising exception."
+                    )
+                    if file_path.exists():
+                        file_path.unlink()
+                    raise DownloadError(
+                        f"Failed to download {file_name} after {max_retries} retries."
+                    ) from seg_e
 
         time_taken = time.time() - start
         logger.info(
