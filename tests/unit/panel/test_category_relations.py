@@ -863,6 +863,55 @@ class TestAll(unittest.TestCase):
                 "CategoryRelations failed when using seperator=cids, labels=False"
             )
 
+    def test_reg_scatter_cids_probability_annotation(self):
+        cids_test = ["USD", "GBP", "JPY", "EUR"]
+        xcats_test = ["XCAT1", "XCAT2"]
+
+        dfx = make_test_df(cids=cids_test, xcats=xcats_test, start="2010-01-01")
+
+        cr = CategoryRelations(
+            df=dfx,
+            xcats=xcats_test,
+            cids=cids_test,
+            freq="M",
+            lag=0,
+            xcat_aggs=["last", "last"],
+            start="2000-01-01",
+            xcat_trims=[None, None],
+        )
+
+        cr.reg_scatter(
+            labels=False,
+            coef_box="upper left",
+            title="FX consistent core CPI excess inflation",
+            xlab="ZN-scored signal",
+            ylab="signal",
+            separator="cids",
+        )
+
+        tables = [
+            table
+            for ax in matplotlib.pyplot.gcf().axes
+            for table in ax.tables
+        ]
+        self.assertEqual(len(tables), len(cids_test))
+        self.assertTrue(
+            all(
+                any(
+                    cell.get_text().get_text() == "Probability\n of significance "
+                    for cell in table.get_celld().values()
+                )
+                for table in tables
+            )
+        )
+        self.assertTrue(
+            all(
+                cell.visible_edges == "BRTL" and cell.get_linewidth() > 0
+                for table in tables
+                for cell in table.get_celld().values()
+            )
+        )
+
     def test_int_seperator(self):
         try:
             cids_test = ["USD", "GBP", "JPY", "EUR"]

@@ -494,19 +494,37 @@ class CategoryRelations(object):
                 zorder=10,
             )
 
+        for cell in data_table.get_celld().values():
+            cell.visible_edges = "closed"
+            cell.set_edgecolor("black")
+            cell.set_linewidth(0.8)
+            cell.set_clip_on(False)
+            cell.get_text().set_clip_on(False)
+
         return data_table
 
-    def annotate_facet(self, data, **kws):
+    def annotate_facet(
+        self,
+        data,
+        prob_est: str = "pool",
+        coef_box_size: Tuple[float] = (0.4, 2.5),
+        coef_box_font_size: int = 12,
+        set_font_size: bool = False,
+        loc: str = "lower left",
+        **kws,
+    ):
         """Annotate each graph within the facet grid."""
 
-        x = data[self.xcats[0]].to_numpy()
-        y = data[self.xcats[1]].to_numpy()
-        coeff, pval = stats.pearsonr(x, y)
-
-        cpl = np.round(coeff, 3)
-        fields = "Correlation coefficient: "
         ax = plt.gca()
-        ax.text(0.04, 0.1, f"{fields} {cpl}", fontsize=10, transform=ax.transAxes)
+        data_table = self.corr_probability(
+            df_probability=data,
+            coef_box_loc=loc,
+            prob_est=prob_est,
+            ax=ax,
+        )
+        data_table.scale(coef_box_size[0], coef_box_size[1])
+        data_table.auto_set_font_size(set_font_size)
+        data_table.set_fontsize(coef_box_font_size)
 
     def reg_scatter(
         self,
@@ -749,6 +767,8 @@ class CategoryRelations(object):
             assert isinstance(single_chart, bool)
 
             dfx_copy = dfx.reset_index().rename(columns={"level_0": "cid"})
+            if remove_zero_predictor:
+                dfx_copy = dfx_copy[dfx_copy.loc[:, self.xcats[0]] != 0]
             n_cids = len(dfx_copy["cid"].unique())
 
             error_cids = (
@@ -782,6 +802,7 @@ class CategoryRelations(object):
                 height=facet_height,
                 aspect=facet_aspect,
             )
+            fg.set(facecolor="white")
             fg.map(
                 sns.regplot,
                 self.xcats[0],
@@ -795,34 +816,41 @@ class CategoryRelations(object):
             )
 
             if coef_box is not None:
-                fg.map_dataframe(self.annotate_facet)
+                facet_prob_est = prob_est
+                if prob_est == "map":
+                    warnings.warn(
+                        "The 'map' estimator is not applicable to individual "
+                        "cross-section facets. Using 'pool' instead.",
+                        UserWarning,
+                    )
+                    facet_prob_est = "pool"
+
+                facet_font_size = 10 if set_font_size else coef_box_font_size
+                fg.map_dataframe(
+                    self.annotate_facet,
+                    prob_est=facet_prob_est,
+                    coef_box_size=coef_box_size,
+                    coef_box_font_size=facet_font_size,
+                    set_font_size=set_font_size,
+                    loc=coef_box,
+                )
 
             fg.set_titles(col_template="{col_name}")
-            fg.fig.suptitle(title, y=title_adj, fontsize=14)
+            fg.fig.suptitle(title, y=title_adj, fontsize=title_fontsize)
 
-            if not single_chart:
-                if xlab is not None:
-                    fg.set_xlabels(xlab, clear_inner=True)
-                if ylab is not None:
-                    fg.set_ylabels(ylab)
-            else:
+            fg.set_axis_labels("", "")
+            if xlab is not None:
+                fg.fig.supxlabel(xlab, fontsize=label_fontsize)
+            if ylab is not None:
+                fg.fig.supylabel(ylab, fontsize=label_fontsize)
+
+            if single_chart:
                 error = "Label expected for the respective axis."
                 assert xlab is not None, error
                 assert ylab is not None, error
-                number_of_graphs = len(fg.axes)
-                no_columns = fg._ncol
-                remainder = int(number_of_graphs % no_columns)
 
-                for i in range(number_of_graphs):
-                    fg.axes[i].set_xlabel("")
-                    fg.axes[i].set_ylabel("")
-
-                    if remainder == 0:
-                        fg.axes[no_columns - 1].set_xlabel(xlab)
-                        fg.axes[no_columns - 1].set_ylabel(ylab)
-                    else:
-                        fg.axes[-remainder].set_xlabel(xlab)
-                        fg.axes[-remainder].set_ylabel(ylab)
+            for facet_ax in fg.axes.flat:
+                facet_ax.tick_params(axis="both", labelsize=tick_fontsize)
 
         elif separator == "cids" and single_scatter:
             assert isinstance(single_chart, bool)
@@ -1050,65 +1078,65 @@ if __name__ == "__main__":
         years=None,
     )
 
-    cr.reg_scatter(
-        labels=False,
-        separator=None,
-        title="Carry and Return",
-        xlab="Carry",
-        ylab="Return",
-        coef_box="lower left",
-        prob_est="map",
-        remove_zero_predictor=True,
-        title_fontsize=14,
-    )
+    # cr.reg_scatter(
+    #     labels=False,
+    #     separator=None,
+    #     title="Carry and Return",
+    #     xlab="Carry",
+    #     ylab="Return",
+    #     coef_box="lower left",
+    #     prob_est="map",
+    #     remove_zero_predictor=True,
+    #     title_fontsize=14,
+    # )
 
-    # years parameter
+    # # years parameter
 
-    cr = CategoryRelations(
-        dfdx,
-        xcats=["CRY", "XR"],
-        freq="M",
-        years=5,
-        lag=0,
-        cids=cidx,
-        xcat_aggs=["mean", "sum"],
-        start="2001-01-01",
-        blacklist=black,
-    )
+    # cr = CategoryRelations(
+    #     dfdx,
+    #     xcats=["CRY", "XR"],
+    #     freq="M",
+    #     years=5,
+    #     lag=0,
+    #     cids=cidx,
+    #     xcat_aggs=["mean", "sum"],
+    #     start="2001-01-01",
+    #     blacklist=black,
+    # )
 
-    cr.reg_scatter(
-        labels=False,
-        separator=None,
-        title="Carry and Return, 5-year periods",
-        xlab="Carry",
-        ylab="Return",
-        coef_box="lower left",
-        prob_est="map",
-    )
+    # cr.reg_scatter(
+    #     labels=False,
+    #     separator=None,
+    #     title="Carry and Return, 5-year periods",
+    #     xlab="Carry",
+    #     ylab="Return",
+    #     coef_box="lower left",
+    #     prob_est="map",
+    # )
 
-    cr = CategoryRelations(
-        dfdx,
-        xcats=["CRY", "XR"],
-        # xcat1_chg="diff",
-        freq="M",
-        lag=1,
-        cids=cidx,
-        xcat_aggs=["mean", "sum"],
-        start="2001-01-01",
-        blacklist=black,
-        years=None,
-    )
+    # cr = CategoryRelations(
+    #     dfdx,
+    #     xcats=["CRY", "XR"],
+    #     # xcat1_chg="diff",
+    #     freq="M",
+    #     lag=1,
+    #     cids=cidx,
+    #     xcat_aggs=["mean", "sum"],
+    #     start="2001-01-01",
+    #     blacklist=black,
+    #     years=None,
+    # )
 
-    cr.reg_scatter(
-        labels=False,
-        separator=2010,
-        title="Carry and Return",
-        xlab="Carry",
-        ylab="Return",
-        coef_box="lower left",
-        ncol=5,
-        remove_zero_predictor=True
-    )
+    # cr.reg_scatter(
+    #     labels=False,
+    #     separator=2010,
+    #     title="Carry and Return",
+    #     xlab="Carry",
+    #     ylab="Return",
+    #     coef_box="lower left",
+    #     ncol=5,
+    #     remove_zero_predictor=True
+    # )
     cr.reg_scatter(
         labels=False,
         separator="cids",
