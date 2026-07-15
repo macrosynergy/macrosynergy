@@ -3,24 +3,30 @@ Module for analysing and visualizing signal and a return series.
 """
 
 import warnings
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
 import seaborn as sns
-from sklearn import metrics as skm
+from matplotlib.colors import is_color_like
 from scipy import stats
-from typing import List, Union, Tuple, Dict, Any, Optional, Callable
-import statsmodels.api as sm
+from sklearn import metrics as skm
 
-from macrosynergy.management.simulate import make_qdf
+import macrosynergy.visuals as msv
+from macrosynergy.learning.random_effects import RandomEffects
+from macrosynergy.management.simulate import make_qdf, make_test_df
+from macrosynergy.management.types import QuantamentalDataFrame
 from macrosynergy.management.utils import (
     apply_slip as apply_slip_util,
-    reduce_df,
+)
+from macrosynergy.management.utils import (
     categories_df,
+    get_cid,
+    get_xcat,
+    reduce_df,
     update_df,
 )
-from macrosynergy.management.types import QuantamentalDataFrame
-import macrosynergy.visuals as msv
 
 # Ensure warnings are printed
 warnings.simplefilter("always")
@@ -128,7 +134,7 @@ class SignalReturnRelations:
                 raise TypeError(f"List or string expected and not {type(cids)}.")
             else:
                 if not all(isinstance(cid, str) for cid in cids):
-                    raise TypeError(f"List of strings expected for cids.")
+                    raise TypeError("List of strings expected for cids.")
 
         required_columns = ["cid", "xcat", "real_date", "value"]
 
@@ -153,7 +159,7 @@ class SignalReturnRelations:
             seen = set()
             self.freqs = []
             for f in freqs:
-                if not f in self.dic_freq.keys():
+                if f not in self.dic_freq.keys():
                     raise ValueError(freq_error)
                 else:
                     if f not in seen:
@@ -164,7 +170,7 @@ class SignalReturnRelations:
                             f"Frequency {f} is repeated, dropping repeated frequency."
                         )
         else:
-            if not freqs in self.dic_freq.keys():
+            if freqs not in self.dic_freq.keys():
                 raise ValueError(freq_error)
             else:
                 self.freqs = [freqs]
@@ -208,10 +214,9 @@ class SignalReturnRelations:
             raise TypeError(f"<bool> object expected and not {type(cosp)}.")
 
         if isinstance(cids, str):
-            self.cids = [cids]
-        else:
-            self.cids = cids
+            cids = [cids]
 
+        self.cids = cids
         self.rets = rets
         self.slip = slip
         self.agg_sigs = agg_sigs
@@ -253,7 +258,7 @@ class SignalReturnRelations:
             self.signs = sig_neg if isinstance(sig_neg, list) else [sig_neg]
 
         for sign in self.signs:
-            if not sign in [False, True]:
+            if sign not in [False, True]:
                 raise TypeError("Sign must be either False or True.")
 
         if len(self.signs) != len(self.sigs):
@@ -286,7 +291,23 @@ class SignalReturnRelations:
 
         self.sigs = new_sigs
 
-        self.original_df = self.df.copy()
+        self.df = QuantamentalDataFrame(self.df)
+
+        all_found_tickers = self.df.list_tickers()
+
+        sigs_found, rets_found = {}, {}
+        for tk in all_found_tickers:
+            cid, xcat = get_cid(tk), get_xcat(tk)
+            if xcat in self.sigs:
+                sigs_found[cid] = sigs_found.get(cid, []) + [tk]
+            if xcat in self.rets:
+                rets_found[cid] = rets_found.get(cid, []) + [tk]
+        # keep only cids that have at least one sig AND one ret
+        self.cids = sorted(set(sigs_found) & set(rets_found))
+
+        self.df = self.df.reduce_df(cids=self.cids, blacklist=self.blacklist)
+        self.original_df = QuantamentalDataFrame(self.df.copy())
+        self.cids_used_in_last_calculation = None
 
     def __rival_sigs__(self, ret, sigs=None):
         """
@@ -425,7 +446,7 @@ class SignalReturnRelations:
         self.manipulate_df(xcats=sigs + [ret], freq=freq, agg_sig=agg_sig)
 
         for i in range(len(sigs)):
-            if not sigs[i] in self.sigs:
+            if sigs[i] not in self.sigs:
                 sigs[i] = sigs[i] + "_NEG"
 
         if view == "cross_section":
@@ -571,7 +592,7 @@ class SignalReturnRelations:
             agg_sig=self.agg_sigs[0],
         )
         for i in range(len(sigs)):
-            if not sigs[i] in self.sigs:
+            if sigs[i] not in self.sigs:
                 sigs[i] = sigs[i] + "_NEG"
         if type == "cross_section":
             df_xs = self.__output_table__(cs_type="cids", ret=ret, sig=sigs[0])
@@ -783,7 +804,9 @@ class SignalReturnRelations:
             xcat_aggs=[agg_sig, "sum"],
         )
         self.df = df
-        self.cids = list(np.sort(self.df.index.get_level_values(0).unique()))
+        self.cids_used_in_last_calculation = list(
+            np.sort(self.df.index.get_level_values(0).unique())
+        )
 
     def __communal_sample__(self, df: pd.DataFrame, signal: str, ret: str):
         """
@@ -831,7 +854,7 @@ class SignalReturnRelations:
                 s_date = intersection_df.index[0]
                 e_date = intersection_df.index[-1]
 
-                final_df.loc[(cid_name, s_date):(cid_name, e_date), signal] = (
+                final_df.loc[(cid_name, s_date) : (cid_name, e_date), signal] = (
                     intersection_df.to_numpy()
                 )
                 storage.append(final_df)
@@ -930,7 +953,15 @@ class SignalReturnRelations:
 
     def map_pval(self, ret_vals, sig_vals) -> float:
         """
-        Calculates the p-value using statsmodels MixedLM.
+        Calculates the p-value of the Macrosynergy Panel (MAP) significance test for
+        the signal-return relationship.
+
+        The test fits a period random-effects panel model ``signal ~ 1 + return`` with
+        a fixed intercept and random effects grouped by ``real_date``, reusing the
+        package's Swamy-Arora feasible-GLS estimator
+        :class:`macrosynergy.learning.random_effects.RandomEffects`. The returned
+        statistic is the two-sided p-value of the fixed-effect slope on the return,
+        rounded to three decimal places.
 
         Parameters
         ----------
@@ -942,35 +973,59 @@ class SignalReturnRelations:
         Returns
         -------
         float
-            p-value of the MixedLM model.
+            p-value of the return slope in the MAP random-effects model, or ``np.nan``
+            if it could not be calculated.
         """
 
         if (
-            not "cid" in ret_vals.index.names
+            "cid" not in ret_vals.index.names
             or ret_vals.index.get_level_values("cid").nunique() <= 1
         ):
             warnings.warn(
                 "P-value could not be calculated, since there wasn't enough datapoints."
             )
             return np.nan
-        X = sm.add_constant(ret_vals)
-        y = sig_vals.copy()
-        groups = ret_vals.index.get_level_values("real_date")
-        mlm = sm.MixedLM(y, X, groups=groups)
+
+        # Degeneracy guard: a signal or return column with no genuine variation gives a
+        # rank-deficient design. RandomEffects does NOT raise on this -- an
+        # (near-)constant column drives the fitted slope and its standard error to
+        # machine epsilon, so re.pvals comes out spuriously finite (~0), i.e. a FALSE
+        # significant result. Reject up front on a relative-std test so both the
+        # exactly-constant and near-constant (constant + tiny noise) cases return nan.
+        # Threshold 1e-9 sits far below any legitimate panel's relative variation.
+        for _col in (ret_vals, sig_vals):
+            _v = np.asarray(_col, dtype=np.float64)
+            _std = np.nanstd(_v)
+            _scale = np.nanmean(np.abs(_v)) + 1.0
+            if not np.isfinite(_std) or _std <= 1e-9 * _scale:
+                warnings.warn(
+                    "Singular matrix encountered, so p-value could not be calculated."
+                )
+                return np.nan
+
         try:
-            re = mlm.fit(reml=False)
-        except np.linalg.LinAlgError:
+            # divide="raise"/invalid="raise" turns RandomEffects' internal
+            # divide-by-zero on a degenerate design (only a RuntimeWarning by default)
+            # into a FloatingPointError we can catch rather than returning a bogus 0.
+            with np.errstate(divide="raise", invalid="raise"):
+                re = RandomEffects(group_col="real_date", fit_intercept=True).fit(
+                    ret_vals, sig_vals
+                )
+                # Features are ['const', <return>]; the return slope is the last entry.
+                pval = float(re.pvals.iloc[-1])
+        except (KeyError, ValueError, FloatingPointError, np.linalg.LinAlgError):
+            # Degenerate/singular design (e.g. a constant/collinear column collapses the
+            # intercept, so the 'const' coefficient is absent) -> no slope p-value.
             warnings.warn(
                 "Singular matrix encountered, so p-value could not be calculated."
             )
             return np.nan
-        if re.summary().tables[1].iloc[1, 3] == "":
+        if np.isnan(pval):
             warnings.warn(
                 "P-value could not be calculated, since there wasn't enough datapoints."
             )
             return np.nan
-        pval_string = re.summary().tables[1].iloc[1, 3]
-        return float(pval_string)
+        return round(pval, 3)
 
     def __output_table__(
         self,
@@ -1322,11 +1377,11 @@ class SignalReturnRelations:
 
         self.manipulate_df(xcats=xcat, freq=freq, agg_sig=agg_sigs)
 
-        if not sig in self.sigs:
+        if sig not in self.sigs:
             sig = sig + "_NEG"
 
         if table_type is not None:
-            if not table_type in ["summary", "years", "cross_section"]:
+            if table_type not in ["summary", "years", "cross_section"]:
                 raise ValueError("Invalid table type")
 
         if table_type == "years":
@@ -1432,19 +1487,19 @@ class SignalReturnRelations:
             freqs = [freqs]
 
         for rets_elem in rets:
-            if not rets_elem in self.xcats:
+            if rets_elem not in self.xcats:
                 raise ValueError(f"{rets_elem} is not a valid return category")
 
         for xcats_elem in xcats:
-            if not xcats_elem in self.xcats:
+            if xcats_elem not in self.xcats:
                 raise ValueError(f"{xcats_elem} is not a valid signal category")
 
         for freqs_elem in freqs:
-            if not freqs_elem in self.freqs:
+            if freqs_elem not in self.freqs:
                 raise ValueError(f"{freqs_elem} is not a valid frequency")
 
         for agg_sigs_elem in agg_sigs:
-            if not agg_sigs_elem in self.agg_sigs:
+            if agg_sigs_elem not in self.agg_sigs:
                 raise ValueError(f"{agg_sigs_elem} is not a valid aggregation method")
 
         xcats = [x for x in xcats if x in self.sigs]
@@ -1508,6 +1563,8 @@ class SignalReturnRelations:
         xcat_labels: Optional[Dict[str, str]] = None,
         freq_labels: Optional[Dict[str, str]] = None,
         agg_sigs_labels: Optional[Dict[str, str]] = None,
+        emphasize_rows: Optional[Union[List[str], Dict[str, str]]] = None,
+        xcat_row_order: Optional[List[str]] = None,
         min_color: Optional[float] = None,
         max_color: Optional[float] = None,
         figsize: Tuple[float, float] = (14, 8),
@@ -1589,6 +1646,23 @@ class SignalReturnRelations:
             label produced by the constant-level collapse. Aggregations
             not listed in the dict are kept verbatim. Default is None
             (raw codes are shown).
+        emphasize_rows : dict or List[str], optional
+            Signal xcats (as passed to ``sigs``) whose rows are outlined
+            with a box in the heatmap, scorecard-style. Pass a mapping
+            ``{xcat: color}`` to set each box colour (any valid matplotlib
+            colour); a plain list is treated as ``{xcat: "black"}``.
+            Requires ``"xcat"`` in ``rows``; raises ``ValueError`` if set
+            without it, if a name is not among ``sigs``, or if a colour is
+            invalid. Boxing does not reorder the table — use
+            ``xcat_row_order`` for that. Default is None.
+        xcat_row_order : List[str], optional
+            Signal xcats (as passed to ``sigs``) giving the desired
+            top-to-bottom row order. Listed signals are placed in this
+            order; any signals not listed keep their original order above
+            them. Requires ``"xcat"`` in ``rows``; raises ``ValueError``
+            if set without it or if a name is not among ``sigs``. The
+            returned DataFrame reflects the new row order; the statistics
+            are unchanged. Default is None.
         min_color : float, optional
             minimum value of the color scale. Default is None, in which case the minimum
             value of the table is used.
@@ -1678,7 +1752,7 @@ class SignalReturnRelations:
 
         self.df = self.original_df.copy()
 
-        if not stat in self.metrics:
+        if stat not in self.metrics:
             raise ValueError(f"Stat must be one of {self.metrics}")
 
         if pval_stat is not None:
@@ -1698,7 +1772,7 @@ class SignalReturnRelations:
         type_values = ["panel", "mean_years", "mean_cids", "pr_years", "pr_cids"]
         rows_values = ["xcat", "ret", "freq", "agg_sigs"]
 
-        if not type in type_values:
+        if type not in type_values:
             raise ValueError(f"Type must be one of {type_values}")
 
         if not all([x in rows_values for x in rows]):
@@ -1713,9 +1787,7 @@ class SignalReturnRelations:
                     "axis_label_levels requires collapse_constant_levels=True."
                 )
             if not all(x in rows_values for x in axis_label_levels):
-                raise ValueError(
-                    f"axis_label_levels must only contain {rows_values}"
-                )
+                raise ValueError(f"axis_label_levels must only contain {rows_values}")
 
         if xcat_labels is not None:
             if signal_name_dict is not None or return_name_dict is not None:
@@ -1728,6 +1800,45 @@ class SignalReturnRelations:
             # downstream reorder.
             signal_name_dict = {s: xcat_labels.get(s, s) for s in self.sigs}
             return_name_dict = {r: xcat_labels.get(r, r) for r in self.rets}
+
+        def _resolve_sig(name: str, label: str) -> str:
+            # Resolve the sig_neg suffix the same way as elsewhere so the
+            # original xcat still matches self.sigs.
+            if name not in self.sigs and f"{name}_NEG" in self.sigs:
+                name = f"{name}_NEG"
+            if name not in self.sigs:
+                raise ValueError(
+                    f"{label} entries must be among sigs {self.sigs}; "
+                    f"got unknown {name!r}."
+                )
+            return name
+
+        if (emphasize_rows is not None or xcat_row_order is not None) and (
+            "xcat" not in rows
+        ):
+            raise ValueError("emphasize_rows / xcat_row_order require 'xcat' in rows.")
+
+        # Map matched signal -> box colour (list form defaults to black).
+        emphasize_colors: Dict[str, str] = {}
+        if emphasize_rows is not None:
+            items = (
+                emphasize_rows.items()
+                if isinstance(emphasize_rows, dict)
+                else [(e, "black") for e in emphasize_rows]
+            )
+            for e, color in items:
+                if not is_color_like(color):
+                    raise ValueError(
+                        f"emphasize_rows colour {color!r} for {e!r} is not a "
+                        "valid matplotlib colour."
+                    )
+                emphasize_colors[_resolve_sig(e, "emphasize_rows")] = color
+
+        row_order_sigs: List[str] = (
+            [_resolve_sig(x, "xcat_row_order") for x in xcat_row_order]
+            if xcat_row_order is not None
+            else []
+        )
 
         rows_dict = {
             "xcat": self.sigs,
@@ -1842,9 +1953,7 @@ class SignalReturnRelations:
                     df_pval.rename(columns=freq_labels_full, inplace=True)
 
         if agg_sigs_labels is not None:
-            agg_sigs_labels_full = {
-                a: agg_sigs_labels.get(a, a) for a in self.agg_sigs
-            }
+            agg_sigs_labels_full = {a: agg_sigs_labels.get(a, a) for a in self.agg_sigs}
             if "agg_sigs" in rows:
                 df_result.rename(index=agg_sigs_labels_full, inplace=True)
                 df_result = self.reindex_multindex_df(
@@ -1859,6 +1968,38 @@ class SignalReturnRelations:
                 df_result.rename(columns=agg_sigs_labels_full, inplace=True)
                 if df_pval is not None:
                     df_pval.rename(columns=agg_sigs_labels_full, inplace=True)
+
+        box_rows: Optional[Dict[int, str]] = None
+        if row_order_sigs or emphasize_colors:
+            # Translate resolved signals through the effective rename so they
+            # still match after signal_name_dict / xcat_labels renamed the index.
+            def _translate(name: str) -> str:
+                return signal_name_dict.get(name, name) if signal_name_dict else name
+
+            signal_level = (
+                df_result.index.get_level_values("Signal")
+                if isinstance(df_result.index, pd.MultiIndex)
+                else df_result.index
+            )
+
+            if row_order_sigs:
+                # Stable-sort listed signals to the given order; unlisted rank
+                # -1 and keep their original order above them.
+                rank_map = {_translate(s): i for i, s in enumerate(row_order_sigs)}
+                rank = [rank_map.get(s, -1) for s in signal_level]
+                order = np.argsort(rank, kind="stable")
+                df_result = df_result.iloc[order]
+                if df_pval is not None:
+                    df_pval = df_pval.iloc[order]
+                signal_level = signal_level[order]
+
+            if emphasize_colors:
+                color_map = {_translate(s): c for s, c in emphasize_colors.items()}
+                box_rows = {
+                    i: color_map[s]
+                    for i, s in enumerate(signal_level)
+                    if s in color_map
+                }
 
         if show_heatmap:
             if not title:
@@ -1945,6 +2086,7 @@ class SignalReturnRelations:
                 xticklabels=xticklabels_to_pass,
                 yticklabels=yticklabels_to_pass,
                 highlight_mask=highlight_mask,
+                box_rows=box_rows,
                 footnote=footnote,
                 footnote_fontsize=footnote_fontsize,
             )
@@ -2235,9 +2377,7 @@ class SignalReturnRelations:
             uniq = idx.get_level_values(level_no).unique()
             if len(uniq) == 1:
                 constant_level_nos.append(level_no)
-                constant_pairs.append(
-                    (str(idx.names[level_no]), str(uniq[0]))
-                )
+                constant_pairs.append((str(idx.names[level_no]), str(uniq[0])))
 
         if not constant_level_nos:
             return None, []
@@ -2494,7 +2634,16 @@ if __name__ == "__main__":
         ret="XRH", xcat="INFL_NEG", freq="Q", agg_sigs="last"
     )
     mrt = sr.multiple_relations_table()
-    sst = sr.single_statistic_table(stat="pearson", show_heatmap=True)
+    # xcat_row_order sets the top-to-bottom row order; emphasize_rows draws a
+    # coloured box around each named signal (grey for the second-last row,
+    # black for the last), scorecard-style.
+    sst = sr.single_statistic_table(
+        stat="pearson",
+        show_heatmap=True,
+        xcat_row_order=["CRY", "INFL", "GROWTH"],
+        emphasize_rows={"INFL": "red", "GROWTH": "black"},
+        title="Pearson (INFL boxed grey, GROWTH boxed black)",
+    )
 
     print(srt)
     print(mrt)
