@@ -126,18 +126,8 @@ class ModelAveragingRegressor(BaseEstimator, RegressorMixin):
             self.multi_output_ = False
             self.targets_ = None
 
-        # For now, return feature importances of the model with the highest weight, if available
-        # For comparability, get absolute value of the feature importances, and sum to one
-        best_model_name = max(self.weights_, key=self.weights_.get)
-        best_model = self.best_estimators_[best_model_name]
-        if hasattr(best_model, "feature_importances_"):
-            self.feature_importances_ = best_model.feature_importances_
-            self.feature_importances_ = np.abs(self.feature_importances_)/np.sum(np.abs(self.feature_importances_))
-        elif hasattr(best_model, "coef_"):
-            self.feature_importances_ = best_model.coef_
-            self.feature_importances_ = np.abs(self.feature_importances_)/np.sum(np.abs(self.feature_importances_))
-        else:
-            self.feature_importances_ = None
+        # TODO: feature importances should be the weighted average of the feature importances of each model, if available. 
+
         return self
     
     def predict(self, X):
@@ -150,12 +140,16 @@ class ModelAveragingRegressor(BaseEstimator, RegressorMixin):
             self.best_estimators_[name].predict(X)
             for name in self.model_names_
         ]
+        if isinstance(predictions[0], pd.DataFrame):
+            prediction_names = predictions[0].columns
+
         # Convert to numpy arrays 
         predictions = [
             pred if isinstance(pred, np.ndarray) else pred.values
             for pred in predictions
         ]
-        # Check if the model is single or multi-output
+
+        # Weighted average of predictions is the final prediction
         predictions = np.stack(predictions, axis=-1)
 
         weights = np.array([
@@ -169,7 +163,7 @@ class ModelAveragingRegressor(BaseEstimator, RegressorMixin):
             return pd.DataFrame(
                 data = adjusted_predictions,
                 index = X.index,
-                columns = self.targets_
+                columns = prediction_names
             )
         else:
             return adjusted_predictions
@@ -366,6 +360,25 @@ class ModelAveragingRegressor(BaseEstimator, RegressorMixin):
                     "X must have a pandas MultiIndex with (cid, date) as levels. "
                     "Got {} instead.".format(type(X.index))
                 )
+            
+        # Check each estimator if multi output, outs a dataframe
+        for name, estimator in self.best_estimators_.items():
+            if not hasattr(estimator, "predict"):
+                raise TypeError(
+                    "The estimator '{}' does not have a predict method.".format(name)
+                )
+            if self.multi_output_:
+                try:
+                    pred = estimator.predict(X)
+                    if not isinstance(pred, pd.DataFrame):
+                        raise TypeError(
+                            "The estimator '{}' must return a pandas DataFrame when predicting for multi-output. "
+                            "Got {} instead.".format(name, type(pred))
+                        )
+                except Exception as e:
+                    raise TypeError(
+                        "The estimator '{}' raised an error when predicting for multi-output: {}".format(name, e)
+                    )
         
 if __name__ == "__main__":
     import macrosynergy.management as msm
@@ -411,8 +424,8 @@ if __name__ == "__main__":
     ).dropna()
 
     # Dataset
-    X_train = train.iloc[:, :-2]
-    y_train = train.iloc[:,-2:]
+    X_train = train.iloc[:, :-1]
+    y_train = train.iloc[:, -1]
 
     model = ModelAveragingRegressor(
         estimators = [
@@ -433,8 +446,4 @@ if __name__ == "__main__":
 
     model.predict(X_train)
 
-    print(model.weights_)
-    print(model.feature_importances_)
-
-
-    
+    print(model.weights_)   
