@@ -379,7 +379,10 @@ class CategoryRelations(object):
         return df
 
     def corr_prob_calc(
-        self, df_probability: Union[pd.DataFrame, List[pd.DataFrame]], prob_est: str
+        self,
+        df_probability: Union[pd.DataFrame, List[pd.DataFrame]],
+        prob_est: str,
+        show_prob: bool = True,
     ):
         """
         Compute the correlation coefficient and probability statistics.
@@ -390,6 +393,9 @@ class CategoryRelations(object):
             pandas DataFrame containing the dependent and explanatory variables.
         prob_est : str
             type of estimator for probability of significant relation.
+        show_prob : bool
+            if True (default), calculate and return the probability of significance.
+            If False, only the correlation coefficient is returned.
 
         Returns
         -------
@@ -409,16 +415,18 @@ class CategoryRelations(object):
             feat = df_i[self.xcats[0]].to_numpy()
             targ = df_i[self.xcats[1]].to_numpy()
             coeff, pval = stats.pearsonr(feat, targ)
-            if prob_est == "kendall":
+            if show_prob and prob_est == "kendall":
                 _, pval = stats.kendalltau(feat, targ)
-            if prob_est == "map":
+            if show_prob and prob_est == "map":
                 X = df_i.loc[:, self.xcats[0]]
                 X = sm.add_constant(X)
                 y = df_i.loc[:, self.xcats[1]]
                 groups = df_i.reset_index().real_date
                 re = sm.MixedLM(y, X, groups).fit(reml=False)  # random effects est
                 pval = float(re.summary().tables[1].iloc[1, 3])
-            row = [np.round(coeff, 3), np.round(1 - pval, 3)]
+            row = [np.round(coeff, 3)]
+            if show_prob:
+                row.append(np.round(1 - pval, 3))
             cpl.append(row)
         return cpl
 
@@ -428,6 +436,7 @@ class CategoryRelations(object):
         prob_est: str,
         time_period: str = "",
         coef_box_loc: str = "upper left",
+        show_prob: bool = True,
         ax: plt.Axes = None,
     ):
         """
@@ -448,7 +457,7 @@ class CategoryRelations(object):
         coef_box_loc : str
             location on the graph of the aforementioned box. The default is in the upper
             left corner.
-        prob_bool : bool
+        show_prob : bool
             boolean parameter which determines whether the probability value is included
             in the table. The default is True.
         ax : plt.Axes
@@ -457,20 +466,20 @@ class CategoryRelations(object):
 
         time_period_error = f"<str> expected - received {type(time_period)}."
         assert isinstance(time_period, str), time_period_error
+        if not isinstance(show_prob, bool):
+            raise TypeError("show_prob must be a boolean.")
 
-        cpl = self.corr_prob_calc(df_probability=df_probability, prob_est=prob_est)
+        cpl = self.corr_prob_calc(
+            df_probability=df_probability, prob_est=prob_est, show_prob=show_prob
+        )
 
-        fields = [
-            f"Correlation\n coefficient {time_period}",
-            f"Probability\n of significance {time_period}",
-        ]
+        fields = [f"Correlation\n coefficient {time_period}"]
+        if show_prob:
+            fields.append(f"Probability\n of significance {time_period}")
 
         if isinstance(df_probability, list) and len(df_probability) == 2:
             row_headers = ["Before 2010", "After 2010"]
-            cellC = [
-                ["lightsteelblue", "lightsteelblue"],
-                ["lightsalmon", "lightsalmon"],
-            ]
+            cellC = [["lightsteelblue"] * len(fields), ["lightsalmon"] * len(fields)]
         else:
             row_headers = None
             cellC = None
@@ -507,6 +516,7 @@ class CategoryRelations(object):
         self,
         data,
         prob_est: str = "pool",
+        show_prob: bool = True,
         coef_box_size: Tuple[float] = (0.4, 2.5),
         coef_box_font_size: int = 12,
         set_font_size: bool = False,
@@ -515,11 +525,15 @@ class CategoryRelations(object):
     ):
         """Annotate each graph within the facet grid."""
 
+        if show_prob and prob_est == "map":
+            prob_est = "pool"
+
         ax = plt.gca()
         data_table = self.corr_probability(
             df_probability=data,
             coef_box_loc=loc,
             prob_est=prob_est,
+            show_prob=show_prob,
             ax=ax,
         )
         data_table.scale(coef_box_size[0], coef_box_size[1])
@@ -539,6 +553,7 @@ class CategoryRelations(object):
         coef_box: str = None,
         coef_box_size: Tuple[float] = (0.4, 2.5),
         coef_box_font_size: int = 0,
+        show_prob: bool = True,
         prob_est: str = "pool",
         fit_reg: bool = True,
         reg_ci: int = 95,
@@ -602,6 +617,9 @@ class CategoryRelations(object):
                 which calculates the Kendall rank correlation coefficient. It is
                 a non-parametric statistic used to measure the strength and direction of
                 association between two ranked variables.
+        show_prob : bool
+            if True (default), the probability of significance is included in the
+            coefficient box. If False, only the correlation coefficient is displayed.
         separator : Union[str, int]
             allows categorizing the scatter analysis by cross-section or integer. In the
             former case the argument is set to "cids" and in the latter case the argument is
@@ -632,6 +650,8 @@ class CategoryRelations(object):
         )
         if coef_box is not None:
             assert isinstance(coef_box, str), coef_box_loc_error
+        if not isinstance(show_prob, bool):
+            raise TypeError("show_prob must be a boolean.")
 
         assert prob_est in [
             "pool",
@@ -748,6 +768,7 @@ class CategoryRelations(object):
                     time_period="",
                     coef_box_loc=coef_box,
                     prob_est=prob_est,
+                    show_prob=show_prob,
                     ax=ax,
                 )
                 x_scale = coef_box_size[0]
@@ -801,6 +822,7 @@ class CategoryRelations(object):
                 col_wrap=ncol,
                 height=facet_height,
                 aspect=facet_aspect,
+                despine=False,
             )
             fg.set(facecolor="white")
             fg.map(
@@ -817,7 +839,7 @@ class CategoryRelations(object):
 
             if coef_box is not None:
                 facet_prob_est = prob_est
-                if prob_est == "map":
+                if show_prob and prob_est == "map":
                     warnings.warn(
                         "The 'map' estimator is not applicable to individual "
                         "cross-section facets. Using 'pool' instead.",
@@ -826,12 +848,17 @@ class CategoryRelations(object):
                     facet_prob_est = "pool"
 
                 facet_font_size = 10 if set_font_size else coef_box_font_size
+                facet_set_font_size = False if set_font_size else set_font_size
+                facet_coef_box_size = coef_box_size
+                if set_font_size and show_prob and coef_box_size == (0.4, 2.5):
+                    facet_coef_box_size = (0.8, 1.7)
                 fg.map_dataframe(
                     self.annotate_facet,
                     prob_est=facet_prob_est,
-                    coef_box_size=coef_box_size,
+                    show_prob=show_prob,
+                    coef_box_size=facet_coef_box_size,
                     coef_box_font_size=facet_font_size,
-                    set_font_size=set_font_size,
+                    set_font_size=facet_set_font_size,
                     loc=coef_box,
                 )
 
@@ -850,6 +877,9 @@ class CategoryRelations(object):
                 assert ylab is not None, error
 
             for facet_ax in fg.axes.flat:
+                facet_ax.set_frame_on(True)
+                for spine in facet_ax.spines.values():
+                    spine.set_visible(True)
                 facet_ax.tick_params(axis="both", labelsize=tick_fontsize)
 
         elif separator == "cids" and single_scatter:
@@ -904,6 +934,7 @@ class CategoryRelations(object):
                     time_period="",
                     coef_box_loc=coef_box,
                     prob_est=prob_est,
+                    show_prob=show_prob,
                     ax=ax,
                 )
                 x_scale = coef_box_size[0]
@@ -946,6 +977,7 @@ class CategoryRelations(object):
                     df_probability=dfx,
                     prob_est=prob_est,
                     coef_box_loc=coef_box,
+                    show_prob=show_prob,
                     ax=ax,
                 )
                 x_scale = coef_box_size[0]
