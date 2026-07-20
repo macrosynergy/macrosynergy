@@ -28,30 +28,52 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         If an integer is provided, the MLP will have a single hidden layer with n_latent
         units. If a list of integers is provided, the MLP will have multiple hidden layers
         with the number of units in each layer specified by the corresponding element in
-        the list. If provided, all (n_latent, fit_encoder_intercept, fit_head_intercept, encoder_activation, head_activation)
+        the list. If provided, all (n_latent, fit_encoder_intercept, fit_head_intercept, encoder_activation, head_activation, dropout_p, dollar_neutral, normalization)
         must be specified and torch_model must be None. Default is 32.
     fit_encoder_intercept : bool, optional
         Whether to include an intercept (bias term) in the encoder layers of the MLP.
-        If provided, all (n_latent, fit_encoder_intercept, fit_head_intercept, encoder_activation, head_activation)
+        If provided, all (n_latent, fit_encoder_intercept, fit_head_intercept, encoder_activation, head_activation, dropout_p, dollar_neutral, normalization)
         must be specified and torch_model must be None. Default is True.
     fit_head_intercept : bool, optional
         Whether to include an intercept (bias term) in the output layer of the MLP.
-        If provided, all (n_latent, fit_encoder_intercept, fit_head_intercept, encoder_activation, head_activation)
+        If provided, all (n_latent, fit_encoder_intercept, fit_head_intercept, encoder_activation, head_activation, dropout_p, dollar_neutral, normalization)
         must be specified and torch_model must be None.Default is True.
     encoder_activation : str, optional
         Activation function for the encoder (hidden) component of the network.
-        If provided, all (n_latent, fit_encoder_intercept, fit_head_intercept, encoder_activation, head_activation)
+        If provided, all (n_latent, fit_encoder_intercept, fit_head_intercept, encoder_activation, head_activation, dropout_p, dollar_neutral, normalization)
         must be specified and torch_model must be None. Default is "relu".
         Must be one of "tanh", "relu", or "sigmoid".
     head_activation : str, optional
         Activation function for the head (output) component of the network.
-        If provided, all (n_latent, fit_encoder_intercept, fit_head_intercept, encoder_activation, head_activation)
+        If provided, all (n_latent, fit_encoder_intercept, fit_head_intercept, encoder_activation, head_activation, dropout_p, dollar_neutral, normalization)
         must be specified and torch_model must be None. Default is "identity". Must be one
         of "tanh", "relu", "sigmoid", or "identity".
+    dropout_p : float, optional
+        Dropout probability for the encoder (hidden) component of the network.
+        If provided, all (n_latent, fit_encoder_intercept, fit_head_intercept, encoder_activation, head_activation, dropout_p, dollar_neutral, normalization)
+        must be specified and torch_model must be None. Default is 0.
+    long_only : bool, optional
+        Whether to constrain the model outputs to sum to 1 or for the absolute values
+        to sum to 1. If None, the model outputs are unconstrained. If True, the output 
+        from the `head_activation` layer is passed through a softmax function. If False,
+        the output from the `head_activation` layer is passed through a softmax function
+        with the denominator accepting the absolute values of the outputs. If provided,
+        all (n_latent, fit_encoder_intercept, fit_head_intercept, encoder_activation, head_activation, dropout_p, dollar_neutral, normalization)
+        must be specified and torch_model must be None. Default is None.
+    dollar_neutral : bool, optional
+        Whether to constrain the model outputs to sum to 0. This is only relevant when `long_only` is False.
+        When True and `long_only` is False, the output from the `head_activation` layer is
+        demeaned to sum to 0, before being passed through the adjusted softmax. 
+        If provided, all (n_latent, fit_encoder_intercept, fit_head_intercept, encoder_activation, head_activation, dropout_p, dollar_neutral, normalization)
+        must be specified, `long_only` should be False and torch_model must be None. Default is False.
+    normalization: bool, optional
+        Whether to apply LayerNorm normalization following each linear layer in the encoder (hidden) component of the network.
+        If provided, all (n_latent, fit_encoder_intercept, fit_head_intercept, encoder_activation, head_activation, dropout_p, dollar_neutral, normalization)
+        must be specified and torch_model must be None. Default is False.
     torch_model : Intersection[torch.nn.Module, BaseEstimator], optional
         Custom PyTorch model to use instead of the default MLP. Must be a subclass of both
         torch.nn.Module and sklearn.base.BaseEstimator. If torch_model is provided, all 
-        parameters (n_latent, fit_encoder_intercept, fit_head_intercept, encoder_activation, head_activation)
+        parameters (n_latent, fit_encoder_intercept, fit_head_intercept, encoder_activation, head_activation, dropout_p, long_only, dollar_neutral, normalization)
         must be None. Default is None.
     loss_func : torch.nn.Module, optional
         Loss function used during training. Must be a subclass of torch.nn.Module.
@@ -60,7 +82,7 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         Optimizer(s) used during training. If a single string is provided, it specifies the
         optimizer used in backpropagation. If a list of strings is provided, each string
         specifies an optimizer to be used in separate training runs, forming an neural
-        network ensemble. Currently supported optimizers are "AdamW", "SGD", and "SGD+mom".
+        network ensemble. Currently supported optimizers are "AdamW", "Adam", "SGD", and "SGD+mom".
         Default is "AdamW".
     scheduler : Optional[str], optional
         Learning rate scheduler used during training. Currently supported schedulers are
@@ -99,6 +121,8 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         Scaler for the target values. Must be a subclass of sklearn's TransformerMixin.
         This can also be set to None.
         Default is StandardScaler(with_mean=False).
+    refit : bool, optional
+        Whether to refit the model on the entire dataset after early stopping. Default is False.
     verbose : bool, optional
         Whether to print training diagnostics during training. Default is False.
     random_state : Union[int, List[int]], optional
@@ -233,6 +257,9 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         encoder_activation = "relu",
         head_activation = "identity",
         dropout_p = 0,
+        long_only = None,
+        dollar_neutral = False,
+        normalization = False,
         torch_model = None,
         # Neural network training dynamics
         loss_func = torch.nn.MSELoss(),
@@ -250,6 +277,7 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         train_pct = 0.7,
         x_scaler = StandardScaler(with_mean=False),
         y_scaler = StandardScaler(with_mean=False), 
+        refit = False,
         # Other stuff 
         verbose = False,
         random_state = 42,
@@ -264,6 +292,9 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
             encoder_activation,
             head_activation,
             dropout_p,
+            long_only,
+            dollar_neutral,
+            normalization,
             torch_model,
             loss_func,
             optimizer,
@@ -280,6 +311,7 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
             train_pct,
             x_scaler,
             y_scaler,
+            refit,
             verbose,
             random_state,
             inverse_transform_preds,
@@ -293,6 +325,9 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         self.encoder_activation = encoder_activation
         self.head_activation = head_activation
         self.dropout_p = dropout_p
+        self.long_only = long_only
+        self.dollar_neutral = dollar_neutral
+        self.normalization = normalization
         self.torch_model = torch_model
         self.loss_func = loss_func
         self.optimizer = optimizer
@@ -310,6 +345,7 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         self.train_pct = train_pct
         self.x_scaler = x_scaler
         self.y_scaler = y_scaler
+        self.refit = refit
         self.verbose = verbose
         self.random_state = random_state
         self.inverse_transform_preds = inverse_transform_preds
@@ -343,10 +379,10 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         X_train, X_valid, y_train, y_valid = self.create_train_valid_splits(X, y, self.train_pct)
 
         # Scale training and validation splits
-        X_train_s, X_valid_s, y_train_s, y_valid_s = self.scale_data(X_train, X_valid, y_train, y_valid, self.x_scaler, self.y_scaler)
+        X_train_s, y_train_s, X_valid_s, y_valid_s = self.scale_data(X_train, y_train, self.x_scaler, self.y_scaler, X_valid, y_valid)
 
         # Make tensor datasets
-        train_dataset, valid_dataset = self.make_tensor_datasets(X_train_s, X_valid_s, y_train_s, y_valid_s, sample_weight)
+        train_dataset, valid_dataset = self.make_tensor_datasets(X_train_s, y_train_s, X_valid_s, y_valid_s, sample_weight)
 
         # Iterate through random states
         for optimizer in self.optimizers:
@@ -355,26 +391,23 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
                 torch.manual_seed(random_state)
 
                 # Make torch dataloaders
-                train_loader, train_loader_eval, valid_loader = self.make_dataloaders(train_dataset, valid_dataset, self.batch_size, self.use_ts_sampler, self.aggregate_last, self.drop_last)
+                train_loader, train_loader_eval, valid_loader = self.make_dataloaders(train_dataset, self.batch_size, self.use_ts_sampler, self.aggregate_last, self.drop_last, valid_dataset)
 
                 # Initialize model
-                if self.torch_model is not None:
-                    # Reinitialise torch_model under the random seed 
-                    # TODO: check this will work upfront
-                    params = self.torch_model.get_params(deep=False)
-                    model = type(self.torch_model)(**params)
-
-                else:
-                    model = self.initialize_model(
-                        n_inputs = X.shape[1],
-                        n_latent = self.n_latent,
-                        n_outputs = y.shape[1],
-                        encoder_activation = self.encoder_activation,
-                        head_activation = self.head_activation,
-                        fit_encoder_intercept = self.fit_encoder_intercept,
-                        fit_head_intercept = self.fit_head_intercept,
-                        dropout_p = self.dropout_p
-                    )
+                model = self.initialize_model(
+                    torch_model = self.torch_model,
+                    n_inputs = X.shape[1],
+                    n_latent = self.n_latent,
+                    n_outputs = y.shape[1],
+                    encoder_activation = self.encoder_activation,
+                    head_activation = self.head_activation,
+                    fit_encoder_intercept = self.fit_encoder_intercept,
+                    fit_head_intercept = self.fit_head_intercept,
+                    dropout_p = self.dropout_p,
+                    long_only = self.long_only,
+                    dollar_neutral = self.dollar_neutral,
+                    normalization = self.normalization, 
+                )            
 
                 # Set up optimizer 
                 optim = self.make_optimizer(model, optimizer, self.learning_rate, self.weight_decay)
@@ -386,8 +419,9 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
                     scheduler = None
         
                 # Train model
-                trained_model = self.train_model(
-                    model = model, 
+                model_es, epochs_es = self.train_model(
+                    model = model,
+                    epochs = self.epochs,
                     train_loader = train_loader,
                     train_loader_eval = train_loader_eval,
                     valid_loader = valid_loader, 
@@ -396,11 +430,60 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
                     loss_func = self.loss_func,
                     sample_weight = sample_weight,
                     sample_weight_strategy = sample_weight_strategy,
-                    #reg_turnover = self.reg_turnover, 
+                    reg_turnover = self.reg_turnover, 
                     patience = self.patience, 
                     verbose = self.verbose
                 )
-                self.models.append(trained_model)
+                if self.refit:
+                    # Create training set dataloader over the full dataset
+                    X_s, y_s, _, _ = self.scale_data(X_train, y_train, self.x_scaler, self.y_scaler)
+                    full_train_dataset, _ = self.make_tensor_datasets(X_train_s = X_s, y_train_s = y_s, sample_weight = sample_weight)
+                    full_train_loader, _, _ = self.make_dataloaders(full_train_dataset, self.batch_size, self.use_ts_sampler, self.aggregate_last, self.drop_last)
+
+                    # Reset seed
+                    torch.manual_seed(random_state)
+
+                    # Reinitialize model
+                    final_model = self.initialize_model(
+                        torch_model = self.torch_model,
+                        n_inputs = X.shape[1],
+                        n_latent = self.n_latent,
+                        n_outputs = y.shape[1],
+                        encoder_activation = self.encoder_activation,
+                        head_activation = self.head_activation,
+                        fit_encoder_intercept = self.fit_encoder_intercept,
+                        fit_head_intercept = self.fit_head_intercept,
+                        dropout_p = self.dropout_p,
+                        long_only = self.long_only,
+                        dollar_neutral = self.dollar_neutral,
+                        normalization = self.normalization, 
+                    )
+                    optim = self.make_optimizer(final_model, optimizer, self.learning_rate, self.weight_decay)
+                    if self.scheduler is not None:
+                        scheduler = self.make_scheduler(optim, self.scheduler, self.epochs, len(full_train_loader))
+                    else:
+                        scheduler = None
+                        
+                    # Train model
+                    model_full, _ = self.train_model(
+                        model = final_model,
+                        epochs = epochs_es,
+                        train_loader = full_train_loader,
+                        train_loader_eval = None,
+                        valid_loader = None, 
+                        optimizer = optim, 
+                        scheduler = scheduler,
+                        loss_func = self.loss_func,
+                        sample_weight = sample_weight,
+                        sample_weight_strategy = sample_weight_strategy,
+                        reg_turnover = self.reg_turnover, 
+                        patience = None, 
+                        verbose = self.verbose
+                    )
+                    self.models.append(model_full)
+
+                else:
+                    self.models.append(model_es)
 
         return self
     
@@ -431,6 +514,7 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
 
     def initialize_model(
         self,
+        torch_model,
         n_inputs,
         n_latent,
         n_outputs,
@@ -438,18 +522,29 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         head_activation,
         fit_encoder_intercept,
         fit_head_intercept,
-        dropout_p
-    ):
-        model = MultiLayerPerceptron(
-            n_inputs=n_inputs,
-            n_latent=n_latent,
-            n_outputs=n_outputs,
-            encoder_activation=encoder_activation,
-            head_activation=head_activation,
-            fit_encoder_intercept=fit_encoder_intercept,
-            fit_head_intercept=fit_head_intercept,
-            dropout_p=dropout_p
-        )
+        dropout_p,
+        long_only,
+        dollar_neutral,
+        normalization,
+    ):            
+        if torch_model is not None:
+            # TODO: check this will work upfront
+            params = torch_model.get_params(deep=False)
+            model = type(torch_model)(**params)
+        else:
+            model = MultiLayerPerceptron(
+                n_inputs=n_inputs,
+                n_latent=n_latent,
+                n_outputs=n_outputs,
+                encoder_activation=encoder_activation,
+                head_activation=head_activation,
+                fit_encoder_intercept=fit_encoder_intercept,
+                fit_head_intercept=fit_head_intercept,
+                dropout_p=dropout_p,
+                long_only=long_only,
+                dollar_neutral=dollar_neutral,
+                normalization=normalization,
+            )
 
         return model
     
@@ -468,59 +563,69 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
     def scale_data(
         self,
         X_train,
-        X_valid, 
         y_train,
-        y_valid,
         x_scaler,
         y_scaler,
+        X_valid = None,
+        y_valid = None,
     ):
+        X_valid_s = None
+        y_valid_s = None
         # Scale independent variables
         if x_scaler:
             x_scaler.fit(X_train)
             X_train_s = x_scaler.transform(X_train)
-            X_valid_s = x_scaler.transform(X_valid)
+            if X_valid is not None:
+                X_valid_s = x_scaler.transform(X_valid)
         else:
             X_train_s = X_train.values
-            X_valid_s = X_valid.values
+            if X_valid is not None:
+                X_valid_s = X_valid.values
 
 
         # Scale dependent variables
         # TODO: ensure ys are 2d for this to work
         if y_scaler:
             y_scaler.fit(y_train)
-            y_train_s = y_scaler.transform(y_train) 
-            y_valid_s = y_scaler.transform(y_valid)
+            y_train_s = y_scaler.transform(y_train)
+            if y_valid is not None:
+                y_valid_s = y_scaler.transform(y_valid)
         else:
             y_train_s = y_train.values
-            y_valid_s = y_valid.values
+            if y_valid is not None:
+                y_valid_s = y_valid.values
 
-        return X_train_s, X_valid_s, y_train_s, y_valid_s
+        return X_train_s, y_train_s, X_valid_s, y_valid_s
     
     def make_tensor_datasets(
         self,
         X_train_s,
-        X_valid_s,
         y_train_s,
-        y_valid_s,
-        sample_weight,
+        X_valid_s = None,
+        y_valid_s = None,
+        sample_weight = None,
     ):
+        # TODO: check that both X_valid_s and y_valid_s have to be None
         if sample_weight is not None: 
             train_dataset = torch.utils.data.TensorDataset(torch.Tensor(X_train_s), torch.Tensor(y_train_s), torch.Tensor(sample_weight))
         else:
             train_dataset = torch.utils.data.TensorDataset(torch.Tensor(X_train_s), torch.Tensor(y_train_s))
 
-        valid_dataset = torch.utils.data.TensorDataset(torch.Tensor(X_valid_s), torch.Tensor(y_valid_s))
+        if X_valid_s is not None:
+            valid_dataset = torch.utils.data.TensorDataset(torch.Tensor(X_valid_s), torch.Tensor(y_valid_s))
+        else:
+            valid_dataset = None
 
         return train_dataset, valid_dataset
 
     def make_dataloaders(
         self,
         train_dataset,
-        valid_dataset,
         batch_size,
         use_ts_sampler,
         aggregate_last,
         drop_last,
+        valid_dataset = None
     ):
         """
         TODO: run through aggregate last and drop last logic 
@@ -560,16 +665,19 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
                 )
             )
 
-        valid_loader = torch.utils.data.DataLoader(
-            dataset = valid_dataset,
-            batch_sampler=TimeSeriesSampler(
-                dataset=valid_dataset,
-                batch_size=self.batch_size,
-                shuffle=False,
-                aggregate_last = aggregate_last,
-                drop_last = False
-            ),
-        )
+        if valid_dataset is not None:
+            valid_loader = torch.utils.data.DataLoader(
+                dataset = valid_dataset,
+                batch_sampler=TimeSeriesSampler(
+                    dataset=valid_dataset,
+                    batch_size=self.batch_size,
+                    shuffle=False,
+                    aggregate_last = aggregate_last,
+                    drop_last = False
+                ),
+            )
+        else:
+            valid_loader = None
 
         return train_loader, train_loader_eval, valid_loader
     
@@ -580,6 +688,8 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
             optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
         elif optimizer_name == "SGD+mom":
             optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate, weight_decay=weight_decay, momentum = 0.9)
+        elif optimizer_name == "Adam":
+            optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
         else:
             # TODO: add LARS for large batch SGD training
             # TODO: add ability to pass in an optimizer class inheriting from torch.optim.Optimizer
@@ -614,6 +724,7 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
     def train_model(
         self,
         model,
+        epochs,
         train_loader,
         train_loader_eval,
         valid_loader,
@@ -622,15 +733,16 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         loss_func,
         sample_weight,
         sample_weight_strategy,
-        #reg_turnover,
+        reg_turnover,
         patience,
         verbose,
     ):
+        best_state = None
         best_score = np.inf
-        best_state = None 
         counter = 0
-
-        for epoch in range(self.epochs):
+        best_epoch = 0
+        
+        for epoch in range(epochs):
             model.train()
             if sample_weight:
                 for X_i, y_i, sw_i in train_loader:
@@ -643,7 +755,7 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
                         loss_func = loss_func,
                         sample_weight = sw_i,
                         sample_weight_strategy = sample_weight_strategy,
-                        #reg_turnover = reg_turnover
+                        reg_turnover = reg_turnover
                     )
             else:
                 for X_i, y_i in train_loader:
@@ -656,21 +768,25 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
                         loss_func = loss_func,
                         sample_weight = None,
                         sample_weight_strategy = sample_weight_strategy,
-                        #reg_turnover = reg_turnover
+                        reg_turnover = reg_turnover
                     )
             
-            train_loss = self._eval_loss(model, train_loader_eval, loss_func)
-            valid_loss = self._eval_loss(model, valid_loader, loss_func)
+            if patience is not None:
+                train_loss = self._eval_loss(model, train_loader_eval, loss_func)
+                valid_loss = self._eval_loss(model, valid_loader, loss_func)
 
-            best_score, best_state, counter = self.update_es_stats(
-                model, train_loss, valid_loss, best_score, best_state, counter, patience
-            )
+                best_score_new, best_state, counter = self.update_es_stats(
+                    model, train_loss, valid_loss, best_score, best_state, counter, patience
+                )
+                if best_score_new < best_score:
+                    best_score = best_score_new
+                    best_epoch  = epoch + 1
+                
+                if verbose and (epoch % 5 == 0 or epoch == epochs - 1):
+                    print(f"Epoch {epoch + 1}: Train Loss = {train_loss:.4f}, Valid Loss = {valid_loss:.4f}, Best Valid Loss = {best_score:.4f}")
 
-            if counter >= patience:
-                break
-
-            if verbose and (epoch % 5 == 0 or epoch == self.epochs - 1):
-                print(f"Epoch {epoch + 1}: Train Loss = {train_loss:.4f}, Valid Loss = {valid_loss:.4f}, Best Valid Loss = {best_score:.4f}")
+                if counter >= patience:
+                    break
 
         if best_state is not None:
             model.load_state_dict(best_state)
@@ -678,7 +794,7 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
             # TODO: handle this case later
             pass
 
-        return model
+        return model, best_epoch
 
     def _fit_one_batch(
         self,
@@ -690,7 +806,7 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         loss_func,
         sample_weight,
         sample_weight_strategy,
-        # reg_turnover
+        reg_turnover
     ):
         optimizer.zero_grad()
         preds = model(X_i)
@@ -702,10 +818,10 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
             loss = loss_func(preds, y_i) * sample_weight
             loss = loss.mean()
 
-        # if reg_turnover > 0:
-        #     pweight_levels = preds[1:] - preds[:-1]
-        #     pweight_l1 = torch.mean(torch.abs(pweight_levels))
-        #     loss = loss + reg_turnover * pweight_l1
+        if reg_turnover > 0:
+            pweight_changes = preds[1:] - preds[:-1]
+            pweight_l2 = torch.mean(torch.sum(pweight_changes ** 2, dim=1))
+            loss = loss + reg_turnover * pweight_l2
 
         loss.backward()
         optimizer.step()
@@ -762,6 +878,9 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         encoder_activation,
         head_activation,
         dropout_p,
+        long_only,
+        dollar_neutral,
+        normalization,
         torch_model,
         loss_func,
         optimizer,
@@ -778,6 +897,7 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         train_pct,
         x_scaler,
         y_scaler,
+        refit,
         verbose,
         random_state,
         inverse_transform_preds,
@@ -785,14 +905,14 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
     ):
         # First check either torch_model is set or (n_latent, fit_encoder_intercept, fit_head_intercept, encoder_activation, head_activation) are set.
         if torch_model is None:
-            if n_latent is None or fit_encoder_intercept is None or fit_head_intercept is None or encoder_activation is None or head_activation is None or dropout_p is None:
+            if n_latent is None or fit_encoder_intercept is None or fit_head_intercept is None or encoder_activation is None or head_activation is None or dropout_p is None or dollar_neutral is None or normalization is None:
                 raise ValueError(
-                    "When torch_model is not provided, (n_latent, fit_encoder_intercept, fit_head_intercept, encoder_activation, head_activation, dropout_p) must all be specified."
+                    "When torch_model is not provided, (n_latent, fit_encoder_intercept, fit_head_intercept, encoder_activation, head_activation, dropout_p, dollar_neutral, normalization) must all be specified."
                 )
         else:
-            if n_latent is not None or fit_encoder_intercept is not None or fit_head_intercept is not None or encoder_activation is not None or head_activation is not None or dropout_p is not None:
+            if n_latent is not None or fit_encoder_intercept is not None or fit_head_intercept is not None or encoder_activation is not None or head_activation is not None or dropout_p is not None or long_only is not None or dollar_neutral is not None or normalization is not None:
                 raise ValueError(
-                    "When torch_model is provided, (n_latent, fit_encoder_intercept, fit_head_intercept, encoder_activation, head_activation, dropout_p) should be set to None."
+                    "When torch_model is provided, (n_latent, fit_encoder_intercept, fit_head_intercept, encoder_activation, head_activation, dropout_p, long_only, dollar_neutral, normalization) should be set to None."
                 )
             
         if torch_model is None:
@@ -839,7 +959,22 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
                 raise TypeError("dropout_p must be a real number.")
             if not (0 <= dropout_p < 0.5):
                 raise ValueError("dropout_p must be between 0 and 0.5.")
-        
+            
+            # long_only
+            if long_only is not None:
+                if not isinstance(long_only, bool):
+                    raise TypeError("long_only must be a boolean or None.")
+                
+            # dollar_neutral
+            if not isinstance(dollar_neutral, bool):
+                raise TypeError("dollar_neutral must be a boolean.")
+            if dollar_neutral:
+                if long_only is None or long_only:
+                    raise ValueError("dollar_neutral can only be True if long_only is False.")
+            # normalization
+            if not isinstance(normalization, bool):
+                raise TypeError("normalization must be a boolean.")
+    
         # torch_model
         if torch_model is not None:
             if not isinstance(torch_model, nn.Module):
@@ -871,11 +1006,11 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
                     raise ValueError("When optimizer is a list, it must contain more than one element.")
                 if not all(isinstance(x, str) for x in optimizer):
                     raise TypeError("When optimizer is a list, all elements must be strings.")
-                if not all(x in {"AdamW", "SGD", "SGD+mom"} for x in optimizer):
-                    raise ValueError("When optimizer is a list, all elements must be one of 'AdamW', 'SGD', or 'SGD+mom'.")
+                if not all(x in {"AdamW", "SGD", "SGD+mom", "Adam"} for x in optimizer):
+                    raise ValueError("When optimizer is a list, all elements must be one of 'AdamW', 'SGD', 'Adam', or 'SGD+mom'.")
         else:
-            if optimizer not in {"AdamW", "SGD", "SGD+mom"}:
-                raise ValueError("optimizer must be one of 'AdamW', 'SGD', or 'SGD+mom'.")
+            if optimizer not in {"AdamW", "SGD", "SGD+mom", "Adam"}:
+                raise ValueError("optimizer must be one of 'AdamW', 'SGD', 'Adam', or 'SGD+mom'.")
         
         # scheduler
         if scheduler is not None:
@@ -949,6 +1084,10 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         if y_scaler is not None:
             if not isinstance(y_scaler, StandardScaler):
                 raise TypeError("y_scaler must be an instance of StandardScaler or None.")
+            
+        # refit 
+        if not isinstance(refit, bool):
+            raise TypeError("refit must be a boolean.")
 
         # verbose
         if not isinstance(verbose, bool):
@@ -1095,23 +1234,23 @@ if __name__ == "__main__":
     X = so.X.copy(deep=True)
     y = so.y.copy(deep=True)
 
-    class BasicMLP(nn.Module, BaseEstimator):
-        def __init__(self, n_inputs, n_latent, n_outputs, dropout=0.1):
-            super().__init__()
-            self.n_inputs = n_inputs
-            self.n_latent = n_latent
-            self.n_outputs = n_outputs
-            self.dropout = dropout
+    # class BasicMLP(nn.Module, BaseEstimator):
+    #     def __init__(self, n_inputs, n_latent, n_outputs, dropout=0.1):
+    #         super().__init__()
+    #         self.n_inputs = n_inputs
+    #         self.n_latent = n_latent
+    #         self.n_outputs = n_outputs
+    #         self.dropout = dropout
 
-            self.encoder = nn.Linear(n_inputs, n_latent)
-            self.dropout_layer = nn.Dropout(dropout)
-            self.head = nn.Linear(n_latent, n_outputs)
+    #         self.encoder = nn.Linear(n_inputs, n_latent)
+    #         self.dropout_layer = nn.Dropout(dropout)
+    #         self.head = nn.Linear(n_latent, n_outputs)
 
-        def forward(self, x):
-            z = torch.tanh(self.encoder(x))
-            z = self.dropout_layer(z)
-            out = self.head(z)
-            return out
+    #     def forward(self, x):
+    #         z = torch.tanh(self.encoder(x))
+    #         z = self.dropout_layer(z)
+    #         out = self.head(z)
+    #         return out
 
     mlp = MLPRegressor(
         n_latent = 2, 
@@ -1120,6 +1259,9 @@ if __name__ == "__main__":
         encoder_activation = "tanh",
         head_activation="identity",
         dropout_p = 0.1,
+        long_only = True,
+        dollar_neutral = False,
+        normalization = False,
         #torch_model = BasicMLP(n_inputs=X.shape[1], n_latent=16, n_outputs=y.shape[1]),
         loss_func=torch.nn.MSELoss(),
         optimizer = ["AdamW","SGD+mom"],
@@ -1133,6 +1275,7 @@ if __name__ == "__main__":
         drop_last=False,
         epochs = 10000,
         patience = 10, 
+        refit=True,
         train_pct = 0.7,
         x_scaler = StandardScaler(with_mean=False),
         y_scaler = StandardScaler(with_mean=False),
@@ -1141,6 +1284,7 @@ if __name__ == "__main__":
         inverse_transform_preds = True,
         min_samples = 36,
     )#.fit(X,y)
+    #print(mlp.predict(X))
 
     so.calculate_predictions(
         name = "MLP",
