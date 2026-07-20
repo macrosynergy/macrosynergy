@@ -182,7 +182,7 @@ class ModelAveragingRegressor(BaseEstimator, RegressorMixin):
             spread = float(temperature)
 
         scaled_scores = all_scores / spread # TODO: deal with zero later
-        scaled_scores = scaled_scores - np.max(scaled_scores)
+        scaled_scores = scaled_scores - np.max(scaled_scores) # exp could blowup so subtracting the max is computationally easier first + doesn't change the relative sizes of the scaled scores
         weights = np.exp(scaled_scores)
         weights = weights / weights.sum()
 
@@ -205,7 +205,10 @@ class ModelAveragingRegressor(BaseEstimator, RegressorMixin):
             if adjusted_weights.sum() == 0:
                 adjusted_weights = weights
             else:
+                # TODO: should this be optional? 
                 adjusted_weights = adjusted_weights / adjusted_weights.sum()
+        else:
+            adjusted_weights = weights
 
         return dict(zip(self.model_names_, adjusted_weights))
     
