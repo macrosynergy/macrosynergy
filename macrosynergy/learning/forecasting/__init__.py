@@ -45,6 +45,10 @@ def __getattr__(name):
         "TimeSeriesSampler",
         "MultiOutputSharpe",
         "MultiOutputMCR",
+        "PortfolioVariance",
+        "NegMeanVarianceUtility",
+        "NegMeanPortfolioReturn",
+        "NegSharpeRatio",
         "LongShortModule",
     }
     _nn_names = {
