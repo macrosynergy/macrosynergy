@@ -1110,65 +1110,65 @@ if __name__ == "__main__":
         years=None,
     )
 
-    # cr.reg_scatter(
-    #     labels=False,
-    #     separator=None,
-    #     title="Carry and Return",
-    #     xlab="Carry",
-    #     ylab="Return",
-    #     coef_box="lower left",
-    #     prob_est="map",
-    #     remove_zero_predictor=True,
-    #     title_fontsize=14,
-    # )
+    cr.reg_scatter(
+        labels=False,
+        separator=None,
+        title="Carry and Return",
+        xlab="Carry",
+        ylab="Return",
+        coef_box="lower left",
+        prob_est="map",
+        remove_zero_predictor=True,
+        title_fontsize=14,
+    )
 
-    # # years parameter
+    # years parameter
 
-    # cr = CategoryRelations(
-    #     dfdx,
-    #     xcats=["CRY", "XR"],
-    #     freq="M",
-    #     years=5,
-    #     lag=0,
-    #     cids=cidx,
-    #     xcat_aggs=["mean", "sum"],
-    #     start="2001-01-01",
-    #     blacklist=black,
-    # )
+    cr = CategoryRelations(
+        dfdx,
+        xcats=["CRY", "XR"],
+        freq="M",
+        years=5,
+        lag=0,
+        cids=cidx,
+        xcat_aggs=["mean", "sum"],
+        start="2001-01-01",
+        blacklist=black,
+    )
 
-    # cr.reg_scatter(
-    #     labels=False,
-    #     separator=None,
-    #     title="Carry and Return, 5-year periods",
-    #     xlab="Carry",
-    #     ylab="Return",
-    #     coef_box="lower left",
-    #     prob_est="map",
-    # )
+    cr.reg_scatter(
+        labels=False,
+        separator=None,
+        title="Carry and Return, 5-year periods",
+        xlab="Carry",
+        ylab="Return",
+        coef_box="lower left",
+        prob_est="map",
+    )
 
-    # cr = CategoryRelations(
-    #     dfdx,
-    #     xcats=["CRY", "XR"],
-    #     # xcat1_chg="diff",
-    #     freq="M",
-    #     lag=1,
-    #     cids=cidx,
-    #     xcat_aggs=["mean", "sum"],
-    #     start="2001-01-01",
-    #     blacklist=black,
-    #     years=None,
-    # )
+    cr = CategoryRelations(
+        dfdx,
+        xcats=["CRY", "XR"],
+        # xcat1_chg="diff",
+        freq="M",
+        lag=1,
+        cids=cidx,
+        xcat_aggs=["mean", "sum"],
+        start="2001-01-01",
+        blacklist=black,
+        years=None,
+    )
 
-    # cr.reg_scatter(
-    #     labels=False,
-    #     separator=2010,
-    #     title="Carry and Return",
-    #     xlab="Carry",
-    #     ylab="Return",
-    #     coef_box="lower left",
-    #     ncol=5,
-    #     remove_zero_predictor=True
-    # )
+    cr.reg_scatter(
+        labels=False,
+        separator=2010,
+        title="Carry and Return",
+        xlab="Carry",
+        ylab="Return",
+        coef_box="lower left",
+        ncol=5,
+        remove_zero_predictor=True
+    )
     cr.reg_scatter(
         labels=False,
         separator="cids",
