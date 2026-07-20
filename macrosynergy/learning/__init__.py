@@ -65,6 +65,7 @@ from .forecasting import (
     PLSTransformer,
     LinearMultiTargetRegression,
     TimeWeightedWrapper,
+    LarsSurrogateModel,
 )
 
 from .model_selection import (
@@ -156,6 +157,7 @@ __all__ = [
     "LinearMultiTargetRegression",
     "MLPRegressor",
     "ModelAveragingRegressor",
+    "LarsSurrogateModel",
     # market beta estimation
     "BetaEstimator",
     # regression system

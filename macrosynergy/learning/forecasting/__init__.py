@@ -35,6 +35,10 @@ from .factor_models import (
     PLSTransformer,
 )
 
+from .model_inference import (
+    LarsSurrogateModel,
+)
+
 def __getattr__(name):
     _torch_names = {
         "MultiLayerPerceptron",
@@ -99,4 +103,5 @@ __all__ = [
     "NegSharpeRatio",
     "MLPRegressor",
     "LongShortModule",
+    "LarsSurrogateModel",
 ]
