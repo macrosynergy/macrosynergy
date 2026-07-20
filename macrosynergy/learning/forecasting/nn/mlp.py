@@ -258,7 +258,7 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         head_activation = "identity",
         dropout_p = 0,
         long_only = None,
-        dollar_neutral = False,
+        dollar_neutral = False, # TODO: for some reason this doesnt work
         normalization = False,
         torch_model = None,
         # Neural network training dynamics
