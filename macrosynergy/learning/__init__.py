@@ -81,6 +81,7 @@ def __getattr__(name):
         "MultiOutputSharpe",
         "MultiOutputMCR",
         "MLPRegressor",
+        "LongShortModule",
     }
     if name in _torch_names:
         from .forecasting import __getattr__ as _fget
@@ -170,6 +171,7 @@ __all__ = [
     "TimeSeriesSampler",
     "MultiOutputSharpe",
     "MultiOutputMCR",
+    "LongShortModule",
     # model selection
     "ModelAveragingRegressor",
 ]

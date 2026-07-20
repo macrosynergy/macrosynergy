@@ -41,6 +41,7 @@ def __getattr__(name):
         "TimeSeriesSampler",
         "MultiOutputSharpe",
         "MultiOutputMCR",
+        "LongShortModule",
     }
     _nn_names = {
         "MLPRegressor",
@@ -51,6 +52,7 @@ def __getattr__(name):
             TimeSeriesSampler,
             MultiOutputSharpe,
             MultiOutputMCR,
+            LongShortModule,
         )
         return locals()[name]
     if name in _nn_names:
@@ -88,4 +90,5 @@ __all__ = [
     "MultiOutputSharpe",
     "MultiOutputMCR",
     "MLPRegressor",
+    "LongShortModule",
 ]

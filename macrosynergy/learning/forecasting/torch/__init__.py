@@ -12,6 +12,7 @@ from .losses import (
     MultiOutputSharpe,
     MultiOutputMCR,
 )
+from .modules import LongShortModule
 
 __all__ = [
     # models
@@ -21,4 +22,6 @@ __all__ = [
     # losses
     "MultiOutputSharpe",
     "MultiOutputMCR",
+    # modules
+    "LongShortModule",
 ]
