@@ -80,6 +80,10 @@ def __getattr__(name):
         "TimeSeriesSampler",
         "MultiOutputSharpe",
         "MultiOutputMCR",
+        "NegMeanPortfolioReturn",
+        "PortfolioVariance",
+        "NegMeanVarianceUtility",
+        "NegSharpeRatio",
         "MLPRegressor",
         "LongShortModule",
     }
@@ -171,6 +175,10 @@ __all__ = [
     "TimeSeriesSampler",
     "MultiOutputSharpe",
     "MultiOutputMCR",
+    "NegMeanPortfolioReturn",
+    "PortfolioVariance",
+    "NegMeanVarianceUtility",
+    "NegSharpeRatio",
     "LongShortModule",
     # model selection
     "ModelAveragingRegressor",

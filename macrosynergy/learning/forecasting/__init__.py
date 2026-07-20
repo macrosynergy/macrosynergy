@@ -52,6 +52,10 @@ def __getattr__(name):
             TimeSeriesSampler,
             MultiOutputSharpe,
             MultiOutputMCR,
+            PortfolioVariance,
+            NegMeanVarianceUtility,
+            NegMeanPortfolioReturn,
+            NegSharpeRatio,
             LongShortModule,
         )
         return locals()[name]
@@ -89,6 +93,10 @@ __all__ = [
     "TimeSeriesSampler",
     "MultiOutputSharpe",
     "MultiOutputMCR",
+    "NegMeanPortfolioReturn",
+    "PortfolioVariance",
+    "NegMeanVarianceUtility",
+    "NegSharpeRatio",
     "MLPRegressor",
     "LongShortModule",
 ]
