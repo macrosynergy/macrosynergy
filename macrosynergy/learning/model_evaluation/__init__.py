@@ -13,6 +13,7 @@ from .scorers import (
     neg_mean_abs_corr,
     multi_output_sharpe,
     multi_output_sortino,
+    multi_output_meanreturn,
 )
 
 __all__ = [
@@ -24,6 +25,7 @@ __all__ = [
     "sortino_ratio",
     "multi_output_sharpe",
     "multi_output_sortino",
+    "multi_output_meanreturn",
     "correlation_coefficient",
     "create_panel_metric",
     "regression_mcc"
