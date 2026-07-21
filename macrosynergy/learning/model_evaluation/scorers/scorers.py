@@ -183,6 +183,7 @@ def multi_output_sortino(estimator, X_test, y_test):
         raise TypeError("X_test must be a pandas DataFrame.")
     if not isinstance(y_test, pd.DataFrame):
         raise TypeError("y_test must be a pandas DataFrame.")
+    
     if X_test.shape[0] != y_test.shape[0]:
         raise ValueError("X_test and y_test must have the same number of rows.")
     
@@ -195,13 +196,16 @@ def multi_output_sortino(estimator, X_test, y_test):
 
     return portfolio_returns.mean() / portfolio_returns[portfolio_returns < 0].std()
 
-def multi_output_sharpe(estimator, X_test, y_test):
+def multi_output_sharpe(estimator, X_test, y_test, directional = True):
     """
-    Sharpe ratio of a naive long-short directional strategy based on multi-output model predictions.
+    Sharpe ratio of a naive strategy based on multi-output model predictions.
     """
     if not isinstance(estimator, (RegressorMixin, ClassifierMixin)):
         raise TypeError("estimator must be a scikit-learn regressor or classifier.")
-    # TODO: add check that estimator is a multi-output model
+    
+    if not isinstance(directional, bool):
+        raise TypeError("directional must be a boolean.")
+    
     if not isinstance(X_test, pd.DataFrame):
         raise TypeError("X_test must be a pandas DataFrame.")
     if not isinstance(y_test, pd.DataFrame):
@@ -209,15 +213,62 @@ def multi_output_sharpe(estimator, X_test, y_test):
     if X_test.shape[0] != y_test.shape[0]:
         raise ValueError("X_test and y_test must have the same number of rows.")
     
-    preds = pd.DataFrame(
-        estimator.predict(X_test), index=y_test.index, columns=y_test.columns
-    )
-    signals = np.sign(preds)
+    preds = estimator.predict(X_test)
+
+    if not isinstance(preds, (np.ndarray, pd.DataFrame)):
+        raise TypeError("preds must be a numpy array or pandas DataFrame.")
+    if preds.shape[1] != y_test.shape[1]:
+        raise ValueError("preds and y_test must have the same number of columns.")
+    
+    if directional:
+        signals = np.sign(preds)
+    else:
+        signals = preds 
+
+    if isinstance(signals, np.ndarray):
+        signals = pd.DataFrame(signals, index=y_test.index, columns=y_test.columns)
+
     returns = signals * y_test
     portfolio_returns = returns.sum(axis=1)
 
     return portfolio_returns.mean() / portfolio_returns.std()
 
+def multi_output_meanreturn(estimator, X_test, y_test, directional = True):
+    """
+    Mean return of a naive strategy based on multi-output model predictions.
+    """
+    if not isinstance(estimator, (RegressorMixin, ClassifierMixin)):
+        raise TypeError("estimator must be a scikit-learn regressor or classifier.")
+    
+    if not isinstance(directional, bool):
+        raise TypeError("directional must be a boolean.")
+    
+    if not isinstance(X_test, pd.DataFrame):
+        raise TypeError("X_test must be a pandas DataFrame.")
+    if not isinstance(y_test, pd.DataFrame):
+        raise TypeError("y_test must be a pandas DataFrame.")
+    if X_test.shape[0] != y_test.shape[0]:
+        raise ValueError("X_test and y_test must have the same number of rows.")
+    
+    preds = estimator.predict(X_test)
+
+    if not isinstance(preds, (np.ndarray, pd.DataFrame)):
+        raise TypeError("preds must be a numpy array or pandas DataFrame.")
+    if preds.shape[1] != y_test.shape[1]:
+        raise ValueError("preds and y_test must have the same number of columns.")
+    
+    if directional:
+        signals = np.sign(preds)
+    else:
+        signals = preds 
+
+    if isinstance(signals, np.ndarray):
+        signals = pd.DataFrame(signals, index=y_test.index, columns=y_test.columns)
+
+    returns = signals * y_test
+    portfolio_returns = returns.sum(axis=1)
+
+    return portfolio_returns.mean()
 
 if __name__ == "__main__":
     import macrosynergy.management as msm
