@@ -217,8 +217,9 @@ def multi_output_sharpe(estimator, X_test, y_test, directional = True):
 
     if not isinstance(preds, (np.ndarray, pd.DataFrame)):
         raise TypeError("preds must be a numpy array or pandas DataFrame.")
-    if preds.shape[1] != y_test.shape[1]:
-        raise ValueError("preds and y_test must have the same number of columns.")
+    # Commenting below because different assets can have different histories
+    # if preds.shape[1] != y_test.shape[1]:
+    #     raise ValueError("preds and y_test must have the same number of columns.")
     
     if directional:
         signals = np.sign(preds)
@@ -254,8 +255,9 @@ def multi_output_meanreturn(estimator, X_test, y_test, directional = True):
 
     if not isinstance(preds, (np.ndarray, pd.DataFrame)):
         raise TypeError("preds must be a numpy array or pandas DataFrame.")
-    if preds.shape[1] != y_test.shape[1]:
-        raise ValueError("preds and y_test must have the same number of columns.")
+    # Commenting below because different assets can have different histories
+    # if preds.shape[1] != y_test.shape[1]:
+    #     raise ValueError("preds and y_test must have the same number of columns.")
     
     if directional:
         signals = np.sign(preds)
