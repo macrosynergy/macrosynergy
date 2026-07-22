@@ -140,6 +140,11 @@ class ModelAveragingRegressor(BaseEstimator, RegressorMixin):
             self.best_estimators_[name].predict(X)
             for name in self.model_names_
         ]
+        if self.multi_output_:
+            # TODO: need a check that the predictions are all dataframes with the same columns
+            prediction_names = predictions[0].columns
+        else:
+            prediction_names = None
 
         # Convert to numpy arrays 
         predictions = [
@@ -161,7 +166,7 @@ class ModelAveragingRegressor(BaseEstimator, RegressorMixin):
             return pd.DataFrame(
                 data = adjusted_predictions,
                 index = X.index,
-                columns = self.targets_
+                columns = prediction_names
             )
         else:
             return adjusted_predictions
