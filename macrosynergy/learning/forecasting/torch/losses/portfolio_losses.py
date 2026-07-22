@@ -35,7 +35,10 @@ class NegMeanPortfolioReturn(nn.Module, BaseEstimator):
         y_true : torch.Tensor
             True asset returns. Dimension: (batch_size, n_assets)
         """
-        returns = y_pred * y_true
+        mask = torch.isfinite(y_true)
+        y_true_masked = torch.where(mask, y_true, torch.zeros_like(y_true))
+
+        returns = y_pred * y_true_masked
         portfolio_returns = torch.sum(returns, dim=1)
 
         loss = - torch.mean(portfolio_returns)
@@ -66,7 +69,10 @@ class PortfolioVariance(nn.Module):
         y_true : torch.Tensor
             True asset returns. Dimension: (batch_size, n_assets)
         """
-        returns = y_pred * y_true
+        mask = torch.isfinite(y_true)
+        y_true_masked = torch.where(mask, y_true, torch.zeros_like(y_true))
+        
+        returns = y_pred * y_true_masked
         portfolio_returns = torch.sum(returns, dim=1)
 
         loss = torch.var(portfolio_returns)
@@ -103,7 +109,10 @@ class NegMeanVarianceUtility(nn.Module, BaseEstimator):
         y_true : torch.Tensor
             True asset returns. Dimension: (batch_size, n_assets)
         """
-        returns = y_pred * y_true
+        mask = torch.isfinite(y_true)
+        y_true_masked = torch.where(mask, y_true, torch.zeros_like(y_true))
+
+        returns = y_pred * y_true_masked
         portfolio_returns = torch.sum(returns, dim=1)
 
         mean_return = torch.mean(portfolio_returns)
@@ -148,7 +157,10 @@ class NegSharpeRatio(nn.Module):
         y_true : torch.Tensor
             True asset returns. Dimension: (batch_size, n_assets)
         """
-        returns = y_pred * y_true
+        mask = torch.isfinite(y_true)
+        y_true_masked = torch.where(mask, y_true, torch.zeros_like(y_true))
+
+        returns = y_pred * y_true_masked
         portfolio_returns = torch.sum(returns, dim=1)
 
         mean_return = torch.mean(portfolio_returns)
