@@ -701,6 +701,8 @@ class TestMLPRegressor(unittest.TestCase):
             dropout_p=None,
             epochs = 5,
             patience = 2,
+            normalization = None,
+            dollar_neutral = None,
         ).fit(self.X, self.y)
 
         model5 = MLPRegressor(
@@ -713,6 +715,8 @@ class TestMLPRegressor(unittest.TestCase):
             dropout_p=None,
             epochs = 5,
             patience = 2,
+            normalization = None,
+            dollar_neutral = None,
         ).fit(self.X, self.y)
 
         model6 = MLPRegressor(
@@ -725,6 +729,8 @@ class TestMLPRegressor(unittest.TestCase):
             n_latent=None,
             epochs = 5,
             patience = 2,
+            normalization = None,
+            dollar_neutral = None,
             random_state=123,
         ).fit(self.X, self.y)
 
@@ -795,6 +801,8 @@ class TestMLPRegressor(unittest.TestCase):
             head_activation=None,
             dropout_p=None,
             n_latent=None,
+            normalization=None,
+            dollar_neutral=None,
             epochs = 5,
             patience = 2,
             optimizer=["AdamW", "SGD+mom"],
@@ -811,6 +819,8 @@ class TestMLPRegressor(unittest.TestCase):
             epochs = 5,
             patience = 2,
             n_latent = None,
+            normalization=None,
+            dollar_neutral=None,
             optimizer=["AdamW", "SGD+mom"],
             random_state=[42, 43],
         ).fit(self.X, self.y)
