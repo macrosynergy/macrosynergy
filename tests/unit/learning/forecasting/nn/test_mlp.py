@@ -195,6 +195,8 @@ class TestMLPRegressor(unittest.TestCase):
                 head_activation=None,
                 dropout_p=None,
                 n_latent=None,
+                dollar_neutral=None,
+                normalization=None
             )
         with self.assertRaises(TypeError):
             model = MLPRegressor(
@@ -205,6 +207,8 @@ class TestMLPRegressor(unittest.TestCase):
                 head_activation=None,
                 dropout_p=None,
                 n_latent=None,
+                dollar_neutral=None,
+                normalization=None
             )
         with self.assertRaises(TypeError):
             model = MLPRegressor(
@@ -215,6 +219,8 @@ class TestMLPRegressor(unittest.TestCase):
                 head_activation=None,
                 dropout_p=None,
                 n_latent=None,
+                dollar_neutral=None,
+                normalization=None
             )
         with self.assertRaises(ValueError):
             model = MLPRegressor(
@@ -225,6 +231,8 @@ class TestMLPRegressor(unittest.TestCase):
                 head_activation=None,
                 dropout_p=None,
                 n_latent=None,
+                dollar_neutral=None,
+                normalization=None
             )
 
         # Check errors are raised when incompatible parameters are provided together
@@ -237,6 +245,8 @@ class TestMLPRegressor(unittest.TestCase):
                 head_activation=None,
                 dropout_p=None,
                 n_latent=None,
+                dollar_neutral=None,
+                normalization=None
             )
         with self.assertRaises(ValueError):
             model = MLPRegressor(
@@ -247,6 +257,8 @@ class TestMLPRegressor(unittest.TestCase):
                 head_activation=None,
                 dropout_p=None,
                 n_latent=None,
+                dollar_neutral=None,
+                normalization=None
             )
         with self.assertRaises(ValueError):
             model = MLPRegressor(
@@ -257,6 +269,8 @@ class TestMLPRegressor(unittest.TestCase):
                 head_activation=None,
                 dropout_p=None,
                 n_latent=None,
+                dollar_neutral=None,
+                normalization=None
             )
         with self.assertRaises(ValueError):
             model = MLPRegressor(
@@ -267,6 +281,8 @@ class TestMLPRegressor(unittest.TestCase):
                 head_activation="relu",
                 dropout_p=None,
                 n_latent=None,
+                dollar_neutral=None,
+                normalization=None
             )
         with self.assertRaises(ValueError):
             model = MLPRegressor(
@@ -277,6 +293,8 @@ class TestMLPRegressor(unittest.TestCase):
                 head_activation=None,
                 dropout_p=0.2,
                 n_latent=None,
+                dollar_neutral=None,
+                normalization=None
             )
         with self.assertRaises(ValueError):
             model = MLPRegressor(
@@ -287,6 +305,8 @@ class TestMLPRegressor(unittest.TestCase):
                 head_activation=None,
                 dropout_p=None,
                 n_latent=4,
+                dollar_neutral=None,
+                normalization=None
             )
 
         """ Loss function """
