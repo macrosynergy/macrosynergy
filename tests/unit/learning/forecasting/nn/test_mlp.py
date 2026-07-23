@@ -900,7 +900,7 @@ class TestMLPRegressor(unittest.TestCase):
         # Test that the data is scaled correctly when both scalers are provided
         model = MLPRegressor()
         X_tr, X_va, y_tr, y_va = model.create_train_valid_splits(self.X, self.y, train_pct=0.6)
-        X_tr_scaled, X_va_scaled, y_tr_scaled, y_va_scaled = model.scale_data(X_tr, X_va, y_tr, y_va, x_scaler=StandardScaler(with_mean=True), y_scaler=StandardScaler(with_mean=True))
+        X_tr_scaled, y_tr_scaled, X_va_scaled, y_va_scaled = model.scale_data(X_train=X_tr, X_valid=X_va, y_train=y_tr, y_valid=y_va, x_scaler=StandardScaler(with_mean=True), y_scaler=StandardScaler(with_mean=True))
 
         self.assertIsInstance(X_tr_scaled, np.ndarray)
         self.assertIsInstance(X_va_scaled, np.ndarray)
@@ -913,14 +913,14 @@ class TestMLPRegressor(unittest.TestCase):
         self.assertAlmostEqual(y_tr_scaled.std(), 1, places=5)
 
         # Repeat for the case where the means are not removed (a common use case)
-        X_tr_scaled, X_va_scaled, y_tr_scaled, y_va_scaled = model.scale_data(X_tr, X_va, y_tr, y_va, x_scaler=StandardScaler(with_mean=False), y_scaler=StandardScaler(with_mean=False))
+        X_tr_scaled, y_tr_scaled, X_va_scaled, y_va_scaled = model.scale_data(X_train=X_tr, X_valid = X_va, y_train = y_tr, y_valid = y_va, x_scaler=StandardScaler(with_mean=False), y_scaler=StandardScaler(with_mean=False))
         self.assertIsInstance(X_tr_scaled, np.ndarray)
         self.assertIsInstance(X_va_scaled, np.ndarray)
         self.assertIsInstance(y_tr_scaled, np.ndarray)
         self.assertIsInstance(y_va_scaled, np.ndarray)
 
         # Repeat for the case where X is scaled but y is not
-        X_tr_scaled, X_va_scaled, y_tr_scaled, y_va_scaled = model.scale_data(X_tr, X_va, y_tr, y_va, x_scaler=StandardScaler(with_mean=False), y_scaler=None)
+        X_tr_scaled, y_tr_scaled, X_va_scaled, y_va_scaled = model.scale_data(X_train=X_tr, X_valid=X_va, y_train=y_tr, y_valid=y_va, x_scaler=StandardScaler(with_mean=False), y_scaler=None)
         self.assertIsInstance(X_tr_scaled, np.ndarray)
         self.assertIsInstance(X_va_scaled, np.ndarray)
         self.assertIsInstance(y_tr_scaled, np.ndarray)
