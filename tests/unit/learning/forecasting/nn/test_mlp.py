@@ -499,6 +499,8 @@ class TestMLPRegressor(unittest.TestCase):
             encoder_activation=None,
             head_activation=None,
             dropout_p=None,
+            normalization=None,
+            dollar_neutral=None,
             torch_model = ValidModel(),
             loss_func=nn.L1Loss(),
             optimizer=["AdamW", "SGD+mom"],
@@ -526,6 +528,8 @@ class TestMLPRegressor(unittest.TestCase):
         self.assertEqual(model.encoder_activation, None)
         self.assertEqual(model.head_activation, None)
         self.assertEqual(model.dropout_p, None)
+        self.assertEqual(model.normalization, None)
+        self.assertEqual(model.dollar_neutral, None)
         self.assertIsInstance(model.torch_model, ValidModel)
         self.assertIsInstance(model.loss_func, nn.L1Loss)
         self.assertEqual(model.optimizer, ["AdamW", "SGD+mom"])
