@@ -946,7 +946,7 @@ class TestMLPRegressor(unittest.TestCase):
 
         sklearn_model = MLPRegressor()
         X_tr, X_va, y_tr, y_va = sklearn_model.create_train_valid_splits(self.X, self.y, train_pct=0.6)
-        X_tr_scaled, X_va_scaled, y_tr_scaled, y_va_scaled = sklearn_model.scale_data(X_tr, X_va, y_tr, y_va, x_scaler=StandardScaler(with_mean=True), y_scaler=StandardScaler(with_mean=True))
+        X_tr_scaled, y_tr_scaled, X_va_scaled, y_va_scaled = sklearn_model.scale_data(X_train=X_tr, X_valid = X_va, y_train = y_tr, y_valid = y_va, x_scaler=StandardScaler(with_mean=True), y_scaler=StandardScaler(with_mean=True))
 
         torch_model = sklearn_model._fit_one_batch(
             torch_model,
@@ -957,6 +957,7 @@ class TestMLPRegressor(unittest.TestCase):
             loss_func = nn.MSELoss(),
             sample_weight = None,
             sample_weight_strategy = None,
+            reg_turnover = 1
         )
         after = {k: v.detach().clone() for k, v in torch_model.state_dict().items()}
         changed = any(not torch.equal(before[k], after[k]) for k in before.keys())
@@ -972,6 +973,7 @@ class TestMLPRegressor(unittest.TestCase):
             loss_func = nn.MSELoss(),
             sample_weight = None,
             sample_weight_strategy = None,
+            reg_turnover = 1
         )
         after2 = {k: v.detach().clone() for k, v in torch_model.state_dict().items()}
         changed2 = any(not torch.equal(after[k], after2[k]) for k in after.keys())
