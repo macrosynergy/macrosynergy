@@ -135,6 +135,7 @@ def compute_daily_weights(
     rebalance_freq: str = "M",
     reconstitution_freq: Optional[str] = None,
     blacklist: Optional[Dict[str, Tuple[pd.Timestamp, pd.Timestamp]]] = None,
+    weights_col: Optional[str] = "membership",
 ) -> pd.DataFrame:
     """
     Compute daily float-adjusted equal weights for an index constituent set.
@@ -176,18 +177,25 @@ def compute_daily_weights(
     _validate_frequency(rebalance_freq, "rebalance_freq")
     if reconstitution_freq is not None:
         _validate_frequency(reconstitution_freq, "reconstitution_freq")
-    _validate_constituents(constituents)
+    _validate_constituents(constituents) # TODO should they be daily ?
     _validate_returns(returns)
+
+    assert isinstance(weights_col, str) and (
+        weights_col in {"membership", "raw_weight"}
+    ), "For equal weighting approach, use `membership` otherwise `raw_weights` for a custom option."
 
     recon_freq = _resolve_reconstitution_freq(rebalance_freq, reconstitution_freq)
 
     # Pivot to wide
     constituents["real_date"] = pd.to_datetime(constituents["real_date"])
-    mem_wide = (
-        _long_to_wide(constituents[["cid", "real_date", "membership"]], "membership")
-        .fillna(0)
-        .astype(int)
+    mem_wide = _long_to_wide(
+        constituents[["cid", "real_date", weights_col]], weights_col
     )
+    if weights_col == "membership":
+        mem_wide = mem_wide.fillna(0).astype(int)
+    else:
+        mem_wide = mem_wide.ffill().fillna(0.0).astype(float)
+
     returns["real_date"] = pd.to_datetime(returns["real_date"])
     ret_wide = _long_to_wide(returns[["cid", "real_date", "value"]], "value")
 
@@ -274,8 +282,12 @@ def compute_daily_weights(
     # Then we normalize row-wise so weights sum to 1.
 
     # Initial equal weights per period: 1/N for members, 0 for non-members
-    n_members = mem_effective.groupby(rebal_periods).transform("first").sum(axis=1)
-    initial_w = mem_effective.div(n_members.replace(0, np.nan), axis=0).fillna(0.0)
+    total_w_denominator = (
+        mem_effective.groupby(rebal_periods).transform("first").sum(axis=1)
+    )
+    initial_w = mem_effective.div(
+        total_w_denominator.replace(0, np.nan), axis=0
+    ).fillna(0.0)
 
     # Cumulative growth factor within each period, shifted so day 0 = 1.0
     growth = (1 + ret_wide).groupby(rebal_periods).cumprod()
