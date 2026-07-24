@@ -849,14 +849,11 @@ class CategoryRelations(object):
 
                 facet_font_size = 10 if set_font_size else coef_box_font_size
                 facet_set_font_size = False if set_font_size else set_font_size
-                facet_coef_box_size = coef_box_size
-                if set_font_size and show_prob and coef_box_size == (0.4, 2.5):
-                    facet_coef_box_size = (0.8, 1.7)
                 fg.map_dataframe(
                     self.annotate_facet,
                     prob_est=facet_prob_est,
                     show_prob=show_prob,
-                    coef_box_size=facet_coef_box_size,
+                    coef_box_size=coef_box_size,
                     coef_box_font_size=facet_font_size,
                     set_font_size=facet_set_font_size,
                     loc=coef_box,
