@@ -11,7 +11,12 @@ from .samplers import TimeSeriesSampler
 from .losses import (
     MultiOutputSharpe,
     MultiOutputMCR,
+    NegMeanPortfolioReturn,
+    PortfolioVariance,
+    NegMeanVarianceUtility,
+    NegSharpeRatio,
 )
+from .modules import LongShortModule
 
 __all__ = [
     # models
@@ -21,4 +26,10 @@ __all__ = [
     # losses
     "MultiOutputSharpe",
     "MultiOutputMCR",
+    "NegMeanPortfolioReturn",
+    "PortfolioVariance",
+    "NegMeanVarianceUtility",
+    "NegSharpeRatio",
+    # modules
+    "LongShortModule",
 ]

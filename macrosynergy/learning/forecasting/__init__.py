@@ -35,12 +35,21 @@ from .factor_models import (
     PLSTransformer,
 )
 
+from .model_inference import (
+    LarsSurrogateModel,
+)
+
 def __getattr__(name):
     _torch_names = {
         "MultiLayerPerceptron",
         "TimeSeriesSampler",
         "MultiOutputSharpe",
         "MultiOutputMCR",
+        "PortfolioVariance",
+        "NegMeanVarianceUtility",
+        "NegMeanPortfolioReturn",
+        "NegSharpeRatio",
+        "LongShortModule",
     }
     _nn_names = {
         "MLPRegressor",
@@ -51,6 +60,11 @@ def __getattr__(name):
             TimeSeriesSampler,
             MultiOutputSharpe,
             MultiOutputMCR,
+            PortfolioVariance,
+            NegMeanVarianceUtility,
+            NegMeanPortfolioReturn,
+            NegSharpeRatio,
+            LongShortModule,
         )
         return locals()[name]
     if name in _nn_names:
@@ -87,5 +101,11 @@ __all__ = [
     "TimeSeriesSampler",
     "MultiOutputSharpe",
     "MultiOutputMCR",
+    "NegMeanPortfolioReturn",
+    "PortfolioVariance",
+    "NegMeanVarianceUtility",
+    "NegSharpeRatio",
     "MLPRegressor",
+    "LongShortModule",
+    "LarsSurrogateModel",
 ]
