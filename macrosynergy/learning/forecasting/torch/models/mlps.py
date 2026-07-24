@@ -1,9 +1,13 @@
 import torch
 import torch.nn as nn
 
+from sklearn.base import BaseEstimator
+
+from macrosynergy.learning.forecasting.torch.modules import LongShortModule
+
 import numbers
 
-class MultiLayerPerceptron(nn.Module):
+class MultiLayerPerceptron(nn.Module, BaseEstimator):
     r"""
     Multi-layer perceptron models in PyTorch.
 
@@ -30,6 +34,20 @@ class MultiLayerPerceptron(nn.Module):
     dropout_p: float, optional
         Dropout probability for regularization. Default is 0 (no dropout).
         Must be between 0 and 0.5. 
+    long_only : bool, optional
+        Whether to enforce a long-only or long-short constraint on the outputs. Default is
+        None for no constraint. If True, outputs from the `head_activation` layer will be
+        passed through a softmax function to ensure they are non-negative and sum to 1. 
+        If False, outputs from the `head_activation` layer will be passed through a custom
+        layer that ensures the absolute values of the outputs sum to 1.
+    dollar_neutral : bool, optional
+        If `long_only` is False, outputs from the `head_activation` layer will be
+        demeaned before being passed through the custom normalization layer to ensure that
+        both the sum of outputs equals zero and the sum of absolute values equals one.
+        Default is False.
+    normalization : bool, optional
+        Whether to add layer normalization after each linear layer in the encoder.
+        Default is False.
 
     Notes
     -----
@@ -49,6 +67,10 @@ class MultiLayerPerceptron(nn.Module):
     When multiple outputs are being modelled, this is usually referred to as having a 
     "multi-head" architecture.
 
+    Optionally, the outputs can be normalized to sum to one or so that the absolute values
+    sum to one, or even with the latter constraint plus the additional constraint that
+    the sum of outputs equals zero. This is useful for portfolio allocation tasks. 
+
     What's the advantage of a feedforward neural network over other models on tabular 
     datasets? Structure and customizability. 32 neurons in a hidden layer means that 32 features
     are being learnt. I can shrink these features towards priors, if I have any beliefs.
@@ -66,6 +88,8 @@ class MultiLayerPerceptron(nn.Module):
     This prevents over-reliance on specific neurons and encourages the network to become
     robust to the design of the neural network architecture. 
 
+
+
     Future work
     -----------
     - Support for skip connections.
@@ -80,6 +104,9 @@ class MultiLayerPerceptron(nn.Module):
         fit_encoder_intercept = False,
         fit_head_intercept = True,
         dropout_p = 0,
+        long_only = None,
+        dollar_neutral = False,
+        normalization = False,
     ):
         super().__init__()
 
@@ -93,6 +120,9 @@ class MultiLayerPerceptron(nn.Module):
             fit_encoder_intercept,
             fit_head_intercept,
             dropout_p,
+            long_only,
+            dollar_neutral,
+            normalization,
         )
 
         # Attributes
@@ -108,6 +138,9 @@ class MultiLayerPerceptron(nn.Module):
         self.fit_encoder_intercept = fit_encoder_intercept
         self.fit_head_intercept = fit_head_intercept
         self.dropout_p = dropout_p
+        self.long_only = long_only
+        self.dollar_neutral = dollar_neutral
+        self.normalization = normalization
 
         self.activation_map = {
             "tanh": lambda: nn.Tanh(),
@@ -117,10 +150,10 @@ class MultiLayerPerceptron(nn.Module):
         }
 
         # Encoder
-        self.encoder = self._build_encoder(self.n_inputs, self.n_latent, self.encoder_activation, self.fit_encoder_intercept, self.dropout_p)
+        self.encoder = self._build_encoder(self.n_inputs, self.n_latent, self.encoder_activation, self.fit_encoder_intercept, self.dropout_p, self.normalization)
 
         # Projection head
-        self.head = self._build_head(self.n_latent[-1], self.n_outputs, self.head_activation, self.fit_head_intercept)
+        self.head = self._build_head(self.n_latent[-1], self.n_outputs, self.head_activation, self.fit_head_intercept, self.long_only, self.dollar_neutral)
 
     def forward(self, x):
         """
@@ -138,13 +171,17 @@ class MultiLayerPerceptron(nn.Module):
         """
         latent = self.encoder(x)
         output = self.head(latent)
+
         return output
 
-    def _build_encoder(self, n_inputs, n_latent, encoder_activation, fit_encoder_intercept, dropout_p):
+    def _build_encoder(self, n_inputs, n_latent, encoder_activation, fit_encoder_intercept, dropout_p, normalization):
         # Identify encoder activation
         activation_func = self.activation_map[encoder_activation]
         # Build encoder
-        encoder_modules = [nn.Linear(n_inputs, n_latent[0], bias = fit_encoder_intercept), activation_func()]
+        encoder_modules = [nn.Linear(n_inputs, n_latent[0], bias = fit_encoder_intercept)]
+        if normalization:
+            encoder_modules.append(nn.LayerNorm(n_latent[0]))
+        encoder_modules.append(activation_func())
         if dropout_p > 0:
             encoder_modules.append(nn.Dropout(p=dropout_p))
         if len(n_latent) > 1:
@@ -152,17 +189,34 @@ class MultiLayerPerceptron(nn.Module):
                 encoder_modules.append(
                     nn.Linear(n_latent[layer_idx - 1], n_latent[layer_idx], bias = fit_encoder_intercept)
                 )
+                if normalization:
+                    encoder_modules.append(nn.LayerNorm(n_latent[layer_idx]))
                 encoder_modules.append(activation_func())
                 if dropout_p > 0:
                     encoder_modules.append(nn.Dropout(p=dropout_p*2))
         
         return nn.Sequential(*encoder_modules)
     
-    def _build_head(self, n_latent, n_outputs, head_activation, fit_head_intercept):
-        head = nn.Sequential(
-            nn.Linear(n_latent, n_outputs, bias = fit_head_intercept),
-            self.activation_map[head_activation]()
-        )
+    def _build_head(self, n_latent, n_outputs, head_activation, fit_head_intercept, long_only, dollar_neutral):
+        if long_only is None:
+            head = nn.Sequential(
+                nn.Linear(n_latent, n_outputs, bias = fit_head_intercept),
+                self.activation_map[head_activation]()
+            )
+        elif long_only is True:
+            head = nn.Sequential(
+                nn.Linear(n_latent, n_outputs, bias = fit_head_intercept),
+                self.activation_map[head_activation](),
+                nn.Softmax(dim = -1)
+            )
+        else:
+            # long_only is False
+            head = nn.Sequential(
+                nn.Linear(n_latent, n_outputs, bias = fit_head_intercept),
+                self.activation_map[head_activation](),
+                LongShortModule(dollar_neutral)
+            )
+            
         return head
 
     def _check_init_params(
@@ -175,6 +229,9 @@ class MultiLayerPerceptron(nn.Module):
         fit_encoder_intercept,
         fit_head_intercept,
         dropout_p,
+        long_only,
+        dollar_neutral,
+        normalization,
     ):
         # n_inputs
         if not isinstance(n_inputs, numbers.Integral):
@@ -225,6 +282,16 @@ class MultiLayerPerceptron(nn.Module):
             raise TypeError("dropout_p must be a real number.")
         if not (0 <= dropout_p < 0.5):
             raise ValueError("dropout_p must be between 0 and 0.5.")
+        
+        # long_only
+        if long_only is not None and not isinstance(long_only, bool):
+            raise TypeError("long_only must be a boolean or None.")
+        # dollar_neutral
+        if long_only is False and not isinstance(dollar_neutral, bool):
+            raise TypeError("dollar_neutral must be a boolean when long_only is False.")
+        # normalization
+        if not isinstance(normalization, bool):
+            raise TypeError("normalization must be a boolean.")
         
 if __name__=="__main__":
     print("========================================")
