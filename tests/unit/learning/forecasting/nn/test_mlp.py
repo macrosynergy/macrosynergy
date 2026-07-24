@@ -183,6 +183,21 @@ class TestMLPRegressor(unittest.TestCase):
         with self.assertRaises(ValueError):
             model = MLPRegressor(torch_model="not None", dropout_p=0.2)
 
+        """ long_only """
+        # should be a boolean
+        with self.assertRaises(TypeError):
+            model = MLPRegressor(long_only="not a bool")
+
+        """ dollar_neutral """
+        # should be a boolean
+        with self.assertRaises(TypeError):
+            model = MLPRegressor(dollar_neutral="not a bool")
+
+        """ normalization """
+        # should be a boolean
+        with self.assertRaises(TypeError):
+            model = MLPRegressor(normalization="not a bool")
+
         """ torch_model """
         # should be an instance of nn.Module and BaseEstimator, with a valid forward method
         # (fit_encoder_intercept, fit_head_intercept, encoder_activation, head_activation, dropout_p) need to be None
@@ -421,6 +436,11 @@ class TestMLPRegressor(unittest.TestCase):
         # Instance of StandardScaler or None
         with self.assertRaises(TypeError):
             model = MLPRegressor(y_scaler="not a scaler")
+
+        """ refit """
+        # Should be a boolean
+        with self.assertRaises(TypeError):
+            model = MLPRegressor(refit="not a bool")
 
         """ verbose """
         # Should be a boolean
