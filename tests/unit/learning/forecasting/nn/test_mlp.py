@@ -1,4 +1,5 @@
 import unittest
+import itertools
 import numpy as np
 import pandas as pd
 
@@ -479,6 +480,9 @@ class TestMLPRegressor(unittest.TestCase):
         self.assertEqual(model.encoder_activation, "relu")
         self.assertEqual(model.head_activation, "identity")
         self.assertEqual(model.dropout_p, 0)
+        self.assertEqual(model.normalization, False)
+        self.assertEqual(model.dollar_neutral, False)
+        self.assertEqual(model.long_only, None)
         self.assertEqual(model.torch_model, None)
         self.assertIsInstance(model.loss_func, nn.MSELoss)
         self.assertEqual(model.optimizer, "AdamW")
@@ -495,7 +499,8 @@ class TestMLPRegressor(unittest.TestCase):
         self.assertEqual(model.train_pct, 0.7)
         self.assertIsInstance(model.x_scaler, StandardScaler)
         self.assertIsInstance(model.y_scaler, StandardScaler)
-        self.assertEqual(model.verbose, False)
+        self.assertEqual(model.refit, False)
+        self.assertEqual(model.verbose, False) 
         self.assertEqual(model.random_state, 42)
         self.assertEqual(model.inverse_transform_preds, False)
         self.assertEqual(model.min_samples, 36)
@@ -566,6 +571,7 @@ class TestMLPRegressor(unittest.TestCase):
         self.assertEqual(model.train_pct, 0.8)
         self.assertIsInstance(model.x_scaler, StandardScaler)
         self.assertIsNone(model.y_scaler)
+        self.assertEqual(model.refit, False)
         self.assertEqual(model.verbose, True)
         self.assertEqual(model.random_state, [42,43])
         self.assertEqual(model.inverse_transform_preds, True)
@@ -605,7 +611,8 @@ class TestMLPRegressor(unittest.TestCase):
 
         self.assertRaises(ValueError, model.fit, X=self.X, y=self.y, sample_weight=np.array([1.0, 2.0, 3.0] * (len(self.X)//3)))
 
-    def test_valid_fit(self):
+    @parameterized.expand(itertools.product([None, True, False], [True, False], [True, False]))
+    def test_valid_fit(self, long_only, normalization, refit):
         """ 
         Test that valid models run as expected under different hyperparameter settings with
         stored attributes as expected. 
@@ -618,6 +625,9 @@ class TestMLPRegressor(unittest.TestCase):
             encoder_activation="relu",
             head_activation="tanh",
             dropout_p=0.2,
+            long_only = long_only,
+            dollar_neutral = False,
+            normalization = normalization,
             torch_model = None,
             loss_func=nn.MSELoss(),
             optimizer="AdamW",
@@ -634,6 +644,7 @@ class TestMLPRegressor(unittest.TestCase):
             train_pct = 0.7,
             x_scaler=StandardScaler(with_mean=False),
             y_scaler=StandardScaler(with_mean=False),
+            refit = refit,
             verbose = False,
             random_state = 42,
             inverse_transform_preds = False,
@@ -656,6 +667,9 @@ class TestMLPRegressor(unittest.TestCase):
             encoder_activation="relu",
             head_activation="tanh",
             dropout_p=0.2,
+            long_only = long_only,
+            dollar_neutral = False,
+            normalization = normalization,
             torch_model = None,
             loss_func=nn.MSELoss(),
             optimizer="AdamW",
@@ -672,6 +686,7 @@ class TestMLPRegressor(unittest.TestCase):
             train_pct = 0.7,
             x_scaler=StandardScaler(with_mean=False),
             y_scaler=StandardScaler(with_mean=False),
+            refit = refit,
             verbose = False,
             random_state = 42,
             inverse_transform_preds = False,
@@ -689,6 +704,9 @@ class TestMLPRegressor(unittest.TestCase):
             encoder_activation="relu",
             head_activation="tanh",
             dropout_p=0.2,
+            long_only = long_only,
+            dollar_neutral = False,
+            normalization = normalization,
             torch_model = None,
             loss_func=nn.MSELoss(),
             optimizer="AdamW",
@@ -705,6 +723,7 @@ class TestMLPRegressor(unittest.TestCase):
             train_pct = 0.7,
             x_scaler=StandardScaler(with_mean=False),
             y_scaler=StandardScaler(with_mean=False),
+            refit = refit,
             verbose = False,
             random_state = 43,
             inverse_transform_preds = False,
@@ -816,7 +835,7 @@ class TestMLPRegressor(unittest.TestCase):
             for param1, param8 in zip(submodel1.parameters(), submodel8.parameters()):
                 self.assertTrue(torch.equal(param1, param8))
 
-        # Lastly check that a custom torch model runs with multiple optimizers and random states as expected
+        # Check that a custom torch model runs with multiple optimizers and random states as expected
         model9 = MLPRegressor(
             torch_model=ValidModel(n_latent=16),
             fit_encoder_intercept=None,
@@ -852,6 +871,17 @@ class TestMLPRegressor(unittest.TestCase):
         for submodel9, submodel10 in zip(model9.models, model10.models):
             for param9, param10 in zip(submodel9.parameters(), submodel10.parameters()):
                 self.assertTrue(torch.equal(param9, param10))
+
+    def test_valid_fit_refit(self):
+        """
+        Test that refitting produces different results.
+        """
+        model_refit = MLPRegressor(epochs = 5, patience = 2, refit=True).fit(self.X, self.y)
+        model_norefit = MLPRegressor(epochs = 5, patience = 2, refit=False).fit(self.X, self.y)
+        params_norefit = [p.clone() for p in model_norefit.models[0].parameters()]
+        params_refit = [p.clone() for p in model_refit.models[0].parameters()]
+        for p_norefit, p_refit in zip(params_norefit, params_refit):
+            self.assertFalse(torch.equal(p_norefit, p_refit))
 
     def test_types_predict(self):
         model = MLPRegressor().fit(self.X, self.y)
