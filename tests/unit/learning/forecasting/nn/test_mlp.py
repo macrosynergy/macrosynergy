@@ -883,6 +883,24 @@ class TestMLPRegressor(unittest.TestCase):
         for p_norefit, p_refit in zip(params_norefit, params_refit):
             self.assertFalse(torch.equal(p_norefit, p_refit))
 
+    def test_valid_fit_dollar_neutral(self):
+        """
+        Test that the dollar neutral constraint is applied correctly during training.
+        """
+        model = MLPRegressor(epochs = 5, patience = 2, dollar_neutral=True, long_only = False).fit(self.X, self.y)
+        for param in model.models[0].parameters():
+            self.assertFalse(torch.isnan(param).any())
+            self.assertFalse(torch.isinf(param).any())
+
+        # Get forward pass outputs for the training data
+        with torch.no_grad():
+            X_tensor = torch.tensor(model.x_scaler.transform(self.X), dtype=torch.float32)
+            outputs = model.models[0](X_tensor)
+
+        # Check that the sum of the outputs across all samples is approximately zero (dollar neutral constraint)
+        output_mean = outputs.sum(dim = 1)
+        self.assertTrue(torch.allclose(output_mean, torch.zeros_like(output_mean), atol=1e-4))
+
     def test_types_predict(self):
         model = MLPRegressor().fit(self.X, self.y)
         # Test type of 'X' parameter
