@@ -12,6 +12,7 @@ from macrosynergy.panel.category_relations import CategoryRelations
 from macrosynergy.management.utils import categories_df
 from typing import List, Tuple, Dict, Union, Optional
 import warnings
+from unittest.mock import patch
 
 
 class TestAll(unittest.TestCase):
@@ -861,6 +862,186 @@ class TestAll(unittest.TestCase):
         except:
             self.fail(
                 "CategoryRelations failed when using seperator=cids, labels=False"
+            )
+
+    def test_reg_scatter_cids_probability_annotation(self):
+        cids_test = ["USD", "GBP", "JPY", "EUR"]
+        xcats_test = ["XCAT1", "XCAT2"]
+
+        dfx = make_test_df(cids=cids_test, xcats=xcats_test, start="2010-01-01")
+
+        cr = CategoryRelations(
+            df=dfx,
+            xcats=xcats_test,
+            cids=cids_test,
+            freq="M",
+            lag=0,
+            xcat_aggs=["last", "last"],
+            start="2000-01-01",
+            xcat_trims=[None, None],
+        )
+
+        cr.reg_scatter(
+            labels=False,
+            coef_box="upper left",
+            title="FX consistent core CPI excess inflation",
+            xlab="ZN-scored signal",
+            ylab="signal",
+            separator="cids",
+        )
+
+        tables = [
+            table
+            for ax in matplotlib.pyplot.gcf().axes
+            for table in ax.tables
+        ]
+        self.assertEqual(len(tables), len(cids_test))
+        self.assertTrue(
+            all(
+                any(
+                    cell.get_text().get_text() == "Probability\n of significance "
+                    for cell in table.get_celld().values()
+                )
+                for table in tables
+            )
+        )
+        self.assertTrue(
+            all(
+                cell.visible_edges == "BRTL" and cell.get_linewidth() > 0
+                for table in tables
+                for cell in table.get_celld().values()
+            )
+        )
+        self.assertTrue(
+            all(
+                all(spine.get_visible() for spine in ax.spines.values())
+                for ax in matplotlib.pyplot.gcf().axes
+            )
+        )
+
+    def test_reg_scatter_cids_probability_annotation_optional(self):
+        cids_test = ["USD", "GBP", "JPY", "EUR"]
+        xcats_test = ["XCAT1", "XCAT2"]
+
+        dfx = make_test_df(cids=cids_test, xcats=xcats_test, start="2010-01-01")
+
+        cr = CategoryRelations(
+            df=dfx,
+            xcats=xcats_test,
+            cids=cids_test,
+            freq="M",
+            lag=0,
+            xcat_aggs=["last", "last"],
+            start="2000-01-01",
+            xcat_trims=[None, None],
+        )
+
+        cr.reg_scatter(
+            labels=False,
+            coef_box="upper left",
+            title="FX consistent core CPI excess inflation",
+            xlab="ZN-scored signal",
+            ylab="signal",
+            separator="cids",
+            show_prob=False,
+        )
+
+        tables = [
+            table
+            for ax in matplotlib.pyplot.gcf().axes
+            for table in ax.tables
+        ]
+        self.assertEqual(len(tables), len(cids_test))
+        self.assertTrue(
+            all(
+                any(
+                    cell.get_text().get_text() == "Correlation\n coefficient "
+                    for cell in table.get_celld().values()
+                )
+                for table in tables
+            )
+        )
+        self.assertFalse(
+            any(
+                cell.get_text().get_text() == "Probability\n of significance "
+                for table in tables
+                for cell in table.get_celld().values()
+            )
+        )
+
+    def test_reg_scatter_cids_uses_default_coef_box_size(self):
+        cids_test = ["USD", "GBP", "JPY", "EUR"]
+        xcats_test = ["XCAT1", "XCAT2"]
+
+        dfx = make_test_df(cids=cids_test, xcats=xcats_test, start="2010-01-01")
+
+        cr = CategoryRelations(
+            df=dfx,
+            xcats=xcats_test,
+            cids=cids_test,
+            freq="M",
+            lag=0,
+            xcat_aggs=["last", "last"],
+            start="2000-01-01",
+            xcat_trims=[None, None],
+        )
+
+        with patch.object(CategoryRelations, "annotate_facet") as annotate_facet:
+            cr.reg_scatter(
+                labels=False,
+                coef_box="upper left",
+                title="FX consistent core CPI excess inflation",
+                xlab="ZN-scored signal",
+                ylab="signal",
+                separator="cids",
+            )
+
+        self.assertEqual(annotate_facet.call_count, len(cids_test))
+        self.assertTrue(
+            all(
+                call[1]["coef_box_size"] == (0.4, 2.5)
+                for call in annotate_facet.call_args_list
+            )
+        )
+
+    def test_reg_scatter_cids_map_probability_uses_pool(self):
+        cids_test = ["USD", "GBP", "JPY", "EUR"]
+        xcats_test = ["XCAT1", "XCAT2"]
+
+        dfx = make_test_df(cids=cids_test, xcats=xcats_test, start="2010-01-01")
+
+        cr = CategoryRelations(
+            df=dfx,
+            xcats=xcats_test,
+            cids=cids_test,
+            freq="M",
+            lag=0,
+            xcat_aggs=["last", "last"],
+            start="2000-01-01",
+            xcat_trims=[None, None],
+        )
+
+        with patch("macrosynergy.panel.category_relations.sm.MixedLM") as mixed_lm:
+            with warnings.catch_warnings(record=True) as w:
+                warnings.simplefilter("always")
+                cr.reg_scatter(
+                    labels=False,
+                    coef_box="upper left",
+                    title="FX consistent core CPI excess inflation",
+                    xlab="ZN-scored signal",
+                    ylab="signal",
+                    separator="cids",
+                    prob_est="map",
+                )
+
+            mixed_lm.assert_not_called()
+            self.assertTrue(
+                any(
+                    "not applicable to individual cross-section facets" in str(
+                        warning.message
+                    )
+                    for warning in w
+                )
             )
 
     def test_int_seperator(self):
