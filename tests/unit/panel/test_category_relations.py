@@ -969,6 +969,41 @@ class TestAll(unittest.TestCase):
             )
         )
 
+    def test_reg_scatter_cids_uses_default_coef_box_size(self):
+        cids_test = ["USD", "GBP", "JPY", "EUR"]
+        xcats_test = ["XCAT1", "XCAT2"]
+
+        dfx = make_test_df(cids=cids_test, xcats=xcats_test, start="2010-01-01")
+
+        cr = CategoryRelations(
+            df=dfx,
+            xcats=xcats_test,
+            cids=cids_test,
+            freq="M",
+            lag=0,
+            xcat_aggs=["last", "last"],
+            start="2000-01-01",
+            xcat_trims=[None, None],
+        )
+
+        with patch.object(CategoryRelations, "annotate_facet") as annotate_facet:
+            cr.reg_scatter(
+                labels=False,
+                coef_box="upper left",
+                title="FX consistent core CPI excess inflation",
+                xlab="ZN-scored signal",
+                ylab="signal",
+                separator="cids",
+            )
+
+        self.assertEqual(annotate_facet.call_count, len(cids_test))
+        self.assertTrue(
+            all(
+                call.kwargs["coef_box_size"] == (0.4, 2.5)
+                for call in annotate_facet.call_args_list
+            )
+        )
+
     def test_reg_scatter_cids_map_probability_uses_pool(self):
         cids_test = ["USD", "GBP", "JPY", "EUR"]
         xcats_test = ["XCAT1", "XCAT2"]

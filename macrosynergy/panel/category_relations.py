@@ -849,14 +849,11 @@ class CategoryRelations(object):
 
                 facet_font_size = 10 if set_font_size else coef_box_font_size
                 facet_set_font_size = False if set_font_size else set_font_size
-                facet_coef_box_size = coef_box_size
-                if set_font_size and show_prob and coef_box_size == (0.4, 2.5):
-                    facet_coef_box_size = (0.8, 1.7)
                 fg.map_dataframe(
                     self.annotate_facet,
                     prob_est=facet_prob_est,
                     show_prob=show_prob,
-                    coef_box_size=facet_coef_box_size,
+                    coef_box_size=coef_box_size,
                     coef_box_font_size=facet_font_size,
                     set_font_size=facet_set_font_size,
                     loc=coef_box,
@@ -1110,54 +1107,54 @@ if __name__ == "__main__":
         years=None,
     )
 
-    cr.reg_scatter(
-        labels=False,
-        separator=None,
-        title="Carry and Return",
-        xlab="Carry",
-        ylab="Return",
-        coef_box="lower left",
-        prob_est="map",
-        remove_zero_predictor=True,
-        title_fontsize=14,
-    )
+    # cr.reg_scatter(
+    #     labels=False,
+    #     separator=None,
+    #     title="Carry and Return",
+    #     xlab="Carry",
+    #     ylab="Return",
+    #     coef_box="lower left",
+    #     prob_est="map",
+    #     remove_zero_predictor=True,
+    #     title_fontsize=14,
+    # )
 
-    # years parameter
+    # # years parameter
 
-    cr = CategoryRelations(
-        dfdx,
-        xcats=["CRY", "XR"],
-        freq="M",
-        years=5,
-        lag=0,
-        cids=cidx,
-        xcat_aggs=["mean", "sum"],
-        start="2001-01-01",
-        blacklist=black,
-    )
+    # cr = CategoryRelations(
+    #     dfdx,
+    #     xcats=["CRY", "XR"],
+    #     freq="M",
+    #     years=5,
+    #     lag=0,
+    #     cids=cidx,
+    #     xcat_aggs=["mean", "sum"],
+    #     start="2001-01-01",
+    #     blacklist=black,
+    # )
 
-    cr.reg_scatter(
-        labels=False,
-        separator=None,
-        title="Carry and Return, 5-year periods",
-        xlab="Carry",
-        ylab="Return",
-        coef_box="lower left",
-        prob_est="map",
-    )
+    # cr.reg_scatter(
+    #     labels=False,
+    #     separator=None,
+    #     title="Carry and Return, 5-year periods",
+    #     xlab="Carry",
+    #     ylab="Return",
+    #     coef_box="lower left",
+    #     prob_est="map",
+    # )
 
-    cr = CategoryRelations(
-        dfdx,
-        xcats=["CRY", "XR"],
-        # xcat1_chg="diff",
-        freq="M",
-        lag=1,
-        cids=cidx,
-        xcat_aggs=["mean", "sum"],
-        start="2001-01-01",
-        blacklist=black,
-        years=None,
-    )
+    # cr = CategoryRelations(
+    #     dfdx,
+    #     xcats=["CRY", "XR"],
+    #     # xcat1_chg="diff",
+    #     freq="M",
+    #     lag=1,
+    #     cids=cidx,
+    #     xcat_aggs=["mean", "sum"],
+    #     start="2001-01-01",
+    #     blacklist=black,
+    #     years=None,
+    # )
 
     cr.reg_scatter(
         labels=False,
