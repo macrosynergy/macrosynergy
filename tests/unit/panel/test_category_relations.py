@@ -999,7 +999,7 @@ class TestAll(unittest.TestCase):
         self.assertEqual(annotate_facet.call_count, len(cids_test))
         self.assertTrue(
             all(
-                call.kwargs["coef_box_size"] == (0.4, 2.5)
+                call[1]["coef_box_size"] == (0.4, 2.5)
                 for call in annotate_facet.call_args_list
             )
         )
