@@ -243,10 +243,8 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
 
     Further work
     ------------
-    * Implement turnover regularization 
     * Custom optimizer and scheduler
     * LARS and ReduceLROnPlateau 
-    * Optional retraining after early stopping to avoid data waste
     """
     def __init__(
         self,
