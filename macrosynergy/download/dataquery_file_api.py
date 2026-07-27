@@ -148,41 +148,38 @@ window) if needed, and return the notifications as pandas DataFrames.
         print(revisions_df.head())
 """
 
-import os
-import pandas as pd
-import polars as pl
-
-import functools
-import time
-import warnings
-from pathlib import Path
-from enum import Enum
-
+import calendar
 import concurrent.futures as cf
+import datetime
+import functools
+import json
 import logging
+import os
 import shutil
+import time
 import traceback as tb
 import uuid
-from typing import Dict, Any, Optional, List, Tuple, Union, Sequence
-from tqdm import tqdm
-import json
-import datetime
-import calendar
+import warnings
+from enum import Enum
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
+import pandas as pd
+import polars as pl
 import requests
+from tqdm import tqdm
+
 from macrosynergy.compat import PD_2_0_OR_LATER, PYTHON_3_8_OR_LATER
-from macrosynergy.management.constants import JPMAQS_METRICS
-from macrosynergy.download.dataquery import JPMAQS_GROUP_ID
+from macrosynergy.download.dataquery import JPMAQS_GROUP_ID, OAUTH_TOKEN_URL
+from macrosynergy.download.exceptions import DownloadError, InvalidResponseError
 from macrosynergy.download.fusion_interface import (
+    _wait_for_api_call,
+    cache_decorator,
     request_wrapper,
     request_wrapper_stream_bytes_to_disk,
-    _wait_for_api_call,
-    convert_ticker_based_parquet_file_to_qdf,
-    cache_decorator,
 )
-from macrosynergy.download.dataquery import OAUTH_TOKEN_URL
-from macrosynergy.download.exceptions import DownloadError, InvalidResponseError
 from macrosynergy.download.jpm_oauth import JPMorganOAuth
+from macrosynergy.management.constants import JPMAQS_METRICS
 
 DQ_FILE_API_BASE_URL: str = (
     "https://api-dataquery.jpmchase.com/research/dataquery-authe/api/v2"
@@ -302,6 +299,10 @@ class DataQueryFileAPIClient:
     authentication, API requests, and file downloads, including large file downloads
     using a segmented, concurrent approach.
 
+    Files are saved to disk unmodified, in the ticker-based Parquet format in which they
+    are delivered. Conversion to a QuantamentalDataFrame (or other format) is performed
+    on read, when the data is loaded via `download`.
+
     Parameters
     ----------
     client_id : Optional[str]
@@ -311,7 +312,9 @@ class DataQueryFileAPIClient:
         Client Secret for authentication. If not provided, it will be sourced from
         environment variables (`DQ_CLIENT_SECRET` or `DATAQUERY_CLIENT_SECRET`).
     out_dir : Optional[str]
-        Default output directory for downloads. Can be overridden in download methods.
+        Output directory for all downloads. Files are saved under a "jpmaqs-download"
+        subdirectory of this path (e.g. "~/jpmaqs-data/jpmaqs-download"). Defaults to
+        "~/jpmaqs-data".
     base_url : str
         The base URL for the DataQuery File API. Defaults to `DQ_FILE_API_BASE_URL`.
     scope : str
@@ -326,11 +329,11 @@ class DataQueryFileAPIClient:
         self,
         client_id: Optional[str] = None,
         client_secret: Optional[str] = None,
-        out_dir: Optional[str] = None,
         base_url: str = DQ_FILE_API_BASE_URL,
         scope: str = DQ_FILE_API_SCOPE,
         proxies: Optional[Dict[str, str]] = None,
         verify_ssl: bool = True,
+        out_dir: Optional[str] = None,
     ):
         if not (bool(client_id) and bool(client_secret)):
             client_id, client_secret = get_client_id_secret()
@@ -344,8 +347,8 @@ class DataQueryFileAPIClient:
 
         self.client_id = client_id
         self.client_secret = client_secret
-        self.out_dir = out_dir or "./jpmaqs-download"
-
+        self.out_dir = out_dir or "~/jpmaqs-data"
+        self.out_dir = Path(self.out_dir).expanduser().resolve()
         self.base_url = _resolve_base_url(
             primary=base_url,
             fallback=DQ_FILE_API_FALLBACK_BASE_URL,
@@ -372,8 +375,13 @@ class DataQueryFileAPIClient:
             logger.error(tb.format_exc())
         return False
 
-    def _get_save_dir(self, out_dir: Optional[str] = None) -> str:
-        base_dir = Path(out_dir or self.out_dir)
+    def _get_save_dir(self) -> str:
+        """
+        Return the directory files are saved to: a "jpmaqs-download" subdirectory of
+        `self.out_dir`. If `self.out_dir` is already named "jpmaqs-download", it is used
+        as-is, so the suffix is never doubled.
+        """
+        base_dir = Path(self.out_dir)
         if base_dir.name != "jpmaqs-download":
             return str(base_dir / "jpmaqs-download")
         return str(base_dir)
@@ -775,21 +783,17 @@ class DataQueryFileAPIClient:
         file_group_id: str = None,
         file_datetime: str = None,
         filename: Optional[str] = None,
-        out_dir: Optional[str] = None,
         overwrite: bool = False,
-        qdf: bool = False,
-        as_csv: bool = False,
-        keep_raw_data: bool = False,
         chunk_size: Optional[int] = None,
         timeout: Optional[float] = DQ_FILE_API_TIMEOUT,
         max_retries: int = 3,
     ) -> str:
         """
-        Downloads a single Parquet file to a specified directory.
+        Downloads a single Parquet file to the client's output directory.
 
-        This method can be called with either (`file_group_id` and `file_datetime`)
-        or a `filename`. For large files, it automatically uses the
-        `SegmentedFileDownloader` for a robust, multi-part download.
+        This method can be called with either (`file_group_id` and `file_datetime`) or a
+        `filename`. For large files, it automatically uses the `SegmentedFileDownloader`
+        for a robust, multi-part download.
 
         Parameters
         ----------
@@ -799,18 +803,8 @@ class DataQueryFileAPIClient:
             The timestamp of the file to download.
         filename : Optional[str]
             The full filename to download. Overrides `file_group_id` and `file_datetime`.
-        out_dir : str
-            The directory where the file will be saved.
         overwrite : bool
             If True, overwrites the file if it already exists. Default is False.
-        qdf : bool
-            If True, converts the DataFrame to a QuantamentalDataFrame. If False, files
-            are saved as-is in the ticker-based Parquet format. Default is False.
-        as_csv : bool
-            If True, saves the downloaded datasets as CSV files. Default is False, with
-            Parquet as the default format.
-        keep_raw_data : bool
-            If True, keeps the raw data files after conversion. Default is False.
         chunk_size : Optional[int]
             The chunk size for streaming downloads (in bytes).
         timeout : Optional[float]
@@ -823,7 +817,7 @@ class DataQueryFileAPIClient:
         str
             The full path to the downloaded file.
         """
-        out_dir = self._get_save_dir(out_dir)
+        out_dir = self._get_save_dir()
         if not ((bool(file_group_id) and bool(file_datetime)) ^ bool(filename)):
             raise ValueError(
                 "One of `file_group_id` & `file_datetime`, or `filename` must be provided."
@@ -870,7 +864,6 @@ class DataQueryFileAPIClient:
         if "_DELTA" in file_group_id:
             is_small_file = file_datetime not in large_delta_file_datetimes()
 
-        is_catalog_file = file_group_id == self.catalog_file_group_id
         if is_small_file:
             request_wrapper_stream_bytes_to_disk(**download_args)
         else:
@@ -882,7 +875,6 @@ class DataQueryFileAPIClient:
                     f"Retrying with segmented download..."
                 )
                 try:
-
                     SegmentedFileDownloader(
                         **download_args,
                         max_file_retries=max_retries,
@@ -903,32 +895,10 @@ class DataQueryFileAPIClient:
         logger.info(
             f"Downloaded {file_name} in {time_taken:.2f} seconds to {file_path}"
         )
-        if not (qdf or as_csv) or is_catalog_file or not file_path.suffix == ".parquet":
-            return str(file_path)
-
-        convert_args = dict(
-            filename=str(file_path),
-            as_csv=as_csv,
-            qdf=qdf,
-            keep_raw_data=keep_raw_data,
-        )
-
-        if PYTHON_3_8_OR_LATER:
-            convert_ticker_based_parquet_file_to_qdf_pl(**convert_args)
-        else:
-            convert_ticker_based_parquet_file_to_qdf(**convert_args)
-        if qdf:
-            msg_str = (
-                f"Successfully converted {filename} to Quantamental Data Format (QDF)"
-            )
-            if as_csv:
-                msg_str += " and saved as CSV"
-            logger.info(msg_str)
         return str(file_path)
 
     def delete_corrupt_files(
         self,
-        out_dir: Optional[str] = None,
         files: Optional[List[str]] = None,
     ) -> List[str]:
         """
@@ -936,20 +906,16 @@ class DataQueryFileAPIClient:
 
         Parameters
         ----------
-        out_dir : Optional[str]
-            The directory to scan for corrupt files. If None, uses the client's default
-            output directory.
         files : Optional[List[str]]
             A list of file paths to check for corruption. If None, scans all downloaded
-            files in the specified output directory.
+            files in the client's output directory.
 
         Returns
         -------
         List[str]
             A list of file paths that were identified as corrupt and deleted.
         """
-        out_dir = self._get_save_dir(out_dir)
-        avail_files = self.list_downloaded_files(out_dir=out_dir)
+        avail_files = self.list_downloaded_files()
         if avail_files.empty:
             return []
         if files is not None:
@@ -965,11 +931,7 @@ class DataQueryFileAPIClient:
     def download_multiple_files(
         self,
         filenames: List[str],
-        out_dir: Optional[str] = None,
         overwrite: bool = False,
-        qdf: bool = False,
-        as_csv: bool = False,
-        keep_raw_data: bool = False,
         max_retries: int = 3,
         n_jobs: int = None,
         chunk_size: Optional[int] = None,
@@ -977,23 +939,14 @@ class DataQueryFileAPIClient:
         show_progress: bool = True,
     ) -> None:
         """
-        Downloads a list of files concurrently with progress indication.
+        Downloads a list of files concurrently, with a progress bar.
 
         Parameters
         ----------
         filenames : List[str]
             A list of full filenames to be downloaded.
-        out_dir : str
-            The directory to save the downloaded files.
         overwrite : bool
             If True, overwrites files if they already exist. Default is False.
-        qdf : bool
-            If True, converts the DataFrame to a QuantamentalDataFrame. If False, files
-            are saved as-is in the ticker-based Parquet format. Default is False.
-        as_csv : bool
-            If True, saves the DataFrame as a CSV file. Default is False.
-        keep_raw_data : bool
-            If True, keeps the raw data files after conversion. Default is False.
         max_retries : int
             The number of times to retry downloading the entire list of failed files.
         n_jobs : int
@@ -1005,13 +958,13 @@ class DataQueryFileAPIClient:
         show_progress : bool
             If True, displays a progress bar for the downloads.
         """
-        out_dir = self._get_save_dir(out_dir)
+        out_dir = self._get_save_dir()
         Path(out_dir).mkdir(parents=True, exist_ok=True)
         start_time = time.time()
         logger.info(f"Starting download of {len(filenames)} files.")
         failed_files = []
         if n_jobs == -1:
-            n_jobs = None
+            n_jobs = os.cpu_count()
         with cf.ThreadPoolExecutor(max_workers=n_jobs) as executor:
             futures = {}
             for filename in tqdm(
@@ -1023,11 +976,7 @@ class DataQueryFileAPIClient:
                     executor.submit(
                         self.download_file,
                         filename=filename,
-                        out_dir=out_dir,
                         overwrite=overwrite,
-                        qdf=qdf,
-                        as_csv=as_csv,
-                        keep_raw_data=keep_raw_data,
                         chunk_size=chunk_size,
                         timeout=timeout,
                     )
@@ -1049,9 +998,7 @@ class DataQueryFileAPIClient:
                 except Exception as e:
                     logger.error(f"Failed to download {fname}: {e}")
                     failed_files.append(fname)
-        found_corrupt_files = self.delete_corrupt_files(
-            out_dir=out_dir, files=filenames
-        )
+        found_corrupt_files = self.delete_corrupt_files(files=filenames)
         failed_files = sorted(set(failed_files + found_corrupt_files))
         if not failed_files:
             total_time = time.time() - start_time
@@ -1072,7 +1019,6 @@ class DataQueryFileAPIClient:
 
         return self.download_multiple_files(
             filenames=failed_files,
-            out_dir=out_dir,
             max_retries=max_retries - 1,
             n_jobs=n_jobs,
             chunk_size=chunk_size,
@@ -1082,14 +1028,10 @@ class DataQueryFileAPIClient:
 
     def download_catalog_file(
         self,
-        out_dir: Optional[str] = None,
-        add_dataset_column: bool = False,
-        as_csv: bool = False,
         overwrite: bool = False,
-        keep_raw_data: bool = False,
         timeout: Optional[float] = DQ_FILE_API_TIMEOUT,
     ) -> str:
-        out_dir = self._get_save_dir(out_dir)
+        """Downloads the latest JPMaQS metadata catalog file and returns its path."""
         available_catalogs = self.list_available_files(self.catalog_file_group_id)
         if available_catalogs.empty:
             raise DownloadError("No catalog files available for download.")
@@ -1101,7 +1043,7 @@ class DataQueryFileAPIClient:
 
         # check if file already exists
         file_path = None
-        existing_files = self.list_downloaded_files(out_dir=out_dir)
+        existing_files = self.list_downloaded_files()
         if not overwrite and not existing_files.empty:
             if latest_filename in sorted(existing_files["file-name"]):
                 file_path = existing_files[
@@ -1111,29 +1053,9 @@ class DataQueryFileAPIClient:
         if file_path is None:
             file_path = self.download_file(
                 filename=latest_filename,
-                out_dir=out_dir,
                 overwrite=overwrite,
                 timeout=timeout,
             )
-
-        if not (add_dataset_column or as_csv):
-            return file_path
-
-        df = pd.read_parquet(file_path)
-
-        if add_dataset_column:
-            df.loc[:, "Dataset"] = (
-                df["Theme"].map(JPMAQS_DATASET_THEME_MAPPING).fillna("Unknown")
-            )
-
-        if as_csv:
-            csv_file_path = Path(file_path).with_suffix(".csv")
-            df.to_csv(csv_file_path, index=False)
-            if not keep_raw_data:
-                Path(file_path).unlink()
-            file_path = str(csv_file_path)
-        else:
-            df.to_parquet(file_path, index=False)
 
         return file_path
 
@@ -1143,7 +1065,6 @@ class DataQueryFileAPIClient:
         cids: Optional[List[str]] = None,
         xcats: Optional[List[str]] = None,
         case_sensitive: bool = False,
-        out_dir: Optional[str] = None,
     ) -> List[str]:
         for param, name in zip(
             [tickers, cids, xcats],
@@ -1173,13 +1094,12 @@ class DataQueryFileAPIClient:
         if not tickers or not any(t.strip() for t in tickers):
             raise ValueError("No valid tickers to search for.")
 
-        catalog_file = self.download_catalog_file(
-            out_dir=out_dir,
-            add_dataset_column=True,
-            as_csv=False,
-        )
+        catalog_file = self.download_catalog_file()
 
         catalog_df = pd.read_parquet(catalog_file)
+        catalog_df["Dataset"] = (
+            catalog_df["Theme"].map(JPMAQS_DATASET_THEME_MAPPING).fillna("Unknown")
+        )
 
         if case_sensitive:
             catalog_df = catalog_df[catalog_df["Ticker"].isin(tickers)]
@@ -1191,10 +1111,7 @@ class DataQueryFileAPIClient:
         datasets_to_keep = sorted(set(catalog_df["Dataset"]))
         return datasets_to_keep
 
-    def list_downloaded_files(
-        self,
-        out_dir: Optional[str] = None,
-    ) -> pd.DataFrame:
+    def list_downloaded_files(self) -> pd.DataFrame:
         out_dir = self._get_save_dir()
         col_order = [
             "filename",
@@ -1398,14 +1315,9 @@ class DataQueryFileAPIClient:
 
     def download_full_snapshot(
         self,
-        out_dir: Optional[str] = None,
         since_datetime: Optional[str] = None,
         to_datetime: Optional[str] = None,
-        file_datetime: Optional[str] = None,
         overwrite: bool = False,
-        qdf: bool = False,
-        as_csv: bool = False,
-        keep_raw_data: bool = False,
         chunk_size: Optional[int] = None,
         timeout: Optional[float] = DQ_FILE_API_TIMEOUT,
         include_full_snapshots: bool = True,
@@ -1423,25 +1335,13 @@ class DataQueryFileAPIClient:
 
         Parameters
         ----------
-        out_dir : str
-            The directory where files will be saved.
         since_datetime : Optional[str]
             Download files modified since this timestamp (inclusive).
-            Defaults to the start of the current day (UTC) if `file_datetime` is not set.
+            Defaults to the start of the current day (UTC).
         to_datetime : Optional[str]
             Download files modified up to this timestamp (inclusive).
-        file_datetime : Optional[str]
-            A specific file date to check for. Overrides `since_datetime`.
         overwrite : bool
             If True, overwrites files if they already exist. Default is False.
-        qdf : bool
-            If True, converts the DataFrame to a QuantamentalDataFrame. If False, files
-            are saved as-is in the ticker-based Parquet format. Default is False.
-        as_csv : bool
-            If True, saves the downloaded datasets as CSV files. Default is False, with
-            Parquet as the default format.
-        keep_raw_data : bool
-            If True, keeps the raw data files after conversion. Default is False.
         chunk_size : Optional[int]
             The chunk size for streaming downloads (in bytes).
         timeout : Optional[float]
@@ -1458,22 +1358,18 @@ class DataQueryFileAPIClient:
         show_progress : bool
             If True, displays a progress bar for downloads.
         """
-        out_dir = self._get_save_dir(out_dir)
+        out_dir = self._get_save_dir()
         Path(out_dir).mkdir(parents=True, exist_ok=True)
         start_time = time.time()
 
-        if file_datetime is None and since_datetime is None:
+        if since_datetime is None:
             since_datetime = pd.Timestamp.utcnow().strftime("%Y%m%d")
 
-        effective_ts = file_datetime or since_datetime
         logger.info(
-            f"Starting snapshot download to '{out_dir}' for files since {effective_ts}."
+            f"Starting snapshot download to '{out_dir}' for files since {since_datetime}."
         )
 
-        validate_dq_timestamp(
-            effective_ts,
-            var_name="file_datetime" if file_datetime else "since_datetime",
-        )
+        validate_dq_timestamp(since_datetime, var_name="since_datetime")
 
         files_df = self.filter_available_files_by_datetime(
             since_datetime=since_datetime,
@@ -1490,7 +1386,7 @@ class DataQueryFileAPIClient:
                 raise ValueError("`file_group_ids` must be a list of strings.")
             files_df = files_df[files_df["file-group-id"].isin(file_group_ids)].copy()
 
-        downloaded_files_df = self.list_downloaded_files(out_dir=out_dir)
+        downloaded_files_df = self.list_downloaded_files()
         if not overwrite and not downloaded_files_df.empty:
             files_df = files_df[
                 ~(files_df["file-name"].isin(downloaded_files_df["file-name"]))
@@ -1514,11 +1410,7 @@ class DataQueryFileAPIClient:
 
         self.download_multiple_files(
             filenames=download_order,
-            out_dir=out_dir,
             overwrite=overwrite,
-            qdf=qdf,
-            as_csv=as_csv,
-            keep_raw_data=keep_raw_data,
             chunk_size=chunk_size,
             timeout=timeout,
             show_progress=show_progress,
@@ -1540,15 +1432,15 @@ class DataQueryFileAPIClient:
         categorical_dataframe: bool = True,
         include_delta_files: bool = False,
         show_progress: bool = True,
-        out_dir: Optional[str] = None,
         overwrite: bool = False,
-        qdf: bool = False,
-        keep_raw_data: bool = False,
-        as_csv: bool = False,
     ) -> Union[pd.DataFrame, pl.DataFrame, pl.LazyFrame]:
         """
-        A method to download data and load it as a DataFrame based on specified
-        indicators, and specified date range.
+        Downloads data for the specified `tickers`, `cids`, or `xcats` and returns it as
+        a DataFrame for the given date range.
+
+        The latest full snapshots of the relevant datasets are downloaded to disk, then
+        loaded and filtered. The files on disk are unmodified; the conversion to
+        `dataframe_format` (e.g. "qdf") is applied lazily on read.
 
         Parameters
         ----------
@@ -1584,20 +1476,8 @@ class DataQueryFileAPIClient:
             If True, delta files will be included in the download. Default is False.
         show_progress : bool
             If True, displays a progress bar during downloads. Default is True.
-        out_dir : Optional[str]
-            The output directory for downloaded files. The default directory being used
-            by the DataQueryFileAPI instance is used if None.
         overwrite : bool
             If True, overwrites files if they already exist. Default is False.
-        qdf : bool
-            If True, each downloaded dataframe will be saved as a QuantamentalDataFrame,
-            otherwise files are saved as-is in the ticker-based Parquet format.
-            Default is False.
-        keep_raw_data : bool
-            If True, keeps the raw data files after conversion. Default is False.
-        as_csv : bool
-            If True, saves the downloaded datasets as CSV files. Default is False, with
-            Parquet as the default format.
 
         Returns
         -------
@@ -1609,18 +1489,14 @@ class DataQueryFileAPIClient:
                 "Downloading delta files is not implemented in this method."
             )
 
-        out_dir = self._get_save_dir(out_dir)
+        out_dir = self._get_save_dir()
         datasets_to_download = self.get_datasets_for_indicators(
             tickers=tickers, cids=cids, xcats=xcats
         )
         self.download_full_snapshot(
-            out_dir=out_dir,
             since_datetime=pd.Timestamp.utcnow().strftime("%Y%m%d"),
             file_group_ids=datasets_to_download,
             overwrite=overwrite,
-            qdf=qdf,
-            as_csv=as_csv,
-            keep_raw_data=keep_raw_data,
             show_progress=show_progress,
             include_full_snapshots=True,
             include_delta=include_delta_files,
@@ -2535,14 +2411,14 @@ def _lazy_load_filtered_parquets(
 
 if __name__ == "__main__":
     print("Current time UTC:", pd.Timestamp.utcnow().isoformat())
-
+    path = Path("~/jpmaqs-data").expanduser()
     start = time.time()
     since_datetime = pd.Timestamp.now() - pd.offsets.BDay(5)
     print(
         f"Downloading full-snapshots, delta-files, and metadata files published since {since_datetime}"
     )
     since_datetime = since_datetime.strftime("%Y%m%d")
-    with DataQueryFileAPIClient(out_dir="./data/jpmaqs-data/") as dq:
+    with DataQueryFileAPIClient(out_dir=path) as dq:
         dq.download_catalog_file()
         dq.download_full_snapshot(since_datetime=since_datetime)
     end = time.time()
@@ -2553,11 +2429,11 @@ if __name__ == "__main__":
     xcats = ["RIR_NSA", "FXXR_NSA", "FXXR_VT10", "DU05YXR_NSA", "DU05YXR_VT10"]
     tickers = [f"{c}_{x}" for c in cids for x in xcats]
 
-    with DataQueryFileAPIClient(out_dir="./data/jpmaqs-data/") as dq:
+    with DataQueryFileAPIClient(out_dir=path) as dq:
         df = dq.download(tickers=tickers)
         print(df.head())
 
-    with DataQueryFileAPIClient(out_dir="./data/jpmaqs-data/") as dq:
+    with DataQueryFileAPIClient(out_dir=path) as dq:
         pl_df: pl.DataFrame = dq.download(
             cids=cids,
             xcats=xcats,
