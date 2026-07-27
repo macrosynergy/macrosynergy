@@ -9,7 +9,7 @@ from unittest.mock import patch, MagicMock
 import functools
 import logging
 import tempfile
-from macrosynergy.compat import PD_2_0_OR_LATER, PYTHON_3_8_OR_LATER
+from macrosynergy.compat import PD_2_0_OR_LATER
 from macrosynergy.download.dataquery_file_api import (
     validate_dq_timestamp,
     get_client_id_secret,
@@ -88,7 +88,7 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
             client_id="arg_id", client_secret="arg_secret", out_dir=test_dir
         )
         self.assertEqual(client.client_id, "arg_id")
-        self.assertEqual(client.out_dir, test_dir)
+        self.assertEqual(client.out_dir, Path(test_dir).expanduser().resolve())
         mock_oauth_constructor.assert_called_once_with(
             client_id="arg_id",
             client_secret="arg_secret",
@@ -105,7 +105,7 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
         client = DataQueryFileAPIClient()
         self.assertEqual(client.client_id, "env_id")
         self.assertEqual(client.client_secret, "env_secret")
-        self.assertEqual(client.out_dir, "./jpmaqs-download")
+        self.assertEqual(client.out_dir, Path("~/jpmaqs-data").expanduser().resolve())
         mock_get_client.assert_called_once()
         mock_oauth_constructor.assert_called_once_with(
             client_id="env_id",
@@ -481,7 +481,7 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
     )
     @patch("macrosynergy.download.dataquery_file_api.Path")
     @patch("macrosynergy.download.dataquery_file_api.DataQueryFileAPIOauth")
-    def test_download_file_catalog_no_conversion(
+    def test_download_file_no_conversion_on_download(
         self, mock_oauth, mock_path, mock_downloader, mock_convert
     ):
         client = DataQueryFileAPIClient(
@@ -494,47 +494,14 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
             mock_path.return_value.__truediv__.return_value.__truediv__.return_value
         ) = mock_file_path
 
-        client.download_file(
-            filename="JPMAQS_METADATA_CATALOG_20230101.parquet", qdf=True
-        )
+        # Files are written to disk as-is; no qdf/csv conversion happens on download.
+        client.download_file(filename="TEST_DATA_20230101.parquet")
         mock_downloader.assert_called_once()
         mock_convert.assert_not_called()
 
-    @patch(
-        "macrosynergy.download.dataquery_file_api.convert_ticker_based_parquet_file_to_qdf_pl"
-    )
-    @patch("macrosynergy.download.dataquery_file_api.SegmentedFileDownloader")
-    @patch("macrosynergy.download.dataquery_file_api.Path")
-    @patch("macrosynergy.download.dataquery_file_api.DataQueryFileAPIOauth")
-    def test_download_file_qdf_conversion(
-        self, mock_oauth, mock_path, mock_downloader, mock_convert
-    ):
-        if not PYTHON_3_8_OR_LATER:
-            self.skipTest("Requires Python 3.8+")
-        client = DataQueryFileAPIClient(
-            client_id="id", client_secret="secret", out_dir=self.test_dir
-        )
-        mock_file_path = MagicMock()
-        mock_file_path.exists.return_value = False
-        mock_file_path.suffix = ".parquet"
-        mock_file_path.__str__.return_value = "mock_dir/TEST_DATA_20230101.parquet"
-        (
-            mock_path.return_value.__truediv__.return_value.__truediv__.return_value
-        ) = mock_file_path
-
-        client.download_file(
-            filename="TEST_DATA_20230101.parquet",
-            qdf=True,
-            as_csv=True,
-            keep_raw_data=True,
-        )
-
-        mock_convert.assert_called_once_with(
-            filename=str(mock_file_path),
-            as_csv=True,
-            qdf=True,
-            keep_raw_data=True,
-        )
+        # The conversion kwargs no longer exist on the download methods.
+        with self.assertRaises(TypeError):
+            client.download_file(filename="TEST_DATA_20230101.parquet", qdf=True)
 
     @patch("macrosynergy.download.dataquery_file_api.cf.as_completed")
     @patch("macrosynergy.download.dataquery_file_api.cf.ThreadPoolExecutor")
@@ -562,6 +529,22 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
 
         future1.result.assert_called_once()
         future2.result.assert_called_once()
+
+    @patch("macrosynergy.download.dataquery_file_api.os.cpu_count", return_value=7)
+    @patch("macrosynergy.download.dataquery_file_api.cf.as_completed", return_value=[])
+    @patch("macrosynergy.download.dataquery_file_api.cf.ThreadPoolExecutor")
+    @patch("macrosynergy.download.dataquery_file_api.DataQueryFileAPIOauth")
+    def test_download_multiple_files_n_jobs_all_cores(
+        self, mock_oauth, mock_executor_cls, mock_as_completed, mock_cpu_count
+    ):
+        client = DataQueryFileAPIClient(
+            client_id="id", client_secret="secret", out_dir=self.test_dir
+        )
+        client.download_multiple_files(
+            filenames=["f1.parquet"], n_jobs=-1, show_progress=False
+        )
+        # n_jobs=-1 resolves to the machine's core count.
+        mock_executor_cls.assert_called_once_with(max_workers=7)
 
     @suppress_logging
     @patch("macrosynergy.download.dataquery_file_api.cf.as_completed")
@@ -623,13 +606,9 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
             )
         mock_executor.shutdown.assert_called_once_with(wait=False, cancel_futures=True)
 
-    @patch("macrosynergy.download.dataquery_file_api.Path")
-    @patch("macrosynergy.download.dataquery_file_api.pd.read_parquet")
     @patch.object(DataQueryFileAPIClient, "download_file")
     @patch.object(DataQueryFileAPIClient, "list_available_files")
-    def test_download_catalog_file(
-        self, mock_list_files, mock_download, mock_read_parquet, mock_path_cls
-    ):
+    def test_download_catalog_file(self, mock_list_files, mock_download):
         client = DataQueryFileAPIClient(
             client_id="id", client_secret="secret", out_dir=self.test_dir
         )
@@ -640,61 +619,49 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
                 "last-modified": pd.to_datetime(["2023-01-02"]),
             }
         )
-        cat_dir = os.path.join(self.test_dir, "cat")
         fake_path_str = os.path.join(
-            cat_dir, "jpmaqs-download", "CATALOG_20230102.parquet"
+            self.test_dir, "jpmaqs-download", "CATALOG_20230102.parquet"
         )
         mock_download.return_value = fake_path_str
 
-        # Configure mock for the first call's _get_save_dir
-        mock_path_cls.return_value.name = "cat"
-        mock_path_cls.return_value.__truediv__.return_value.__str__.return_value = (
-            os.path.join(cat_dir, "jpmaqs-download")
-        )
-
-        # simple base case
-        client.download_catalog_file(out_dir=cat_dir, overwrite=True)
+        # The catalog is downloaded as-is; nothing is read/converted/mutated on disk.
+        path = client.download_catalog_file(overwrite=True)
+        self.assertEqual(path, fake_path_str)
         mock_download.assert_called_once_with(
             filename="CATALOG_20230102.parquet",
-            out_dir=os.path.join(cat_dir, "jpmaqs-download"),
             overwrite=True,
             timeout=300.0,
         )
-        mock_read_parquet.assert_not_called()
-
-        # reset mocks
-        mock_download.reset_mock()
-        mock_read_parquet.reset_mock()
-        theme, expected_dataset = next(iter(JPMAQS_DATASET_THEME_MAPPING.items()))
-        mock_df = pd.DataFrame({"Theme": [theme, "Some unknown theme"]})
-        mock_df.to_parquet = MagicMock()
-        mock_df.to_csv = MagicMock()
-        mock_read_parquet.return_value = mock_df
-        mock_path_instance = MagicMock()
-        mock_path_cls.return_value = mock_path_instance
-
-        # add_dataset_column without as_csv
-        client.download_catalog_file(add_dataset_column=True)
-        mock_read_parquet.assert_called_once_with(fake_path_str)
-        self.assertEqual(mock_df["Dataset"].iloc[0], expected_dataset)
-        self.assertEqual(mock_df["Dataset"].iloc[1], "Unknown")
-        mock_df.to_parquet.assert_called_once_with(fake_path_str, index=False)
-        mock_df.to_csv.assert_not_called()
-
-        # as_csv with keep_raw_data=False
-        mock_read_parquet.reset_mock()
-        mock_df.to_csv.reset_mock()
-        mock_path_instance = MagicMock()
-        mock_path_cls.return_value = mock_path_instance
-        client.download_catalog_file(as_csv=True, keep_raw_data=False)
-        mock_read_parquet.assert_called_once_with(fake_path_str)
-        mock_df.to_csv.assert_called_once()
-        mock_path_instance.unlink.assert_called_once_with()
 
         # error case
         mock_list_files.return_value = pd.DataFrame()
         with self.assertRaises(DownloadError):
             client.download_catalog_file()
+
+    @patch("macrosynergy.download.dataquery_file_api.pd.read_parquet")
+    @patch.object(DataQueryFileAPIClient, "download_catalog_file")
+    def test_get_datasets_for_indicators(
+        self, mock_download_catalog, mock_read_parquet
+    ):
+        client = DataQueryFileAPIClient(
+            client_id="id", client_secret="secret", out_dir=self.test_dir
+        )
+        theme, expected_dataset = next(iter(JPMAQS_DATASET_THEME_MAPPING.items()))
+        mock_download_catalog.return_value = "catalog.parquet"
+        mock_read_parquet.return_value = pd.DataFrame(
+            {
+                "Ticker": ["USD_GROWTH", "JPY_INFL", "EUR_RATE"],
+                "Theme": [theme, "Some unknown theme", theme],
+            }
+        )
+
+        datasets = client.get_datasets_for_indicators(
+            tickers=["USD_GROWTH", "JPY_INFL"]
+        )
+        # Catalog is downloaded as-is; the Dataset column is derived in-memory.
+        mock_download_catalog.assert_called_once_with()
+        mock_read_parquet.assert_called_once_with("catalog.parquet")
+        self.assertEqual(datasets, sorted({expected_dataset, "Unknown"}))
 
     @patch("macrosynergy.download.dataquery_file_api.logger")
     @patch.object(DataQueryFileAPIClient, "download_multiple_files")
@@ -736,30 +703,7 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
 
         mock_download_multi.assert_called_once_with(
             filenames=expected_order,
-            out_dir=os.path.join(class_dir, "jpmaqs-download"),
             overwrite=False,
-            qdf=False,
-            as_csv=False,
-            keep_raw_data=False,
-            chunk_size=None,
-            timeout=300.0,
-            show_progress=False,
-        )
-
-        mock_download_multi.reset_mock()
-        method_dir = os.path.join(self.test_dir, "method", "dir")
-        client.download_full_snapshot(
-            since_datetime="20250201",
-            show_progress=False,
-            out_dir=method_dir,
-        )
-        mock_download_multi.assert_called_once_with(
-            filenames=expected_order,
-            out_dir=os.path.join(method_dir, "jpmaqs-download"),
-            overwrite=False,
-            qdf=False,
-            as_csv=False,
-            keep_raw_data=False,
             chunk_size=None,
             timeout=300.0,
             show_progress=False,
@@ -767,7 +711,7 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
 
     @patch.object(DataQueryFileAPIClient, "download_multiple_files")
     @patch.object(DataQueryFileAPIClient, "filter_available_files_by_datetime")
-    def test_download_full_snapshot_with_file_datetime(
+    def test_download_full_snapshot_filter_args(
         self, mock_filter_files, mock_download_multi
     ):
         client = DataQueryFileAPIClient(
