@@ -221,7 +221,7 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
         client.list_group_files()
         mock_get.assert_called_once()
 
-    @patch("pandas.Timestamp.utcnow")
+    @patch("macrosynergy.download.dataquery_file_api.utc_now")
     @patch.object(DataQueryFileAPIClient, "_get")
     def test_list_available_files(self, mock_get, mock_now):
         client = DataQueryFileAPIClient(
@@ -351,7 +351,7 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
         mock_list_all_files.assert_called_once()
 
     @patch("macrosynergy.download.dataquery_file_api.logger")
-    @patch("pandas.Timestamp.utcnow")
+    @patch("macrosynergy.download.dataquery_file_api.utc_now")
     @patch.object(DataQueryFileAPIClient, "list_available_files_for_all_file_groups")
     def test_filter_available_files_by_datetime_defaults_and_swap(
         self, mock_list_all_files, mock_now, mock_logger
@@ -908,7 +908,7 @@ class TestDataQueryFileAPIClientNotificationLoading(unittest.TestCase):
         mock_download_full_snapshot.assert_not_called()
 
     @patch("macrosynergy.download.dataquery_file_api.logger")
-    @patch("pandas.Timestamp.utcnow")
+    @patch("macrosynergy.download.dataquery_file_api.utc_now")
     @patch.object(DataQueryFileAPIClient, "list_downloaded_files")
     @patch.object(DataQueryFileAPIClient, "download_full_snapshot")
     def test_load_metadata_jsons_future_date_warns_and_downloads(

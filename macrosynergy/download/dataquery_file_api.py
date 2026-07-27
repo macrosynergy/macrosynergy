@@ -211,6 +211,13 @@ JPMAQS_EARLIEST_FILE_DATE = "20220101"
 logger = logging.getLogger(__name__)
 
 
+def utc_now() -> pd.Timestamp:
+    """
+    Returns the current UTC timestamp as a pandas Timestamp object.
+    """
+    return pd.Timestamp(datetime.datetime.now(datetime.timezone.utc))
+
+
 class DataQueryFileAPIOauth(JPMorganOAuth):
     """
     A class to handle OAuth authentication for the JPMorgan DataQuery File API.
@@ -547,7 +554,7 @@ class DataQueryFileAPIClient:
             A DataFrame of available files with their details.
         """
         if end_date is None:
-            end_date = pd.Timestamp.utcnow().strftime("%Y%m%d")
+            end_date = utc_now().strftime("%Y%m%d")
         endpoint = "/group/files/available-files"
         params = {
             "group-id": group_id,
@@ -703,9 +710,9 @@ class DataQueryFileAPIClient:
             A DataFrame of files modified within the specified time window.
         """
         if since_datetime is None:
-            since_datetime = pd.Timestamp.utcnow().strftime("%Y%m%d")
+            since_datetime = utc_now().strftime("%Y%m%d")
         if to_datetime is None:
-            to_datetime = pd.Timestamp.utcnow().strftime("%Y%m%dT%H%M%S")
+            to_datetime = utc_now().strftime("%Y%m%dT%H%M%S")
         validate_dq_timestamp(since_datetime, var_name="since_datetime")
         validate_dq_timestamp(to_datetime, var_name="to_datetime")
 
@@ -1143,10 +1150,10 @@ class DataQueryFileAPIClient:
     ) -> Dict[str, pd.DataFrame]:
         """Load JPMaQS metadata notification JSONs for a date."""
         date: pd.Timestamp = (
-            pd_to_datetime_compat(date) if date is not None else pd.Timestamp.utcnow()
+            pd_to_datetime_compat(date) if date is not None else utc_now()
         ).normalize()
-        if date > pd.Timestamp.utcnow().normalize():
-            today_utc = pd.Timestamp.utcnow().normalize()
+        if date > utc_now().normalize():
+            today_utc = utc_now().normalize()
             raise ValueError(
                 "Provided `date` is in the future (UTC). "
                 f"Requested: {date.date()}, today (UTC): {today_utc.date()}."
@@ -1363,7 +1370,7 @@ class DataQueryFileAPIClient:
         start_time = time.time()
 
         if since_datetime is None:
-            since_datetime = pd.Timestamp.utcnow().strftime("%Y%m%d")
+            since_datetime = utc_now().strftime("%Y%m%d")
 
         logger.info(
             f"Starting snapshot download to '{out_dir}' for files since {since_datetime}."
@@ -1494,7 +1501,7 @@ class DataQueryFileAPIClient:
             tickers=tickers, cids=cids, xcats=xcats
         )
         self.download_full_snapshot(
-            since_datetime=pd.Timestamp.utcnow().strftime("%Y%m%d"),
+            since_datetime=utc_now().strftime("%Y%m%d"),
             file_group_ids=datasets_to_download,
             overwrite=overwrite,
             show_progress=show_progress,
