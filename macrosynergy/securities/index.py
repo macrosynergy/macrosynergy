@@ -313,6 +313,7 @@ def compute_index_returns(
     rebalance_freq: str = "M",
     reconstitution_freq: Optional[str] = None,
     blacklist: Optional[Dict[str, Tuple[pd.Timestamp, pd.Timestamp]]] = None,
+    weights_col : Optional[str] = "membership"
 ) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
     Compute daily index-level returns from constituent weights and individual returns.
@@ -347,7 +348,7 @@ def compute_index_returns(
         Long-format weight DataFrame as returned by "compute_daily_weights".
     """
     weights_long = compute_daily_weights(
-        constituents, returns, rebalance_freq, reconstitution_freq, blacklist
+        constituents, returns, rebalance_freq, reconstitution_freq, blacklist, weights_col
     )
 
     # Pivot weights to wide for multiplication
