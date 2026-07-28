@@ -162,7 +162,7 @@ import uuid
 import warnings
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Union, overload
 
 import pandas as pd
 import polars as pl
@@ -850,7 +850,7 @@ class DataQueryFileAPIClient:
                 logger.warning(f"File {file_path} already exists. Skipping download.")
                 return str(file_path)
             logger.warning(f"File {file_path} already exists. It will be overwritten.")
-            file_path.unlink()
+            _delete_jpmaqs_file(file_path)
 
         logger.info(f"Starting download of {file_name}...")
         start = time.time()
@@ -892,8 +892,7 @@ class DataQueryFileAPIClient:
                         f"Segmented download also failed for {file_name}: {seg_e}. "
                         f"Cleaning up partial file and raising exception."
                     )
-                    if file_path.exists():
-                        file_path.unlink()
+                    _delete_jpmaqs_file(file_path)
                     raise DownloadError(
                         f"Failed to download {file_name} after {max_retries} retries."
                     ) from seg_e
@@ -968,10 +967,14 @@ class DataQueryFileAPIClient:
         out_dir = self._get_save_dir()
         Path(out_dir).mkdir(parents=True, exist_ok=True)
         start_time = time.time()
+        if len(filenames) == 0:
+            logger.info("No files to download.")
+            return []
         logger.info(f"Starting download of {len(filenames)} files.")
         failed_files = []
         if n_jobs == -1:
             n_jobs = os.cpu_count()
+        completed_file_names = set()
         with cf.ThreadPoolExecutor(max_workers=n_jobs) as executor:
             futures = {}
             for filename in tqdm(
@@ -999,6 +1002,7 @@ class DataQueryFileAPIClient:
                 fname = futures[future]
                 try:
                     future.result()
+                    completed_file_names.add(fname)
                 except KeyboardInterrupt:
                     executor.shutdown(wait=False, cancel_futures=True)
                     raise
@@ -1006,13 +1010,14 @@ class DataQueryFileAPIClient:
                     logger.error(f"Failed to download {fname}: {e}")
                     failed_files.append(fname)
         found_corrupt_files = self.delete_corrupt_files(files=filenames)
+        completed_file_names -= set(found_corrupt_files)
         failed_files = sorted(set(failed_files + found_corrupt_files))
         if not failed_files:
             total_time = time.time() - start_time
             logger.info(
                 f"Successfully downloaded {len(filenames)} files in {total_time:.2f} seconds."
             )
-            return  # All downloads scuccessful
+            return sorted(completed_file_names)  # All downloads successful
 
         log_msg = f"Failed to download {len(failed_files)} files"
         if max_retries > 0:
@@ -1024,7 +1029,7 @@ class DataQueryFileAPIClient:
             logger.error(f"Files failed after retries: {failed_files}")
             raise DownloadError(f"Files failed after retries: {failed_files}")
 
-        return self.download_multiple_files(
+        retried = self.download_multiple_files(
             filenames=failed_files,
             max_retries=max_retries - 1,
             n_jobs=n_jobs,
@@ -1032,6 +1037,7 @@ class DataQueryFileAPIClient:
             timeout=timeout,
             show_progress=show_progress,
         )
+        return sorted(completed_file_names | set(retried))
 
     def download_catalog_file(
         self,
@@ -1320,6 +1326,161 @@ class DataQueryFileAPIClient:
         )
         return df1
 
+    def cleanup_old_files(
+        self,
+        keep_n_days_old_files: int = 0,
+        to_datetime: Optional[Union[str, pd.Timestamp]] = None,
+        dry_run: bool = False,
+        show_progress: bool = True,
+    ) -> Optional[pd.DataFrame]:
+        """
+        Deletes files older than N days from the output directory.
+        The deletion logic checks decides if files are kept/deleted based on the file's
+        timestamp (in the file name itself), implying historical delta files
+        are evaluated based on their publication date (usually an end-of-month date).
+
+        Parameters
+        ----------
+        keep_n_days_old_files : Optional[int]
+            Delete files older than N days from the output directory.
+            At 0 (default), only the latest files are kept, at 1, the latest and previous
+            day's files are kept, etc. If None, or -1, no files are deleted.
+        to_datetime : Optional[Union[str, pd.Timestamp]]
+            The reference datetime to determine which files are considered "old".
+            If None, the current UTC datetime is used.
+        dry_run : bool
+            If True, logs which files would be deleted without actually deleting them. In
+            this mode, the method returns a DataFrame of files that would be deleted.
+            Default is False.
+        show_progress : bool
+            If True, displays a progress bar for the deletion process.
+
+        Returns
+        -------
+        Optional[pd.DataFrame]
+            In dry-run mode, the DataFrame of files that would be deleted; otherwise None.
+        """
+        if keep_n_days_old_files is None or keep_n_days_old_files < 0:
+            return
+
+        downloaded_df = self.list_downloaded_files()
+        if downloaded_df.empty:
+            return
+
+        if to_datetime is None:
+            to_dt = utc_now()
+        else:
+            to_dt = pd_to_datetime_compat(to_datetime, utc=True)
+        since_dt = to_dt.normalize() - pd.Timedelta(days=keep_n_days_old_files)
+
+        files_df = self._add_snap_date_column(downloaded_df)
+        snap_dates = pd.to_datetime(files_df["snap-date"], format="%Y%m%d", utc=True)
+        files_to_delete = files_df[snap_dates < since_dt]
+        if files_to_delete.empty:
+            logger.info(
+                "No files found with snap-date before %s. No files deleted.",
+                since_dt.date(),
+            )
+            return
+
+        if dry_run:
+            logger.info(
+                "Dry run: %d files with snap-date before %s would be deleted.",
+                len(files_to_delete),
+                since_dt.date(),
+            )
+            return files_to_delete
+
+        for file_path in tqdm(
+            sorted(files_to_delete["path"]),
+            desc=f"Cleaning up files older than {since_dt.date()}",
+            disable=not show_progress,
+        ):
+            _delete_jpmaqs_file(file_path)
+
+        # remove any date folders left empty by the deletion
+        for parent_dir in {Path(p).parent for p in files_to_delete["path"]}:
+            try:
+                parent_dir.rmdir()
+            except OSError:
+                pass
+
+        logger.info(
+            "Deleted %d files with snap-date before %s.",
+            len(files_to_delete),
+            since_dt.date(),
+        )
+
+    def _sort_file_for_download_order(self, files_df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Sorts files for download order based on priority:
+        1. Full snapshots
+        2. Delta files
+        3. Metadata files
+
+        Within each category, files are sorted by 'file-datetime' and then by 'file-name'.
+
+        Parameters
+        ----------
+        files_df : pd.DataFrame
+            DataFrame containing file details.
+
+        Returns
+        -------
+        pd.DataFrame
+            Sorted DataFrame ready for download.
+        """
+        sorted_df = files_df.copy()
+        sorted_df["download-priority"] = sorted_df["file-name"].apply(
+            lambda x: 3 if "_METADATA" in x else (2 if "_DELTA" in x else 1)
+        )
+        sorted_df = sorted_df.sort_values(
+            by=["download-priority", "file-datetime", "file-name"],
+            ascending=[True, True, True],
+        ).reset_index(drop=True)
+        return sorted_df
+
+    def _add_snap_date_column(self, files_df: pd.DataFrame) -> pd.DataFrame:
+        SNAP_ASSUMED_TIME = "T060000"
+        # files published from 06:00 UTC belong to that day's snapshot, earlier to the previous
+        SNAP_WINDOW_START = pd.Timedelta(hours=6)
+        files_df = files_df.copy()
+        # tail of the filename: "20260728" or "20260728T080000"
+        timestamps = (
+            files_df["file-name"]
+            .astype(str)
+            .str.rsplit("_", n=1)
+            .str[-1]
+            .str.split(".")
+            .str[0]
+        )
+        snap_dt_col = pd.to_datetime(
+            timestamps.where(
+                timestamps.str.contains("T"), timestamps + SNAP_ASSUMED_TIME
+            ),
+            format="%Y%m%dT%H%M%S",
+            errors="coerce",
+        )
+        if snap_dt_col.isna().any():
+            bad = files_df.loc[snap_dt_col.isna(), "file-name"].tolist()
+            raise ValueError(
+                f"Incorrectly named file(s), cannot parse timestamp: {bad}"
+            )
+        files_df["snap-date"] = (snap_dt_col - SNAP_WINDOW_START).dt.strftime("%Y%m%d")
+        return files_df
+
+    def _latest_complete_snapshot_date(self, files_df: pd.DataFrame) -> Optional[str]:
+        """
+        Returns the latest snap-date whose full-snapshot set covers every JPMaQS theme,
+        or None if no snap-date has a complete set. This avoids treating a partially
+        published (in-progress) snapshot as the latest.
+        """
+        expected = set(JPMAQS_DATASET_THEME_MAPPING.values())
+        full = files_df[~files_df["file-name"].str.contains("_DELTA|_METADATA")]
+        complete = full.groupby("snap-date")["file-group-id"].agg(expected.issubset)
+        complete_dates = complete.index[complete]
+        return max(complete_dates) if len(complete_dates) else None
+
     def download_full_snapshot(
         self,
         since_datetime: Optional[str] = None,
@@ -1332,7 +1493,7 @@ class DataQueryFileAPIClient:
         include_metadata: bool = True,
         file_group_ids: Optional[List[str]] = None,
         show_progress: bool = True,
-    ) -> None:
+    ) -> List[str]:
         """
         Downloads a complete snapshot of files based on specified criteria.
 
@@ -1404,18 +1565,12 @@ class DataQueryFileAPIClient:
         logger.info(f"Found {num_files_to_download} new files to download.")
         if not num_files_to_download:
             logger.info("No new files to download.")
-            return
+            return []
 
-        files_df["download-priority"] = (
-            files_df["file-name"]
-            .str.lower()
-            .apply(lambda x: (3 if "_metadata" in x else (2 if "_delta" in x else 1)))
-        )
-        download_order = files_df.sort_values(
-            by=["download-priority", "file-datetime", "file-name"],
-        )["file-name"].tolist()
-
-        self.download_multiple_files(
+        download_order = self._sort_file_for_download_order(files_df)[
+            "file-name"
+        ].tolist()
+        downloaded_files = self.download_multiple_files(
             filenames=download_order,
             overwrite=overwrite,
             chunk_size=chunk_size,
@@ -1425,6 +1580,87 @@ class DataQueryFileAPIClient:
 
         total_time = time.time() - start_time
         logger.info(f"Snapshot download completed in {total_time:.2f} seconds.")
+        logger.info(f"Downloaded {len(downloaded_files)} files to '{out_dir}'.")
+        return downloaded_files
+
+    def download_latest_snapshot(
+        self,
+        keep_n_days_old_files: Optional[int] = 0,
+        overwrite: bool = False,
+        chunk_size: Optional[int] = None,
+        timeout: Optional[float] = DQ_FILE_API_TIMEOUT,
+        show_progress: bool = True,
+    ) -> List[str]:
+        """
+        Downloads the latest complete snapshot to the output directory.
+
+        Determines the most recent snapshot date for which every JPMaQS full-snapshot
+        dataset is available, then downloads that date's files (full snapshots, deltas
+        and metadata), skipping any already present unless `overwrite` is set. Older
+        files are then removed according to `keep_n_days_old_files`.
+
+        Parameters
+        ----------
+        keep_n_days_old_files : int
+            Delete files older than N days from the output directory after the download.
+            At 0 (default), only the latest files are kept, at 1, the latest and previous
+            day's files are kept, etc. If None, or -1, no files are deleted.
+            See :func:`DataQueryFileAPIClient.cleanup_old_files` for more details.
+        overwrite : bool
+            If True, overwrites files if they already exist. Default is False.
+        chunk_size : Optional[int]
+            The chunk size for streaming downloads (in bytes).
+        timeout : Optional[float]
+            The timeout for each download request in seconds.
+        show_progress : bool
+            If True, displays a progress bar for downloads.
+
+        Returns
+        -------
+        List[str]
+            The list of files downloaded.
+        """
+        files_df = self._add_snap_date_column(
+            self.filter_available_files_by_datetime(
+                since_datetime=JPMAQS_EARLIEST_FILE_DATE,
+                include_delta=True,
+                include_full_snapshots=True,
+                include_metadata=True,
+            )
+        )
+        latest_snapshot_date = self._latest_complete_snapshot_date(files_df)
+        if latest_snapshot_date is None:
+            logger.warning("No complete snapshot available to download.")
+            return []
+
+        files_to_download = files_df[files_df["snap-date"] == latest_snapshot_date]
+        avail_files_df = self.list_downloaded_files()
+        if not avail_files_df.empty and not overwrite:
+            files_to_download = files_to_download[
+                ~files_to_download["file-name"].isin(avail_files_df["file-name"])
+            ]
+        download_order = self._sort_file_for_download_order(files_to_download)[
+            "file-name"
+        ].tolist()
+
+        downloaded_files = self.download_multiple_files(
+            filenames=download_order,
+            overwrite=overwrite,
+            chunk_size=chunk_size,
+            timeout=timeout,
+            show_progress=show_progress,
+        )
+        if downloaded_files:
+            logger.info(
+                f"Downloaded {len(downloaded_files)} files for the latest snapshot "
+                f"dated {latest_snapshot_date}."
+            )
+
+        self.cleanup_old_files(
+            keep_n_days_old_files=keep_n_days_old_files,
+            to_datetime=latest_snapshot_date,
+        )
+        return downloaded_files
 
     def download(
         self,
@@ -1524,7 +1760,7 @@ class DataQueryFileAPIClient:
         )
 
 
-def _pd_to_datetime_compat(ts: str, utc: bool):
+def _pd_to_datetime_compat(ts: str, utc: bool) -> pd.Timestamp:
     formats = [
         "%Y%m%d",
         "%Y%m%dT%H%M%S",
@@ -1545,11 +1781,27 @@ def _pd_to_datetime_compat(ts: str, utc: bool):
     )
 
 
+@overload
+def pd_to_datetime_compat(
+    ts: str,
+    format: str = "mixed",
+    utc: bool = True,
+) -> pd.Timestamp: ...
+
+
+@overload
+def pd_to_datetime_compat(
+    ts: pd.Series,
+    format: str = "mixed",
+    utc: bool = True,
+) -> pd.Series: ...
+
+
 def pd_to_datetime_compat(
     ts: Union[str, pd.Series],
     format: str = "mixed",
     utc: bool = True,
-):
+) -> Union[pd.Timestamp, pd.Series]:
     if PD_2_0_OR_LATER:
         return pd.to_datetime(ts, format=format, utc=utc)
     if isinstance(ts, pd.Series):
@@ -1678,8 +1930,8 @@ def _delete_corrupt_files(
             raise
         except Exception:
             logger.warning(f"Deleting corrupt file: {file_path}")
-            file_path.unlink()
-            removed_files.append(file_path)
+            if _delete_jpmaqs_file(file_path):
+                removed_files.append(file_path)
 
     return sorted(map(str, removed_files))
 
@@ -2118,13 +2370,42 @@ def _check_lazy_load_inputs(
         raise ValueError("`categorical_dataframe` must be a boolean.")
 
 
+def _is_jpmaqs_file(path: Union[str, Path]) -> bool:
+    """A downloaded file is a JPMaQS file iff it is named JPMAQS_....{parquet,csv,json}."""
+    p = Path(path)
+    return p.name.startswith("JPMAQS_") and p.suffix.lower() in (
+        ".parquet",
+        ".csv",
+        ".json",
+    )
+
+
+def _delete_jpmaqs_file(path: Union[str, Path]) -> bool:
+    """
+    Central deletion for downloaded files. Deletes `path` only if it is a JPMaQS file
+    (see `_is_jpmaqs_file`); otherwise it warns and leaves the file untouched. Returns
+    True if the file was deleted.
+    """
+    path = Path(path)
+    if not _is_jpmaqs_file(path):
+        logger.warning(f"Refusing to delete non-JPMaQS file: {path}")
+        return False
+    path.unlink(missing_ok=True)
+    return True
+
+
 def _list_downloaded_files(files_dir: Path, file_format: str = "parquet") -> List[Path]:
     files_dir = Path(files_dir)
     assert files_dir.is_dir(), f"No such directory: {files_dir}"
     if file_format not in ["parquet", "csv", "json"]:
         raise ValueError("`file_format` must be one of 'parquet', 'csv', or 'json'.")
     files = sorted(files_dir.glob(f"**/*.{file_format}"))
-    return files
+    for f in files:
+        if not _is_jpmaqs_file(f):
+            logger.warning(
+                f"File is not a JPMaQS file and is not meant to be here: {f}"
+            )
+    return [f for f in files if _is_jpmaqs_file(f)]
 
 
 def _downloaded_files_df(
@@ -2417,7 +2698,7 @@ def _lazy_load_filtered_parquets(
 
 
 if __name__ == "__main__":
-    print("Current time UTC:", pd.Timestamp.utcnow().isoformat())
+    print("Current time UTC:", utc_now().isoformat())
     path = Path("~/jpmaqs-data").expanduser()
     start = time.time()
     since_datetime = pd.Timestamp.now() - pd.offsets.BDay(5)
