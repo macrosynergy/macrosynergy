@@ -24,6 +24,8 @@ from macrosynergy.download.dataquery_file_api import (
     _to_output_schema,
     _filter_lazy_frame_by_tickers,
     _delete_corrupt_files,
+    _delete_jpmaqs_file,
+    _is_jpmaqs_file,
 )
 from macrosynergy.compat import PYTHON_3_8_OR_LATER
 
@@ -281,7 +283,7 @@ class TestLazyLoad(unittest.TestCase):
         self.tmpdir = Path(tempfile.mkdtemp())
 
         _make_ticker_parquet(
-            self.tmpdir / "DATASET1_20240101.parquet",
+            self.tmpdir / "JPMAQS_DATASET1_20240101.parquet",
             {
                 "ticker": ["USD_INFL", "EUR_INFL"],
                 "real_date": [datetime.date(2023, 1, 1), datetime.date(2023, 1, 1)],
@@ -289,7 +291,7 @@ class TestLazyLoad(unittest.TestCase):
             },
         )
         _make_ticker_parquet(
-            self.tmpdir / "DATASET1_20240102.parquet",
+            self.tmpdir / "JPMAQS_DATASET1_20240102.parquet",
             {
                 "ticker": ["USD_INFL", "EUR_INFL", "JPY_INFL"],
                 "real_date": [
@@ -300,11 +302,11 @@ class TestLazyLoad(unittest.TestCase):
                 "value": [1.1, 2.1, 3.1],
             },
         )
-        (self.tmpdir / "DATASET1_20240102_DELTA.parquet").touch()
+        (self.tmpdir / "JPMAQS_DATASET1_20240102_DELTA.parquet").touch()
 
         sub_dir = self.tmpdir / "subdir"
         _make_qdf_parquet(
-            sub_dir / "DATASET2_20240103.parquet",
+            sub_dir / "JPMAQS_DATASET2_20240103.parquet",
             {
                 "cid": ["USD", "GBP"],
                 "xcat": ["GROWTH", "GROWTH"],
@@ -312,7 +314,7 @@ class TestLazyLoad(unittest.TestCase):
                 "value": [5.0, 6.0],
             },
         )
-        (self.tmpdir / "DATASET2_20240103_METADATA.json").touch()
+        (self.tmpdir / "JPMAQS_DATASET2_20240103_METADATA.json").touch()
 
     def tearDown(self):
         shutil.rmtree(self.tmpdir)
@@ -321,10 +323,10 @@ class TestLazyLoad(unittest.TestCase):
         files = _list_downloaded_files(self.tmpdir, file_format="parquet")
         self.assertEqual(len(files), 4)
         filenames = sorted([p.name for p in files])
-        self.assertIn("DATASET1_20240101.parquet", filenames)
-        self.assertIn("DATASET1_20240102.parquet", filenames)
-        self.assertIn("DATASET1_20240102_DELTA.parquet", filenames)
-        self.assertIn("DATASET2_20240103.parquet", filenames)
+        self.assertIn("JPMAQS_DATASET1_20240101.parquet", filenames)
+        self.assertIn("JPMAQS_DATASET1_20240102.parquet", filenames)
+        self.assertIn("JPMAQS_DATASET1_20240102_DELTA.parquet", filenames)
+        self.assertIn("JPMAQS_DATASET2_20240103.parquet", filenames)
 
     @patch(
         "macrosynergy.download.dataquery_file_api.pd_to_datetime_compat",
@@ -333,9 +335,11 @@ class TestLazyLoad(unittest.TestCase):
     def test_downloaded_files_df(self):
         df = _downloaded_files_df(self.tmpdir, file_format="parquet")
         self.assertEqual(len(df), 4)
-        self.assertNotIn("DATASET2_20240103_METADATA.json", df["filename"].to_list())
-        ds1_latest = df[df["filename"] == "DATASET1_20240102.parquet"].iloc[0]
-        self.assertEqual(ds1_latest["dataset"], "DATASET1")
+        self.assertNotIn(
+            "JPMAQS_DATASET2_20240103_METADATA.json", df["filename"].to_list()
+        )
+        ds1_latest = df[df["filename"] == "JPMAQS_DATASET1_20240102.parquet"].iloc[0]
+        self.assertEqual(ds1_latest["dataset"], "JPMAQS_DATASET1")
         self.assertEqual(ds1_latest["file-timestamp"], pd.Timestamp("2024-01-02"))
 
     @patch(
@@ -347,9 +351,9 @@ class TestLazyLoad(unittest.TestCase):
         latest = _filter_to_latest_files(df)
         self.assertEqual(len(latest), 2)
         filenames = latest["filename"].to_list()
-        self.assertIn("DATASET1_20240102.parquet", filenames)
-        self.assertIn("DATASET2_20240103.parquet", filenames)
-        self.assertNotIn("DATASET1_20240102_DELTA.parquet", filenames)
+        self.assertIn("JPMAQS_DATASET1_20240102.parquet", filenames)
+        self.assertIn("JPMAQS_DATASET2_20240103.parquet", filenames)
+        self.assertNotIn("JPMAQS_DATASET1_20240102_DELTA.parquet", filenames)
 
     def test_identify_schema_type(self):
         lf_ticker = pl.LazyFrame({"ticker": ["A_B"], "value": [1]})
@@ -434,7 +438,7 @@ class TestLazyLoad(unittest.TestCase):
 
         df_ds = lazy_load_from_parquets(
             self.tmpdir,
-            datasets=["DATASET2"],
+            datasets=["JPMAQS_DATASET2"],
             cids=["USD", "GBP"],
             xcats=["GROWTH"],
         )
@@ -515,14 +519,14 @@ class TestCorruptedFilesHandling(unittest.TestCase):
         # _make_sample_parquet with 4 paths
         self.tmpdir = Path(tempfile.mkdtemp())
         self.created_filenames = [
-            "good1.parquet",
-            "good2.parquet",
-            "corrupted.parquet",
-            "good3.parquet",
+            "JPMAQS_GOOD_20260701.parquet",
+            "JPMAQS_GOOD_20260702.parquet",
+            "JPMAQS_CORRUPT_20260703.parquet",
+            "JPMAQS_GOOD_20260704.parquet",
         ]
         for fname in self.created_filenames:
             path = self.tmpdir / fname
-            if "corrupted" in fname:
+            if "CORRUPT" in fname:
                 with open(path, "wb") as f:
                     f.write(b"not a parquet file")
             else:
@@ -532,8 +536,7 @@ class TestCorruptedFilesHandling(unittest.TestCase):
         shutil.rmtree(self.tmpdir)
 
     def test_delete_corrupt_files(self):
-        corrupt_file = "corrupted.parquet"
-        corrupt_file_path = self.tmpdir / corrupt_file
+        corrupt_file_path = self.tmpdir / "JPMAQS_CORRUPT_20260703.parquet"
         self.assertTrue(corrupt_file_path.exists())
         parquet_files = list(Path(self.tmpdir).glob("*.parquet"))
         _delete_corrupt_files(parquet_files)
@@ -542,6 +545,73 @@ class TestCorruptedFilesHandling(unittest.TestCase):
         current_files = list(Path(self.tmpdir).glob("*.parquet"))
         self.assertEqual(len(current_files), 3)
         self.assertFalse(corrupt_file_path in current_files)
+
+
+class TestJpmaqsFileDeletion(unittest.TestCase):
+    def setUp(self):
+        self.tmpdir = Path(tempfile.mkdtemp())
+
+    def tearDown(self):
+        shutil.rmtree(self.tmpdir)
+
+    @suppress_logging
+    def test_delete_jpmaqs_file_refuses_non_jpmaqs(self):
+        good = self.tmpdir / "JPMAQS_GENERIC_RETURNS_20260728.parquet"
+        bad = self.tmpdir / "not_a_jpmaqs_file.parquet"
+        good.write_bytes(b"x")
+        bad.write_bytes(b"x")
+
+        self.assertTrue(_delete_jpmaqs_file(good))
+        self.assertFalse(good.exists())
+
+        self.assertFalse(_delete_jpmaqs_file(bad))
+        self.assertTrue(bad.exists())  # non-JPMaQS file is never deleted
+
+    @suppress_logging
+    def test_delete_corrupt_files_ignores_non_jpmaqs(self):
+        bad = self.tmpdir / "corrupted.parquet"
+        bad.write_bytes(b"not a parquet file")
+        _delete_corrupt_files([bad])
+        self.assertTrue(bad.exists())  # non-JPMaQS file left untouched
+
+    def test_is_jpmaqs_file_variants(self):
+        for name in (
+            "JPMAQS_GENERIC_RETURNS_20260728.parquet",
+            "JPMAQS_METADATA_CATALOG_20260728.csv",
+            "JPMAQS_METADATA_NOTIFICATIONS_20260728T060000.json",
+            "JPMAQS_X_20260728.PARQUET",  # extension case-insensitive
+        ):
+            self.assertTrue(_is_jpmaqs_file(self.tmpdir / name), name)
+        for name in (
+            "random.parquet",
+            "jpmaqs_lowercase_20260728.parquet",  # prefix is case-sensitive
+            "not_JPMAQS_prefixed.parquet",
+            "JPMAQS_X_20260728.txt",  # unsupported extension
+            "JPMAQS_X_20260728",  # no extension
+        ):
+            self.assertFalse(_is_jpmaqs_file(self.tmpdir / name), name)
+
+    @suppress_logging
+    def test_delete_jpmaqs_file_missing_is_ok(self):
+        missing = self.tmpdir / "JPMAQS_GENERIC_RETURNS_20260728.parquet"
+        # file does not exist; JPMaQS-named deletion is a no-op, not an error
+        self.assertTrue(_delete_jpmaqs_file(missing))
+
+    @suppress_logging
+    def test_list_downloaded_files_excludes_non_jpmaqs(self):
+        (self.tmpdir / "JPMAQS_GENERIC_RETURNS_20260728.parquet").write_bytes(b"x")
+        (self.tmpdir / "random.parquet").write_bytes(b"x")
+        names = [f.name for f in _list_downloaded_files(self.tmpdir, "parquet")]
+        self.assertEqual(names, ["JPMAQS_GENERIC_RETURNS_20260728.parquet"])
+
+    @suppress_logging
+    def test_list_downloaded_files_recurses_subdirs(self):
+        sub = self.tmpdir / "2026-07-28"
+        sub.mkdir()
+        (sub / "JPMAQS_GENERIC_RETURNS_20260728.parquet").write_bytes(b"x")
+        (sub / "notes.parquet").write_bytes(b"x")
+        names = [f.name for f in _list_downloaded_files(self.tmpdir, "parquet")]
+        self.assertEqual(names, ["JPMAQS_GENERIC_RETURNS_20260728.parquet"])
 
 
 if __name__ == "__main__":
