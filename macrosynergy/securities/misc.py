@@ -1,3 +1,7 @@
+"""
+Miscellaneous helpers for managing cached single-security data.
+"""
+
 import logging
 from datetime import timedelta, datetime, date
 from typing import Optional, Dict, Tuple, Union
@@ -11,12 +15,42 @@ import seaborn as sns
 logger = logging.getLogger(__name__)
 
 
-def rescale_to_anchor(frame: pd.DataFrame, status: pd.DataFrame, ratio_tolerance: float = 0.05):
-    """Rescale freshly fetched RI levels onto the cached series using the overlapping
-    anchor date (the ticker's last cached date) as a splice point — this corrects for
-    any level rebasing the source may apply to historical data even though the % change
-    is unaffected — then drop the anchor row itself, since the old cached value for that
-    date remains authoritative. Tickers with no prior cache pass through unscaled."""
+def rescale_to_anchor(
+    frame: pd.DataFrame,
+    status: pd.DataFrame,
+    ratio_tolerance: float = 0.05,
+) -> pd.DataFrame:
+    """
+    Splice freshly fetched return index (RI) levels onto a cached series.
+
+    The overlapping anchor date - the ticker's last cached date - is used as the
+    splice point: the fetched levels are scaled by the ratio of the cached to the
+    fetched value on that date. This corrects for any level rebasing the source may
+    apply to historical data, which leaves the % change unaffected but shifts the
+    level. The anchor row itself is then dropped, since the old cached value for that
+    date remains authoritative. Tickers with no prior cache pass through unscaled.
+
+    Parameters
+    ----------
+    frame : pd.DataFrame
+        Freshly fetched long-format data with columns ``"ticker"``, ``"real_date"``
+        and ``"value"`` (RI level).
+    status : pd.DataFrame
+        Cache state indexed by ticker, with columns ``"max_real_date"`` (the ticker's
+        last cached date, i.e. the anchor) and ``"last_value"`` (the cached RI level
+        on that date). Tickers missing from the index are treated as having no prior
+        cache and are left unscaled.
+    ratio_tolerance : float, default 0.05
+        Absolute deviation of the rescaling ratio from one above which a warning is
+        emitted for that ticker, flagging an RI level that may have shifted
+        materially. Affects reporting only, not the rescaling itself.
+
+    Returns
+    -------
+    pd.DataFrame
+        ``frame`` with ``"value"`` rescaled onto the cached level, anchor-date rows
+        removed, the merged helper columns dropped and the index reset.
+    """
     frame = frame.merge(
         status[["max_real_date", "last_value"]],
         how="left",
