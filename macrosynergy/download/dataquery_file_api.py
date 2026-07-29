@@ -44,7 +44,7 @@ including full datasets, deltas, and metadata.
     client = DataQueryFileAPIClient(out_dir="./jpmaqs_data")
 
     print(f"Downloading today's files to {client.out_dir}...")
-    client.download_full_snapshot()
+    client.download_files()
     print("Download complete.")
 
 **Example 3: Download all new or updated files for the day, and load data from them
@@ -90,7 +90,7 @@ The resulting dataframe is returned to the user in the chosen dataframe format
     client = DataQueryFileAPIClient("./jpmaqs_data")
     since_datetime = pd.Timestamp.today() - pd.DateOffset(days=10)
 
-    client.download_full_snapshot(
+    client.download_files(
         since_datetime=since_datetime,
         include_full_snapshots=False,
         include_metadata=True,
@@ -1166,7 +1166,7 @@ class DataQueryFileAPIClient:
             )
         if not skip_download:
             to_dt = date + pd.offsets.BDay(1) - pd.Timedelta(seconds=1)
-            self.download_full_snapshot(
+            self.download_files(
                 since_datetime=date,
                 to_datetime=to_dt,
                 include_full_snapshots=False,
@@ -1334,10 +1334,9 @@ class DataQueryFileAPIClient:
         show_progress: bool = True,
     ) -> Optional[pd.DataFrame]:
         """
-        Deletes files older than N days from the output directory.
-        The deletion logic checks decides if files are kept/deleted based on the file's
-        timestamp (in the file name itself), implying historical delta files
-        are evaluated based on their publication date (usually an end-of-month date).
+        Deletes files older than N days from the output directory. A file is kept or
+        deleted based on the snapshot date derived from its file name, not on when it
+        was downloaded.
 
         Parameters
         ----------
@@ -1472,16 +1471,20 @@ class DataQueryFileAPIClient:
     def _latest_complete_snapshot_date(self, files_df: pd.DataFrame) -> Optional[str]:
         """
         Returns the latest snap-date whose full-snapshot set covers every JPMaQS theme,
-        or None if no snap-date has a complete set. This avoids treating a partially
-        published (in-progress) snapshot as the latest.
+        or None if no snap-date has a complete set.
         """
+        if files_df.empty:
+            return None
         expected = set(JPMAQS_DATASET_THEME_MAPPING.values())
-        full = files_df[~files_df["file-name"].str.contains("_DELTA|_METADATA")]
-        complete = full.groupby("snap-date")["file-group-id"].agg(expected.issubset)
+        checkfile = lambda x: any(s in x for s in ["_DELTA", "_METADATA"])  # noqa: E731
+        snap_df = files_df[~files_df["file-name"].apply(checkfile)]
+        if "snap-date" not in snap_df.columns:
+            snap_df = self._add_snap_date_column(snap_df)
+        complete = snap_df.groupby("snap-date")["file-group-id"].agg(expected.issubset)
         complete_dates = complete.index[complete]
         return max(complete_dates) if len(complete_dates) else None
 
-    def download_full_snapshot(
+    def download_files(
         self,
         since_datetime: Optional[str] = None,
         to_datetime: Optional[str] = None,
@@ -1583,8 +1586,47 @@ class DataQueryFileAPIClient:
         logger.info(f"Downloaded {len(downloaded_files)} files to '{out_dir}'.")
         return downloaded_files
 
+    def download_full_snapshot(
+        self,
+        since_datetime: Optional[str] = None,
+        to_datetime: Optional[str] = None,
+        overwrite: bool = False,
+        chunk_size: Optional[int] = None,
+        timeout: Optional[float] = DQ_FILE_API_TIMEOUT,
+        include_full_snapshots: bool = True,
+        include_delta: bool = True,
+        include_metadata: bool = True,
+        file_group_ids: Optional[List[str]] = None,
+        show_progress: bool = True,
+    ) -> List[str]:
+        """
+        Deprecated method to download files, now superseded by
+        :func:`DataQueryFileAPIClient.download_files`. This method will be removed in a
+        future release.
+        """
+        warnings.warn(
+            "The `DataQueryFileAPIClient.download_full_snapshot` method is deprecated "
+            "and will be removed in a future release. "
+            "Please use `DataQueryFileAPIClient.download_files` instead.",
+            FutureWarning,
+            stacklevel=2,
+        )
+        return self.download_files(
+            since_datetime=since_datetime,
+            to_datetime=to_datetime,
+            overwrite=overwrite,
+            chunk_size=chunk_size,
+            timeout=timeout,
+            include_full_snapshots=include_full_snapshots,
+            include_delta=include_delta,
+            include_metadata=include_metadata,
+            file_group_ids=file_group_ids,
+            show_progress=show_progress,
+        )
+
     def download_latest_snapshot(
         self,
+        file_group_ids: Optional[List[str]] = None,
         keep_n_days_old_files: Optional[int] = 0,
         overwrite: bool = False,
         chunk_size: Optional[int] = None,
@@ -1592,15 +1634,19 @@ class DataQueryFileAPIClient:
         show_progress: bool = True,
     ) -> List[str]:
         """
-        Downloads the latest complete snapshot to the output directory.
+        Downloads the latest snapshot to the output directory.
 
-        Determines the most recent snapshot date for which every JPMaQS full-snapshot
-        dataset is available, then downloads that date's files (full snapshots, deltas
-        and metadata), skipping any already present unless `overwrite` is set. Older
-        files are then removed according to `keep_n_days_old_files`.
+        Downloads the files for the latest snapshot date (full snapshots, deltas and
+        metadata), optionally restricted to `file_group_ids`. Files already on disk are
+        skipped unless `overwrite` is set, and older files are removed according to
+        `keep_n_days_old_files`.
 
         Parameters
         ----------
+        file_group_ids : Optional[List[str]]
+            Restrict the download to these file groups, e.g. "JPMAQS_GENERIC_RETURNS".
+            Matching is by prefix, so a group's delta files are downloaded alongside its
+            full snapshot. If None (default), all available file groups are downloaded.
         keep_n_days_old_files : int
             Delete files older than N days from the output directory after the download.
             At 0 (default), only the latest files are kept, at 1, the latest and previous
@@ -1628,12 +1674,18 @@ class DataQueryFileAPIClient:
                 include_metadata=True,
             )
         )
+        # resolve and filter by the latest snapshot date across all groups
         latest_snapshot_date = self._latest_complete_snapshot_date(files_df)
         if latest_snapshot_date is None:
-            logger.warning("No complete snapshot available to download.")
+            logger.warning("No snapshot available to download.")
             return []
 
         files_to_download = files_df[files_df["snap-date"] == latest_snapshot_date]
+        # file_group_ids=None means "all groups"
+        if file_group_ids is not None:
+            files_to_download = files_to_download[
+                files_to_download["file-group-id"].str.startswith(tuple(file_group_ids))
+            ]
         avail_files_df = self.list_downloaded_files()
         if not avail_files_df.empty and not overwrite:
             files_to_download = files_to_download[
@@ -1642,6 +1694,12 @@ class DataQueryFileAPIClient:
         download_order = self._sort_file_for_download_order(files_to_download)[
             "file-name"
         ].tolist()
+        if not download_order:
+            logger.info(
+                f"No new files to download for the latest snapshot dated "
+                f"{latest_snapshot_date}."
+            )
+            return []
 
         downloaded_files = self.download_multiple_files(
             filenames=download_order,
@@ -1650,11 +1708,10 @@ class DataQueryFileAPIClient:
             timeout=timeout,
             show_progress=show_progress,
         )
-        if downloaded_files:
-            logger.info(
-                f"Downloaded {len(downloaded_files)} files for the latest snapshot "
-                f"dated {latest_snapshot_date}."
-            )
+        logger.info(
+            f"Downloaded {len(downloaded_files)} files for the latest snapshot "
+            f"dated {latest_snapshot_date}."
+        )
 
         self.cleanup_old_files(
             keep_n_days_old_files=keep_n_days_old_files,
@@ -1676,6 +1733,7 @@ class DataQueryFileAPIClient:
         include_delta_files: bool = False,
         show_progress: bool = True,
         overwrite: bool = False,
+        keep_n_days_old_files: Optional[int] = 0,
     ) -> Union[pd.DataFrame, pl.DataFrame, pl.LazyFrame]:
         """
         Downloads data for the specified `tickers`, `cids`, or `xcats` and returns it as
@@ -1721,6 +1779,10 @@ class DataQueryFileAPIClient:
             If True, displays a progress bar during downloads. Default is True.
         overwrite : bool
             If True, overwrites files if they already exist. Default is False.
+        keep_n_days_old_files : int
+            Passed to the snapshot download to prune older files after downloading.
+            At 0 (default), only the latest snapshot is kept. If None or -1, no files
+            are deleted. See :func:`DataQueryFileAPIClient.cleanup_old_files`.
 
         Returns
         -------
@@ -1736,14 +1798,11 @@ class DataQueryFileAPIClient:
         datasets_to_download = self.get_datasets_for_indicators(
             tickers=tickers, cids=cids, xcats=xcats
         )
-        self.download_full_snapshot(
-            since_datetime=utc_now().strftime("%Y%m%d"),
-            file_group_ids=datasets_to_download,
+        self.download_latest_snapshot(
             overwrite=overwrite,
             show_progress=show_progress,
-            include_full_snapshots=True,
-            include_delta=include_delta_files,
-            include_metadata=False,
+            keep_n_days_old_files=keep_n_days_old_files,
+            file_group_ids=datasets_to_download,
         )
         return lazy_load_from_parquets(
             files_dir=out_dir,
@@ -2708,7 +2767,7 @@ if __name__ == "__main__":
     since_datetime = since_datetime.strftime("%Y%m%d")
     with DataQueryFileAPIClient(out_dir=path) as dq:
         dq.download_catalog_file()
-        dq.download_full_snapshot(since_datetime=since_datetime)
+        dq.download_files(since_datetime=since_datetime)
     end = time.time()
 
     print(f"Download completed in {end - start:.2f} seconds")
