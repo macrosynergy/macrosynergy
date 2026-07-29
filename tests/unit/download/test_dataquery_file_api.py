@@ -490,15 +490,12 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
             client.download_file(filename="invalidformat.parquet")
 
     @patch(
-        "macrosynergy.download.dataquery_file_api.convert_ticker_based_parquet_file_to_qdf_pl"
-    )
-    @patch(
         "macrosynergy.download.dataquery_file_api.request_wrapper_stream_bytes_to_disk"
     )
     @patch("macrosynergy.download.dataquery_file_api.Path")
     @patch("macrosynergy.download.dataquery_file_api.DataQueryFileAPIOauth")
-    def test_download_file_no_conversion_on_download(
-        self, mock_oauth, mock_path, mock_downloader, mock_convert
+    def test_download_file_writes_raw_file_and_returns_path(
+        self, mock_oauth, mock_path, mock_downloader
     ):
         client = DataQueryFileAPIClient(
             client_id="id", client_secret="secret", out_dir=self.test_dir
@@ -510,14 +507,13 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
             mock_path.return_value.__truediv__.return_value.__truediv__.return_value
         ) = mock_file_path
 
-        # Files are written to disk as-is; no qdf/csv conversion happens on download.
-        client.download_file(filename="TEST_DATA_20230101.parquet")
-        mock_downloader.assert_called_once()
-        mock_convert.assert_not_called()
+        result = client.download_file(filename="TEST_DATA_20230101.parquet")
 
-        # The conversion kwargs no longer exist on the download methods.
-        with self.assertRaises(TypeError):
-            client.download_file(filename="TEST_DATA_20230101.parquet", qdf=True)
+        # the raw file is streamed straight to its final path (no temp/converted path)
+        # and that same path is returned unchanged
+        mock_downloader.assert_called_once()
+        self.assertEqual(mock_downloader.call_args[1]["filename"], str(mock_file_path))
+        self.assertEqual(result, str(mock_file_path))
 
     @patch("macrosynergy.download.dataquery_file_api.cf.as_completed")
     @patch("macrosynergy.download.dataquery_file_api.cf.ThreadPoolExecutor")
