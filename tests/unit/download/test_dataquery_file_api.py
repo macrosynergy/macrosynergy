@@ -682,9 +682,7 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
     @patch("macrosynergy.download.dataquery_file_api.logger")
     @patch.object(DataQueryFileAPIClient, "download_multiple_files")
     @patch.object(DataQueryFileAPIClient, "filter_available_files_by_datetime")
-    def test_download_full_snapshot(
-        self, mock_filter_files, mock_download_multi, mock_logger
-    ):
+    def test_download_files(self, mock_filter_files, mock_download_multi, mock_logger):
         class_dir = os.path.join(self.test_dir, "class", "dir")
         client = DataQueryFileAPIClient(
             client_id="id", client_secret="secret", out_dir=class_dir
@@ -707,7 +705,7 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
                 ],
             }
         )
-        client.download_full_snapshot(since_datetime="20250201", show_progress=False)
+        client.download_files(since_datetime="20250201", show_progress=False)
 
         expected_order = [
             "A_full_20250101.parquet",
@@ -727,9 +725,7 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
 
     @patch.object(DataQueryFileAPIClient, "download_multiple_files")
     @patch.object(DataQueryFileAPIClient, "filter_available_files_by_datetime")
-    def test_download_full_snapshot_filter_args(
-        self, mock_filter_files, mock_download_multi
-    ):
+    def test_download_files_filter_args(self, mock_filter_files, mock_download_multi):
         client = DataQueryFileAPIClient(
             client_id="id", client_secret="secret", out_dir=self.test_dir
         )
@@ -739,7 +735,7 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
                 "file-datetime": ["20230101T000000"],
             }
         )
-        client.download_full_snapshot(since_datetime="20230101", show_progress=False)
+        client.download_files(since_datetime="20230101", show_progress=False)
 
         mock_filter_files.assert_called_once_with(
             since_datetime="20230101",
@@ -753,22 +749,20 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
     @patch("macrosynergy.download.dataquery_file_api.logger")
     @patch.object(DataQueryFileAPIClient, "download_multiple_files")
     @patch.object(DataQueryFileAPIClient, "filter_available_files_by_datetime")
-    def test_download_full_snapshot_no_new_files(
+    def test_download_files_no_new_files(
         self, mock_filter_files, mock_download_multi, mock_logger
     ):
         client = DataQueryFileAPIClient(
             client_id="id", client_secret="secret", out_dir=self.test_dir
         )
         mock_filter_files.return_value = pd.DataFrame(columns=["file-name"])
-        client.download_full_snapshot(
-            since_datetime="20230102T000000", show_progress=False
-        )
+        client.download_files(since_datetime="20230102T000000", show_progress=False)
         mock_download_multi.assert_not_called()
         mock_logger.info.assert_any_call("No new files to download.")
 
     @patch.object(DataQueryFileAPIClient, "download_multiple_files")
     @patch.object(DataQueryFileAPIClient, "filter_available_files_by_datetime")
-    def test_download_full_snapshot_file_group_ids(
+    def test_download_files_file_group_ids(
         self, mock_filter_files, mock_download_multi
     ):
         client = DataQueryFileAPIClient(
@@ -781,7 +775,7 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
                 "file-datetime": ["20230101", "20230101", "20230101"],
             }
         )
-        client.download_full_snapshot(
+        client.download_files(
             since_datetime="20230101",
             file_group_ids=["FG1"],
             show_progress=False,
@@ -790,7 +784,7 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
         self.assertCountEqual(called_args["filenames"], ["f1", "f3"])
 
         with self.assertRaises(ValueError):
-            client.download_full_snapshot(
+            client.download_files(
                 since_datetime="20230101", file_group_ids="not-a-list"
             )
 
@@ -818,9 +812,9 @@ class TestDataQueryFileAPIClientNotificationLoading(unittest.TestCase):
         path.write_text(json.dumps(payload), encoding="utf-8")
 
     @patch.object(DataQueryFileAPIClient, "list_downloaded_files")
-    @patch.object(DataQueryFileAPIClient, "download_full_snapshot")
+    @patch.object(DataQueryFileAPIClient, "download_files")
     def test_load_metadata_jsons_filters_normalizes_and_canonicalizes_titles(
-        self, mock_download_full_snapshot, mock_list_downloaded_files
+        self, mock_download_files, mock_list_downloaded_files
     ):
         client = DataQueryFileAPIClient(
             client_id="id", client_secret="secret", out_dir=self.test_dir
@@ -921,15 +915,15 @@ class TestDataQueryFileAPIClientNotificationLoading(unittest.TestCase):
         addl = result["Additional information on missing updates"]
         self.assertEqual(addl.columns.tolist(), ["ticker", "additional_information"])
 
-        mock_download_full_snapshot.assert_not_called()
+        mock_download_files.assert_not_called()
 
     @patch("macrosynergy.download.dataquery_file_api.logger")
     @patch("macrosynergy.download.dataquery_file_api.utc_now")
     @patch.object(DataQueryFileAPIClient, "list_downloaded_files")
-    @patch.object(DataQueryFileAPIClient, "download_full_snapshot")
+    @patch.object(DataQueryFileAPIClient, "download_files")
     def test_load_metadata_jsons_future_date_warns_and_downloads(
         self,
-        mock_download_full_snapshot,
+        mock_download_files,
         mock_list_downloaded_files,
         mock_now,
         mock_logger,
@@ -950,7 +944,7 @@ class TestDataQueryFileAPIClientNotificationLoading(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "future"):
             client._load_metadata_jsons(date="2026-01-25")
         mock_logger.warning.assert_not_called()
-        mock_download_full_snapshot.assert_not_called()
+        mock_download_files.assert_not_called()
         mock_list_downloaded_files.assert_not_called()
 
     @patch("macrosynergy.download.dataquery_file_api.logger")
@@ -1704,7 +1698,7 @@ class TestDownloadLatestSnapshot(unittest.TestCase):
             rows.extend(extra_rows)
         return pd.DataFrame(rows)
 
-    def _run(self, available, downloaded, overwrite=False):
+    def _run(self, available, downloaded, overwrite=False, file_group_ids=None):
         empty = pd.DataFrame(columns=["file-name"])
         with (
             patch.object(
@@ -1725,7 +1719,9 @@ class TestDownloadLatestSnapshot(unittest.TestCase):
             patch.object(self.client, "cleanup_old_files") as mclean,
         ):
             res = self.client.download_latest_snapshot(
-                overwrite=overwrite, show_progress=False
+                overwrite=overwrite,
+                file_group_ids=file_group_ids,
+                show_progress=False,
             )
         return res, mdl, mclean
 
@@ -1780,9 +1776,38 @@ class TestDownloadLatestSnapshot(unittest.TestCase):
         self.assertIn("JPMAQS_METADATA_CATALOG_20260728.parquet", downloaded)
         self.assertEqual(len(downloaded), 9)
 
+    def test_file_group_ids_narrows_after_completeness_check(self):
+        # completeness is judged over ALL themes, then narrowed to the requested subset
+        # (this is the path `download()` uses; filtering before the check would find
+        # no complete snapshot and download nothing).
+        subset = self.themes[:2]
+        _res, mdl, mclean = self._run(self._available(), None, file_group_ids=subset)
+        downloaded = mdl.call_args[1]["filenames"]
+        self.assertEqual(
+            sorted(downloaded),
+            sorted(f"{t}_20260728.parquet" for t in subset),
+        )
+        self.assertEqual(mclean.call_args[1]["to_datetime"], "20260728")
 
-class TestDownloadFullSnapshotReturn(unittest.TestCase):
-    """`download_full_snapshot` returns the downloaded file list."""
+    def test_empty_file_group_ids_downloads_nothing(self):
+        # `download()` passes [] when no requested ticker matches any dataset; that must
+        # download nothing and skip cleanup (not fall through to the whole snapshot).
+        res, mdl, mclean = self._run(self._available(), None, file_group_ids=[])
+        self.assertEqual(res, [])
+        mdl.assert_not_called()
+        mclean.assert_not_called()
+
+    def test_unmatched_file_group_ids_downloads_nothing(self):
+        res, mdl, mclean = self._run(
+            self._available(), None, file_group_ids=["JPMAQS_DOES_NOT_EXIST"]
+        )
+        self.assertEqual(res, [])
+        mdl.assert_not_called()
+        mclean.assert_not_called()
+
+
+class TestDownloadFilesReturn(unittest.TestCase):
+    """`download_files` returns the downloaded file list."""
 
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()
@@ -1809,7 +1834,7 @@ class TestDownloadFullSnapshotReturn(unittest.TestCase):
                 return_value=["JPMAQS_A_20260201.parquet"],
             ),
         ):
-            result = self.client.download_full_snapshot(
+            result = self.client.download_files(
                 since_datetime="20260201", show_progress=False
             )
         self.assertEqual(result, ["JPMAQS_A_20260201.parquet"])
@@ -1828,10 +1853,47 @@ class TestDownloadFullSnapshotReturn(unittest.TestCase):
                 return_value=pd.DataFrame(columns=["file-name"]),
             ),
         ):
-            result = self.client.download_full_snapshot(
+            result = self.client.download_files(
                 since_datetime="20260201", show_progress=False
             )
         self.assertEqual(result, [])
+
+
+class TestDownloadFullSnapshotDeprecated(unittest.TestCase):
+    """`download_full_snapshot` is a deprecated shim over `download_files`."""
+
+    def setUp(self):
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp_dir.cleanup)
+        self.client = _make_client(self.temp_dir.name)
+
+    def test_emits_futurewarning_and_delegates(self):
+        with patch.object(
+            self.client, "download_files", return_value=["JPMAQS_A_20260201.parquet"]
+        ) as mock_download_files:
+            with self.assertWarns(FutureWarning) as cm:
+                result = self.client.download_full_snapshot(
+                    since_datetime="20260201",
+                    include_delta=False,
+                    show_progress=False,
+                )
+
+        self.assertIn("deprecated", str(cm.warning))
+        self.assertIn("download_files", str(cm.warning))
+        # delegates verbatim and returns the delegate's result
+        mock_download_files.assert_called_once_with(
+            since_datetime="20260201",
+            to_datetime=None,
+            overwrite=False,
+            chunk_size=None,
+            timeout=300.0,
+            include_full_snapshots=True,
+            include_delta=False,
+            include_metadata=True,
+            file_group_ids=None,
+            show_progress=False,
+        )
+        self.assertEqual(result, ["JPMAQS_A_20260201.parquet"])
 
 
 if __name__ == "__main__":
