@@ -1078,7 +1078,33 @@ class DataQueryFileAPIClient:
         cids: Optional[List[str]] = None,
         xcats: Optional[List[str]] = None,
         case_sensitive: bool = False,
-    ) -> List[str]:
+        as_dict: bool = False,
+    ) -> Union[List[str], Dict[str, List[str]]]:
+        """
+        Returns a list of datasets (or a dictionary mapping datasets to tickers) that
+        contain the specified tickers, CIDs, or XCATs.
+
+        Parameters
+        ----------
+        tickers : Optional[List[str]]
+            A list of tickers to search for.
+        cids : Optional[List[str]]
+            A list of CIDs to search for (must be used in conjunction with `xcats`).
+        xcats : Optional[List[str]]
+            A list of XCATs to search for (must be used in conjunction with `cids`).
+        case_sensitive : bool
+            If True, the search will be case-sensitive. Defaults to False.
+        as_dict : bool
+            If True, returns a dictionary mapping datasets to lists of tickers. Defaults
+            to False, which returns a list of datasets.
+
+        Returns
+        -------
+        Union[List[str], Dict[str, List[str]]]
+            A list of datasets or a dictionary mapping datasets to tickers, depending on
+            the `as_dict` parameter.
+        """
+
         for param, name in zip(
             [tickers, cids, xcats],
             ["tickers", "cids", "xcats"],
@@ -1122,6 +1148,14 @@ class DataQueryFileAPIClient:
             ]
 
         datasets_to_keep = sorted(set(catalog_df["Dataset"]))
+        if as_dict:
+            rdict = {
+                dataset: sorted(
+                    set(catalog_df[catalog_df["Dataset"] == dataset]["Ticker"])
+                )
+                for dataset in datasets_to_keep
+            }
+            return rdict
         return datasets_to_keep
 
     def list_downloaded_files(self) -> pd.DataFrame:
@@ -1730,10 +1764,10 @@ class DataQueryFileAPIClient:
         dataframe_format: str = "qdf",
         dataframe_type: str = "pandas",
         categorical_dataframe: bool = True,
-        include_delta_files: bool = False,
+        include_delta_files: bool = True,
         show_progress: bool = True,
         overwrite: bool = False,
-        keep_n_days_old_files: Optional[int] = 0,
+        keep_n_days_old_files: Optional[int] = None,
     ) -> Union[pd.DataFrame, pl.DataFrame, pl.LazyFrame]:
         """
         Downloads data for the specified `tickers`, `cids`, or `xcats` and returns it as
@@ -1789,11 +1823,6 @@ class DataQueryFileAPIClient:
         Union[pd.DataFrame, pl.DataFrame, pl.LazyFrame]
             A DataFrame containing the requested data.
         """
-        if include_delta_files:
-            raise NotImplementedError(
-                "Downloading delta files is not implemented in this method."
-            )
-
         out_dir = self._get_save_dir()
         datasets_to_download = self.get_datasets_for_indicators(
             tickers=tickers, cids=cids, xcats=xcats
@@ -1804,6 +1833,7 @@ class DataQueryFileAPIClient:
             keep_n_days_old_files=keep_n_days_old_files,
             file_group_ids=datasets_to_download,
         )
+        catalog_path = Path(self.download_catalog_file())
         return lazy_load_from_parquets(
             files_dir=out_dir,
             tickers=tickers,
@@ -1816,6 +1846,8 @@ class DataQueryFileAPIClient:
             dataframe_type=dataframe_type,
             categorical_dataframe=categorical_dataframe,
             datasets=datasets_to_download,
+            include_delta_files=include_delta_files,
+            catalog_path=catalog_path,
         )
 
 
@@ -2364,10 +2396,10 @@ def _filter_to_latest_files(
     files_df: pd.DataFrame,
     include_delta_files: bool = False,
 ) -> pd.DataFrame:
-    if include_delta_files:
-        raise NotImplementedError(
-            "Filtering to latest files including delta files is not implemented."
-        )
+    # if include_delta_files:
+    #     raise NotImplementedError(
+    #         "Filtering to latest files including delta files is not implemented."
+    #     )
 
     if files_df.empty:
         return files_df
@@ -2375,15 +2407,15 @@ def _filter_to_latest_files(
     if not include_delta_files:
         files_df = files_df[~files_df["filename"].str.contains("_DELTA")].copy()
 
-    # Filter to rows where file-timestamp == per-dataset max
-    latest_mask = files_df["file-timestamp"].eq(
-        files_df.groupby("dataset")["file-timestamp"].transform("max")
+    latest_timestamp = pd_to_datetime_compat(
+        files_df[~files_df["file-datetime"].str.contains("T")]["file-datetime"].max()
     )
+    latest_files: pd.DataFrame = files_df[
+        files_df["file-timestamp"] >= latest_timestamp
+    ].copy()
 
-    latest_files = (
-        files_df.loc[latest_mask]
-        .sort_values(["dataset", "file-timestamp", "filename"])
-        .reset_index(drop=True)
+    latest_files["e-dataset"] = latest_files["dataset"].apply(
+        lambda x: str(x).replace("_DELTA", "")
     )
 
     return latest_files
@@ -2404,6 +2436,7 @@ def lazy_load_from_parquets(
     datasets: Optional[List[str]] = None,
     include_delta_files: bool = False,
     include_metadata_files: bool = False,
+    catalog_path: Union[str, Path] = None,
 ) -> pd.DataFrame:
     files_dir = Path(files_dir)
     if (not metrics) or (metrics == "all") or ("all" in metrics):
@@ -2434,7 +2467,7 @@ def lazy_load_from_parquets(
     )
     if datasets:
         available_files_df = available_files_df.loc[
-            available_files_df["dataset"].isin(datasets)
+            available_files_df["e-dataset"].isin(datasets)
         ]
 
     tickers = tickers or []
@@ -2447,6 +2480,7 @@ def lazy_load_from_parquets(
         start_date=start_date,
         end_date=end_date,
         return_qdf=(dataframe_format == "qdf"),
+        catalog_path=catalog_path,
     )
     if metrics and set(metrics) != set(JPMAQS_METRICS):
         cols_to_keep = ["real_date", "cid", "xcat", "ticker"] + metrics
@@ -2456,11 +2490,9 @@ def lazy_load_from_parquets(
             )
         else:
             lf = lf.select([pl.col(c) for c in cols_to_keep if c in lf.schema.keys()])
-    if dataframe_type == "polars-lazy":
-        return lf
 
     cat_cols = ["cid", "xcat", "ticker"]
-    if dataframe_type == "polars":
+    if dataframe_type in ["polars", "polars-lazy"]:
         if categorical_dataframe:
             cols = None
             if PYTHON_3_8_OR_LATER:
@@ -2469,6 +2501,8 @@ def lazy_load_from_parquets(
                 cols = [c for c in cat_cols if c in lf.schema.keys()]
             if cols:
                 lf = lf.with_columns([pl.col(c).cast(pl.Categorical) for c in cols])
+        if dataframe_type == "polars-lazy":
+            return lf
         return lf.collect()
     if dataframe_type == "pandas":
         df = lf.collect().to_pandas()
@@ -2582,6 +2616,10 @@ def _scan_and_prepare_single_parquet(
     return_qdf: bool,
 ) -> pl.LazyFrame:
     lf = pl.scan_parquet(path)
+
+    if dict(lf.collect_schema())["grading"] == pl.String:
+        lf = lf.with_columns(pl.col("grading").cast(pl.Float64))
+
     kind = _identify_schema_type(lf)
     lf = _filter_lazy_frame_by_tickers(
         lf=lf,
@@ -2599,26 +2637,137 @@ def _lazy_load_filtered_parquets(
     tickers: List[str],
     start_date: Optional[Union[str, pd.Timestamp]],
     end_date: Optional[Union[str, pd.Timestamp]],
+    catalog_path: Union[str, Path],
     return_qdf: bool = True,
 ) -> pl.LazyFrame:
     if not paths:
         raise ValueError("No paths provided")
 
-    tickers_list: List[str] = list(dict.fromkeys(tickers))
+    ticker_lazyframes_df = build_filtered_lazy_frames_df(
+        paths, tickers, start_date, end_date, catalog_path, return_qdf
+    )
+    assert not (
+        (ticker_lazyframes_df.empty) or (ticker_lazyframes_df["lazyframe"].isna().any())
+    )
 
-    lazy_parts: List[pl.LazyFrame] = [
-        _scan_and_prepare_single_parquet(
-            path=p,
-            tickers=tickers_list,
-            start_date=start_date,
-            end_date=end_date,
-            return_qdf=return_qdf,
+    for _, row in ticker_lazyframes_df.iterrows():
+        lf = row["lazyframe"]
+        delta_treatment = "latest" if return_qdf else "all"
+        lf = _apply_delta_treatment(lf, delta_treatment=delta_treatment)
+        ticker_lazyframes_df.loc[_, "lazyframe"] = lf
+    out_lf: pl.LazyFrame = pl.concat(
+        [
+            row["lazyframe"]
+            for _, row in ticker_lazyframes_df.iterrows()
+            if row["lazyframe"] is not None
+        ],
+        how="vertical",
+    )
+    sort_cols = (["cid", "xcat"] if return_qdf else ["ticker"]) + ["real_date"]
+    out_lf = out_lf.sort(sort_cols)
+    return out_lf
+
+
+def _apply_delta_treatment(
+    lf: pl.LazyFrame,
+    delta_treatment: str = "latest",
+    return_qdf: bool = True,
+) -> pl.LazyFrame:
+    if delta_treatment not in ["latest", "all", "earliest"]:
+        raise ValueError(
+            "delta_treatment must be one of 'latest', 'all', or 'earliest'"
         )
-        for p in paths
-    ]
+    key_cols = ["cid", "xcat"] if return_qdf else ["ticker"]
+    full_key = key_cols + ["real_date"]
 
-    out = pl.concat(lazy_parts, how="vertical")
-    return out
+    if delta_treatment != "all":
+        if delta_treatment == "latest":
+            lf = lf.sort(
+                full_key + ["last_updated"], descending=[False] * len(full_key) + [True]
+            ).unique(subset=full_key, keep="first")
+        elif delta_treatment == "earliest":
+            lf = lf.sort(
+                full_key + ["last_updated"],
+                descending=[False] * len(full_key) + [False],
+            ).unique(subset=full_key, keep="first")
+        else:
+            raise ValueError(f"Unknown delta_treatment: {delta_treatment}")
+    return lf
+
+
+def build_filtered_lazy_frames_df(
+    paths: List[str],
+    tickers: List[str],
+    start_date: Optional[Union[str, pd.Timestamp]],
+    end_date: Optional[Union[str, pd.Timestamp]],
+    catalog_path: Union[str, Path],
+    return_qdf: bool,
+) -> pd.DataFrame:
+    tickers_list: List[str] = list(dict.fromkeys(tickers))
+    catalog_df = pd.read_parquet(catalog_path)
+    catalog_df["Dataset"] = (
+        catalog_df["Theme"].map(JPMAQS_DATASET_THEME_MAPPING).fillna("Unknown")
+    )
+
+    dataset_tickers_dict = catalog_df[
+        catalog_df["Ticker"].str.lower().isin(map(str.lower, tickers_list))
+    ][["Ticker", "Dataset"]]
+
+    tickers_in_ds = (
+        dataset_tickers_dict.rename(
+            columns={"Ticker": "ticker", "Dataset": "e-dataset"}
+        )
+        .groupby("e-dataset")["ticker"]
+        .agg(sorted)
+        .reset_index()
+    )
+    files_for_ds = (
+        pd.DataFrame(
+            [
+                [p, p.name.split(".")[0].rsplit("_", 1)[0].replace("_DELTA", "")]
+                for p in paths
+            ],
+            columns=["path", "e-dataset"],
+        )
+        .groupby("e-dataset")["path"]
+        .agg(sorted)
+        .reset_index()
+    )
+    ticker_ds_file_mapping = tickers_in_ds.merge(
+        files_for_ds, on="e-dataset", how="outer", indicator=True
+    )
+
+    # this df is just a store for the lazyframes which maps each dataset to
+    # the associated parquet files, and ticker to be loaded from it
+    # these are NOT concatted here - which avoids delta-dedup/filtering on the full lazyframe
+    ticker_ds_file_mapping["lazyframe"] = None
+    for _, row in ticker_ds_file_mapping.iterrows():
+        curr_dataset = row["e-dataset"]
+        curr_tickers = row["ticker"]
+        curr_paths = row["path"]
+        if curr_dataset == "Unknown":
+            logger.warning(
+                f"Dataset for tickers {curr_tickers} is unknown. Skipping these tickers."
+            )
+            continue
+        lazy_frame: pl.LazyFrame = pl.concat(
+            [
+                _scan_and_prepare_single_parquet(
+                    path=p,
+                    tickers=curr_tickers,
+                    start_date=start_date,
+                    end_date=end_date,
+                    return_qdf=return_qdf,
+                )
+                for p in curr_paths
+            ],
+            how="vertical",
+        )
+        ticker_ds_file_mapping.loc[_, "lazyframe"] = lazy_frame
+
+    # drop where lazyframe is None (i.e., unknown datasets)
+    ticker_ds_file_mapping = ticker_ds_file_mapping.dropna(subset=["lazyframe"])
+    return ticker_ds_file_mapping
 
 
 if __name__ == "__main__":
