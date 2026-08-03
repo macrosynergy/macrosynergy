@@ -164,27 +164,32 @@ class BasePanelLearner(ABC):
         else:
             features_xcats = self.xcats[:-self.n_targets]
             targets_xcats = self.xcats[-self.n_targets:]
-            dfs = []
-            for target in targets_xcats:
-                df_long = (
-                    categories_df(
-                        df=self.df,
-                        xcats=features_xcats + [target],
-                        cids=self.cids,
-                        start=self.start,
-                        end=self.end,
-                        blacklist=self.blacklist,
-                        freq=self.freq,
-                        lag=self.lag,
-                        xcat_aggs=self.xcat_aggs,
-                    )
-                )
-                dfs.append(df_long)
-            df_long = pd.concat(dfs, axis=1).sort_index()
-            # Filter out duplicate categories
-            df_features = df_long.iloc[:,:len(features_xcats)]
-            df_targets = df_long[targets_xcats]
-            df_long = pd.concat([df_features, df_targets], axis=1)
+
+            df_features = categories_df(
+                df=self.df,
+                xcats=features_xcats + [targets_xcats[0]],
+                cids=self.cids,
+                start=self.start,
+                end=self.end,
+                blacklist=self.blacklist,
+                freq=self.freq,
+                lag=self.lag,
+                xcat_aggs=self.xcat_aggs,
+            )[features_xcats]
+
+            df_targets = categories_df(
+                df=self.df,
+                xcats=targets_xcats,
+                cids=self.cids,
+                start=self.start,
+                end=self.end,
+                blacklist=self.blacklist,
+                freq=self.freq,
+                lag = 0,
+                xcat_aggs=[self.xcat_aggs[1], self.xcat_aggs[1]],
+            )[targets_xcats]
+            
+            df_long = pd.concat([df_features, df_targets], axis=1).sort_index()
 
         # Handle NaNs
         # No matter what, drop rows where all independent variables are NaN
