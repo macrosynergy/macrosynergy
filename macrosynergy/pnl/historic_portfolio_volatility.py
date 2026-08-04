@@ -24,7 +24,7 @@ from macrosynergy.management.utils import (
 )
 
 RETURN_SERIES_XCAT = "_PNL_USD1S_ASD"
-FREQ_TO_BDAY_MAP = {"B": 1, "W-FRI": 5, "BME": 21, "BQ": 63, "BA": 252}
+FREQ_TO_BDAY_MAP = {"D": 1, "B": 1, "W-FRI": 5, "BME": 21, "BQ": 63, "BA": 252}
 
 
 logger = logging.getLogger(__name__)
@@ -133,29 +133,22 @@ def estimate_variance_covariance(
 
 
 def _downsample_returns(piv_df: pd.DataFrame, freq: str) -> pd.DataFrame:
-    n_bdays = FREQ_TO_BDAY_MAP[freq]
-    piv_df = 1 + piv_df / 100
+    n = FREQ_TO_BDAY_MAP[freq]
+    n_rows = piv_df.shape[0]
+    piv_df = piv_df.sort_index()
 
-    first, last = piv_df.index.min(), piv_df.index.max()
-    all_bd = pd.bdate_range(first, last)
+    # compute buckets counting backwards from the most recent row
+    bucket = np.arange(n_rows - 1, -1, -1) // n
+    keep = bucket < n_rows // n  # drop the oldest partial block
 
-    pos = all_bd.searchsorted(piv_df.index, side='right') - 1
-    pos = np.maximum(pos, 0)
+    piv_df, bucket = piv_df[keep], bucket[keep]
+    bucket = bucket[::-1] # oldest bucket is 0
 
-    # Backward distance in business days; bucket 0 ends on `last`
-    dist = pos.max() - pos
-    bucket = dist // n_bdays
+    # compound data within each bucket
+    compounded = (1 + piv_df / 100).groupby(bucket).prod(min_count=1)
+    out = 100 * (compounded - 1)
 
-    # A full bucket must span a complete n_bdays block starting at dist multiples
-    # of n_bdays.The oldest bucket is short whenever pos.max() (total span) isn't
-    # a multiple of n_bdays.Keep only buckets whose block fits entirely within the
-    # available business days.
-    max_full_bucket = (pos.max() + 1) // n_bdays - 1  # highest bucket index with a full n_bdays bdays
-
-    keep = bucket <= max_full_bucket
-    piv_new_freq = 100 * (piv_df[keep].groupby(bucket[keep]).prod() - 1)
-
-    return piv_new_freq
+    return out
 
 
 def _calculate_multi_frequency_vcv_for_period(
