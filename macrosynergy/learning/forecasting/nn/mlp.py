@@ -811,7 +811,11 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
                     )
             
             if patience is not None:
-                train_loss = self._eval_loss(model, train_loader_eval, loss_func)
+                if verbose:
+                    train_loss = self._eval_loss(model, train_loader_eval, loss_func)
+                else:
+                    train_loss = None
+
                 valid_loss = self._eval_loss(model, valid_loader, loss_func)
 
                 best_score_new, best_state, counter = self.update_es_stats(
@@ -1356,7 +1360,7 @@ if __name__ == "__main__":
         aggregate_last=True,
         drop_last=False,
         epochs = 10000,
-        patience = 1000, 
+        patience = 10, 
         refit=True,
         train_pct = 0.7,
         x_scaler = StandardScaler(with_mean=False),
