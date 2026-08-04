@@ -265,6 +265,7 @@ class BasePanelLearner(ABC):
         store_additional_data=None,
         n_jobs_outer=-1,
         n_jobs_inner=1,
+        skip_validation=False,
     ):
         """
         Run a learning process over a panel.
@@ -315,6 +316,9 @@ class BasePanelLearner(ABC):
         n_jobs_inner : int, optional
             Number of jobs to run in parallel for the inner loop. Default is 1. If no
             hyperparameter tuning is required, this parameter can be disregarded.
+        skip_validation : bool, optional
+            Whether to skip the more intensive validation checks for, primarily, the 
+            model and hyperparameter dictionaries. Default is False.
 
         Returns
         -------
@@ -346,22 +350,24 @@ class BasePanelLearner(ABC):
         # Check models can be fitted on first train set
         X_first = self.X.iloc[train_test_splits[0][0]]
         y_first = self.y.iloc[train_test_splits[0][0]]
-        for key, model in models.items():
-            try:
-                models[key].fit(X_first, y_first)
-            except Exception as e:
-                raise RuntimeError(
-                    f"Initial fit check failed for model '{key}' on the first outer "
-                    f"training split. The model could not be trained with X shape"
-                    f"={X_first.shape} and y shape={y_first.shape}. This may indicate "
-                    f"that the estimator is incompatible with the provided features, "
-                    f"target, or preprocessing configuration. "
-                    f"Original error: {e}"
-                ) from e
-            
-            # Reinitialize the model to ensure the actual learning process is not affected by this check
-            params = models[key].get_params(deep=False)
-            models[key] = type(model)(**params)
+
+        if not skip_validation:
+            for key, model in models.items():
+                try:
+                    models[key].fit(X_first, y_first)
+                except Exception as e:
+                    raise RuntimeError(
+                        f"Initial fit check failed for model '{key}' on the first outer "
+                        f"training split. The model could not be trained with X shape"
+                        f"={X_first.shape} and y shape={y_first.shape}. This may indicate "
+                        f"that the estimator is incompatible with the provided features, "
+                        f"target, or preprocessing configuration. "
+                        f"Original error: {e}"
+                    ) from e
+                
+                # Reinitialize the model to ensure the actual learning process is not affected by this check
+                params = models[key].get_params(deep=False)
+                models[key] = type(model)(**params)
 
         if inner_splitters is not None:
             base_splits = self._get_base_splits(inner_splitters)
