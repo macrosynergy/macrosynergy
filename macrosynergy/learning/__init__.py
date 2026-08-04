@@ -38,6 +38,7 @@ from .model_evaluation import (
     correlation_coefficient,
     create_panel_metric,
     regression_mcc,
+    cost_aware_metric,
 )
 from .sequential import SignalOptimizer, BetaEstimator, ReturnForecaster
 
@@ -138,6 +139,7 @@ __all__ = [
     "create_panel_metric",
     "correlation_coefficient",
     "regression_mcc",
+    "cost_aware_metric",
     # Sequential forecasting
     "SignalOptimizer",
     "ReturnForecaster",

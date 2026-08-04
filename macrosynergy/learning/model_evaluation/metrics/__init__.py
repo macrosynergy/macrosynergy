@@ -6,7 +6,8 @@ from .metrics import (
     sortino_ratio,
     correlation_coefficient,
     create_panel_metric,
-    regression_mcc
+    regression_mcc,
+    cost_aware_metric,
 )
 
 __all__ = [
@@ -17,5 +18,6 @@ __all__ = [
     "sortino_ratio",
     "correlation_coefficient",
     "create_panel_metric",
-    "regression_mcc"
+    "regression_mcc",
+    "cost_aware_metric",
 ]
