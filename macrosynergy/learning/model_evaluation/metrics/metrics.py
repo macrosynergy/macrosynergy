@@ -3,11 +3,21 @@ Scikit-learn compatible performance metrics for model evaluation.
 """
 
 import inspect
+from numbers import Number
+from typing import Optional
+
 import numpy as np
 import pandas as pd
 import scipy.stats as stats
 
 from macrosynergy.learning.random_effects import RandomEffects
+from macrosynergy.management import reduce_df
+from macrosynergy.management.types import NoneType
+from macrosynergy.pnl.contract_signals import contract_signals
+from macrosynergy.pnl.notional_positions import notional_positions
+from macrosynergy.pnl.proxy_pnl_calc import proxy_pnl_calc
+from macrosynergy.pnl.transaction_costs import TransactionCostsDictAdapter
+from macrosynergy.pnl.sharpe_stability_ratio import sharpe_stability_ratio
 
 from sklearn.metrics import accuracy_score, balanced_accuracy_score, matthews_corrcoef
 
@@ -708,6 +718,128 @@ def correlation_coefficient(
             correlations.append(correlation)
 
         return np.mean(correlations)
+
+
+def cost_aware_metric(
+    y_true: pd.Series,
+    y_pred: pd.Series,
+    metric: str,
+    aum: Number,
+    cost_object: TransactionCostsDictAdapter,
+    dps: Optional[Number] = None,
+    leverage: Optional[Number] = None,
+    rebal_freq: str = "D",
+    threshold: Number = 3,
+    min_obs: Number = 30,
+) -> float:
+    # checks
+    for arg, val, ok_type, ok_vals in [
+        ("y_true", y_true, pd.Series, None),
+        ("y_pred", y_pred, pd.Series, None),
+        ("metric", metric, str, {"sharpe", "sortino", "ssr"}),
+        ("aum", aum, Number, None),
+        ("cost_object", cost_object, TransactionCostsDictAdapter, None),
+        ("dps", dps, (Number, NoneType), None),
+        ("leverage", leverage, (Number, NoneType), None),
+        ("rebal_freq", rebal_freq, str, {"D", "M"}),
+        ("threshold", threshold, Number, None),
+        ("min_obs", min_obs, Number, None),
+    ]:
+        if not isinstance(val, ok_type):
+            raise TypeError(f"{arg} must be of type {ok_type}")
+
+        if ok_vals is not None and val not in ok_vals:
+            raise ValueError(f"{arg} must be one of {ok_vals}")
+
+    if len(y_pred) < min_obs:
+        raise ValueError(
+            f"Cannot compute cost aware metric for {metric}. "
+            f"{len(y_pred)} is less than the minimum number of observations {min_obs} "
+            f"required."
+        )
+
+    if (
+        (dps is None and leverage is None) or
+        (dps is not None and leverage is not None)
+    ):
+        raise ValueError("Exactly one of `dps` and `leverage` must be specified.")
+
+    # define some helpers
+    rstring = "XR"
+    sname = "STRAT"
+    sig_name = "y_pred"
+    pname = "POS"
+    portfolio_name = "CV"
+    ctype = cost_object.fids[0].split("_")[-1]
+
+    # turn y_pred into a z-scored signal
+    y_pred = y_pred.sort_index(level=1)
+    y_true = y_true.loc[y_pred.index]
+
+    y_pred = (y_pred - y_pred.mean()) / y_pred.std()
+    y_pred = y_pred.clip(lower=-threshold, upper=threshold)
+
+    sig_df = y_pred.to_frame(name="value").assign(xcat=sig_name).reset_index()
+    ret_df = y_true.to_frame(name="value").assign(xcat=ctype + rstring).reset_index()
+
+    # create a contract signal
+    csig = contract_signals(
+        df=sig_df,
+        sig=sig_name,
+        cids=sig_df["cid"].unique().tolist(),
+        ctypes=[ctype],
+        sname=sname,
+    )
+
+    # create notional positions (DPS or leverage)
+    npos = notional_positions(
+        df=csig,
+        sname=sname,
+        fids=cost_object.fids,
+        aum=aum,
+        dollar_per_signal=dps,
+        leverage=leverage,
+        pname=pname,
+        slip=0,
+        rebal_freq=rebal_freq,
+    )
+
+    # compute proxy pnl
+    pnl = proxy_pnl_calc(
+        df=pd.concat((npos, ret_df), ignore_index=True),
+        spos=f"{sname}_{pname}",
+        rstring=rstring,
+        transaction_costs_object=cost_object,
+        portfolio_name=portfolio_name,
+    )
+
+    # convert pnl into returns %
+    pnl_vals = reduce_df(pnl, cids=[portfolio_name])["value"].values
+    pnl_vals = 100 * pnl_vals / aum
+
+    if metric == "sharpe":
+        mean = pnl_vals.mean() * 252
+        std = pnl_vals.std() * np.sqrt(252)
+        metric = mean / std
+    elif metric == "sortino":
+        mean = pnl_vals.mean() * 252
+        metric = (
+            mean /
+            np.sqrt(np.sum(pnl_vals[pnl_vals < 0] ** 2) / len(pnl_vals)) * np.sqrt(252)
+        )
+    elif metric == "ssr":
+        if pnl_vals.shape[0] < 252:
+            raise ValueError(
+                "Cannot compute SSR as there is less than 252 observations"
+            )
+        metric = sharpe_stability_ratio(
+            pnl_vals,
+            window=252,
+            benchmark_sr=0.0,
+            annualization_factor=252,
+        )
+
+    return metric
 
 
 def _check_metric_params(
