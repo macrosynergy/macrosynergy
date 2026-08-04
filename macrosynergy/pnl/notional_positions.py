@@ -15,6 +15,8 @@ from macrosynergy.management.utils import (
     is_valid_iso_date,
     apply_slip as apply_slip_util,
     ticker_df_to_qdf,
+    get_sops,
+    _map_to_business_day_frequency,
 )
 
 from macrosynergy.management.types import NoneType, QuantamentalDataFrame
@@ -186,8 +188,6 @@ def _vol_target_positions(
     histpvol["scale"] = ((vol_target / histpvol["value"]) * aum).replace(np.inf, np.nan)
     # TODO check inf => convert to NaN
     histpvol.set_index("real_date", inplace=True)
-
-    out_df = pd.DataFrame(index=df_wide.index)
 
     signal_columns: List[str] = [f"{contx:s}{sig_ident:s}" for contx in fids]
     df_signals: pd.DataFrame = df_wide.loc[histpvol.index, signal_columns]
@@ -505,16 +505,23 @@ def notional_positions(
         ):
             raise ValueError(f"Contract identifier `{contx}` not in dataframe.")
 
-    ## Apply the slip
+    ## Apply the slip and adjust signals to rebalancing frequency
     df: pd.DataFrame = _apply_slip(
         df=df,
         slip=slip,
         fids=fids,
     )
 
-    # TODO why pivot it out to a wide format?
-    # df_wide = qdf_to_ticker_df(df)
     df_wide = QuantamentalDataFrame(df=df).to_wide()
+
+    rebal_dates = get_sops(
+        dates=df_wide.index,
+        freq=_map_to_business_day_frequency(rebal_freq)
+    )
+
+    is_rb_date = pd.Series(df_wide.index.isin(rebal_dates), index=df_wide.index)
+    df_wide = df_wide.where(is_rb_date, axis=0).ffill()
+
     return_df = None
     if leverage:
         return_df: pd.DataFrame = _leverage_positions(
