@@ -29,8 +29,6 @@ import pandas as pd
 from macrosynergy.management.types import QuantamentalDataFrame
 from macrosynergy.management.utils.core import _map_to_business_day_frequency
 
-__all__ = ["categories_df_fast", "categories_df_fast_loop"]
-
 # `categories_df`'s own order, and the order the assertion message shows the caller.
 CATEGORIES_DF_METRICS = ["value", "grading", "mop_lag", "eop_lag"]
 
@@ -55,7 +53,43 @@ DEFAULT_ARGS: Dict[str, Any] = dict(
 )
 
 
-# ------------------------------------------------------------------- the arguments
+class DroppedObs(NamedTuple):
+    """The observations the union's cross sections dropped, in whole-frame codes."""
+
+    cid_of_obs: np.ndarray
+    xcat_of_obs: np.ndarray
+    date_ns_of_obs: np.ndarray
+
+
+class WideFrame(NamedTuple):
+    """The dense ``(cid, real_date) x xcat`` `dfw`, built over a batch's union.
+
+    Every field is settled at construction; a request never mutates the reshape.
+    """
+
+    is_qdf: bool
+    # (n_xcats, n_rows) cells per requested metric; one without a float column is absent
+    dfw_values: Dict[str, np.ndarray]
+    # per requested frequency: (period_of_date, eop_dates)
+    periods: Dict[str, Tuple[np.ndarray, pd.DatetimeIndex]]
+    # (n_xcats, n_rows): the cells `pivot` would emit - not `~isnan(values)`, H11
+    observed_cells: np.ndarray
+    # per row of the reshape: cid axis position, date axis position, and the date
+    cid_of_row: np.ndarray
+    date_of_row: np.ndarray
+    date_ns_of_row: np.ndarray
+    cids: List[str]
+    pos_of_cid: Dict[str, int]
+    pos_of_xcat: Dict[str, int]
+    dfw_columns: pd.Index
+    cid_index_level: pd.Index
+    # rows the union's cross sections dropped, kept only while a category derived from
+    # them could still survive a QuantamentalDataFrame request - H1
+    obs_dropped_by_cids: Optional[DroppedObs]
+    xcats_only_outside_cids: FrozenSet[str]
+    # label -> code over the whole frame, the coding `obs_dropped_by_cids` speaks
+    code_of_cid: Dict[str, int]
+    code_of_xcat: Dict[str, int]
 
 
 def _fill_default_args(args: Dict[str, Any]) -> Dict[str, Any]:
@@ -177,9 +211,6 @@ def _check_blacklist(blacklist: Any) -> None:
             "Values of `blacklist` must be lists of start & end dates "
             "(str or pd.Timestamp)."
         )
-
-
-# ------------------------------------------------------------------------- reduce
 
 
 def _reduce_df(
@@ -386,9 +417,6 @@ def _reduce_dfw_rows(
     return rows, xcats, cids
 
 
-# ------------------------------------------------------------------------ reshape
-
-
 def _pivot_dfw(reduced: pd.DataFrame, val: str) -> pd.DataFrame:
     """The ``(cid, real_date) x xcat`` frame, the way `categories_df` builds it."""
 
@@ -472,43 +500,14 @@ def _can_build_dfw(df: pd.DataFrame) -> bool:
     return True
 
 
-class DroppedObs(NamedTuple):
-    """The observations the union's cross sections dropped, in whole-frame codes."""
-
-    cid_of_obs: np.ndarray
-    xcat_of_obs: np.ndarray
-    date_ns_of_obs: np.ndarray
-
-
-class WideFrame(NamedTuple):
-    """The dense ``(cid, real_date) x xcat`` `dfw`, built over a batch's union.
-
-    Every field is settled at construction; a request never mutates the reshape.
-    """
-
-    is_qdf: bool
-    # (n_xcats, n_rows) cells per requested metric; one without a float column is absent
-    dfw_values: Dict[str, np.ndarray]
-    # per requested frequency: (period_of_date, eop_dates)
-    periods: Dict[str, Tuple[np.ndarray, pd.DatetimeIndex]]
-    # (n_xcats, n_rows): the cells `pivot` would emit - not `~isnan(values)`, H11
-    observed_cells: np.ndarray
-    # per row of the reshape: cid axis position, date axis position, and the date
-    cid_of_row: np.ndarray
-    date_of_row: np.ndarray
-    date_ns_of_row: np.ndarray
-    cids: List[str]
-    pos_of_cid: Dict[str, int]
-    pos_of_xcat: Dict[str, int]
-    dfw_columns: pd.Index
-    cid_index_level: pd.Index
-    # rows the union's cross sections dropped, kept only while a category derived from
-    # them could still survive a QuantamentalDataFrame request - H1
-    obs_dropped_by_cids: Optional[DroppedObs]
-    xcats_only_outside_cids: FrozenSet[str]
-    # label -> code over the whole frame, the coding `obs_dropped_by_cids` speaks
-    code_of_cid: Dict[str, int]
-    code_of_xcat: Dict[str, int]
+def _period_index(
+    dates: pd.DatetimeIndex, freq: str
+) -> Tuple[np.ndarray, pd.DatetimeIndex]:
+    # Empty periods are numbered too, and the labels come from pandas' own resampler
+    # so that `freq="B"` snaps weekend dates the way `categories_df` does - H9.
+    counts = pd.Series(np.zeros(len(dates)), index=dates).resample(freq).size()
+    period_of_date = np.repeat(np.arange(len(counts)), counts.to_numpy())
+    return period_of_date, counts.index
 
 
 def _build_dfw(
@@ -650,19 +649,6 @@ def _build_dfw(
     )
 
 
-# --------------------------------------------------------------------- downsample
-
-
-def _period_index(
-    dates: pd.DatetimeIndex, freq: str
-) -> Tuple[np.ndarray, pd.DatetimeIndex]:
-    # Empty periods are numbered too, and the labels come from pandas' own resampler
-    # so that `freq="B"` snaps weekend dates the way `categories_df` does - H9.
-    counts = pd.Series(np.zeros(len(dates)), index=dates).resample(freq).size()
-    period_of_date = np.repeat(np.arange(len(counts)), counts.to_numpy())
-    return period_of_date, counts.index
-
-
 def _downsample_dfw(dfw: pd.DataFrame, freq: str) -> pd.core.groupby.DataFrameGroupBy:
     return dfw.groupby(
         [pd.Grouper(level="cid"), pd.Grouper(level="real_date", freq=freq)],
@@ -708,9 +694,6 @@ def _downsample_dfw_arrays(
     )
 
 
-# ----------------------------------------- aggregate, lag, assemble, drop empty rows
-
-
 def _aggregate_xcats(
     grouped: pd.core.groupby.DataFrameGroupBy, xcats: List[str], agg_method: str
 ) -> pd.DataFrame:
@@ -748,7 +731,7 @@ def _build_dfc(
 
 
 def _cast_cid_index_to_object(dfc: pd.DataFrame) -> pd.DataFrame:
-    """Cast a categorical `cid` index level back to object, then drop all-NaN rows."""
+    """Cast a categorical `cid` index level back to object."""
 
     if dfc.index.dtypes["cid"].name == "category":
         new_outer_index = dfc.index.levels[0].astype("object")
@@ -758,10 +741,7 @@ def _cast_cid_index_to_object(dfc: pd.DataFrame) -> pd.DataFrame:
             names=dfc.index.names,
         )
         dfc.index = new_index
-    return dfc.dropna(axis=0, how="all")
-
-
-# ------------------------------------------------------------ one request, end to end
+    return dfc
 
 
 def _categories_df_via_pivot(
@@ -784,16 +764,16 @@ def _categories_df_via_pivot(
     dep_col = _aggregate_xcats(grouped=dfw, xcats=[xcats[-1]], agg_method=xcat_aggs[1])[
         xcats[-1]
     ]
-    return _cast_cid_index_to_object(
-        dfc=_build_dfc(
-            dfw_explanatory=_lag_explanatory(
-                dfw_explanatory=dfw_explanatory, lag=args["lag"]
-            ),
-            dep_col=dep_col,
-            xcats=xcats,
-            fwin=args["fwin"],
-        )
+    dfw_explanatory = _lag_explanatory(dfw_explanatory=dfw_explanatory, lag=args["lag"])
+    dfc: pd.DataFrame = _build_dfc(
+        dfw_explanatory=dfw_explanatory,
+        dep_col=dep_col,
+        xcats=xcats,
+        fwin=args["fwin"],
     )
+    # `categories_df` is a support function: a category that is NaN for a period is
+    # left for the caller to handle, and only an entirely empty row is dropped.
+    return _cast_cid_index_to_object(dfc=dfc).dropna(axis=0, how="all")
 
 
 def _categories_df_via_dfw(
@@ -821,16 +801,14 @@ def _categories_df_via_dfw(
         grouped=grouped, xcats=[xcats[-1]], agg_method=xcat_aggs[1]
     )
     dfw_explanatory.index = dep_frame.index = downsampled_index
-    return _cast_cid_index_to_object(
-        dfc=_build_dfc(
-            dfw_explanatory=_lag_explanatory(
-                dfw_explanatory=dfw_explanatory, lag=args["lag"]
-            ),
-            dep_col=dep_frame[xcats[-1]],
-            xcats=xcats,
-            fwin=args["fwin"],
-        )
+    dfw_explanatory = _lag_explanatory(dfw_explanatory=dfw_explanatory, lag=args["lag"])
+    dfc: pd.DataFrame = _build_dfc(
+        dfw_explanatory=dfw_explanatory,
+        dep_col=dep_frame[xcats[-1]],
+        xcats=xcats,
+        fwin=args["fwin"],
     )
+    return _cast_cid_index_to_object(dfc=dfc).dropna(axis=0, how="all")
 
 
 def _year_group_labels(start_year: int, end_year: int, years: int) -> List[str]:
@@ -889,10 +867,7 @@ def _categories_df_by_year_groups(
     dfc = pd.concat(df_output).pivot(
         index=("cid", "real_date"), columns="xcat", values=val
     )
-    return _cast_cid_index_to_object(dfc=dfc)
-
-
-# ----------------------------------------------------------------- the entry points
+    return _cast_cid_index_to_object(dfc=dfc).dropna(axis=0, how="all")
 
 
 def _categories_df_many(
