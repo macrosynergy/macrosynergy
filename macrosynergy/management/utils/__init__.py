@@ -46,6 +46,8 @@ from .df_utils import (
     rotate_cid_xcat,
 )
 
+from .categories_df_fast import categories_df_fast, categories_df_fast_loop
+
 from .sparse import (
     create_delta_data,
     calculate_score_on_sparse_indicator,
@@ -98,6 +100,8 @@ __all__ = [
     "reduce_df",
     "reduce_df_by_ticker",
     "categories_df",
+    "categories_df_fast",
+    "categories_df_fast_loop",
     "categories_df_aggregation_helper",
     "_categories_df_explanatory_df",
     "_map_to_business_day_frequency",

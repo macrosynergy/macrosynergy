@@ -16,6 +16,8 @@ from .utils import (
     update_df,
     reduce_df,
     categories_df,
+    categories_df_fast,
+    categories_df_fast_loop,
     reduce_df_by_ticker,
     merge_categories,
 )
@@ -38,6 +40,8 @@ __all__ = [
     # METHODS
     "reduce_df",
     "categories_df",
+    "categories_df_fast",
+    "categories_df_fast_loop",
     "reduce_df_by_ticker",
     "visual_paneldates",
     "check_enddates",
