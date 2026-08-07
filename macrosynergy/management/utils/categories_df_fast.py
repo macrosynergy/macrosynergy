@@ -14,7 +14,8 @@ import pandas as pd
 from macrosynergy.management.types import QuantamentalDataFrame
 from macrosynergy.management.utils.core import _map_to_business_day_frequency
 
-# `categories_df`'s own order, and the order the assertion message shows the caller.
+# `categories_df`'s own order, and the order the assertion message shows the caller;
+# deliberately not `constants.JPMAQS_METRICS`, which has five entries in another order.
 CATEGORIES_DF_METRICS = ["value", "grading", "mop_lag", "eop_lag"]
 
 NS_PER_DAY = 86_400_000_000_000
@@ -65,7 +66,9 @@ class WideFrame(NamedTuple):
         per requested frequency, the period each date falls in and the end-of-period
         dates that label them.
     observed_cells : np.ndarray
-        ``(n_xcats, n_rows)``, the cells `pivot` would emit.
+        ``(n_xcats, n_rows)``, the cells `pivot` would emit - not ``~isnan(values)``.
+        An all-NaN daily row still forms a group and still moves the positional shift
+        (df_utils.py:1078-1083) - H11.
     cid_of_row : np.ndarray
         per row, the position of its cross section on the cid axis.
     date_of_row : np.ndarray
@@ -73,7 +76,7 @@ class WideFrame(NamedTuple):
     date_ns_of_row : np.ndarray
         per row, its date as int64 nanoseconds.
     cids : List[str]
-        the cross sections on the cid axis, sorted.
+        the cross sections on the cid axis.
     pos_of_cid : Dict[str, int]
         cross section to its cid axis position.
     pos_of_xcat : Dict[str, int]
@@ -84,7 +87,9 @@ class WideFrame(NamedTuple):
         the outer level of the ``(cid, real_date)`` index, as object dtype.
     obs_dropped_by_cids : Optional[DroppedObs]
         the rows the union's cross sections dropped. Kept only while a category derived
-        from them could still survive a QuantamentalDataFrame request.
+        from them could still survive a QuantamentalDataFrame request, whose body
+        derives the categories before the cid filter (methods.py:364-370, vs the plain
+        body at :385) - H1.
     xcats_only_outside_cids : FrozenSet[str]
         the categories that appear nowhere inside the union's cross sections.
     code_of_cid : Dict[str, int]
@@ -97,8 +102,6 @@ class WideFrame(NamedTuple):
     is_qdf: bool
     dfw_values: Dict[str, np.ndarray]
     periods: Dict[str, Tuple[np.ndarray, pd.DatetimeIndex]]
-    # the cells `pivot` emits, not `~isnan(values)`: an all-NaN daily row still forms a
-    # group, and that group participates in the positional shift - H11
     observed_cells: np.ndarray
     cid_of_row: np.ndarray
     date_of_row: np.ndarray
@@ -108,8 +111,6 @@ class WideFrame(NamedTuple):
     pos_of_xcat: Dict[str, int]
     dfw_columns: pd.Index
     cid_index_level: pd.Index
-    # the QuantamentalDataFrame body derives the categories before the cid filter
-    # (methods.py:364-370, vs the plain body at :385) - H1
     obs_dropped_by_cids: Optional[DroppedObs]
     xcats_only_outside_cids: FrozenSet[str]
     code_of_cid: Dict[str, int]
@@ -191,22 +192,6 @@ def _check_reduced_xcats_and_cids(
     """
     Raise or warn on what survived the reduction, as `categories_df` does.
 
-    Parameters
-    ----------
-    xcats : List[str]
-        the categories that survived the reduction, in requested order.
-    cids : List[str]
-        the cross sections that survived the reduction, sorted.
-    args : Dict[str, Any]
-        one request's arguments; `xcats` and `cids` are read as the requested lists.
-
-    Raises
-    ------
-    ValueError
-        if fewer than two categories, or no cross section, survived.
-
-    Notes
-    -----
     Both warning texts are byte-identical to `df_utils.py:1039-1041` and `:1049-1051`,
     and the cross-section one is skipped when no `cids` were requested - H5.
     """
@@ -337,8 +322,9 @@ def _reduce_df(
 def _blacklist_bound(value: Any, is_qdf: bool) -> int:
     """One blacklist bound as int64 nanoseconds, raising the way its body would."""
 
-    # `apply_blacklist` compares the raw bound against a datetime64 column, so a bad
-    # one is a TypeError; the plain body parses it first and raises DateParseError - H6.
+    # `apply_blacklist` compares the raw bound against a datetime64 column
+    # (methods.py:272-279), so a bad one is a TypeError; the plain body parses it first
+    # (df_utils.py:760-768) and raises DateParseError - H6.
     try:
         return pd.Timestamp(value).value
     except ValueError:
@@ -405,7 +391,7 @@ def _label_mask(
 
 
 def _reduce_dfw_rows(
-    dfw: "WideFrame", args: Dict[str, Any]
+    dfw: WideFrame, args: Dict[str, Any]
 ) -> Tuple[np.ndarray, List[str], List[str]]:
     """`reduce_df` as a mask over the reshape's rows, plus the lists it derives."""
 
@@ -429,8 +415,9 @@ def _reduce_dfw_rows(
     # the QuantamentalDataFrame body derives the categories before the cid filter
     # (methods.py:364-370, vs the plain body at :385) - H1
     for_xcats = date_mask if dfw.is_qdf or cid_mask is None else (date_mask & cid_mask)
-    # Off the observed cells, not the values: an all-NaN period is still a group, and
-    # `dropna` removing its row does not stop `shift` sourcing from it - H11.
+    # Off the observed cells, not the values: an all-NaN period is still a group
+    # (df_utils.py:1078-1083), and `dropna` removing its row does not stop `shift`
+    # sourcing from it - H11.
     xcat_survives = (dfw.observed_cells & for_xcats).any(axis=1)
 
     xcats_outside = frozenset()
@@ -547,7 +534,7 @@ def _dfw_metric_values(
     dfw_values = {}
     for metric in metrics:
         col = df[metric].to_numpy() if metric in df.columns else None
-        # a NaN-observed_cells scatter cannot stand up an integer column; `pivot` serves those
+        # a NaN-filled array cannot stand up an integer column; `pivot` serves those
         if col is None or col.dtype.kind != "f":
             continue
         cells = np.full(shape[0] * shape[1], np.nan, dtype=col.dtype)
@@ -557,14 +544,20 @@ def _dfw_metric_values(
 
 
 def _can_build_dfw(df: pd.DataFrame) -> bool:
-    """Whether a dense reshape can stand in for `pivot` on this frame at all - §5."""
+    """
+    Whether a dense reshape can stand in for `pivot` (df_utils.py:1072) on this frame.
+
+    A one-column test made before any allocation; §5 of the parity doc lists the
+    conditions and why each one is exact rather than a heuristic.
+    """
 
     if str(df["real_date"].dtype) != "datetime64[ns]":
         return False  # a row id is int64 nanoseconds // a day
     dtype = df["cid"].dtype
     if type(df) is not QuantamentalDataFrame and isinstance(dtype, pd.CategoricalDtype):
-        # `pivot` honours a categorical level's order only while every category is
-        # used, and the plain `reduce_df` body leaves unused ones behind - §2, §5
+        # `pivot` (df_utils.py:1072) honours a categorical level's order only while
+        # every category is used, and the plain `reduce_df` body leaves unused
+        # categories behind (vs the QuantamentalDataFrame body at methods.py:389) - §5
         categories = list(dtype.categories)
         return categories == sorted(categories)
     return True
@@ -576,7 +569,8 @@ def _period_index(
     """The downsample period each date falls in, and the end-of-period dates."""
 
     # Empty periods are numbered too, and the labels come from pandas' own resampler
-    # so that `freq="B"` snaps weekend dates the way `categories_df` does - H9.
+    # so that `freq="B"` snaps weekend dates onto business-day bins the way the shipped
+    # `pd.Grouper` does (df_utils.py:1078-1084) - H9.
     counts = pd.Series(np.zeros(len(dates)), index=dates).resample(freq).size()
     period_of_date = np.repeat(np.arange(len(counts)), counts.to_numpy())
     return period_of_date, counts.index
@@ -601,7 +595,8 @@ def _build_dfw(
     -------
     Optional[WideFrame]
         the shared reshape, or None where the frame is one the dense route cannot
-        reproduce exactly and the caller must fall back on `pivot` - §5.
+        reproduce exactly and the caller must fall back on `pivot`
+        (df_utils.py:1072) - §5.
     """
 
     cid_codes, df_cids = _label_codes(col=df["cid"])
@@ -744,7 +739,9 @@ def _downsample_dfw(dfw: pd.DataFrame, freq: str) -> pd.core.groupby.DataFrameGr
 
     return dfw.groupby(
         [pd.Grouper(level="cid"), pd.Grouper(level="real_date", freq=freq)],
-        observed=True,  # unused cid categories would explode the groupby - H12
+        # `observed=False` would explode the groupby over unused cid categories;
+        # the shipped groupby sets this too (df_utils.py:1078-1084) - H12
+        observed=True,
     )
 
 
@@ -879,13 +876,14 @@ def _categories_df_via_pivot(
     _check_dfw_columns(xcats=xcats, dfw_columns=dfw.columns)
 
     dfw = _downsample_dfw(dfw=dfw, freq=args["_bday_freq"])
+    dep = xcats[-1]
     xcat_aggs = args["xcat_aggs"]
+    # de-duplicated to aggregate each category once; `_build_dfc` restores the
+    # duplicated selection, so a category asked for twice is still returned twice
     dfw_explanatory = _aggregate_xcats(
         grouped=dfw, xcats=list(dict.fromkeys(xcats[:-1])), agg_method=xcat_aggs[0]
     )
-    dep_col = _aggregate_xcats(grouped=dfw, xcats=[xcats[-1]], agg_method=xcat_aggs[1])[
-        xcats[-1]
-    ]
+    dep_col = _aggregate_xcats(grouped=dfw, xcats=[dep], agg_method=xcat_aggs[1])[dep]
     dfw_explanatory = _lag_explanatory(dfw_explanatory=dfw_explanatory, lag=args["lag"])
     dfc: pd.DataFrame = _build_dfc(
         dfw_explanatory=dfw_explanatory,
@@ -915,18 +913,18 @@ def _categories_df_via_dfw(
     grouped, downsampled_index = _downsample_dfw_arrays(
         dfw=dfw, rows=rows, metric=args["val"], freq=args["_bday_freq"]
     )
+    dep = xcats[-1]
     xcat_aggs = args["xcat_aggs"]
+    # de-duplicated as above; the duplicated selection is restored in `_build_dfc`
     dfw_explanatory = _aggregate_xcats(
         grouped=grouped, xcats=list(dict.fromkeys(xcats[:-1])), agg_method=xcat_aggs[0]
     )
-    dep_frame = _aggregate_xcats(
-        grouped=grouped, xcats=[xcats[-1]], agg_method=xcat_aggs[1]
-    )
+    dep_frame = _aggregate_xcats(grouped=grouped, xcats=[dep], agg_method=xcat_aggs[1])
     dfw_explanatory.index = dep_frame.index = downsampled_index
     dfw_explanatory = _lag_explanatory(dfw_explanatory=dfw_explanatory, lag=args["lag"])
     dfc: pd.DataFrame = _build_dfc(
         dfw_explanatory=dfw_explanatory,
-        dep_col=dep_frame[xcats[-1]],
+        dep_col=dep_frame[dep],
         xcats=xcats,
         fwin=args["fwin"],
     )
@@ -1111,6 +1109,9 @@ def categories_df_fast(
     - values, dtypes, warnings and exceptions alike - by way of a reshape indexed by
     integer codes rather than `pivot`. Use `categories_df_fast_loop` when several
     requests share one DataFrame; they then share the reshape too.
+
+    The quirks reproduced deliberately are catalogued as H1-H14 in
+    CATEGORIES_DF_PARITY.md at the root of the repository.
     """
 
     args = {
