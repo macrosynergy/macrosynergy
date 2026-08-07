@@ -313,52 +313,56 @@ def _reduce_dfw_rows(
         args=args,
         bl_ranges=bl_ranges,
         cid_codes=wide.cid_of_row,
-        nanos=wide.nanos_of_row,
-        code_of_cid=wide.cid_pos,
+        nanos=wide.date_ns_of_row,
+        code_of_cid=wide.pos_of_cid,
     )
     # a row mask, not a period one: the forward window is not grouped by cid - H8
     by_cid = (
         None
         if args["cids"] is None
         else _label_mask(
-            labels=args["cids"], code_of_label=wide.cid_pos, n_codes=len(wide.cids)
+            labels=args["cids"], code_of_label=wide.pos_of_cid, n_codes=len(wide.cids)
         )[wide.cid_of_row]
     )
     # the QuantamentalDataFrame body derives the categories before the cid filter - H1
     for_xcats = by_date if wide.is_qdf or by_cid is None else (by_date & by_cid)
-    # off the filled cells, not the values: an all-NaN period still moves `shift` - §2
-    xcat_survives = (wide.filled & for_xcats).any(axis=1)
+    # off the observed_cells cells, not the values: an all-NaN period still moves `shift` - §2
+    xcat_survives = (wide.observed_cells & for_xcats).any(axis=1)
 
     xcats_outside = frozenset()
-    if wide.obs_outside_cids is not None:
-        cid_of_obs, xcat_of_obs, nanos_of_obs = wide.obs_outside_cids
+    if wide.obs_dropped_by_cids is not None:
+        dropped = wide.obs_dropped_by_cids
         kept = _date_mask(
             args=args,
             bl_ranges=bl_ranges,
-            cid_codes=cid_of_obs,
-            nanos=nanos_of_obs,
-            code_of_cid=wide.df_cid_code,
+            cid_codes=dropped.cid_of_obs,
+            nanos=dropped.date_ns_of_obs,
+            code_of_cid=wide.code_of_cid,
         )
-        seen = np.zeros(len(wide.df_xcat_code), dtype=bool)
-        seen[xcat_of_obs[kept]] = True
+        seen = np.zeros(len(wide.code_of_xcat), dtype=bool)
+        seen[dropped.xcat_of_obs[kept]] = True
         xcats_outside = frozenset(
-            x for x in wide.xcats_outside_cids if seen[wide.df_xcat_code[x]]
+            x for x in wide.xcats_only_outside_cids if seen[wide.code_of_xcat[x]]
         )
 
     out_xcats = [
         x
         for x in args["xcats"]
-        if (x in wide.xcat_pos and xcat_survives[wide.xcat_pos[x]])
+        if (x in wide.pos_of_xcat and xcat_survives[wide.pos_of_xcat[x]])
         or x in xcats_outside
     ]
-    no_rows = np.zeros(wide.filled.shape[1], dtype=bool)
+    no_rows = np.zeros(wide.observed_cells.shape[1], dtype=bool)
     if len(out_xcats) < 2:
         return no_rows, out_xcats, []
 
     xcat_cols = [
-        wide.xcat_pos[x] for x in dict.fromkeys(out_xcats) if x in wide.xcat_pos
+        wide.pos_of_xcat[x] for x in dict.fromkeys(out_xcats) if x in wide.pos_of_xcat
     ]
-    rows = (for_xcats & wide.filled[xcat_cols].any(axis=0)) if xcat_cols else no_rows
+    rows = (
+        (for_xcats & wide.observed_cells[xcat_cols].any(axis=0))
+        if xcat_cols
+        else no_rows
+    )
     if wide.is_qdf and by_cid is not None:
         rows = rows & by_cid
 
@@ -370,7 +374,7 @@ def _reduce_dfw_rows(
         else [
             c
             for c in args["cids"]
-            if c in wide.cid_pos and cid_survives[wide.cid_pos[c]]
+            if c in wide.pos_of_cid and cid_survives[wide.pos_of_cid[c]]
         ]
     )
     return rows, out_xcats, out_cids
@@ -439,16 +443,16 @@ def _dfw_metric_values(
 ) -> Dict[str, np.ndarray]:
     """A dense ``(n_xcats, n_rows)`` array of cells per metric with a float column."""
 
-    value_arrs = {}
+    dfw_values = {}
     for metric in metrics:
         col = df[metric].to_numpy() if metric in df.columns else None
-        # a NaN-filled scatter cannot stand up an integer column; `pivot` serves those
+        # a NaN-observed_cells scatter cannot stand up an integer column; `pivot` serves those
         if col is None or col.dtype.kind != "f":
             continue
         cells = np.full(shape[0] * shape[1], np.nan, dtype=col.dtype)
         cells[cell_of_obs] = col.take(obs_idx)
-        value_arrs[metric] = cells.reshape(shape)
-    return value_arrs
+        dfw_values[metric] = cells.reshape(shape)
+    return dfw_values
 
 
 def _can_build_dfw(df: pd.DataFrame) -> bool:
@@ -462,36 +466,43 @@ def _can_build_dfw(df: pd.DataFrame) -> bool:
     return True
 
 
+class DroppedObs(NamedTuple):
+    """The observations the union's cross sections dropped, in whole-frame codes."""
+
+    cid_of_obs: np.ndarray
+    xcat_of_obs: np.ndarray
+    date_ns_of_obs: np.ndarray
+
+
 class WideFrame(NamedTuple):
     """The dense ``(cid, real_date) x xcat`` `dfw`, built over a batch's union.
 
     Every field is settled at construction; a request never mutates the reshape.
     """
 
-    df: pd.DataFrame
     is_qdf: bool
     # (n_xcats, n_rows) cells per requested metric; one without a float column is absent
-    value_arrs: Dict[str, np.ndarray]
-    # per requested frequency: (period_of_date, period_dates)
+    dfw_values: Dict[str, np.ndarray]
+    # per requested frequency: (period_of_date, eop_dates)
     periods: Dict[str, Tuple[np.ndarray, pd.DatetimeIndex]]
     # (n_xcats, n_rows): the cells `pivot` would emit - not `~isnan(values)`, H11
-    filled: np.ndarray
+    observed_cells: np.ndarray
     # per row of the reshape: cid axis position, date axis position, and the date
     cid_of_row: np.ndarray
     date_of_row: np.ndarray
-    nanos_of_row: np.ndarray
+    date_ns_of_row: np.ndarray
     cids: List[str]
-    cid_pos: Dict[str, int]
-    xcat_pos: Dict[str, int]
-    columns: pd.Index
-    cid_level: pd.Index
+    pos_of_cid: Dict[str, int]
+    pos_of_xcat: Dict[str, int]
+    dfw_columns: pd.Index
+    cid_index_level: pd.Index
     # rows the union's cross sections dropped, kept only while a category derived from
     # them could still survive a QuantamentalDataFrame request - H1
-    obs_outside_cids: Optional[Tuple[np.ndarray, np.ndarray, np.ndarray]]
-    xcats_outside_cids: FrozenSet[str]
-    # label -> code over the whole frame, the coding `obs_outside_cids` speaks
-    df_cid_code: Dict[str, int]
-    df_xcat_code: Dict[str, int]
+    obs_dropped_by_cids: Optional[DroppedObs]
+    xcats_only_outside_cids: FrozenSet[str]
+    # label -> code over the whole frame, the coding `obs_dropped_by_cids` speaks
+    code_of_cid: Dict[str, int]
+    code_of_xcat: Dict[str, int]
 
 
 def _build_dfw(
@@ -502,8 +513,8 @@ def _build_dfw(
     cid_codes, df_cids = _label_codes(col=df["cid"])
     xcat_codes, df_xcats = _label_codes(col=df["xcat"])
     nanos = df["real_date"].to_numpy().view("int64")
-    df_cid_code = {c: i for i, c in enumerate(df_cids)}
-    df_xcat_code = {x: i for i, x in enumerate(df_xcats)}
+    code_of_cid = {c: i for i, c in enumerate(df_cids)}
+    code_of_xcat = {x: i for i, x in enumerate(df_xcats)}
 
     # The batch's union. Dates and blacklists stay per request: they vary, and hoisting
     # one would drop a row another request needs.
@@ -514,21 +525,21 @@ def _build_dfw(
         else list(dict.fromkeys(c for a in arg_batches for c in a["cids"]))
     )
     in_batch = _label_mask(
-        labels=batch_xcats, code_of_label=df_xcat_code, n_codes=len(df_xcats)
+        labels=batch_xcats, code_of_label=code_of_xcat, n_codes=len(df_xcats)
     )[xcat_codes]
     obs_idx = np.flatnonzero(in_batch)
     cid_of_obs = cid_codes.take(obs_idx)
-    obs_outside_cids = None
+    obs_dropped_by_cids = None
     if batch_cids is not None:
         in_cids = _label_mask(
-            labels=batch_cids, code_of_label=df_cid_code, n_codes=len(df_cids)
+            labels=batch_cids, code_of_label=code_of_cid, n_codes=len(df_cids)
         )[cid_of_obs]
         if is_qdf and not in_cids.all():
             dropped_idx = obs_idx[~in_cids]
-            obs_outside_cids = (
-                cid_of_obs[~in_cids],
-                xcat_codes.take(dropped_idx),
-                nanos.take(dropped_idx),
+            obs_dropped_by_cids = DroppedObs(
+                cid_of_obs=cid_of_obs[~in_cids],
+                xcat_of_obs=xcat_codes.take(dropped_idx),
+                date_ns_of_obs=nanos.take(dropped_idx),
             )
         obs_idx, cid_of_obs = obs_idx[in_cids], cid_of_obs[in_cids]
     xcat_of_obs, nanos_of_obs = xcat_codes.take(obs_idx), nanos.take(obs_idx)
@@ -582,32 +593,31 @@ def _build_dfw(
     cell_of_obs += row_of_obs
 
     # duplicate (cid, real_date, xcat) keys collide on one cell - H2
-    filled = np.zeros(n_xcats * n_rows, dtype=bool)
-    filled[cell_of_obs] = True
-    if np.count_nonzero(filled) != len(cell_of_obs):
+    observed_cells = np.zeros(n_xcats * n_rows, dtype=bool)
+    observed_cells[cell_of_obs] = True
+    if np.count_nonzero(observed_cells) != len(cell_of_obs):
         return None
 
-    xcat_pos = {df_xcats[i]: j for j, i in enumerate(xcat_axis)}
+    pos_of_xcat = {df_xcats[i]: j for j, i in enumerate(xcat_axis)}
     wide_dates = pd.DatetimeIndex((date_axis + first_day) * NS_PER_DAY)
 
-    if obs_outside_cids is not None:
+    if obs_dropped_by_cids is not None:
         # only a category found nowhere inside the union can change a derived list
-        xcats_outside_cids = frozenset(
+        xcats_only_outside_cids = frozenset(
             df_xcats[i]
-            for i in np.unique(obs_outside_cids[1])
-            if df_xcats[i] not in xcat_pos
+            for i in np.unique(obs_dropped_by_cids.xcat_of_obs)
+            if df_xcats[i] not in pos_of_xcat
         )
-        if not xcats_outside_cids:
-            obs_outside_cids = None
+        if not xcats_only_outside_cids:
+            obs_dropped_by_cids = None
     else:
-        xcats_outside_cids = frozenset()
+        xcats_only_outside_cids = frozenset()
 
     date_of_row = (wide_rows % n_dates).astype(np.int32)
     cids = [df_cids[i] for i in cid_axis]
     return WideFrame(
-        df=df,
         is_qdf=is_qdf,
-        value_arrs=_dfw_metric_values(
+        dfw_values=_dfw_metric_values(
             df=df,
             metrics={a["val"] for a in arg_batches},
             cell_of_obs=cell_of_obs,
@@ -618,19 +628,19 @@ def _build_dfw(
             a["_bday_freq"]: _period_index(dates=wide_dates, freq=a["_bday_freq"])
             for a in arg_batches
         },
-        filled=filled.reshape(n_xcats, n_rows),
+        observed_cells=observed_cells.reshape(n_xcats, n_rows),
         cid_of_row=(wide_rows // n_dates).astype(np.int32),
         date_of_row=date_of_row,
-        nanos_of_row=(date_axis[date_of_row] + first_day) * NS_PER_DAY,
+        date_ns_of_row=(date_axis[date_of_row] + first_day) * NS_PER_DAY,
         cids=cids,
-        cid_pos={c: i for i, c in enumerate(cids)},
-        xcat_pos=xcat_pos,
-        columns=pd.Index(list(xcat_pos), name="xcat", dtype=object),
-        cid_level=pd.Index(cids, dtype=object),
-        obs_outside_cids=obs_outside_cids,
-        xcats_outside_cids=xcats_outside_cids,
-        df_cid_code=df_cid_code,
-        df_xcat_code=df_xcat_code,
+        pos_of_cid={c: i for i, c in enumerate(cids)},
+        pos_of_xcat=pos_of_xcat,
+        dfw_columns=pd.Index(list(pos_of_xcat), name="xcat", dtype=object),
+        cid_index_level=pd.Index(cids, dtype=object),
+        obs_dropped_by_cids=obs_dropped_by_cids,
+        xcats_only_outside_cids=xcats_only_outside_cids,
+        code_of_cid=code_of_cid,
+        code_of_xcat=code_of_xcat,
     )
 
 
@@ -663,12 +673,12 @@ def _downsample_dfw_arrays(
     row_idx = None if rows.all() else np.flatnonzero(rows)
     if row_idx is None:
         cid_of_row, date_of_row = wide.cid_of_row, wide.date_of_row
-        cells = wide.value_arrs[metric]
+        cells = wide.dfw_values[metric]
     else:
         cid_of_row = wide.cid_of_row.take(row_idx)
         date_of_row = wide.date_of_row.take(row_idx)
         # gather along the contiguous axis, so `.T` stays F-ordered
-        cells = wide.value_arrs[metric].take(row_idx, axis=1)
+        cells = wide.dfw_values[metric].take(row_idx, axis=1)
 
     # One integer per (cid, period). The rows are sorted by (cid, date), so each
     # group is one run of it and the distinct keys are a run-length scan.
@@ -679,12 +689,12 @@ def _downsample_dfw_arrays(
     distinct_keys = period_key[period_starts]
 
     period_index = pd.MultiIndex(
-        levels=[wide.cid_level, period_dates],
+        levels=[wide.cid_index_level, period_dates],
         codes=[distinct_keys // n_periods, distinct_keys % n_periods],
         names=["cid", "real_date"],
         verify_integrity=False,
     )
-    dfw = pd.DataFrame(cells.T, columns=wide.columns, copy=False)
+    dfw = pd.DataFrame(cells.T, columns=wide.dfw_columns, copy=False)
     return dfw.groupby(np.cumsum(period_starts) - 1, sort=False), period_index
 
 
@@ -774,16 +784,18 @@ def _categories_df_via_pivot(
     )
 
 
-def _categories_df_via_dfw(wide: WideFrame, args: Dict[str, Any]) -> pd.DataFrame:
+def _categories_df_via_dfw(
+    df: pd.DataFrame, wide: WideFrame, args: Dict[str, Any]
+) -> pd.DataFrame:
     """The same steps as `_categories_df_via_pivot`, off the reshape the batch shares."""
 
     rows, out_xcats, out_cids = _reduce_dfw_rows(wide=wide, args=args)
     _check_reduced_xcats_and_cids(out_xcats=out_xcats, out_cids=out_cids, args=args)
-    _check_val_column(df=wide.df, val=args["val"])
-    xcat_survives = (wide.filled & rows).any(axis=1)
+    _check_val_column(df=df, val=args["val"])
+    xcat_survives = (wide.observed_cells & rows).any(axis=1)
     _check_dfw_columns(
         out_xcats=out_xcats,
-        dfw_columns={x for x, i in wide.xcat_pos.items() if xcat_survives[i]},
+        dfw_columns={x for x, i in wide.pos_of_xcat.items() if xcat_survives[i]},
     )
 
     grouped, period_index = _downsample_dfw_arrays(
@@ -901,8 +913,8 @@ def _categories_df_many(
     for i in freq_idx:
         args = arg_batches[i]
         try:
-            if wide is not None and args["val"] in wide.value_arrs:
-                results[i] = _categories_df_via_dfw(wide=wide, args=args)
+            if wide is not None and args["val"] in wide.dfw_values:
+                results[i] = _categories_df_via_dfw(df=df, wide=wide, args=args)
             else:
                 results[i] = _categories_df_via_pivot(df=df, args=args, is_qdf=is_qdf)
         except Exception as e:  # noqa: BLE001
