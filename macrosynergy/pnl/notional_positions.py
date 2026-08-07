@@ -234,6 +234,7 @@ def _leverage_positions(
     df_wide: pd.DataFrame,
     sname: str,
     fids: List[str],
+    rebal_freq: str,
     aum: Number = 100,
     leverage: Number = 1.0,
     pname: str = "POS",
@@ -244,6 +245,11 @@ def _leverage_positions(
     sig_ident: str = f"_CSIG_{sname}"
 
     _contracts: List[str] = [f"{contx}{sig_ident}" for contx in fids]
+
+    rebal_freq = _map_to_business_day_frequency(rebal_freq)
+    rebal_dates = get_sops(dates=df_wide.index, freq=rebal_freq)
+    is_rb_date = pd.Series(df_wide.index.isin(rebal_dates), index=df_wide.index)
+    df_wide = df_wide.where(is_rb_date, axis=0).ffill()
 
     rowsums: pd.Series = df_wide.loc[:, _contracts].abs().sum(axis=1)
     # if any of the rowsums are zero, set to NaN to avoid div by zero
@@ -266,6 +272,7 @@ def _dollar_per_signal_positions(
     df_wide: pd.DataFrame,
     sname: str,
     fids: List[str],
+    rebal_freq: str,
     aum: Number = 100,
     dollar_per_signal: Number = 1.0,
     pname: str = "POS",
@@ -279,6 +286,11 @@ def _dollar_per_signal_positions(
         raise ValueError("`dollar_per_signal` must be a number.")
     _check_df_for_contract_signals(df_wide=df_wide, sname=sname, fids=fids)
     sig_ident: str = f"_CSIG_{sname}"
+
+    rebal_freq = _map_to_business_day_frequency(rebal_freq)
+    rebal_dates = get_sops(dates=df_wide.index, freq=rebal_freq)
+    is_rb_date = pd.Series(df_wide.index.isin(rebal_dates), index=df_wide.index)
+    df_wide = df_wide.where(is_rb_date, axis=0).ffill()
 
     for _, contx in enumerate(fids):
         pos_col: str = f"{contx}_{sname}_{pname}"
@@ -505,7 +517,7 @@ def notional_positions(
         ):
             raise ValueError(f"Contract identifier `{contx}` not in dataframe.")
 
-    ## Apply the slip and adjust signals to rebalancing frequency
+    ## Apply the slip
     df: pd.DataFrame = _apply_slip(
         df=df,
         slip=slip,
@@ -513,15 +525,6 @@ def notional_positions(
     )
 
     df_wide = QuantamentalDataFrame(df=df).to_wide()
-
-    rebal_dates = get_sops(
-        dates=df_wide.index,
-        freq=_map_to_business_day_frequency(rebal_freq)
-    )
-
-    is_rb_date = pd.Series(df_wide.index.isin(rebal_dates), index=df_wide.index)
-    df_wide = df_wide.where(is_rb_date, axis=0).ffill()
-
     return_df = None
     if leverage:
         return_df: pd.DataFrame = _leverage_positions(
@@ -531,6 +534,7 @@ def notional_positions(
             aum=aum,
             leverage=leverage,
             pname=pname,
+            rebal_freq=rebal_freq,
         )
     elif dollar_per_signal:
         return_df: pd.DataFrame = _dollar_per_signal_positions(
@@ -540,6 +544,7 @@ def notional_positions(
             aum=aum,
             dollar_per_signal=dollar_per_signal,
             pname=pname,
+            rebal_freq=rebal_freq,
         )
     elif vol_target:
         return_df, pvol, vcv_df = _vol_target_positions(

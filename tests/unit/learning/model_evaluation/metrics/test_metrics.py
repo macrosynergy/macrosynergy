@@ -18,7 +18,7 @@ from macrosynergy.learning import (
     sortino_ratio,
     correlation_coefficient,
     create_panel_metric,
-    regression_mcc,
+    cost_aware_metric,
 )
 
 from parameterized import parameterized
@@ -1206,6 +1206,65 @@ class TestMetrics(unittest.TestCase):
             expected_result,
             "create_panel_metric should return the same value as the metric function passed as argument, when applied over time periods",
         )
+
+    def test_valid_cost_aware_metric(self):
+        from macrosynergy.pnl.transaction_costs import TransactionCostsDictAdapter
+
+        cost_dict = {
+            "GBP_FX": {
+                "bid_offer": {
+                    "size": {"median": 40, "pct90": 200},
+                    "cost": {"median": 0.01, "pct90": 0.017},
+                },
+                "rollcost": {
+                    "size": {"median": 40, "pct90": 200},
+                    "cost": {"median": 0.004, "pct90": 0.008},
+                },
+            },
+            "CAD_FX": {
+                "bid_offer": {
+                    "size": {"median": 40, "pct90": 200},
+                    "cost": {"median": 0.01, "pct90": 0.016},
+                },
+                "rollcost": {
+                    "size": {"median": 40, "pct90": 200},
+                    "cost": {"median": 0.004, "pct90": 0.007},
+                },
+            },
+            "AUD_FX": {
+                "bid_offer": {
+                    "size": {"median": 35, "pct90": 175},
+                    "cost": {"median": 0.012, "pct90": 0.02},
+                },
+                "rollcost": {
+                    "size": {"median": 35, "pct90": 175},
+                    "cost": {"median": 0.005, "pct90": 0.009},
+                },
+            },
+            "USD_FX": {
+                "bid_offer": {
+                    "size": {"median": 35, "pct90": 175},
+                    "cost": {"median": 0.012, "pct90": 0.02},
+                },
+                "rollcost": {
+                    "size": {"median": 35, "pct90": 175},
+                    "cost": {"median": 0.005, "pct90": 0.009},
+                },
+            },
+        }
+
+
+        result = cost_aware_metric(
+            y_true=self.regressor_true,
+            y_pred=self.regressor_predictions,
+            aum=500,
+            cost_object=TransactionCostsDictAdapter(cost_dict),
+            leverage=5,
+            metric="sharpe",
+            rebal_freq="M",
+        )
+
+        print(result)
 
 
 if __name__ == "__main__":
