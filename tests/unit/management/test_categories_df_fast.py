@@ -671,8 +671,8 @@ class TestSharedReshapeInvariants(ParityTestCase):
         last_cad = out.xs("CAD", level="cid")["RET"]
         self.assertTrue(last_cad.iloc[-2:].isna().all())
 
-    def test_reduce_order_differs_between_frame_types(self) -> None:
-        """The two `reduce_df` bodies derive the surviving categories differently."""
+    def test_reduce_order_agrees_between_frame_types(self) -> None:
+        """Both `reduce_df` bodies derive the surviving categories after the cids."""
 
         shared = make_panel(
             cids=["AUD", "CAD"], xcats=["FTR1", "RET"], end="2005-12-31"
@@ -682,10 +682,26 @@ class TestSharedReshapeInvariants(ParityTestCase):
         qdf = QuantamentalDataFrame(plain)
         request = dict(xcats=["FTR1", "ONLYCAD", "RET"], cids=["AUD"])
 
-        # the QDF body derives xcats before the cid filter, so ONLYCAD survives with
-        # no column of its own; the plain body filters first and simply warns
-        self.assertIsInstance(call(categories_df, qdf, **request), KeyError)
-        self.assertIsInstance(call(categories_df, plain, **request), pd.DataFrame)
+        # ONLYCAD exists only for a cross section that was not requested, so both
+        # bodies drop it before deriving the categories and both merely warn. Before
+        # the cid-filter hoist in `reduce_df`, the QuantamentalDataFrame body kept it
+        # and `categories_df` raised KeyError on a column `pivot` never made - H1.
+        qdf_out = call(categories_df, qdf, **request)
+        plain_out = call(categories_df, plain, **request)
+        self.assertIsInstance(qdf_out, pd.DataFrame)
+        self.assertEqual(list(qdf_out.columns), ["FTR1", "RET"])
+        self.assertSameResult(plain_out, qdf_out)
+
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            categories_df(qdf, **request)
+        self.assertTrue(
+            any(
+                "missing from the DataFrame: ['ONLYCAD']" in str(c.message)
+                for c in caught
+            )
+        )
+
         self.assertParity(qdf, **request)
         self.assertParity(plain, **request)
 

@@ -5,7 +5,7 @@ order the columns, drop the all-NaN rows.
 
 import operator
 import warnings
-from typing import Any, Dict, FrozenSet, Iterable, List, NamedTuple, Optional
+from typing import Any, Dict, Iterable, List, NamedTuple, Optional
 from typing import Sequence, Tuple, Union
 
 import numpy as np
@@ -38,14 +38,6 @@ DEFAULT_ARGS: Dict[str, Any] = dict(
     fwin=1,
     xcat_aggs=["mean", "mean"],
 )
-
-
-class DroppedObs(NamedTuple):
-    """The observations the union's cross sections dropped, in whole-frame codes."""
-
-    cid_of_obs: np.ndarray
-    xcat_of_obs: np.ndarray
-    date_ns_of_obs: np.ndarray
 
 
 class WideFrame(NamedTuple):
@@ -85,18 +77,6 @@ class WideFrame(NamedTuple):
         `dfw`'s column axis, one entry per category on the xcat axis.
     cid_index_level : pd.Index
         the outer level of the ``(cid, real_date)`` index, as object dtype.
-    obs_dropped_by_cids : Optional[DroppedObs]
-        the rows the union's cross sections dropped. Kept only while a category derived
-        from them could still survive a QuantamentalDataFrame request, whose body
-        derives the categories before the cid filter (methods.py:364-370, vs the plain
-        body at :385) - H1.
-    xcats_only_outside_cids : FrozenSet[str]
-        the categories that appear nowhere inside the union's cross sections.
-    code_of_cid : Dict[str, int]
-        cross section to its code over the whole frame, the coding
-        `obs_dropped_by_cids` speaks.
-    code_of_xcat : Dict[str, int]
-        category to its code over the whole frame.
     """
 
     is_qdf: bool
@@ -111,10 +91,6 @@ class WideFrame(NamedTuple):
     pos_of_xcat: Dict[str, int]
     dfw_columns: pd.Index
     cid_index_level: pd.Index
-    obs_dropped_by_cids: Optional[DroppedObs]
-    xcats_only_outside_cids: FrozenSet[str]
-    code_of_cid: Dict[str, int]
-    code_of_xcat: Dict[str, int]
 
 
 def _fill_default_args(args: Dict[str, Any]) -> Dict[str, Any]:
@@ -219,20 +195,6 @@ def _check_reduced_xcats_and_cids(
         )
 
 
-def _check_dfw_columns(xcats: List[str], dfw_columns: Iterable[str]) -> None:
-    """
-    Reject a surviving category the reshape gave no column of its own.
-
-    A category derived before the cid filter can survive the reduction while `pivot`
-    never makes it a column (methods.py:364-370); the shipped body then raises this
-    `KeyError` from `df_utils.py:1099` - H1.
-    """
-
-    missing = [x for x in xcats if x not in dfw_columns]
-    if missing:
-        raise KeyError(f"Column not found: {missing[0]}")
-
-
 def _check_blacklist(blacklist: Any) -> None:
     """`apply_blacklist`'s type guards, which only the QuantamentalDataFrame body runs."""
 
@@ -257,9 +219,9 @@ def _reduce_df(
     """
     ``reduce_df(..., out_all=True)``, in whichever of its two bodies applies.
 
-    The two genuinely disagree on the surviving categories, because the
-    QuantamentalDataFrame body derives them before the cid filter (methods.py:364-370)
-    and the plain body after it (:385) - H1.
+    Both bodies now derive the surviving categories after the cid filter, so they
+    agree on the returned lists. The split remains because they still differ on the
+    blacklist type guards (H6) and on dropping unused categories (§2).
     """
 
     xcats, cids = args["xcats"], args["cids"]
@@ -281,6 +243,8 @@ def _reduce_df(
                     )
                 ]
             df = df.reset_index(drop=True)
+        if cids is not None:
+            df = df[df["cid"].isin(cids)]
         xcats_in_df = df["xcat"].unique()
         xcats = [xcat for xcat in xcats if xcat in xcats_in_df]
         df = df[df["xcat"].isin(xcats)]
@@ -412,35 +376,16 @@ def _reduce_dfw_rows(
             labels=args["cids"], code_of_label=dfw.pos_of_cid, n_codes=len(dfw.cids)
         )[dfw.cid_of_row]
     )
-    # the QuantamentalDataFrame body derives the categories before the cid filter
-    # (methods.py:364-370, vs the plain body at :385) - H1
-    for_xcats = date_mask if dfw.is_qdf or cid_mask is None else (date_mask & cid_mask)
+    for_xcats = date_mask if cid_mask is None else (date_mask & cid_mask)
     # Off the observed cells, not the values: an all-NaN period is still a group
     # (df_utils.py:1078-1083), and `dropna` removing its row does not stop `shift`
     # sourcing from it - H11.
     xcat_survives = (dfw.observed_cells & for_xcats).any(axis=1)
 
-    xcats_outside = frozenset()
-    if dfw.obs_dropped_by_cids is not None:
-        dropped = dfw.obs_dropped_by_cids
-        kept = _date_mask(
-            args=args,
-            blacklist_ranges=blacklist_ranges,
-            cid_codes=dropped.cid_of_obs,
-            date_ns=dropped.date_ns_of_obs,
-            code_of_cid=dfw.code_of_cid,
-        )
-        seen = np.zeros(len(dfw.code_of_xcat), dtype=bool)
-        seen[dropped.xcat_of_obs[kept]] = True
-        xcats_outside = frozenset(
-            x for x in dfw.xcats_only_outside_cids if seen[dfw.code_of_xcat[x]]
-        )
-
     xcats = [
         x
         for x in args["xcats"]
-        if (x in dfw.pos_of_xcat and xcat_survives[dfw.pos_of_xcat[x]])
-        or x in xcats_outside
+        if x in dfw.pos_of_xcat and xcat_survives[dfw.pos_of_xcat[x]]
     ]
     no_rows = np.zeros(dfw.observed_cells.shape[1], dtype=bool)
     if len(xcats) < 2:
@@ -454,8 +399,6 @@ def _reduce_dfw_rows(
         if xcat_cols
         else no_rows
     )
-    if dfw.is_qdf and cid_mask is not None:
-        rows = rows & cid_mask
 
     cid_survives = np.zeros(len(dfw.cids), dtype=bool)
     cid_survives[dfw.cid_of_row[rows]] = True
@@ -618,18 +561,10 @@ def _build_dfw(
     )[xcat_codes]
     obs_idx = np.flatnonzero(in_union)
     cid_of_obs = cid_codes.take(obs_idx)
-    obs_dropped_by_cids = None
     if union_cids is not None:
         in_cids = _label_mask(
             labels=union_cids, code_of_label=code_of_cid, n_codes=len(df_cids)
         )[cid_of_obs]
-        if is_qdf and not in_cids.all():
-            dropped_idx = obs_idx[~in_cids]
-            obs_dropped_by_cids = DroppedObs(
-                cid_of_obs=cid_of_obs[~in_cids],
-                xcat_of_obs=xcat_codes.take(dropped_idx),
-                date_ns_of_obs=date_ns.take(dropped_idx),
-            )
         obs_idx, cid_of_obs = obs_idx[in_cids], cid_of_obs[in_cids]
     xcat_of_obs, date_ns_of_obs = xcat_codes.take(obs_idx), date_ns.take(obs_idx)
 
@@ -691,18 +626,6 @@ def _build_dfw(
     pos_of_xcat = {df_xcats[i]: j for j, i in enumerate(xcat_axis)}
     dfw_dates = pd.DatetimeIndex((date_axis + first_day) * NS_PER_DAY)
 
-    if obs_dropped_by_cids is not None:
-        # only a category found nowhere inside the union can change a derived list
-        xcats_only_outside_cids = frozenset(
-            df_xcats[i]
-            for i in np.unique(obs_dropped_by_cids.xcat_of_obs)
-            if df_xcats[i] not in pos_of_xcat
-        )
-        if not xcats_only_outside_cids:
-            obs_dropped_by_cids = None
-    else:
-        xcats_only_outside_cids = frozenset()
-
     date_of_row = (dfw_rows % n_dates).astype(np.int32)
     cids = [df_cids[i] for i in cid_axis]
     return WideFrame(
@@ -727,10 +650,6 @@ def _build_dfw(
         pos_of_xcat=pos_of_xcat,
         dfw_columns=pd.Index(list(pos_of_xcat), name="xcat", dtype=object),
         cid_index_level=pd.Index(cids, dtype=object),
-        obs_dropped_by_cids=obs_dropped_by_cids,
-        xcats_only_outside_cids=xcats_only_outside_cids,
-        code_of_cid=code_of_cid,
-        code_of_xcat=code_of_xcat,
     )
 
 
@@ -873,8 +792,6 @@ def _categories_df_via_pivot(
     _check_val_column(df=df, val=args["val"])
 
     dfw = _pivot_dfw(reduced=reduced, val=args["val"])
-    _check_dfw_columns(xcats=xcats, dfw_columns=dfw.columns)
-
     dfw = _downsample_dfw(dfw=dfw, freq=args["_bday_freq"])
     dep = xcats[-1]
     xcat_aggs = args["xcat_aggs"]
@@ -904,11 +821,6 @@ def _categories_df_via_dfw(
     rows, xcats, cids = _reduce_dfw_rows(dfw=dfw, args=args)
     _check_reduced_xcats_and_cids(xcats=xcats, cids=cids, args=args)
     _check_val_column(df=df, val=args["val"])
-    xcat_survives = (dfw.observed_cells & rows).any(axis=1)
-    _check_dfw_columns(
-        xcats=xcats,
-        dfw_columns={x for x, i in dfw.pos_of_xcat.items() if xcat_survives[i]},
-    )
 
     grouped, downsampled_index = _downsample_dfw_arrays(
         dfw=dfw, rows=rows, metric=args["val"], freq=args["_bday_freq"]
