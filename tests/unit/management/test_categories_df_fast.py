@@ -769,7 +769,7 @@ class TestSharedReshapeInvariants(ParityTestCase):
         """The bitmap and factorize branches of the row index must be identical."""
 
         from macrosynergy.management.utils.categories_df_fast import (
-            _reshape_index_wide_rows,
+            _dfw_row_positions,
         )
 
         rng = np.random.default_rng(5)
@@ -777,8 +777,8 @@ class TestSharedReshapeInvariants(ParityTestCase):
         for n_filled in (1, 37, 4000):
             row_id = rng.choice(n_row_ids, size=n_filled, replace=False).repeat(3)
             rng.shuffle(row_id)
-            bitmap = _reshape_index_wide_rows(row_id, n_row_ids, len(row_id), np.int32)
-            factorized = _reshape_index_wide_rows(row_id, n_row_ids, 1, np.int32)
+            bitmap = _dfw_row_positions(row_id, n_row_ids, len(row_id), np.int32)
+            factorized = _dfw_row_positions(row_id, n_row_ids, 1, np.int32)
             with self.subTest(filled=n_filled):
                 np.testing.assert_array_equal(bitmap[0], factorized[0])
                 np.testing.assert_array_equal(bitmap[1], factorized[1])

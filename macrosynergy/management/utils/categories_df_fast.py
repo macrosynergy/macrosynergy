@@ -7,10 +7,10 @@ reshape, downsample, lag the explanatory categories, aggregate the dependent one
 assemble, drop empty rows - and return the same frame for the same arguments.
 
 The module is laid out by those steps, and the first two have two implementations each.
-`_reduce_df` and `_reshape_by_pivot` are the shipped `reduce_df` and `pivot` flow
+`_reduce_df` and `_pivot_dfw` are the shipped `reduce_df` and `pivot` flow
 transcribed, and serve whatever the vectorised reshape cannot reproduce exactly.
-`_reshape_by_scatter` scatters the frame into one dense ``(cid, real_date) x xcat`` `dfw`
-indexed by integer codes, and `_reduce_to_wide_rows` turns a request into a mask over that
+`_build_dfw` scatters the frame into one dense ``(cid, real_date) x xcat`` `dfw`
+indexed by integer codes, and `_reduce_dfw_rows` turns a request into a mask over that
 `dfw`'s rows, so a batch shares the one reshape. Year groups are a separate pipeline in
 the shipped function too, and keep their own runner here.
 
@@ -32,15 +32,15 @@ from macrosynergy.management.utils.core import _map_to_business_day_frequency
 __all__ = ["categories_df_fast", "categories_df_fast_loop"]
 
 # `categories_df`'s own order, and the order the assertion message shows the caller.
-_METRICS = ["value", "grading", "mop_lag", "eop_lag"]
+CATEGORIES_DF_METRICS = ["value", "grading", "mop_lag", "eop_lag"]
 
-_NS_PER_DAY = 86_400_000_000_000
+NS_PER_DAY = 86_400_000_000_000
 
-# `_reshape_index_wide_rows` scans a bitmap of the row-id space while it stays this small.
-_BITMAP_MAX_IDS_PER_OBS = 24
-_BITMAP_MAX_IDS = 32_000_000
+# `_dfw_row_positions` scans a bitmap of the row-id space while it stays this small.
+MAX_ROW_IDS_PER_OBS = 24
+MAX_ROW_IDS = 32_000_000
 
-_DEFAULT_ARGS: Dict[str, Any] = dict(
+DEFAULT_ARGS: Dict[str, Any] = dict(
     xcats=None,
     cids=None,
     val="value",
@@ -58,10 +58,10 @@ _DEFAULT_ARGS: Dict[str, Any] = dict(
 # ------------------------------------------------------------------- the arguments
 
 
-def _args_fill_defaults(args: Dict[str, Any]) -> Dict[str, Any]:
+def _fill_default_args(args: Dict[str, Any]) -> Dict[str, Any]:
     """Fill one request's defaults, failing the way ``categories_df(df, **args)`` does."""
 
-    unknown = sorted(set(args) - set(_DEFAULT_ARGS))
+    unknown = sorted(set(args) - set(DEFAULT_ARGS))
     if unknown:
         raise TypeError(
             f"categories_df() got an unexpected keyword argument {unknown[0]!r}"
@@ -70,7 +70,7 @@ def _args_fill_defaults(args: Dict[str, Any]) -> Dict[str, Any]:
         raise TypeError(
             "categories_df() missing 1 required positional argument: 'xcats'"
         )
-    full_args = dict(_DEFAULT_ARGS)
+    full_args = dict(DEFAULT_ARGS)
     full_args.update(args)
     # both `reduce_df` bodies promote a bare string, so nothing below has to
     if isinstance(full_args["cids"], str):
@@ -78,7 +78,7 @@ def _args_fill_defaults(args: Dict[str, Any]) -> Dict[str, Any]:
     return full_args
 
 
-def _args_check(df: pd.DataFrame, args: Dict[str, Any]) -> None:
+def _check_categories_df_args(df: pd.DataFrame, args: Dict[str, Any]) -> None:
     """What `categories_df` checks before it reads a row; the order is observable."""
 
     args["_bday_freq"] = _map_to_business_day_frequency(args["freq"])
@@ -109,12 +109,12 @@ def _args_check(df: pd.DataFrame, args: Dict[str, Any]) -> None:
         raise TypeError("Argument `df` must be a standardised Quantamental DataFrame.")
 
 
-def _args_check_val_column(df: pd.DataFrame, val: str) -> None:
+def _check_val_column(df: pd.DataFrame, val: str) -> None:
     """The value column check, which `categories_df` makes after `reduce_df` warns."""
 
-    assert val in _METRICS, (
+    assert val in CATEGORIES_DF_METRICS, (
         "The column of interest must be one of the defined JPMaQS metrics, "
-        f"{_METRICS}, but received {val}."
+        f"{CATEGORIES_DF_METRICS}, but received {val}."
     )
     avbl_cols = list(df.columns)
     assert val in avbl_cols, (
@@ -123,7 +123,7 @@ def _args_check_val_column(df: pd.DataFrame, val: str) -> None:
     )
 
 
-def _reduce_check_xcats_and_cids(
+def _check_reduced_xcats_and_cids(
     out_xcats: List[str], out_cids: List[str], args: Dict[str, Any]
 ) -> None:
     """Raise or warn on what survived the reduction, as `categories_df` does - H5."""
@@ -147,7 +147,7 @@ def _reduce_check_xcats_and_cids(
         )
 
 
-def _reshape_check_columns(out_xcats: List[str], dfw_columns: Iterable[str]) -> None:
+def _check_dfw_columns(out_xcats: List[str], dfw_columns: Iterable[str]) -> None:
     """Reject a surviving category the reshape gave no column of its own - H1."""
 
     missing = [x for x in out_xcats if x not in dfw_columns]
@@ -155,7 +155,7 @@ def _reshape_check_columns(out_xcats: List[str], dfw_columns: Iterable[str]) -> 
         raise KeyError(f"Column not found: {missing[0]}")
 
 
-def _args_check_blacklist(blacklist: Any) -> None:
+def _check_blacklist(blacklist: Any) -> None:
     """`apply_blacklist`'s type guards, which only the QuantamentalDataFrame body runs."""
 
     if not isinstance(blacklist, dict):
@@ -190,7 +190,7 @@ def _reduce_df(
         if end:
             df = df[df["real_date"] <= pd.to_datetime(end)]
         if blacklist is not None:
-            _args_check_blacklist(blacklist=blacklist)
+            _check_blacklist(blacklist=blacklist)
             for key, value in blacklist.items():
                 df = df[
                     ~(
@@ -238,7 +238,7 @@ def _reduce_df(
     return df.drop_duplicates(), xcats, sorted(cids)
 
 
-def _reduce_blacklist_bound(value: Any, is_qdf: bool) -> int:
+def _blacklist_bound(value: Any, is_qdf: bool) -> int:
     # `apply_blacklist` compares the raw bound, the plain body parses it first - H6.
     try:
         return pd.Timestamp(value).value
@@ -250,7 +250,7 @@ def _reduce_blacklist_bound(value: Any, is_qdf: bool) -> int:
         ) from None
 
 
-def _reduce_blacklist_ranges(
+def _blacklist_ranges(
     args: Dict[str, Any], is_qdf: bool
 ) -> Tuple[Tuple[str, int, int], ...]:
     # An absent cross section is kept: both bodies evaluate every bound, so a
@@ -258,18 +258,18 @@ def _reduce_blacklist_ranges(
     if args["blacklist"] is None:
         return ()
     if is_qdf:
-        _args_check_blacklist(blacklist=args["blacklist"])
+        _check_blacklist(blacklist=args["blacklist"])
     return tuple(
         (
             key[:3],
-            _reduce_blacklist_bound(value=value[0], is_qdf=is_qdf),
-            _reduce_blacklist_bound(value=value[1], is_qdf=is_qdf),
+            _blacklist_bound(value=value[0], is_qdf=is_qdf),
+            _blacklist_bound(value=value[1], is_qdf=is_qdf),
         )
         for key, value in args["blacklist"].items()
     )
 
 
-def _reduce_by_date(
+def _date_mask(
     args: Dict[str, Any],
     bl_ranges: Tuple[Tuple[str, int, int], ...],
     cid_codes: np.ndarray,
@@ -290,7 +290,7 @@ def _reduce_by_date(
     return mask
 
 
-def _mask_selected_labels(
+def _label_mask(
     labels: Iterable[str], code_of_label: Dict[str, int], n_codes: int
 ) -> np.ndarray:
     """A mask over label codes, one entry longer so a ``-1`` code gathers False."""
@@ -303,13 +303,13 @@ def _mask_selected_labels(
     return mask
 
 
-def _reduce_to_wide_rows(
-    wide: "_WideFrame", args: Dict[str, Any]
+def _reduce_dfw_rows(
+    wide: "WideFrame", args: Dict[str, Any]
 ) -> Tuple[np.ndarray, List[str], List[str]]:
     """`reduce_df` as a mask over the reshape's rows, plus the lists it derives."""
 
-    bl_ranges = _reduce_blacklist_ranges(args=args, is_qdf=wide.is_qdf)
-    by_date = _reduce_by_date(
+    bl_ranges = _blacklist_ranges(args=args, is_qdf=wide.is_qdf)
+    by_date = _date_mask(
         args=args,
         bl_ranges=bl_ranges,
         cid_codes=wide.cid_of_row,
@@ -320,7 +320,7 @@ def _reduce_to_wide_rows(
     by_cid = (
         None
         if args["cids"] is None
-        else _mask_selected_labels(
+        else _label_mask(
             labels=args["cids"], code_of_label=wide.cid_pos, n_codes=len(wide.cids)
         )[wide.cid_of_row]
     )
@@ -332,7 +332,7 @@ def _reduce_to_wide_rows(
     xcats_outside = frozenset()
     if wide.obs_outside_cids is not None:
         cid_of_obs, xcat_of_obs, nanos_of_obs = wide.obs_outside_cids
-        kept = _reduce_by_date(
+        kept = _date_mask(
             args=args,
             bl_ranges=bl_ranges,
             cid_codes=cid_of_obs,
@@ -379,13 +379,13 @@ def _reduce_to_wide_rows(
 # ------------------------------------------------------------------------ reshape
 
 
-def _reshape_by_pivot(reduced: pd.DataFrame, val: str) -> pd.DataFrame:
+def _pivot_dfw(reduced: pd.DataFrame, val: str) -> pd.DataFrame:
     """The ``(cid, real_date) x xcat`` frame, the way `categories_df` builds it."""
 
     return reduced.pivot(index=("cid", "real_date"), columns="xcat", values=val)
 
 
-def _reshape_encode_labels(col: pd.Series) -> Tuple[np.ndarray, List[str]]:
+def _label_codes(col: pd.Series) -> Tuple[np.ndarray, List[str]]:
     """Integer codes for a label column, and its labels in the order `pivot` sorts to."""
 
     if isinstance(col.dtype, pd.CategoricalDtype):
@@ -394,7 +394,7 @@ def _reshape_encode_labels(col: pd.Series) -> Tuple[np.ndarray, List[str]]:
     return codes, list(uniques)
 
 
-def _reshape_index_axis(
+def _axis_positions(
     codes: np.ndarray, n_codes: int, pos_dtype: Any
 ) -> Tuple[np.ndarray, np.ndarray]:
     """The codes one axis of the reshape uses, and the axis position of every code."""
@@ -407,13 +407,13 @@ def _reshape_index_axis(
     return axis, pos_of_code
 
 
-def _reshape_index_wide_rows(
+def _dfw_row_positions(
     row_id: np.ndarray, n_row_ids: int, n_obs: int, pos_dtype: Any
 ) -> Tuple[np.ndarray, np.ndarray]:
     """The row ids that occur, ascending, and the wide row of every observation."""
 
     # linear in the id space here, linear in the observations below; both are exact
-    if n_row_ids <= _BITMAP_MAX_IDS_PER_OBS * n_obs and n_row_ids <= _BITMAP_MAX_IDS:
+    if n_row_ids <= MAX_ROW_IDS_PER_OBS * n_obs and n_row_ids <= MAX_ROW_IDS:
         seen = np.zeros(n_row_ids, dtype=bool)
         seen[row_id] = True
         wide_rows = np.flatnonzero(seen)
@@ -430,7 +430,7 @@ def _reshape_index_wide_rows(
     return uniques[order], row_of_code[codes]
 
 
-def _reshape_scatter_values(
+def _dfw_metric_values(
     df: pd.DataFrame,
     metrics: Iterable[str],
     cell_of_obs: np.ndarray,
@@ -451,7 +451,7 @@ def _reshape_scatter_values(
     return value_arrs
 
 
-def _reshape_can_scatter(df: pd.DataFrame) -> bool:
+def _can_build_dfw(df: pd.DataFrame) -> bool:
     if str(df["real_date"].dtype) != "datetime64[ns]":
         return False  # a row id is int64 nanoseconds // a day
     dtype = df["cid"].dtype
@@ -462,7 +462,7 @@ def _reshape_can_scatter(df: pd.DataFrame) -> bool:
     return True
 
 
-class _WideFrame(NamedTuple):
+class WideFrame(NamedTuple):
     """The dense ``(cid, real_date) x xcat`` `dfw`, built over a batch's union.
 
     Every field is settled at construction; a request never mutates the reshape.
@@ -494,13 +494,13 @@ class _WideFrame(NamedTuple):
     df_xcat_code: Dict[str, int]
 
 
-def _reshape_by_scatter(
+def _build_dfw(
     df: pd.DataFrame, arg_batches: Sequence[Dict[str, Any]], is_qdf: bool
-) -> Optional[_WideFrame]:
+) -> Optional[WideFrame]:
     """The one reshape a batch shares, or None where only `pivot` can serve it - §5."""
 
-    cid_codes, df_cids = _reshape_encode_labels(col=df["cid"])
-    xcat_codes, df_xcats = _reshape_encode_labels(col=df["xcat"])
+    cid_codes, df_cids = _label_codes(col=df["cid"])
+    xcat_codes, df_xcats = _label_codes(col=df["xcat"])
     nanos = df["real_date"].to_numpy().view("int64")
     df_cid_code = {c: i for i, c in enumerate(df_cids)}
     df_xcat_code = {x: i for i, x in enumerate(df_xcats)}
@@ -513,14 +513,14 @@ def _reshape_by_scatter(
         if any(a["cids"] is None for a in arg_batches)
         else list(dict.fromkeys(c for a in arg_batches for c in a["cids"]))
     )
-    in_batch = _mask_selected_labels(
+    in_batch = _label_mask(
         labels=batch_xcats, code_of_label=df_xcat_code, n_codes=len(df_xcats)
     )[xcat_codes]
     obs_idx = np.flatnonzero(in_batch)
     cid_of_obs = cid_codes.take(obs_idx)
     obs_outside_cids = None
     if batch_cids is not None:
-        in_cids = _mask_selected_labels(
+        in_cids = _label_mask(
             labels=batch_cids, code_of_label=df_cid_code, n_codes=len(df_cids)
         )[cid_of_obs]
         if is_qdf and not in_cids.all():
@@ -537,8 +537,8 @@ def _reshape_by_scatter(
         return None
     if (cid_of_obs < 0).any():
         return None  # a NaN cross section, which the reduction raises on
-    date_of_obs = nanos_of_obs // _NS_PER_DAY
-    if (date_of_obs * _NS_PER_DAY != nanos_of_obs).any():
+    date_of_obs = nanos_of_obs // NS_PER_DAY
+    if (date_of_obs * NS_PER_DAY != nanos_of_obs).any():
         return None  # an intraday timestamp moves every start, end and blacklist bound
 
     first_day = int(date_of_obs.min())
@@ -556,13 +556,13 @@ def _reshape_by_scatter(
         < 2**31
         else np.int64
     )
-    cid_axis, cid_pos_of_code = _reshape_index_axis(
+    cid_axis, cid_pos_of_code = _axis_positions(
         codes=cid_of_obs, n_codes=len(df_cids), pos_dtype=pos_dtype
     )
-    xcat_axis, xcat_pos_of_code = _reshape_index_axis(
+    xcat_axis, xcat_pos_of_code = _axis_positions(
         codes=xcat_of_obs, n_codes=len(df_xcats), pos_dtype=pos_dtype
     )
-    date_axis, date_pos_of_code = _reshape_index_axis(
+    date_axis, date_pos_of_code = _axis_positions(
         codes=date_of_obs, n_codes=dates_spanned, pos_dtype=pos_dtype
     )
     n_cids, n_xcats, n_dates = len(cid_axis), len(xcat_axis), len(date_axis)
@@ -570,7 +570,7 @@ def _reshape_by_scatter(
     row_id = cid_pos_of_code[cid_of_obs]  # the only allocation; the rest is in place
     row_id *= n_dates
     row_id += date_pos_of_code[date_of_obs]
-    wide_rows, row_of_obs = _reshape_index_wide_rows(
+    wide_rows, row_of_obs = _dfw_row_positions(
         row_id=row_id, n_row_ids=n_cids * n_dates, n_obs=n_obs, pos_dtype=pos_dtype
     )
     n_rows = len(wide_rows)
@@ -588,7 +588,7 @@ def _reshape_by_scatter(
         return None
 
     xcat_pos = {df_xcats[i]: j for j, i in enumerate(xcat_axis)}
-    wide_dates = pd.DatetimeIndex((date_axis + first_day) * _NS_PER_DAY)
+    wide_dates = pd.DatetimeIndex((date_axis + first_day) * NS_PER_DAY)
 
     if obs_outside_cids is not None:
         # only a category found nowhere inside the union can change a derived list
@@ -604,10 +604,10 @@ def _reshape_by_scatter(
 
     date_of_row = (wide_rows % n_dates).astype(np.int32)
     cids = [df_cids[i] for i in cid_axis]
-    return _WideFrame(
+    return WideFrame(
         df=df,
         is_qdf=is_qdf,
-        value_arrs=_reshape_scatter_values(
+        value_arrs=_dfw_metric_values(
             df=df,
             metrics={a["val"] for a in arg_batches},
             cell_of_obs=cell_of_obs,
@@ -615,13 +615,13 @@ def _reshape_by_scatter(
             shape=(n_xcats, n_rows),
         ),
         periods={
-            a["_bday_freq"]: _downsample_periods(dates=wide_dates, freq=a["_bday_freq"])
+            a["_bday_freq"]: _period_index(dates=wide_dates, freq=a["_bday_freq"])
             for a in arg_batches
         },
         filled=filled.reshape(n_xcats, n_rows),
         cid_of_row=(wide_rows // n_dates).astype(np.int32),
         date_of_row=date_of_row,
-        nanos_of_row=(date_axis[date_of_row] + first_day) * _NS_PER_DAY,
+        nanos_of_row=(date_axis[date_of_row] + first_day) * NS_PER_DAY,
         cids=cids,
         cid_pos={c: i for i, c in enumerate(cids)},
         xcat_pos=xcat_pos,
@@ -637,7 +637,7 @@ def _reshape_by_scatter(
 # --------------------------------------------------------------------- downsample
 
 
-def _downsample_periods(
+def _period_index(
     dates: pd.DatetimeIndex, freq: str
 ) -> Tuple[np.ndarray, pd.DatetimeIndex]:
     # Empty periods are numbered too, and the labels come from pandas' own resampler
@@ -647,15 +647,15 @@ def _downsample_periods(
     return period_of_date, counts.index
 
 
-def _downsample_pivot(dfw: pd.DataFrame, freq: str) -> pd.core.groupby.DataFrameGroupBy:
+def _downsample_dfw(dfw: pd.DataFrame, freq: str) -> pd.core.groupby.DataFrameGroupBy:
     return dfw.groupby(
         [pd.Grouper(level="cid"), pd.Grouper(level="real_date", freq=freq)],
         observed=True,  # H12
     )
 
 
-def _downsample_wide_rows(
-    wide: _WideFrame, rows: np.ndarray, metric: str, freq: str
+def _downsample_dfw_arrays(
+    wide: WideFrame, rows: np.ndarray, metric: str, freq: str
 ) -> Tuple[pd.core.groupby.DataFrameGroupBy, pd.MultiIndex]:
     period_of_date, period_dates = wide.periods[freq]
     n_periods = len(period_dates)
@@ -691,7 +691,7 @@ def _downsample_wide_rows(
 # ----------------------------------------- aggregate, lag, assemble, drop empty rows
 
 
-def _downsample_aggregate(
+def _aggregate_xcats(
     grouped: pd.core.groupby.DataFrameGroupBy, xcats: List[str], agg_method: str
 ) -> pd.DataFrame:
     if agg_method == "sum":
@@ -704,14 +704,14 @@ def _downsample_aggregate(
     return dfw_agg
 
 
-def _assemble_lag_explanatory(dfw_explanatory: pd.DataFrame, lag: int) -> pd.DataFrame:
+def _lag_explanatory(dfw_explanatory: pd.DataFrame, lag: int) -> pd.DataFrame:
     # a non-positive lag is a no-op in the shipped function too - H7
     if lag <= 0:
         return dfw_explanatory
     return dfw_explanatory.groupby(level=0, observed=True).shift(lag)
 
 
-def _assemble_dfc(
+def _build_dfc(
     dfw_explanatory: pd.DataFrame, dep_col: pd.Series, out_xcats: List[str], fwin: int
 ) -> pd.DataFrame:
     dep = out_xcats[-1]
@@ -727,7 +727,7 @@ def _assemble_dfc(
     return dfc
 
 
-def _assemble_cast_index_and_dropna(dfc: pd.DataFrame) -> pd.DataFrame:
+def _cast_cid_index_to_object(dfc: pd.DataFrame) -> pd.DataFrame:
     """Cast a categorical `cid` index level back to object, then drop all-NaN rows."""
 
     if dfc.index.dtypes["cid"].name == "category":
@@ -742,29 +742,29 @@ def _assemble_cast_index_and_dropna(dfc: pd.DataFrame) -> pd.DataFrame:
 # ------------------------------------------------------------ one request, end to end
 
 
-def _request_via_pivot(
+def _categories_df_via_pivot(
     df: pd.DataFrame, args: Dict[str, Any], is_qdf: bool
 ) -> pd.DataFrame:
     """One frequency request through `pivot`; serves every frame, at every shape."""
 
     reduced, out_xcats, out_cids = _reduce_df(df=df, args=args, is_qdf=is_qdf)
-    _reduce_check_xcats_and_cids(out_xcats=out_xcats, out_cids=out_cids, args=args)
-    _args_check_val_column(df=df, val=args["val"])
+    _check_reduced_xcats_and_cids(out_xcats=out_xcats, out_cids=out_cids, args=args)
+    _check_val_column(df=df, val=args["val"])
 
-    dfw = _reshape_by_pivot(reduced=reduced, val=args["val"])
-    _reshape_check_columns(out_xcats=out_xcats, dfw_columns=dfw.columns)
+    dfw = _pivot_dfw(reduced=reduced, val=args["val"])
+    _check_dfw_columns(out_xcats=out_xcats, dfw_columns=dfw.columns)
 
-    grouped = _downsample_pivot(dfw=dfw, freq=args["_bday_freq"])
+    grouped = _downsample_dfw(dfw=dfw, freq=args["_bday_freq"])
     aggs = args["xcat_aggs"]
-    dfw_explanatory = _downsample_aggregate(
+    dfw_explanatory = _aggregate_xcats(
         grouped=grouped, xcats=list(dict.fromkeys(out_xcats[:-1])), agg_method=aggs[0]
     )
-    dep_col = _downsample_aggregate(
+    dep_col = _aggregate_xcats(
         grouped=grouped, xcats=[out_xcats[-1]], agg_method=aggs[1]
     )[out_xcats[-1]]
-    return _assemble_cast_index_and_dropna(
-        dfc=_assemble_dfc(
-            dfw_explanatory=_assemble_lag_explanatory(
+    return _cast_cid_index_to_object(
+        dfc=_build_dfc(
+            dfw_explanatory=_lag_explanatory(
                 dfw_explanatory=dfw_explanatory, lag=args["lag"]
             ),
             dep_col=dep_col,
@@ -774,32 +774,32 @@ def _request_via_pivot(
     )
 
 
-def _request_via_wide_frame(wide: _WideFrame, args: Dict[str, Any]) -> pd.DataFrame:
-    """The same steps as `_request_via_pivot`, off the reshape the batch shares."""
+def _categories_df_via_dfw(wide: WideFrame, args: Dict[str, Any]) -> pd.DataFrame:
+    """The same steps as `_categories_df_via_pivot`, off the reshape the batch shares."""
 
-    rows, out_xcats, out_cids = _reduce_to_wide_rows(wide=wide, args=args)
-    _reduce_check_xcats_and_cids(out_xcats=out_xcats, out_cids=out_cids, args=args)
-    _args_check_val_column(df=wide.df, val=args["val"])
+    rows, out_xcats, out_cids = _reduce_dfw_rows(wide=wide, args=args)
+    _check_reduced_xcats_and_cids(out_xcats=out_xcats, out_cids=out_cids, args=args)
+    _check_val_column(df=wide.df, val=args["val"])
     xcat_survives = (wide.filled & rows).any(axis=1)
-    _reshape_check_columns(
+    _check_dfw_columns(
         out_xcats=out_xcats,
         dfw_columns={x for x, i in wide.xcat_pos.items() if xcat_survives[i]},
     )
 
-    grouped, period_index = _downsample_wide_rows(
+    grouped, period_index = _downsample_dfw_arrays(
         wide=wide, rows=rows, metric=args["val"], freq=args["_bday_freq"]
     )
     aggs = args["xcat_aggs"]
-    dfw_explanatory = _downsample_aggregate(
+    dfw_explanatory = _aggregate_xcats(
         grouped=grouped, xcats=list(dict.fromkeys(out_xcats[:-1])), agg_method=aggs[0]
     )
-    dep_frame = _downsample_aggregate(
+    dep_frame = _aggregate_xcats(
         grouped=grouped, xcats=[out_xcats[-1]], agg_method=aggs[1]
     )
     dfw_explanatory.index = dep_frame.index = period_index
-    return _assemble_cast_index_and_dropna(
-        dfc=_assemble_dfc(
-            dfw_explanatory=_assemble_lag_explanatory(
+    return _cast_cid_index_to_object(
+        dfc=_build_dfc(
+            dfw_explanatory=_lag_explanatory(
                 dfw_explanatory=dfw_explanatory, lag=args["lag"]
             ),
             dep_col=dep_frame[out_xcats[-1]],
@@ -809,7 +809,7 @@ def _request_via_wide_frame(wide: _WideFrame, args: Dict[str, Any]) -> pd.DataFr
     )
 
 
-def _years_group_labels(start_year: int, end_year: int, years: int) -> List[str]:
+def _year_group_labels(start_year: int, end_year: int, years: int) -> List[str]:
     """Year-group labels spanning `start_year` to `end_year`, the last open-ended."""
 
     n_groups = int((end_year - start_year) / years)
@@ -822,18 +822,18 @@ def _years_group_labels(start_year: int, end_year: int, years: int) -> List[str]
     return labels
 
 
-def _request_by_year_groups(
+def _categories_df_by_year_groups(
     df: pd.DataFrame, args: Dict[str, Any], is_qdf: bool
 ) -> pd.DataFrame:
     """One multi-year request: two categories aggregated over fixed year groups - H14."""
 
     reduced, out_xcats, out_cids = _reduce_df(df=df, args=args, is_qdf=is_qdf)
-    _reduce_check_xcats_and_cids(out_xcats=out_xcats, out_cids=out_cids, args=args)
-    _args_check_val_column(df=df, val=args["val"])
+    _check_reduced_xcats_and_cids(out_xcats=out_xcats, out_cids=out_cids, args=args)
+    _check_val_column(df=df, val=args["val"])
 
     val, years = args["val"], args["years"]
     start_year = pd.to_datetime(args["start"]).year
-    labels = _years_group_labels(
+    labels = _year_group_labels(
         start_year=start_year, end_year=reduced["real_date"].max().year + 1, years=years
     )
 
@@ -862,13 +862,13 @@ def _request_by_year_groups(
         parts.append(part[["cid", "xcat", "real_date", val]])
 
     dfc = pd.concat(parts).pivot(index=("cid", "real_date"), columns="xcat", values=val)
-    return _assemble_cast_index_and_dropna(dfc=dfc)
+    return _cast_cid_index_to_object(dfc=dfc)
 
 
 # ----------------------------------------------------------------- the entry points
 
 
-def _run_batch(
+def _categories_df_many(
     df: pd.DataFrame,
     arg_batches: Sequence[Optional[Dict[str, Any]]],
 ) -> List[Any]:
@@ -881,9 +881,11 @@ def _run_batch(
         if args is None:
             continue
         try:
-            _args_check(df=df, args=args)
+            _check_categories_df_args(df=df, args=args)
             if args["years"] is not None:
-                results[i] = _request_by_year_groups(df=df, args=args, is_qdf=is_qdf)
+                results[i] = _categories_df_by_year_groups(
+                    df=df, args=args, is_qdf=is_qdf
+                )
             else:
                 freq_idx.append(i)
         except Exception as e:  # noqa: BLE001 - the exception IS this request's result
@@ -892,19 +894,17 @@ def _run_batch(
         return results
 
     wide = (
-        _reshape_by_scatter(
-            df=df, arg_batches=[arg_batches[i] for i in freq_idx], is_qdf=is_qdf
-        )
-        if _reshape_can_scatter(df=df)
+        _build_dfw(df=df, arg_batches=[arg_batches[i] for i in freq_idx], is_qdf=is_qdf)
+        if _can_build_dfw(df=df)
         else None
     )
     for i in freq_idx:
         args = arg_batches[i]
         try:
             if wide is not None and args["val"] in wide.value_arrs:
-                results[i] = _request_via_wide_frame(wide=wide, args=args)
+                results[i] = _categories_df_via_dfw(wide=wide, args=args)
             else:
-                results[i] = _request_via_pivot(df=df, args=args, is_qdf=is_qdf)
+                results[i] = _categories_df_via_pivot(df=df, args=args, is_qdf=is_qdf)
         except Exception as e:  # noqa: BLE001
             results[i] = e
     return results
@@ -996,9 +996,9 @@ def categories_df_fast(
         "fwin": fwin,
         "xcat_aggs": xcat_aggs,
     }
-    result = _run_batch(
+    result = _categories_df_many(
         df=df,
-        arg_batches=[_args_fill_defaults(args=_args)],
+        arg_batches=[_fill_default_args(args=_args)],
     )[0]
     if isinstance(result, BaseException):
         raise result
@@ -1041,12 +1041,12 @@ def categories_df_fast_loop(
     results: List[Any] = []
     for args in arg_batches:
         try:
-            full_args.append(_args_fill_defaults(args=args))
+            full_args.append(_fill_default_args(args=args))
             results.append(None)
         except Exception as e:  # noqa: BLE001 - an unusable request is its own result
             full_args.append(None)
             results.append(e)
-    for i, result in enumerate(_run_batch(df=df, arg_batches=full_args)):
+    for i, result in enumerate(_categories_df_many(df=df, arg_batches=full_args)):
         if full_args[i] is not None:
             results[i] = result
     return results
