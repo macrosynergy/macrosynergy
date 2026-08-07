@@ -537,13 +537,13 @@ def _reshape_by_scatter(
         return None
     if (cid_of_obs < 0).any():
         return None  # a NaN cross section, which the reduction raises on
-    day_of_obs = nanos_of_obs // _NS_PER_DAY
-    if (day_of_obs * _NS_PER_DAY != nanos_of_obs).any():
+    date_of_obs = nanos_of_obs // _NS_PER_DAY
+    if (date_of_obs * _NS_PER_DAY != nanos_of_obs).any():
         return None  # an intraday timestamp moves every start, end and blacklist bound
 
-    first_day = int(day_of_obs.min())
-    date_of_obs = day_of_obs - first_day
-    dates_spanned = int(day_of_obs.max()) - first_day + 1
+    first_day = int(date_of_obs.min())
+    dates_spanned = int(date_of_obs.max()) - first_day + 1
+    date_of_obs -= first_day  # in place; the floor-divide already gave a fresh array
     n_obs = len(obs_idx)
     # Bounded above rather than measured, because the axes below need the width to
     # allocate; no realistic frame is near the int32 ceiling either way.
