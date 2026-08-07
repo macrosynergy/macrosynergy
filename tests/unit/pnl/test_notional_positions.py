@@ -17,7 +17,7 @@ from macrosynergy.pnl.notional_positions import (
     _leverage_positions,
     _mask_unavailable_positions,
     _vol_target_positions,
-    notional_positions,
+    notional_positions, _vol_target_positions2,
 )
 
 
@@ -578,6 +578,7 @@ class TestNotionalPositions(unittest.TestCase):
             lback_meth="xma",
             nan_tolerance=0.1,
             remove_zeros=True,
+            cov_freq="M",
         )
 
         df_wide = df_wide[
@@ -589,7 +590,7 @@ class TestNotionalPositions(unittest.TestCase):
         ]
         df_wide = pd.concat([df_wide, df_xr], axis=1)
 
-        result: Tuple[pd.DataFrame, ...] = _vol_target_positions(
+        result: Tuple[pd.DataFrame, ...] = _vol_target_positions2(
             df_wide=df_wide, **good_args
         )
 

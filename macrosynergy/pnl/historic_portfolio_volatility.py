@@ -24,7 +24,11 @@ from macrosynergy.management.utils import (
 )
 
 RETURN_SERIES_XCAT = "_PNL_USD1S_ASD"
-FREQ_TO_BDAY_MAP = {"D": 1, "B": 1, "W-FRI": 5, "BME": 21, "BQ": 63, "BA": 252}
+FREQ_TO_BDAY_MAP = {"B": 1, "W-FRI": 5, "BME": 21, "BQE": 63, "BA": 252}
+
+
+def _bdays_per_period(freq: str) -> int:
+    return FREQ_TO_BDAY_MAP[_map_to_business_day_frequency(freq)]
 
 
 logger = logging.getLogger(__name__)
@@ -133,7 +137,7 @@ def estimate_variance_covariance(
 
 
 def _downsample_returns(piv_df: pd.DataFrame, freq: str) -> pd.DataFrame:
-    n = FREQ_TO_BDAY_MAP[freq]
+    n = _bdays_per_period(freq)
     n_rows = piv_df.shape[0]
     piv_df = piv_df.sort_index()
 
@@ -151,9 +155,63 @@ def _downsample_returns(piv_df: pd.DataFrame, freq: str) -> pd.DataFrame:
     return out
 
 
+def _nan_frac_since_first_obs(window_df: pd.DataFrame) -> pd.Series:
+    """
+    NaN fraction of each column, measured from its first observation in the window.
+    """
+    n_rows = window_df.shape[0]
+    if n_rows == 0:
+        return pd.Series(1.0, index=window_df.columns, dtype=float)
+
+    isna = window_df.isna().to_numpy()
+    first_obs = np.where(isna.all(axis=0), n_rows, isna.argmin(axis=0))
+    live_len = n_rows - first_obs
+    nan_after_first = isna.sum(axis=0) - first_obs
+
+    frac = np.ones(window_df.shape[1], dtype=float)
+    np.divide(nan_after_first, live_len, out=frac, where=live_len > 0)
+
+    return pd.Series(frac, index=window_df.columns, dtype=float)
+
+
+def _blend_frequency_vcvs(
+    dict_vcv: Dict[str, pd.DataFrame],
+    est_freqs: List[str],
+    est_weights: List[float],
+    column_order: pd.Index,
+) -> pd.DataFrame:
+    """
+    Combine the per-frequency covariance estimates into one annualized matrix.
+    Each entry is the `est_weights`-weighted mean of the annualized estimates actually
+    available for it, with the surviving weights renormalized so a contract dropped
+    at one estimation frequency still gets an estimate from the others
+    """
+    estimated = set().union(*(vcv.columns for vcv in dict_vcv.values()))
+    fids = [fid for fid in column_order if fid in estimated]
+
+    stacked = np.stack(
+        [
+            dict_vcv[freq].reindex(index=fids, columns=fids).to_numpy()
+            for freq in est_freqs
+        ]
+    )
+    weights = np.asarray(est_weights, dtype=float)[:, None, None]
+    annualization = np.asarray(
+        [ANNUALIZATION_FACTORS[freq] for freq in est_freqs], dtype=float
+    )[:, None, None]
+
+    available = ~np.isnan(stacked)
+    weight_sum = np.where(available, weights, 0.0).sum(axis=0)
+    weighted = np.where(available, weights * annualization * stacked, 0.0).sum(axis=0)
+
+    blended = np.full_like(weight_sum, np.nan)
+    np.divide(weighted, weight_sum, out=blended, where=weight_sum > 0)
+
+    return pd.DataFrame(blended, index=fids, columns=fids)
+
+
 def _calculate_multi_frequency_vcv_for_period(
     pivot_returns: pd.DataFrame,
-    pivot_signals: pd.DataFrame,
     rebal_date: pd.Timestamp,
     est_freqs: List[str],
     est_weights: List[float],
@@ -169,12 +227,12 @@ def _calculate_multi_frequency_vcv_for_period(
     for freq, lb, hl, min_obs in zip(
         est_freqs, lback_periods, half_life, lback_min_obs
     ):
-        lb_bdays = lb * FREQ_TO_BDAY_MAP[freq]
+        lb_bdays = lb * _bdays_per_period(freq)
         first_date = None if lb == -1 else rebal_date - pd.offsets.BDay(lb_bdays)
         window_df = pivot_returns.loc[first_date : rebal_date]
 
         # check for nan tolerance violations
-        nan_frac = window_df.isna().mean(axis=0)
+        nan_frac = _nan_frac_since_first_obs(window_df)
         window_df = window_df[window_df.columns[nan_frac <= nan_tolerance]]
 
         if window_df.empty:
@@ -183,7 +241,7 @@ def _calculate_multi_frequency_vcv_for_period(
         # down sample returns and compute covariance matrix
         piv_ret = _downsample_returns(window_df, freq=freq)
 
-        if piv_ret.shape[0] < piv_ret.shape[1]:
+        if piv_ret.shape[0] <= piv_ret.shape[1]:
             raise ValueError(
                 f"{piv_ret.shape[1] + 1} data points are required to compute a "
                 f"covariance matrix for {piv_ret.shape[1]} fids, but only found "
@@ -198,19 +256,13 @@ def _calculate_multi_frequency_vcv_for_period(
             half_life=hl,
             lback_min_obs=min_obs,
         )
-        # if dict_vcv[freq].isna().any().any():
-        #     raise ValueError(
-        #         f"N/A values in variance-covariance matrix at freq={freq} at real_date={rebal_date}!\n"
-        #         f"{dict_vcv[freq].isna().any()}"
-        #     )
 
-    # NOTE: in this case Float+NA = Na
-    vcv_df: pd.DataFrame = sum(
-        est_weights[ix] * ANNUALIZATION_FACTORS[freq] * dict_vcv[freq]
-        for ix, freq in enumerate(est_freqs)
+    return _blend_frequency_vcvs(
+        dict_vcv=dict_vcv,
+        est_freqs=est_freqs,
+        est_weights=est_weights,
+        column_order=pivot_returns.columns,
     )
-
-    return vcv_df
 
 
 def _calc_vol_tuple(
@@ -276,9 +328,9 @@ def _get_first_usable_date(
     n_fids = pivot_returns.shape[1]
 
     max_lback_days = max(
-        2 * n_fids * FREQ_TO_BDAY_MAP[est_freq]
+        2 * n_fids * _bdays_per_period(est_freq)
         if lback_period == -1 else
-        lback_period * FREQ_TO_BDAY_MAP[est_freq]
+        lback_period * _bdays_per_period(est_freq)
         for est_freq, lback_period in zip(est_freqs, lback_periods)
     )
 
@@ -306,7 +358,18 @@ def _calculate_portfolio_volatility(
     remove_zeros: bool,
     lback_min_obs: List[int],
     portfolio_return_name: str,
+    cov_freq: str,
 ) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    # signals are paired with the covariance axes positionally, so they must have
+    # the same order
+    if set(pivot_signals.columns) != set(pivot_returns.columns):
+        raise ValueError(
+            "`pivot_signals` and `pivot_returns` must cover the same contracts; "
+            f"signals only: {sorted(set(pivot_signals.columns) - set(pivot_returns.columns))}, "
+            f"returns only: {sorted(set(pivot_returns.columns) - set(pivot_signals.columns))}"
+        )
+    pivot_signals = pivot_signals[pivot_returns.columns]
+
     logger.info(
         f"Calculating portfolio volatility "
         f"for FIDS={pivot_returns.columns.tolist()} "
@@ -317,77 +380,58 @@ def _calculate_portfolio_volatility(
         f"est_weights={est_weights} "
     )
 
-    rebal_dates = get_sops(dates=pivot_signals.index, freq=rebal_freq)
-
-    # Returns batches
-    logger.info(
-        "Rebalance portfolio from %s to %s (%s times)",
-        rebal_dates.min(),
-        rebal_dates.max(),
-        rebal_dates.shape[0],
-    )
-
-    # TODO convert frequencies
-    list_vcv: List[pd.DataFrame] = []
-    list_pvol: List[Tuple[pd.Timestamp, np.float64]] = []
-    first_starts = _get_first_usable_date(
+    # estimate covariance matrices according to the cov_freq schedule
+    cov_estimation_dates = get_sops(pivot_returns.index, freq=cov_freq)
+    cov_history: np.ndarray = _cov_matrix_history(
         pivot_returns=pivot_returns,
-        rebal_dates=rebal_dates,
+        estimation_dates=cov_estimation_dates,
         est_freqs=est_freqs,
+        est_weights=est_weights,
         lback_periods=lback_periods,
+        half_life=half_life,
+        nan_tolerance=nan_tolerance,
+        remove_zeros=remove_zeros,
+        weights_func=weights_func,
+        lback_min_obs=lback_min_obs,
     )
 
-    for td in rebal_dates:
-        avails = first_starts[first_starts <= td].index.tolist()
-        if len(avails) == 0:
-            logger.warning(
-                f"Insufficient return data available on rebalancing date: {td} "
-                f"to compute a covariance matrix estimate using a "
-                f"lookback period of {max(lback_periods)} days." # todo fix units
-            )
-            continue
-        vcv_df = _calculate_multi_frequency_vcv_for_period(
-            pivot_returns=pivot_returns[avails],
-            pivot_signals=pivot_signals[avails],
-            rebal_date=td,
-            est_freqs=est_freqs,
-            est_weights=est_weights,
-            weights_func=weights_func,
-            lback_periods=lback_periods,
-            half_life=half_life,
-            nan_tolerance=nan_tolerance,
-            remove_zeros=remove_zeros,
-            lback_min_obs=lback_min_obs,
-        )
+    # determine the signals on rebalancing dates
+    rebal_dates = get_sops(dates=pivot_signals.index, freq=rebal_freq)
+    rebal_sigs = pivot_signals.loc[rebal_dates]
 
-        if vcv_df.empty:
-            continue
+    # find the index of the most recent cov matrix for each rebal date; rebal dates
+    # that precede the first estimate have no covariance available
+    cov_idx = np.searchsorted(cov_estimation_dates, rebal_dates, side="right") - 1
+    estimated = cov_idx >= 0
+    cov_at_rebal = np.full(
+        (len(rebal_dates), *cov_history.shape[1:]), fill_value=np.nan
+    )
+    cov_at_rebal[estimated] = cov_history[cov_idx[estimated]]
 
-        list_vcv.append(stack_covariances(vcv_df=vcv_df, real_date=td))
-        vol_tuple = _calc_vol_tuple(
-            vcv_df=vcv_df,
-            signals=pivot_signals,
-            date=td,
-            available_cids=avails,
-        )
-        list_pvol.append(vol_tuple)
+    # replace nans with 0s in cov and signals to allow for vectorized computation of vol
+    cov_zero = np.nan_to_num(cov_at_rebal, nan=0.0)
+    rebal_sigs_zero = np.nan_to_num(rebal_sigs.values, nan=0.0)
 
+    # calculate volatility in a vectorised manner
+    pvar = np.einsum("ni,nij,nj->n",rebal_sigs_zero, cov_zero, rebal_sigs_zero)
+    pvol = np.sqrt(pvar)
+
+    # No estimate at all means there is no measurable portfolio on that date
+    pvol[np.isnan(cov_at_rebal).all(axis=(1, 2))] = np.nan
+
+    # create dataframes
     pvol = pd.DataFrame(
-        list_pvol,
-        columns=["real_date", portfolio_return_name],
+        {"real_date": rebal_sigs.index, portfolio_return_name: pvol}
     ).set_index("real_date")
 
-    vcv_df_long = pd.concat(list_vcv, axis=0)  # add to cls.vcv
-
-    vcv_df_long["helper"] = vcv_df_long[["fid1", "fid2", "real_date"]].apply(
-        func=(lambda x: "-".join(sorted([x["fid1"], x["fid2"]])) + str(x["real_date"])),
-        axis=1,
-    )
-    vcv_df_long = (
-        vcv_df_long.drop_duplicates(subset=["helper"])
-        .drop(columns=["helper"])
-        .reset_index(drop=True)
-    )
+    i, j = np.triu_indices(pivot_returns.shape[1])
+    fids = pivot_returns.columns.to_numpy()
+    vcv_df_long = pd.DataFrame({
+        "fid1": np.tile(fids[i], rebal_dates.shape[0]),
+        "fid2": np.tile(fids[j], rebal_dates.shape[0]),
+        "real_date": np.repeat(rebal_dates, len(i)),
+        "value": cov_at_rebal[:, i, j].ravel(),
+    }).dropna()
 
     return pvol, vcv_df_long
 
@@ -406,6 +450,7 @@ def _hist_vol(
     nan_tolerance: float,
     remove_zeros: bool,
     return_variance_covariance: bool,
+    cov_freq: Optional[str] = None,
 ) -> List[pd.DataFrame]:
     """
     Calculates historic volatility for a given strategy. It assumes that the dataframe
@@ -469,6 +514,7 @@ def _hist_vol(
         lback_min_obs=lback_min_obs,
         est_freqs=est_freqs,
         est_weights=est_weights,
+        cov_freq=cov_freq or rebal_freq, # default to cov matrix re-estimated every rebal date
     )
 
     # assert portfolio_return_name the only column
@@ -845,6 +891,66 @@ def historic_portfolio_vol(
     if return_variance_covariance:
         return result[0], result[1]
     return result[0]
+
+
+def _cov_matrix_history(
+    pivot_returns: pd.DataFrame,
+    estimation_dates: Union[pd.Series, np.ndarray],
+    est_freqs: List[str],
+    est_weights: List[float],
+    lback_periods: List[int],
+    half_life: List[int],
+    nan_tolerance: float,
+    remove_zeros: bool,
+    weights_func: Callable[[int, int], np.ndarray],
+    lback_min_obs: List[int],
+) -> np.ndarray:
+    first_starts = _get_first_usable_date(
+        pivot_returns=pivot_returns,
+        rebal_dates=estimation_dates,
+        est_freqs=est_freqs,
+        lback_periods=lback_periods,
+    )
+
+    fids = pivot_returns.columns.tolist()
+    vcv_df_history: np.ndarray = np.full(
+        shape=(len(estimation_dates), len(fids), len(fids)),
+        fill_value=np.nan,
+    )
+    for i, estimation_date in enumerate(estimation_dates):
+        avails = first_starts[first_starts <= estimation_date].index.tolist()
+        if len(avails) == 0:
+            logger.warning(
+                f"Insufficient return data available on date: {estimation_date} "
+                f"to compute a covariance matrix estimate using a "
+                f"lookback period of {max(lback_periods)} days."  # todo fix units
+            )
+            continue
+
+        vcv_df = _calculate_multi_frequency_vcv_for_period(
+            pivot_returns=pivot_returns[avails],
+            rebal_date=estimation_date,
+            est_freqs=est_freqs,
+            est_weights=est_weights,
+            weights_func=weights_func,
+            lback_periods=lback_periods,
+            half_life=half_life,
+            nan_tolerance=nan_tolerance,
+            remove_zeros=remove_zeros,
+            lback_min_obs=lback_min_obs,
+        )
+
+        if vcv_df.empty:
+            logger.warning(f"Covariance matrix empty for date: {estimation_date}")
+            continue
+
+        vcv_df = vcv_df.reindex(pivot_returns.columns, axis="columns")
+        vcv_df = vcv_df.reindex(pivot_returns.columns, axis="rows")
+
+        vcv_df_history[i] = vcv_df.values
+
+    return vcv_df_history
+
 
 
 if __name__ == "__main__":
