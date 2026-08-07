@@ -90,20 +90,23 @@ def _check_categories_df_args(df: pd.DataFrame, args: Dict[str, Any]) -> None:
     aggs_error = "List of strings, outlining the aggregation methods, expected."
     assert isinstance(xcat_aggs, list), aggs_error
     assert all([isinstance(a, str) for a in xcat_aggs]), aggs_error
-    assert len(xcat_aggs) == 2, (
+    aggs_len = (
         "Only two aggregation methods required. The first will be used for all "
         "explanatory category(s)."
     )
+    assert len(xcat_aggs) == 2, aggs_len
 
     assert not (years is not None) & (
         args["lag"] != 0
     ), "Lags cannot be applied to year groups."
     if years is not None:
         assert isinstance(args["start"], str), "Year aggregation requires a start date."
-        assert len(xcats) == 2, (
+
+        no_xcats = (
             "If the data is aggregated over a multi-year timeframe, only two "
             "categories are permitted."
         )
+        assert len(xcats) == 2, no_xcats
 
     if not isinstance(df, QuantamentalDataFrame):
         raise TypeError("Argument `df` must be a standardised Quantamental DataFrame.")
@@ -112,10 +115,11 @@ def _check_categories_df_args(df: pd.DataFrame, args: Dict[str, Any]) -> None:
 def _check_val_column(df: pd.DataFrame, val: str) -> None:
     """The value column check, which `categories_df` makes after `reduce_df` warns."""
 
-    assert val in CATEGORIES_DF_METRICS, (
+    val_error = (
         "The column of interest must be one of the defined JPMaQS metrics, "
         f"{CATEGORIES_DF_METRICS}, but received {val}."
     )
+    assert val in CATEGORIES_DF_METRICS, val_error
     avbl_cols = list(df.columns)
     assert val in avbl_cols, (
         f"The passed column name, {val}, must be present in the "
@@ -128,10 +132,12 @@ def _check_reduced_xcats_and_cids(
 ) -> None:
     """Raise or warn on what survived the reduction, as `categories_df` does - H5."""
 
+    input_xcats, input_cids = args["xcats"], args["cids"]
+
     if len(xcats) < 2:
         raise ValueError("The DataFrame must contain at least two categories. ")
-    elif set(xcats) != set(args["xcats"]):
-        missing_xcats = list(set(args["xcats"]) - set(xcats))
+    elif set(xcats) != set(input_xcats):
+        missing_xcats = list(set(input_xcats) - set(xcats))
         warnings.warn(
             f"The following categories are missing from the DataFrame: {missing_xcats}"
         )
@@ -140,8 +146,8 @@ def _check_reduced_xcats_and_cids(
         raise ValueError(
             "The DataFrame must contain at least one valid cross section. "
         )
-    elif args["cids"] and set(cids) != set(args["cids"]):
-        missing_cids = list(set(args["cids"]) - set(cids))
+    elif input_cids and set(cids) != set(input_cids):
+        missing_cids = list(set(input_cids) - set(cids))
         warnings.warn(
             f"The following cross sections are missing from the DataFrame: {missing_cids}"
         )
@@ -745,11 +751,13 @@ def _cast_cid_index_to_object(dfc: pd.DataFrame) -> pd.DataFrame:
     """Cast a categorical `cid` index level back to object, then drop all-NaN rows."""
 
     if dfc.index.dtypes["cid"].name == "category":
-        dfc.index = pd.MultiIndex(
-            levels=[dfc.index.levels[0].astype("object"), dfc.index.levels[1]],
+        new_outer_index = dfc.index.levels[0].astype("object")
+        new_index = pd.MultiIndex(
+            levels=[new_outer_index, dfc.index.levels[1]],
             codes=dfc.index.codes,
             names=dfc.index.names,
         )
+        dfc.index = new_index
     return dfc.dropna(axis=0, how="all")
 
 
@@ -768,14 +776,14 @@ def _categories_df_via_pivot(
     dfw = _pivot_dfw(reduced=reduced, val=args["val"])
     _check_dfw_columns(xcats=xcats, dfw_columns=dfw.columns)
 
-    grouped = _downsample_dfw(dfw=dfw, freq=args["_bday_freq"])
+    dfw = _downsample_dfw(dfw=dfw, freq=args["_bday_freq"])
     xcat_aggs = args["xcat_aggs"]
     dfw_explanatory = _aggregate_xcats(
-        grouped=grouped, xcats=list(dict.fromkeys(xcats[:-1])), agg_method=xcat_aggs[0]
+        grouped=dfw, xcats=list(dict.fromkeys(xcats[:-1])), agg_method=xcat_aggs[0]
     )
-    dep_col = _aggregate_xcats(
-        grouped=grouped, xcats=[xcats[-1]], agg_method=xcat_aggs[1]
-    )[xcats[-1]]
+    dep_col = _aggregate_xcats(grouped=dfw, xcats=[xcats[-1]], agg_method=xcat_aggs[1])[
+        xcats[-1]
+    ]
     return _cast_cid_index_to_object(
         dfc=_build_dfc(
             dfw_explanatory=_lag_explanatory(
@@ -865,6 +873,7 @@ def _categories_df_by_year_groups(
     reduced = reduced.copy()
     reduced["custom_date"] = group_of_year[inverse]
 
+    col_names = ["cid", "xcat", "real_date", val]
     df_output = []
     for xcat, agg_method in zip(xcats, args["xcat_aggs"]):
         dfx = (
@@ -875,7 +884,7 @@ def _categories_df_by_year_groups(
             .reset_index()
             .rename(columns={"custom_date": "real_date"})
         )
-        df_output.append(dfx[["cid", "xcat", "real_date", val]])
+        df_output.append(dfx[col_names])
 
     dfc = pd.concat(df_output).pivot(
         index=("cid", "real_date"), columns="xcat", values=val
