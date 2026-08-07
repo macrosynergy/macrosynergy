@@ -361,9 +361,11 @@ def reduce_df(
     if blacklist is not None:
         df = apply_blacklist(df, blacklist)
 
-    # The cross-section filter must run before the categories are derived below:
-    # deriving them first leaves a category that exists only outside `cids` in the
-    # returned list, which callers then look up on a frame that no longer has it.
+    # Row filters first, in the plain body's order. The surviving-category list is
+    # derived below, once BOTH filters have been applied -- deriving it earlier
+    # leaves a category that exists only outside `cids` in the returned list.
+    if xcats is not None:
+        df = df[df["xcat"].isin(xcats)]
     if cids is not None:
         cids = [cids] if isinstance(cids, str) else list(cids)
         df = df[df["cid"].isin(cids)]
@@ -373,8 +375,6 @@ def reduce_df(
     else:
         xcats_in_df = df["xcat"].unique()
         xcats = [xcat for xcat in xcats if xcat in xcats_in_df]
-
-    df = df[df["xcat"].isin(xcats)]
 
     if intersect:
         cids_in_df = set.intersection(

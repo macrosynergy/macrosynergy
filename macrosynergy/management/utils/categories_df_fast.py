@@ -243,11 +243,12 @@ def _reduce_df(
                     )
                 ]
             df = df.reset_index(drop=True)
+        # both row filters first; the lists derive off the fully filtered frame
+        df = df[df["xcat"].isin(xcats)]
         if cids is not None:
             df = df[df["cid"].isin(cids)]
         xcats_in_df = df["xcat"].unique()
         xcats = [xcat for xcat in xcats if xcat in xcats_in_df]
-        df = df[df["xcat"].isin(xcats)]
         cids_in_df = df["cid"].unique()
         cids = (
             sorted(cids_in_df) if cids is None else [c for c in cids if c in cids_in_df]
@@ -295,7 +296,7 @@ def _blacklist_bound(value: Any, is_qdf: bool) -> int:
         if not is_qdf:
             raise
         raise TypeError(
-            f"Invalid comparison between dtype=datetime64[ns] and {type(value).__name__}"
+            f"Invalid comparson between dtype=datetime64[ns] and {type(value).__name__}"
         ) from None
 
 
