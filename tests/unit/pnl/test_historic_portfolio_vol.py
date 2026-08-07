@@ -3,36 +3,36 @@
 import unittest
 import pandas as pd
 import numpy as np
-from typing import Dict, List, Tuple, Union, Any, Optional
-from numbers import Number
+from typing import Dict, List, Tuple, Any
 from unittest import mock
-import warnings
 from macrosynergy.pnl.historic_portfolio_volatility import (
     historic_portfolio_vol,
     unstack_covariances,
     _hist_vol,
     _calculate_portfolio_volatility,
+    _calculate_multi_frequency_vcv_for_period,
+    _cov_matrix_history,
     flat_weights_arr,
     _downsample_returns,
     expo_weights_arr,
     _weighted_covariance,
     estimate_variance_covariance,
-    get_max_lookback,
     _check_est_args,
     _check_missing_data,
     _check_frequency,
     _check_input_arguments,
     _get_first_usable_date,
+    _bdays_per_period,
     RETURN_SERIES_XCAT,
 )
-from macrosynergy.management.utils import (
-    qdf_to_ticker_df,
-    get_sops,
-    ticker_df_to_qdf,
-    _map_to_business_day_frequency,
-)
+from macrosynergy.management.utils import qdf_to_ticker_df, get_sops
+from macrosynergy.management.constants import ANNUALIZATION_FACTORS
 from macrosynergy.management.types import QuantamentalDataFrame, NoneType
-from macrosynergy.management.simulate import make_test_df, simulate_returns_and_signals
+from macrosynergy.management.simulate import (
+    make_test_df,
+    simulate_returns_and_signals,
+    SignalsAndReturnsGenerator,
+)
 
 
 class TestWeightedCovariance(unittest.TestCase):
@@ -345,44 +345,87 @@ class TestMisc(unittest.TestCase):
             with self.assertRaises(ValueError):
                 _check_frequency(freq, "freq-type")
 
-    def test_get_max_lookback(self):
-        def _get_max_lookback_mock(lb: int, nt: float) -> int:
-            return int(np.ceil(lb * (1 + nt))) if lb > 0 else 0
+    @staticmethod
+    def _series_df(n_rows: int, cols: List[str] = ["A"]) -> pd.DataFrame:
+        # distinct, non-zero returns so any mis-bucketing changes the answer
+        idx = pd.bdate_range("2020-01-01", periods=n_rows)
+        vals = np.arange(1, n_rows * len(cols) + 1, dtype=float).reshape(
+            n_rows, len(cols)
+        )
+        return pd.DataFrame(vals, index=idx, columns=cols)
 
-        # nt between 0 and 1, lb > 0
-        for _ in range(1000):
-            lb = np.random.randint(1, 100)
-            nt = np.random.rand()
-            res = get_max_lookback(lb, nt)
-            self.assertEqual(res, _get_max_lookback_mock(lb, nt))
+    def test_downsample_returns_compounds_within_backward_buckets(self):
+        # buckets are counted back from the most recent row rather than anchored to
+        # calendar period ends, so every bucket holds exactly `n` business days.
+        n = _bdays_per_period("W-FRI")
+        piv_df = self._series_df(2 * n + 1)
 
-    def test_downsample_returns(self):
-        def _downsample_returns_mock(piv_df: pd.DataFrame, freq: str) -> pd.DataFrame:
-            freq = _map_to_business_day_frequency(freq)
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore")
-                piv_new_freq: pd.DataFrame = (
-                    (1 + piv_df / 100).resample(freq).prod() - 1
-                ) * 100
+        res = _downsample_returns(piv_df, "W-FRI")
 
-                warnings.resetwarnings()
+        self.assertEqual(res.shape, (2, 1))
+        vals = piv_df["A"].to_numpy()
+        expected = [
+            100 * (np.prod(1 + vals[k : k + n] / 100) - 1)
+            for k in (1, 1 + n)  # row 0 is the dropped partial block
+        ]
+        np.testing.assert_allclose(res["A"].to_numpy(), expected, rtol=1e-12)
+        self.assertEqual(res.index.tolist(), [0, 1])
 
-            return piv_new_freq
+    def test_downsample_returns_drops_oldest_partial_block(self):
+        n = _bdays_per_period("W-FRI")
+        piv_df = self._series_df(2 * n + 3)
 
-        cols = ["A", "B", "C", "D"]
-        idx = pd.bdate_range(start="2010-01-01", end="2015-01-01")
-        freqs = ["D", "W", "M", "Q", "A"]
+        res = _downsample_returns(piv_df, "W-FRI")
+        self.assertEqual(res.shape[0], len(piv_df) // n)
 
-        def _gen_df(idx, cols):
-            return pd.DataFrame(
-                np.random.rand(len(idx), len(cols)), columns=cols, index=idx
+        # the 3 oldest rows fall outside a whole bucket, so perturbing them has
+        # no effect
+        perturbed = piv_df.copy()
+        perturbed.iloc[:3] += 1000.0
+        np.testing.assert_allclose(
+            _downsample_returns(perturbed, "W-FRI").to_numpy(),
+            res.to_numpy(),
+            rtol=1e-12,
+        )
+
+    def test_downsample_returns_daily_preserves_values(self):
+        piv_df = self._series_df(20, ["A", "B"])
+        for freq in ("B", "D"):
+            res = _downsample_returns(piv_df, freq)
+            self.assertEqual(res.shape, piv_df.shape)
+            np.testing.assert_allclose(
+                res.to_numpy(), piv_df.to_numpy(), rtol=1e-12
             )
 
-        for freq in freqs:
-            piv_df = _gen_df(idx, cols)
-            res = _downsample_returns(piv_df, freq)
-            res_mock = _downsample_returns_mock(piv_df, freq)
-            self.assertTrue(res.equals(res_mock))
+    def test_downsample_returns_nan_handling(self):
+        n = _bdays_per_period("W-FRI")
+        piv_df = self._series_df(2 * n)
+
+        # a bucket with no observations at all cannot be compounded
+        all_nan = piv_df.copy()
+        all_nan.iloc[:n] = np.nan
+        res = _downsample_returns(all_nan, "W-FRI")
+        self.assertTrue(np.isnan(res["A"].iloc[0]))
+        self.assertFalse(np.isnan(res["A"].iloc[1]))
+
+        # a partially observed bucket compounds the observations it does have
+        partial = piv_df.copy()
+        partial.iloc[0] = np.nan
+        res = _downsample_returns(partial, "W-FRI")
+        expected = 100 * (np.prod(1 + piv_df["A"].to_numpy()[1:n] / 100) - 1)
+        self.assertAlmostEqual(res["A"].iloc[0], expected, places=10)
+
+    def test_downsample_returns_shorter_than_one_bucket_is_empty(self):
+        piv_df = self._series_df(_bdays_per_period("W-FRI") - 1)
+        self.assertEqual(_downsample_returns(piv_df, "W-FRI").shape[0], 0)
+
+    def test_downsample_returns_sorts_index(self):
+        piv_df = self._series_df(2 * _bdays_per_period("W-FRI"))
+        np.testing.assert_allclose(
+            _downsample_returns(piv_df.iloc[::-1], "W-FRI").to_numpy(),
+            _downsample_returns(piv_df, "W-FRI").to_numpy(),
+            rtol=1e-12,
+        )
 
     def test_unstack_covariances_no_fillna(self):
         result = unstack_covariances(self.vcv_df, fillna=False)
@@ -419,12 +462,9 @@ class TestGetFirstUsableDate(unittest.TestCase):
     def setUp(self):
         self.est_freqs = ["D"]
         self.lback_periods = [15]
-        self.nan_tolerance = 0.1
         self.rebal_freq = "M"
         self.idx = pd.bdate_range(start="2010-01-01", end="2013-01-01")
         self.rebal_dates = get_sops(dates=self.idx, freq=self.rebal_freq)
-        # mirrors the buffer derived inside `_get_first_usable_date`
-        self.max_lb = get_max_lookback(self.lback_periods[0], self.nan_tolerance)
 
     def tearDown(self): ...
 
@@ -436,169 +476,359 @@ class TestGetFirstUsableDate(unittest.TestCase):
         return df
 
     def _first_usable(
-        self, pivot_returns: pd.DataFrame, pivot_signals: pd.DataFrame
+        self,
+        pivot_returns: pd.DataFrame,
+        est_freqs: List[str] = None,
+        lback_periods: List[int] = None,
     ) -> pd.Series:
         return _get_first_usable_date(
             pivot_returns=pivot_returns,
-            pivot_signals=pivot_signals,
             rebal_dates=self.rebal_dates,
-            est_freqs=self.est_freqs,
-            lback_periods=self.lback_periods,
-            nan_tolerance=self.nan_tolerance,
+            est_freqs=est_freqs or self.est_freqs,
+            lback_periods=lback_periods or self.lback_periods,
         )
 
-    def test_signal_start_is_ignored(self):
-        # the usable date is driven by returns only: a contract enters the
-        # estimate once it has `max_lb` days of return history. The signal start
-        # plays no part, so moving it later must not change the result.
+    def _expected(self, ret_start: str, buffer_bdays: int) -> pd.Timestamp:
+        # first rebalance date at or after the contract's return start plus buffer
+        return self.rebal_dates[
+            self.rebal_dates >= pd.Timestamp(ret_start) + pd.offsets.BDay(buffer_bdays)
+        ].min()
+
+    def test_each_contract_uses_its_own_return_start(self):
+        pivot_returns = self._pivot({"USD_EQ": "2010-01-01", "EUR_EQ": "2011-06-01"})
+
+        res = self._first_usable(pivot_returns)
+
+        self.assertEqual(res["USD_EQ"], self._expected("2010-01-01", 15))
+        self.assertEqual(res["EUR_EQ"], self._expected("2011-06-01", 15))
+        self.assertGreater(res["EUR_EQ"], res["USD_EQ"])
+
+    def test_multi_frequency_takes_the_longest_buffer(self):
+        # with several estimation frequencies, the longest window must be chosen
         ret_start = "2010-01-01"
         pivot_returns = self._pivot({"USD_EQ": ret_start, "EUR_EQ": ret_start})
 
-        expected = self.rebal_dates[
-            self.rebal_dates >= pd.Timestamp(ret_start) + pd.offsets.BDay(self.max_lb)
-        ].min()
+        res = self._first_usable(
+            pivot_returns, est_freqs=["D", "BME"], lback_periods=[15, 3]
+        )
 
-        # EUR_EQ signal starts well after its returns; USD_EQ is the control.
-        for sig_start in ("2010-01-01", "2011-06-01"):
-            pivot_signals = self._pivot({"USD_EQ": ret_start, "EUR_EQ": sig_start})
-            res = self._first_usable(pivot_returns, pivot_signals)
-            self.assertEqual(res["EUR_EQ"], expected)
-            self.assertEqual(res["USD_EQ"], expected)
+        buffer_bdays = max(15 * _bdays_per_period("D"), 3 * _bdays_per_period("BME"))
+        self.assertEqual(res["USD_EQ"], self._expected(ret_start, buffer_bdays))
 
-    def test_return_start_keeps_buffer(self):
-        # when the signal is the longer series the contract must still wait for
-        # `max_lb` days of returns before it enters the covariance estimate.
-        ret_start = "2011-06-01"
-        pivot_returns = self._pivot({"USD_EQ": "2010-01-01", "EUR_EQ": ret_start})
-        pivot_signals = self._pivot({"USD_EQ": "2010-01-01", "EUR_EQ": "2010-01-01"})
+    def test_full_lookback_requires_twice_as_many_periods_as_contracts(self):
+        ret_start = "2010-01-01"
+        pivot_returns = self._pivot(
+            {f"C{i}_EQ": ret_start for i in range(4)}
+        )
+        n_fids = pivot_returns.shape[1]
 
-        res = self._first_usable(pivot_returns, pivot_signals)
+        for est_freq in ("D", "W-FRI"):
+            res = self._first_usable(
+                pivot_returns, est_freqs=[est_freq], lback_periods=[-1]
+            )
+            buffer_bdays = 2 * n_fids * _bdays_per_period(est_freq)
+            self.assertEqual(res["C0_EQ"], self._expected(ret_start, buffer_bdays))
 
-        expected = self.rebal_dates[
-            self.rebal_dates >= pd.Timestamp(ret_start) + pd.offsets.BDay(self.max_lb)
-        ].min()
-        self.assertEqual(res["EUR_EQ"], expected)
+    def test_contract_without_enough_history_gets_nat(self):
+        pivot_returns = self._pivot(
+            {"USD_EQ": "2010-01-01", "EUR_EQ": self.idx[-2].strftime("%Y-%m-%d")}
+        )
+
+        res = self._first_usable(pivot_returns)
+
+        self.assertTrue(pd.isna(res["EUR_EQ"]))
+        self.assertFalse(pd.isna(res["USD_EQ"]))
 
 
 class TestCalculatePortfolioVolatility(unittest.TestCase):
     def setUp(self):
-        mkdf_args = dict(
-            cids=["USD", "EUR", "GBP", "JPY", "CHF", "HUF"],
-            xcats=["EQ"],
-            start="2010-01-01",
-            end="2021-01-01",
+        rng = np.random.default_rng(0)
+        self.idx = pd.bdate_range("2015-01-01", periods=400)
+        self.fids = ["AUD_FX", "CAD_FX", "GBP_FX"]
+        self.returns = pd.DataFrame(
+            rng.normal(0, [0.2, 1.0, 3.0], size=(len(self.idx), 3)),
+            index=self.idx,
+            columns=self.fids,
         )
-        _dft = make_test_df(**mkdf_args)
-        _dft["value"] = 1
-        _dft = qdf_to_ticker_df(_dft)
-        self.good_args: Dict[str, Any] = {
-            "pivot_returns": _dft,
-            "pivot_signals": _dft,
-            "weights_func": flat_weights_arr,
-            "rebal_freq": "M",
-            "est_freqs": ["D", "W"],
-            "est_weights": [0.5, 0.5],
-            "half_life": [10, 2],
-            "lback_periods": [15, 5],
-            "lback_min_obs": [1, 1],
-            "nan_tolerance": 0.1,
-            "remove_zeros": True,
-            "portfolio_return_name": "PORTFOLIO",
-        }
+        self.signals = pd.DataFrame(1.0, index=self.idx, columns=self.fids)
 
-    @staticmethod
-    def expected_rebal_dates(dt_range: pd.DatetimeIndex, freq: str) -> pd.Series:
-        return get_sops(dates=dt_range, freq=freq)
+        self.good_args = dict(
+            pivot_returns=self.returns,
+            pivot_signals=self.signals,
+            weights_func=flat_weights_arr,
+            rebal_freq="M",
+            cov_freq="M",
+            est_freqs=["D"],
+            est_weights=[1.0],
+            half_life=[10],
+            lback_periods=[60],
+            lback_min_obs=[1],
+            nan_tolerance=0.1,
+            remove_zeros=False,
+            portfolio_return_name="PORTFOLIO",
+        )
 
     def tearDown(self): ...
 
-    def test_basic(self):
-        # Test good args
-        res = _calculate_portfolio_volatility(**self.good_args)
-        # res must be a tuple of 2 elements
-        self.assertTrue(isinstance(res, tuple))
-        self.assertEqual(len(res), 2)
-        # both elements must be pandas dataframes
-        self.assertTrue(isinstance(res[0], pd.DataFrame))
-        # the first element must have 1 column and real_date as index
-        expc_rebal_dates = self.expected_rebal_dates(
-            res[0].index, self.good_args["rebal_freq"]
+    def _vol(self, **overrides):
+        pvol, _ = _calculate_portfolio_volatility(**{**self.good_args, **overrides})
+        return pvol
+
+    def test_output_properties(self):
+        """Test the output dfs have the correct properties"""
+        pvol, vcv = _calculate_portfolio_volatility(**self.good_args)
+
+        rebal_dates = get_sops(dates=self.signals.index, freq=self.good_args["rebal_freq"])
+        self.assertTrue(pvol.index.equals(pd.DatetimeIndex(rebal_dates)))
+        self.assertEqual(pvol.index.name, "real_date")
+        self.assertEqual(pvol.columns.tolist(), ["PORTFOLIO"])
+
+        vals = pvol["PORTFOLIO"].to_numpy()
+        self.assertTrue(np.all(vals[~np.isnan(vals)] >= 0))
+
+        self.assertEqual(vcv.columns.tolist(), ["fid1", "fid2", "real_date", "value"])
+        self.assertFalse(vcv["value"].isna().any())
+        self.assertTrue(vcv["real_date"].isin(rebal_dates).all())
+
+    def test_single_fid_vol_equals_annualized_return_vol(self):
+        """
+        Test that with one fid holding a unit signal the portfolio volatility is just
+        that fid's annualized return volatility over the lookback window
+        """
+        returns = self.returns[["GBP_FX"]]
+        signals = self.signals[["GBP_FX"]]
+        pvol = self._vol(pivot_returns=returns, pivot_signals=signals)
+
+        expected = {}
+        lback_periods = self.good_args["lback_periods"][0]
+        est_freq = self.good_args["est_freqs"][0]
+        for date in pvol.index:
+            window = returns.loc[date - pd.offsets.BDay(lback_periods) : date]
+            cov = estimate_variance_covariance(
+                piv_ret=_downsample_returns(window, freq=est_freq),
+                remove_zeros=False,
+                weights_func=flat_weights_arr,
+                lback_periods=lback_periods,
+                half_life=10,
+                lback_min_obs=1,
+            )
+            assert cov.shape == (1, 1)
+            expected[date] = np.sqrt(ANNUALIZATION_FACTORS["D"] * cov.iloc[0, 0])
+
+        observed = pvol["PORTFOLIO"].dropna()
+        self.assertGreater(len(observed), 0)
+        np.testing.assert_allclose(
+            observed.to_numpy(),
+            np.array([expected[d] for d in observed.index]),
+            rtol=1e-12,
         )
-        self.assertTrue(res[0].index.tolist() == expc_rebal_dates.tolist())
-        self.assertTrue(res[0].shape[1] == 1)
-        # column name must be the same as the portfolio_return_name
-        self.assertTrue(res[0].columns[0] == self.good_args["portfolio_return_name"])
 
-        # the second element must be a pandas dataframe
-        # must be a df with 'real_date', 'fid1', 'fid2', 'value' as columns
-        self.assertTrue(isinstance(res[1], pd.DataFrame))
-        self.assertTrue(res[1].shape[1] == 4)
-        self.assertTrue(set(res[1].columns) == {"real_date", "fid1", "fid2", "value"})
-        self.assertTrue(set(res[1]["real_date"]) == set(expc_rebal_dates))
+    def test_pvol_matches_returned_covariances(self):
+        """
+        Test that the reported volatility is the quadratic form of the signals against
+        the covariance matrix that is reported alongside it
+        """
+        pvol, vcv = _calculate_portfolio_volatility(**self.good_args)
+        pos = {fid: i for i, fid in enumerate(self.fids)}
 
-        fid_tuples: List[Tuple[str, str]] = (
-            res[1][["fid1", "fid2"]].apply(tuple, axis=1).tolist()
+        for date, block in vcv.groupby("real_date"):
+            cov = np.zeros((len(self.fids), len(self.fids)))
+            for fid1, fid2, value in block[["fid1", "fid2", "value"]].itertuples(
+                index=False
+            ):
+                cov[pos[fid1], pos[fid2]] = cov[pos[fid2], pos[fid1]] = value
+            sig = self.signals.loc[date, self.fids].to_numpy()
+
+            np.testing.assert_allclose(
+                pvol.loc[date, "PORTFOLIO"], np.sqrt(sig @ cov @ sig), rtol=1e-12
+            )
+
+    def test_scaling_signals_scales_vol(self):
+        """Test that scaling signals scales volatility"""
+        unscaled = self._vol()["PORTFOLIO"].to_numpy()
+        scaled_pos = self._vol(pivot_signals=self.signals * 2)["PORTFOLIO"].to_numpy()
+        scaled_neg = self._vol(pivot_signals=self.signals * -5)["PORTFOLIO"].to_numpy()
+
+        np.testing.assert_allclose(scaled_pos, 2 * unscaled, rtol=1e-12)
+        np.testing.assert_allclose(scaled_neg, 5 * unscaled, rtol=1e-12)
+
+    def test_offsetting_positions_have_no_vol(self):
+        returns = self.returns[["GBP_FX"]].copy()
+        returns["GBP_FX_CLONE"] = returns["GBP_FX"]
+        signals = pd.DataFrame({"GBP_FX": 1.0, "GBP_FX_CLONE": -1.0}, index=self.idx)
+
+        pvol = self._vol(pivot_returns=returns, pivot_signals=signals)
+        self.assertTrue(np.all(np.nan_to_num(pvol["PORTFOLIO"].to_numpy()) < 1e-8))
+
+    def test_zero_signals_give_zero_vol_where_estimated(self):
+        """
+        Test that a portfolio wit 0 signals has no volatility, which is not the same
+        as having no estimate (NaN)
+        """
+        pvol, vcv = _calculate_portfolio_volatility(
+            **{**self.good_args, "pivot_signals": self.signals * 0.0}
         )
-        found_finds = self.good_args["pivot_signals"].columns.tolist()
 
-        all_possible_fid_tuples = [
-            (found_finds[i], found_finds[j])
-            for i in range(len(found_finds))
-            for j in range(len(found_finds))
-        ]
+        estimated = pvol.index.isin(vcv["real_date"].unique())
+        self.assertGreater(estimated.sum(), 0)
+        self.assertGreater((~estimated).sum(), 0)
+        np.testing.assert_allclose(pvol.loc[estimated, "PORTFOLIO"].to_numpy(), 0.0)
+        self.assertTrue(pvol.loc[~estimated, "PORTFOLIO"].isna().all())
 
-        not_found = set(all_possible_fid_tuples) - set(fid_tuples)
-        # now check that each tuple's inverted tuple is also in the fid_tuples - 2 way check
-        for fid_tuple in not_found:
-            self.assertTrue(fid_tuple[::-1] in fid_tuples)
+    def test_result_invariant_to_signal_column_order(self):
+        """
+        Test signals are matched to the covariance axes by contract, not by the order
+        in which the caller happens to supply the columns
+        """
+        signals = self.signals * np.array([1.0, -2.0, 0.5])
 
-    def test_calls(self):
-        # test that estimate_variance_covariance is called N times
-        rebal_dates = self.expected_rebal_dates(
-            self.good_args["pivot_signals"].index, self.good_args["rebal_freq"]
+        base = self._vol(pivot_signals=signals)
+        permuted = self._vol(pivot_signals=signals[signals.columns[::-1]])
+
+        np.testing.assert_allclose(
+            permuted["PORTFOLIO"].to_numpy(),
+            base["PORTFOLIO"].to_numpy(),
+            rtol=1e-12,
         )
-        rebal_dates
-        fsts = _get_first_usable_date(
-            pivot_returns=self.good_args["pivot_returns"],
-            pivot_signals=self.good_args["pivot_signals"],
-            est_freqs=self.good_args["est_freqs"],
-            lback_periods=self.good_args["lback_periods"],
-            nan_tolerance=self.good_args["nan_tolerance"],
-            rebal_dates=rebal_dates,
+
+    def test_mismatched_fids_raise(self):
+        """Test signals and returns with different fids raises error"""
+        signals = self.signals.rename(columns={"CAD_FX": "CAD_EQ"})
+        with self.assertRaises(ValueError):
+            self._vol(pivot_signals=signals)
+
+    def test_no_lookahead(self):
+        """
+        Test pvol is never estimated using a cov containing future data
+        """
+        # scale returns after a cutoff so if future data was used it would be obvious
+        cutoff_dt = self.idx[250]
+        shocked = self.returns.copy()
+        shocked.loc[shocked.index > cutoff_dt] *= 100
+
+        base = self._vol()["PORTFOLIO"]
+        after = self._vol(pivot_returns=shocked)["PORTFOLIO"]
+
+        early = base.index <= cutoff_dt
+        self.assertGreater(early.sum(), 0)
+        np.testing.assert_allclose(
+            after[early].to_numpy(),
+            base[early].to_numpy(),
+            rtol=1e-12,
         )
-        # excl_dt_count = sum(
-        #     [len(fsts[fsts <= rd].index.tolist()) > 0 for rd in rebal_dates]
-        # )
-        # _call_count = len(self.good_args["est_freqs"]) * (
-        #     len(rebal_dates) - excl_dt_count
-        # )
-        _call_count = 0
-        for rd in rebal_dates:
-            if len(fsts[fsts <= rd].index.tolist()) > 0:
-                for freq in self.good_args["est_freqs"]:
-                    _call_count += 1
+        self.assertFalse(np.allclose(after.to_numpy(), base.to_numpy()))
 
-        with mock.patch(
-            "macrosynergy.pnl.historic_portfolio_volatility.estimate_variance_covariance",
-            side_effect=estimate_variance_covariance,
-        ) as mock_est_var_cov:
-            with mock.patch(
-                "macrosynergy.pnl.historic_portfolio_volatility._downsample_returns",
-                side_effect=_downsample_returns,
-            ) as mock_downsample_returns:
-                with mock.patch(
-                    "macrosynergy.pnl.historic_portfolio_volatility.get_max_lookback",
-                    side_effect=get_max_lookback,
-                ) as mock_get_max_lookback:
-                    _calculate_portfolio_volatility(**self.good_args)
-                    self.assertEqual(mock_est_var_cov.call_count, _call_count)
-                    self.assertEqual(mock_downsample_returns.call_count, _call_count)
+    def test_stale_covariance_reused_between_estimates(self):
+        """
+        Test that rebalancing more often than the covariance is re-estimated
+        reuses the most recent estimate until the next one is produced
+        """
+        _, vcv = _calculate_portfolio_volatility(
+            **{**self.good_args, "rebal_freq": "W", "cov_freq": "Q"}
+        )
+        vcv_wide = vcv.pivot_table(
+            index="real_date", columns=["fid1", "fid2"], values="value"
+        )
+        quarters = vcv_wide.index.to_period("Q")
 
-                    # called len(est_freqs) times in _get_first_usable_date in _calculate_portfolio_volatility
-                    self.assertEqual(
-                        mock_get_max_lookback.call_count,
-                        _call_count + len(self.good_args["est_freqs"]),
-                    )
+        self.assertTrue((vcv_wide.groupby(quarters).nunique().max(axis=1) == 1).all())
+        self.assertGreater(vcv_wide.groupby(quarters).ngroups, 1)
+        self.assertGreater(vcv_wide.round(12).drop_duplicates().shape[0], 1)
+
+    def test_warmup_dates_have_no_volatility(self):
+        """
+        Test early rebalance dates that don't have enough history to estimate
+        a cov matrix hav NaN for volatility
+        """
+        pvol, vcv = _calculate_portfolio_volatility(**self.good_args)
+
+        warmup = pvol.index < vcv["real_date"].min()
+        self.assertGreater(warmup.sum(), 0)
+        self.assertTrue(pvol.loc[warmup, "PORTFOLIO"].isna().all())
+
+    def test_late_starting_fid_enters_when_it_has_history(self):
+
+        returns = self.returns.copy()
+        returns.loc[returns.index < self.idx[200], "CAD_FX"] = np.nan
+
+        _, vcv = _calculate_portfolio_volatility(
+            **{**self.good_args, "pivot_returns": returns}
+        )
+        cad = vcv[(vcv["fid1"] == "CAD_FX") | (vcv["fid2"] == "CAD_FX")]
+        others = vcv[(vcv["fid1"] != "CAD_FX") & (vcv["fid2"] != "CAD_FX")]
+
+        self.assertGreater(len(cad), 0)
+        self.assertGreater(cad["real_date"].min(), others["real_date"].min())
+
+    def test_est_weights_blend_variances_linearly(self):
+        """
+        Test that a multi freq estimation is a linear combination of
+        single freq estimates
+        """
+        daily = self._vol(
+            est_freqs=["D"], est_weights=[1.0], lback_periods=[60], half_life=[10]
+        )["PORTFOLIO"]
+        weekly = self._vol(
+            est_freqs=["W"], est_weights=[1.0], lback_periods=[12], half_life=[4]
+        )["PORTFOLIO"]
+        blend = self._vol(
+            est_freqs=["D", "W"],
+            est_weights=[0.25, 0.75],
+            lback_periods=[60, 12],
+            half_life=[10, 4],
+            lback_min_obs=[1, 1],
+        )["PORTFOLIO"]
+
+        defined = ~(daily.isna() | weekly.isna() | blend.isna())
+        np.testing.assert_allclose(
+            np.square(blend[defined].to_numpy()),
+            0.25 * np.square(daily[defined].to_numpy())
+            + 0.75 * np.square(weekly[defined].to_numpy()),
+            rtol=1e-12,
+        )
+
+    def test_lookback_too_short_for_fid_count_raises(self):
+        with self.assertRaisesRegex(
+            ValueError,
+            expected_regex="4 data points are required to compute a covariance "
+                           "matrix for 3 fids, but only found 2",
+        ):
+            self._vol(est_freqs=["W"], lback_periods=[2], half_life=[2])
+
+    def test_recovers_known_annualised_vol(self):
+        base_vol = np.array([0.01, 0.02, 0.05])
+        dg = SignalsAndReturnsGenerator(
+            n_fids=3, corr=np.eye(3), vol_of_vol=0, base_vol=base_vol
+        )
+        dg.simulate_signals_and_returns(
+            n_periods=2000,
+            signal_names=["CAD_FX", "GBP_FX", "JPY_FX"],
+            return_names=["CAD_FX", "GBP_FX", "JPY_FX"],
+            seed=29,
+        )
+        signals = dg.signals * 0 + 1 / 3 # equally weighted signals
+
+        pvol, vcv = _calculate_portfolio_volatility(
+            **{
+                **self.good_args,
+                "pivot_returns": dg.returns,
+                "pivot_signals": signals,
+                "rebal_freq": "W",
+                "est_freqs": ["D", "W"],
+                "est_weights": [0.5, 0.5],
+                "half_life": [10, 2],
+                "lback_periods": [60, 35],
+                "lback_min_obs": [1, 1],
+                "remove_zeros": True,
+            }
+        )
+
+        expected = np.sqrt(252) * np.sqrt((1 / 9) * np.square(base_vol).sum())
+        np.testing.assert_allclose(pvol["PORTFOLIO"].mean(), expected, rtol=0.07)
+
+        # independent returns leave no systematic cross-contract covariance
+        off_diag = vcv[vcv["fid1"] != vcv["fid2"]]["value"]
+        self.assertTrue(np.isclose(off_diag.mean(), 0, atol=0.01))
 
 
 class TestHistVolFunc(unittest.TestCase):
@@ -623,7 +853,7 @@ class TestHistVolFunc(unittest.TestCase):
             "sname": "SNAME",
             "rebal_freq": "M",
             "lback_meth": "ma",
-            "lback_periods": [15, 5],
+            "lback_periods": [15, 6],
             "half_life": [10, 2],
             "lback_min_obs": [1, 1],
             "est_freqs": ["D", "W"],
@@ -760,6 +990,154 @@ class TestHistVolEntrypoint(unittest.TestCase):
         for argx, inpx in zip(["start", "end"], ["5006-59-01", "2024-14-14"]):
             with self.assertRaises(ValueError):
                 historic_portfolio_vol(**{**all_args, argx: inpx})
+
+
+class TestCovMatrixHistory(unittest.TestCase):
+    def setUp(self):
+        rng = np.random.default_rng(3)
+        self.idx = pd.bdate_range("2015-01-01", periods=500)
+        self.fids = ["AUD_FX", "CAD_FX", "GBP_FX"]
+        self.returns = pd.DataFrame(
+            rng.normal(0, [0.5, 1.0, 2.0], size=(len(self.idx), 3)),
+            index=self.idx,
+            columns=self.fids,
+        )
+        self.estimation_dates = get_sops(dates=self.idx, freq="M")
+
+        self.good_args = dict(
+            pivot_returns=self.returns,
+            estimation_dates=self.estimation_dates,
+            est_freqs=["D"],
+            est_weights=[1.0],
+            lback_periods=[60],
+            half_life=[10],
+            nan_tolerance=0.1,
+            remove_zeros=False,
+            weights_func=flat_weights_arr,
+            lback_min_obs=[1],
+        )
+
+    def tearDown(self): ...
+
+    def _first_usable(self, **overrides) -> pd.Series:
+        args = {**self.good_args, **overrides}
+        return _get_first_usable_date(
+            pivot_returns=args["pivot_returns"],
+            rebal_dates=args["estimation_dates"],
+            est_freqs=args["est_freqs"],
+            lback_periods=args["lback_periods"],
+        )
+
+    def test_shape_and_symmetry(self):
+        """Test output has correct dimensions and each cov matrix is symmetric"""
+        history = _cov_matrix_history(**self.good_args)
+
+        self.assertEqual(
+            history.shape,
+            (len(self.estimation_dates), len(self.fids), len(self.fids)),
+        )
+
+        estimated = ~np.isnan(history).all(axis=(1, 2))
+
+        self.assertGreater(estimated.sum(), 0)
+        for mat in history[estimated]:
+            np.testing.assert_allclose(mat, mat.T, rtol=1e-12)
+            self.assertTrue(np.all(np.diag(mat) >= 0))
+
+    def test_warmup_covs_are_nan(self):
+        """
+        Test cov matrices on dates with insufficient history are all nan
+        """
+        history = _cov_matrix_history(**self.good_args)
+        first_usable = self._first_usable().min()
+
+        warmup = np.asarray(self.estimation_dates) < np.datetime64(first_usable)
+        self.assertGreater(warmup.sum(), 0)
+        self.assertTrue(np.isnan(history[warmup]).all())
+        self.assertFalse(np.isnan(history[~warmup]).any())
+
+    def test_slice_matches_single_period_estimate(self):
+        """
+        Test each slice is the vcv that the per-period helper produces for that date
+        """
+        history = _cov_matrix_history(**self.good_args)
+        estimated = np.flatnonzero(~np.isnan(history).all(axis=(1, 2)))
+
+        for i in (estimated[0], estimated[len(estimated) // 2], estimated[-1]):
+            expected = _calculate_multi_frequency_vcv_for_period(
+                pivot_returns=self.returns,
+                rebal_date=self.estimation_dates.iloc[i],
+                est_freqs=self.good_args["est_freqs"],
+                est_weights=self.good_args["est_weights"],
+                weights_func=self.good_args["weights_func"],
+                lback_periods=self.good_args["lback_periods"],
+                half_life=self.good_args["half_life"],
+                nan_tolerance=self.good_args["nan_tolerance"],
+                remove_zeros=self.good_args["remove_zeros"],
+                lback_min_obs=self.good_args["lback_min_obs"],
+            )
+            np.testing.assert_allclose(
+                history[i],
+                expected.loc[self.fids, self.fids].to_numpy(),
+                rtol=1e-12,
+            )
+
+    def test_axes_follow_pivot_returns_column_order(self):
+        """
+        Test that even if contracts become available at different dates, the axes of
+        every slice stays in the same order as pivot_returns.columns
+        """
+        returns = self.returns.copy()
+        returns.loc[returns.index < self.idx[300], "AUD_FX"] = np.nan
+
+        history = _cov_matrix_history(**{**self.good_args, "pivot_returns": returns})
+        aud = returns.columns.get_loc("AUD_FX")
+
+        first_usable = self._first_usable(pivot_returns=returns)
+        aud_starts = np.asarray(self.estimation_dates) >= np.datetime64(
+            first_usable["AUD_FX"]
+        )
+        others_started = np.asarray(self.estimation_dates) >= np.datetime64(
+            first_usable.drop("AUD_FX").min()
+        )
+
+        # before AUD is usable the other contracts are already estimated, so its
+        # row/column is the only NaN part of the slice
+        pre = others_started & ~aud_starts
+        self.assertGreater(pre.sum(), 0)
+        self.assertTrue(np.isnan(history[pre][:, aud, :]).all())
+        self.assertTrue(np.isnan(history[pre][:, :, aud]).all())
+        kept = [i for i in range(len(self.fids)) if i != aud]
+        self.assertFalse(np.isnan(history[pre][:, kept][:, :, kept]).any())
+
+        # once usable, its variance lands on the AUD diagonal position
+        self.assertFalse(np.isnan(history[aud_starts][:, aud, aud]).any())
+
+    def test_est_weights_blend_frequencies(self):
+        """
+        Test a blended history is the weighted sum of the single-frequency histories
+        """
+        daily = _cov_matrix_history(
+            **{**self.good_args, "est_freqs": ["D"], "est_weights": [1.0],
+               "lback_periods": [60], "half_life": [10]}
+        )
+        weekly = _cov_matrix_history(
+            **{**self.good_args, "est_freqs": ["W-FRI"], "est_weights": [1.0],
+               "lback_periods": [12], "half_life": [4]}
+        )
+        blend = _cov_matrix_history(
+            **{**self.good_args, "est_freqs": ["D", "W-FRI"],
+               "est_weights": [0.25, 0.75], "lback_periods": [60, 12],
+               "half_life": [10, 4], "lback_min_obs": [1, 1]}
+        )
+
+        defined = ~(np.isnan(daily) | np.isnan(weekly) | np.isnan(blend))
+        self.assertTrue(defined.any())
+        np.testing.assert_allclose(
+            blend[defined],
+            0.25 * daily[defined] + 0.75 * weekly[defined],
+            rtol=1e-12,
+        )
 
 
 if __name__ == "__main__":
