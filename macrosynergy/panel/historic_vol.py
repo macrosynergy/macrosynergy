@@ -50,7 +50,9 @@ def historic_vol(
         average, 'xma' for exponential moving average, and 'sq' for exponentially weighted
         std. Default is 'ma'.
     half_life : int
-        Refers to the half-time for "xma". Default is 11.
+        number of periods in the half-life of the exponential moving average 
+        (`lback_meth='xma'`) or exponentially weighted std (`lback_meth='sq'`). 
+        Default is 11.
     start : str
         earliest date in ISO format. Default is None and earliest date in df is used.
     end : str
@@ -58,13 +60,11 @@ def historic_vol(
     est_freq : str
         Frequency of (re-)estimation of volatility. Options are 'D' for end of each day
         (default), 'W' for end of each work week, 'M' for end of each month, and 'Q' for end
-        of each week.
+        of each quarter.
     blacklist : dict
         cross sections with date ranges that should be excluded from the data frame. If
         one cross section has several blacklist periods append numbers to the cross section
         code.
-    half_life : int
-        Refers to the half-time for "xma" and full lookback period for "ma".
     remove_zeros : bool
         if True (default) any returns that are exact zeros will not be included in the
         lookback window and prior non-zero values are added to the window instead.
