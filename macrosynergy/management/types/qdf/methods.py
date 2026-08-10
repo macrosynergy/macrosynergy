@@ -361,13 +361,17 @@ def reduce_df(
     if blacklist is not None:
         df = apply_blacklist(df, blacklist)
 
+    if xcats is not None:
+        df = df[df["xcat"].isin(xcats)]
+    if cids is not None:
+        cids = [cids] if isinstance(cids, str) else list(cids)
+        df = df[df["cid"].isin(cids)]
+
     if xcats is None:
         xcats = sorted(df["xcat"].unique())
     else:
         xcats_in_df = df["xcat"].unique()
         xcats = [xcat for xcat in xcats if xcat in xcats_in_df]
-
-    df = df[df["xcat"].isin(xcats)]
 
     if intersect:
         cids_in_df = set.intersection(
@@ -379,7 +383,6 @@ def reduce_df(
     if cids is None:
         cids = sorted(cids_in_df)
     else:
-        cids = [cids] if isinstance(cids, str) else cids
         cids = [cid for cid in cids if cid in cids_in_df]
 
     df = df[df["cid"].isin(cids)].reset_index(drop=True)
