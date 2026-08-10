@@ -912,6 +912,9 @@ def _cov_matrix_history(
         lback_periods=lback_periods,
     )
 
+    if first_starts.isna().all():
+        raise ValueError("No fid has enough history to estimate a covariance matrix")
+
     fids = pivot_returns.columns.tolist()
     vcv_df_history: np.ndarray = np.full(
         shape=(len(estimation_dates), len(fids), len(fids)),
