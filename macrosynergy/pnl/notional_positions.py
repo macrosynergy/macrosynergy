@@ -234,7 +234,7 @@ def _leverage_positions(
     df_wide: pd.DataFrame,
     sname: str,
     fids: List[str],
-    rebal_freq: str,
+    rebal_freq: str = "m",
     aum: Number = 100,
     leverage: Number = 1.0,
     pname: str = "POS",
@@ -249,30 +249,34 @@ def _leverage_positions(
     rebal_freq = _map_to_business_day_frequency(rebal_freq)
     rebal_dates = get_sops(dates=df_wide.index, freq=rebal_freq)
     is_rb_date = pd.Series(df_wide.index.isin(rebal_dates), index=df_wide.index)
-    df_wide = df_wide.where(is_rb_date, axis=0).ffill()
+    df_sigs: pd.DataFrame = (
+        df_wide.loc[:, _contracts]
+        .where(is_rb_date, axis=0)
+        .groupby(is_rb_date.cumsum()) # bound the ffill to one rebalance window,
+        .ffill()
+    )
+    _traded: pd.DataFrame = df_sigs.ffill().notna() & df_sigs.bfill().notna()
+    df_sigs = df_sigs.mask(_traded & df_sigs.isna(), 0.0)
 
-    rowsums: pd.Series = df_wide.loc[:, _contracts].abs().sum(axis=1)
+    rowsums: pd.Series = df_sigs.abs().sum(axis=1)
     # if any of the rowsums are zero, set to NaN to avoid div by zero
     rowsums[rowsums == 0] = np.nan
 
-    for ic, contx in enumerate(fids):
+    df_pos: pd.DataFrame = pd.DataFrame(index=df_wide.index)
+    for contx in fids:
         pos_col: str = f"{contx}_{sname}_{pname}"
         cont_name: str = contx + sig_ident
-        # NOTE: this should be
         # dfw_pos = dfw_sigs * aum * leverage / rowsums(dfw_sigs)
-        df_wide[pos_col] = df_wide[cont_name] * aum * leverage / rowsums
+        df_pos[pos_col] = df_sigs[cont_name] * aum * leverage / rowsums
 
-    # filter df to only contain position columns
-    df_wide = df_wide.loc[:, [f"{contx}_{sname}_{pname}" for contx in fids]]
-
-    return df_wide
+    return df_pos
 
 
 def _dollar_per_signal_positions(
     df_wide: pd.DataFrame,
     sname: str,
     fids: List[str],
-    rebal_freq: str,
+    rebal_freq: str = "m",
     aum: Number = 100,
     dollar_per_signal: Number = 1.0,
     pname: str = "POS",
@@ -287,22 +291,30 @@ def _dollar_per_signal_positions(
     _check_df_for_contract_signals(df_wide=df_wide, sname=sname, fids=fids)
     sig_ident: str = f"_CSIG_{sname}"
 
+    _contracts: List[str] = [f"{contx}{sig_ident}" for contx in fids]
+
     rebal_freq = _map_to_business_day_frequency(rebal_freq)
     rebal_dates = get_sops(dates=df_wide.index, freq=rebal_freq)
     is_rb_date = pd.Series(df_wide.index.isin(rebal_dates), index=df_wide.index)
-    df_wide = df_wide.where(is_rb_date, axis=0).ffill()
+    df_sigs: pd.DataFrame = (
+        df_wide.loc[:, _contracts]
+        .where(is_rb_date, axis=0)
+        .groupby(is_rb_date.cumsum()) # bound the ffill to one rebalance window,
+        .ffill()
+    )
+    _traded: pd.DataFrame = df_sigs.ffill().notna() & df_sigs.bfill().notna()
+    df_sigs = df_sigs.mask(_traded & df_sigs.isna(), 0.0)
 
-    for _, contx in enumerate(fids):
+    df_pos: pd.DataFrame = pd.DataFrame(index=df_wide.index)
+    for contx in fids:
         pos_col: str = f"{contx}_{sname}_{pname}"
         cont_name: str = contx + sig_ident
         # position = signal * dollar_per_signal
-        df_wide[pos_col] = df_wide[cont_name] * dollar_per_signal
+        df_pos[pos_col] = df_sigs[cont_name] * dollar_per_signal
 
-    positions_exceed_aum = (
-        df_wide[[f"{contx}_{sname}_{pname}" for contx in fids]].sum(axis=1) > aum
-    )
+    positions_exceed_aum = df_pos.sum(axis=1) > aum
     if positions_exceed_aum.any():
-        exceed_dates = df_wide.index[positions_exceed_aum].strftime("%Y-%m-%d").tolist()
+        exceed_dates = df_pos.index[positions_exceed_aum].strftime("%Y-%m-%d").tolist()
         warning_msg = (
             f"Warning: On the following dates, the total notional positions exceed AUM:\n"
             f"{', '.join(exceed_dates)}\n"
@@ -310,10 +322,7 @@ def _dollar_per_signal_positions(
         )
         warnings.warn(warning_msg, UserWarning)
 
-    # filter df to only contain position columns
-    df_wide = df_wide.loc[:, [f"{contx}_{sname}_{pname}" for contx in fids]]
-
-    return df_wide
+    return df_pos
 
 
 def notional_positions(

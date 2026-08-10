@@ -1,6 +1,6 @@
 import unittest
 import warnings
-from typing import List, Set, Tuple
+from typing import List, Tuple
 from unittest import mock
 
 import numpy as np
@@ -17,7 +17,7 @@ from macrosynergy.pnl.notional_positions import (
     _leverage_positions,
     _mask_unavailable_positions,
     _vol_target_positions,
-    notional_positions, _vol_target_positions2,
+    notional_positions,
 )
 
 
@@ -135,6 +135,37 @@ class TestNotionalPositions(unittest.TestCase):
             xcats=ticker_endings,
         )
         self.mock_df_wide = qdf_to_ticker_df(self.mock_df)
+        self.rebal_freq: str = "w"
+
+    def _rebalance_fixture(self):
+        """
+        An FX signal panel whose level is distinct in every
+        rebalance period, so that a value carried over from a previous period is
+        distinguishable from one freshly read on a rebalance date. The signal for the
+        contract at index `offset` on the k-th rebalance date is `k + 1 + offset`.
+
+        Blanks one contract's signal on the 3rd rebalance date and two on the 4th, plus
+        a whole non-rebalance row - the latter must be a no-op, since values off the
+        rebalance schedule are never read.
+        """
+        fx_fids = [f"{cid}_FX" for cid in self.cids]
+        sig_cols = [f"{fid}_CSIG_{self.sname}" for fid in fx_fids]
+        df_wide = self.mock_df_wide.copy()[sig_cols]
+
+        rebal_dates = list(get_sops(dates=df_wide.index, freq=self.rebal_freq))
+        period = pd.Series(
+            df_wide.index.isin(rebal_dates), index=df_wide.index
+        ).cumsum()
+        for offset, col in enumerate(sig_cols):
+            df_wide[col] = (period + offset).astype(float)
+
+        blanked = {rebal_dates[2]: sig_cols[:1], rebal_dates[3]: sig_cols[1:3]}
+        for date, cols in blanked.items():
+            df_wide.loc[date, cols] = np.nan
+        non_rebal_date = df_wide.index[~df_wide.index.isin(rebal_dates)][0]
+        df_wide.loc[non_rebal_date, :] = np.nan
+
+        return df_wide, fx_fids, sig_cols, rebal_dates, period, blanked
 
     def test__apply_slip(self):
         cids = ["USD", "EUR", "JPY", "GBP"]
@@ -195,68 +226,87 @@ class TestNotionalPositions(unittest.TestCase):
         expected_result_value = _aum * _leverage / len(fx_fids)
         self.assertEqual(unique_values, {expected_result_value})
 
-        ## Test 2 - Test with a few nans
-        # The tests only need to check the logic of the calculation relative to input
-        # so we can set all values to 1
-        df_wide = self.mock_df_wide.copy()
-        df_wide.loc[:, :] = 1
-        fx_fids = [f"{cid}_FX" for cid in self.cids]
-        df_wide = df_wide[
-            [u for u in df_wide.columns if str(u).endswith(f"_FX_CSIG_{self.sname}")]
-        ]
+        ## Test 2 - signals are read only on rebalance dates, and a signal missing on a
+        ## rebalance date leaves that contract unpositioned for the whole period
+        df_wide, fx_fids, sig_cols, rebal_dates, period, blanked = (
+            self._rebalance_fixture()
+        )
+        expected_cols = [f"{fid}_{self.sname}_{self.pname}" for fid in fx_fids]
 
-        for _leverage in [1, np.random.randint(1, 10), np.random.rand()]:
-            for _aum in [1, np.random.randint(1, int(1e6)), np.random.rand() * 1e6]:
-                # create a few nans in the dataframe randomly but record the locations
-                shuffled_fx_fids = [f"{t}_CSIG_{self.sname}" for t in fx_fids]
-                np.random.shuffle(shuffled_fx_fids)
-                random_dates = np.random.choice(df_wide.index, 3, replace=False)
-                nan_tuples = [
-                    (random_dates[0], f"{shuffled_fx_fids[0]}"),
-                    (random_dates[1], f"{shuffled_fx_fids[1]}"),
-                    (random_dates[1], f"{shuffled_fx_fids[2]}"),
-                    (random_dates[2], None),
+        for _leverage, _aum in [(1, 100), (3, 5e5), (0.5, 1.0)]:
+            result = _leverage_positions(
+                df_wide=df_wide.copy(),
+                sname=self.sname,
+                pname=self.pname,
+                fids=fx_fids,
+                rebal_freq=self.rebal_freq,
+                leverage=_leverage,
+                aum=_aum,
+            )
+            self.assertEqual(set(expected_cols), set(result.columns))
+
+            # positions are held flat between rebalance dates
+            for _, block in result.groupby(period):
+                self.assertTrue((block.nunique(dropna=False) == 1).all())
+
+            for rb_i, rb in enumerate(rebal_dates):
+                # the signal on the k-th rebalance date is (k + 1 + offset)
+                live = [
+                    (offset, pos_col)
+                    for offset, (pos_col, sig_col) in enumerate(
+                        zip(expected_cols, sig_cols)
+                    )
+                    if sig_col not in blanked.get(rb, [])
                 ]
+                # the contracts that are still live absorb the full leverage budget
+                rowsum = sum(rb_i + 1 + offset for offset, _ in live)
+                for offset, pos_col in live:
+                    np.testing.assert_allclose(
+                        result.loc[rb, pos_col],
+                        (rb_i + 1 + offset) * _aum * _leverage / rowsum,
+                        rtol=1e-9,
+                    )
+                # a blanked contract is an explicit flat, not a NaN - these are all
+                # interior gaps, with signals on both earlier and later rebalance dates
+                for sig_col in blanked.get(rb, []):
+                    pos_col = sig_col.replace(
+                        f"_CSIG_{self.sname}", f"_{self.sname}_{self.pname}"
+                    )
+                    self.assertEqual(result.loc[rb, pos_col], 0.0)
 
-                for date, fid in nan_tuples:
-                    if fid is None:
-                        df_wide.loc[date, :] = np.nan
-                    else:
-                        df_wide.loc[date, fid] = np.nan
+    def test__leverage_positions_flat_only_inside_a_contracts_history(self):
+        # A gap in the middle of a contract's history is an explicit flat (0), so the
+        # close and the later reopen both show up as trades to the cost model. Dates
+        # before the first signal and after the last are NaN - no position at all.
+        idx = pd.bdate_range("2020-01-01", "2020-05-29")
+        fids = ["USD_FX", "EUR_FX", "GBP_FX"]
+        df_wide = pd.DataFrame(
+            1.0, index=idx, columns=[f"{fid}_CSIG_STRAT" for fid in fids]
+        )
+        df_wide.index.name = "real_date"
+        gbp = "GBP_FX_CSIG_STRAT"
+        df_wide.loc[:"2020-01-31", gbp] = np.nan  # no history yet
+        df_wide.loc[pd.Timestamp("2020-03-02"), gbp] = np.nan  # interior gap
+        df_wide.loc["2020-05-01":, gbp] = np.nan  # history ended
 
-                result = _leverage_positions(
-                    df_wide=df_wide,
-                    sname=self.sname,
-                    pname=self.pname,
-                    fids=fx_fids,
-                    leverage=_leverage,
-                    aum=_aum,
-                )
+        result = _leverage_positions(
+            df_wide=df_wide, sname="STRAT", fids=fids, rebal_freq="m", aum=100
+        )
+        pos = result["GBP_FX_STRAT_POS"]
+        self.assertTrue(np.isnan(pos.loc["2020-01-15"]))
+        self.assertEqual(pos.loc["2020-03-16"], 0.0)
+        self.assertTrue(np.isnan(pos.loc["2020-05-15"]))
+        for live_date in ["2020-02-14", "2020-04-15"]:
+            self.assertGreater(pos.loc[live_date], 0.0)
 
-                # col names should be the FID+strat+pos
-                expected_cols = [f"{fid}_{self.sname}_{self.pname}" for fid in fx_fids]
-                found_cols = list(result.columns)
-                self.assertEqual(set(expected_cols), set(found_cols))
-
-                # check nan-locations - should be in the same place
-                for date, fidcsig in nan_tuples:
-                    if fidcsig is None:
-                        self.assertTrue(result.loc[date, :].isnull().all())
-                    else:
-                        posname: str = f"{fidcsig}_{self.pname}".replace("_CSIG", "")
-                        self.assertTrue(np.isnan(result.loc[date, posname]))
-
-                # iterate through all rows
-                for date, row in result.iterrows():
-                    # There should be one unique value in each row
-                    na_count: int = int(row.isna().sum())
-                    if na_count == len(fx_fids):
-                        continue  # this is the all nan row
-                    unique_values: Set = set(row.dropna().values)
-                    self.assertEqual(len(unique_values), 1)
-                    # the value should be LEV*AUM/NON-NAN-COUNT
-                    expected_result_value = _leverage * _aum / (len(fx_fids) - na_count)
-                    self.assertEqual(unique_values, {expected_result_value})
+        # the flat period is entered and exited exactly once, as two real trades
+        traded = pos.diff().abs()
+        self.assertEqual(
+            list(traded[traded > 0].index),
+            [pd.Timestamp("2020-03-02"), pd.Timestamp("2020-04-01")],
+        )
+        # and the live contracts always carry the whole leverage budget
+        np.testing.assert_allclose(result.abs().sum(axis=1), 100.0, rtol=1e-9)
 
     def test__leverage_positions_scales_by_gross_not_net(self):
         # Mixed-sign signals: leverage must scale by gross exposure
@@ -377,69 +427,46 @@ class TestNotionalPositions(unittest.TestCase):
         self.assertEqual(len(unique_values), 1)
         self.assertEqual(unique_values, {1 * _dollar_per_signal})
 
-        ## Test 2 - Test with a few nans
-        # The tests only need to check the logic of the calculation relative to input
-        # so we can set all values to 1
-        df_wide = self.mock_df_wide.copy()
-        df_wide.loc[:, :] = 1
-        fx_fids = [f"{cid}_FX" for cid in self.cids]
-        df_wide = df_wide[
-            [u for u in df_wide.columns if str(u).endswith(f"_FX_CSIG_{self.sname}")]
-        ]
+        ## Test 2 - signals are read only on rebalance dates, and a signal missing on a
+        ## rebalance date leaves that contract unpositioned for the whole period
+        df_wide, fx_fids, sig_cols, rebal_dates, period, blanked = (
+            self._rebalance_fixture()
+        )
+        expected_cols = [f"{fid}_{self.sname}_{self.pname}" for fid in fx_fids]
 
-        for _dollar_per_signal in [1, np.random.randint(1, 10), np.random.rand()]:
-            for _aum in [1, np.random.randint(1, int(1e6)), np.random.rand() * 1e6]:
-                # create a few nans in the dataframe randomly but record the locations
-                shuffled_fx_fids = [f"{t}_CSIG_{self.sname}" for t in fx_fids]
-                np.random.shuffle(shuffled_fx_fids)
-                random_dates = np.random.choice(df_wide.index, 3, replace=False)
-                nan_tuples = [
-                    (random_dates[0], f"{shuffled_fx_fids[0]}"),
-                    (random_dates[1], f"{shuffled_fx_fids[1]}"),
-                    (random_dates[1], f"{shuffled_fx_fids[2]}"),
-                    (random_dates[2], None),
-                ]
+        for _dollar_per_signal, _aum in [(1, 100), (7, 5e5), (0.5, 1.0)]:
+            with warnings.catch_warnings():
+                # the AUM-exceed warning is irrelevant to the position formula here
+                warnings.simplefilter("ignore")
+                result = _dollar_per_signal_positions(
+                    df_wide=df_wide.copy(),
+                    sname=self.sname,
+                    pname=self.pname,
+                    fids=fx_fids,
+                    rebal_freq=self.rebal_freq,
+                    dollar_per_signal=_dollar_per_signal,
+                    aum=_aum,
+                )
+            self.assertEqual(set(expected_cols), set(result.columns))
 
-                for date, fid in nan_tuples:
-                    if fid is None:
-                        df_wide.loc[date, :] = np.nan
+            # positions are held flat between rebalance dates
+            for _, block in result.groupby(period):
+                self.assertTrue((block.nunique(dropna=False) == 1).all())
+
+            for rb_i, rb in enumerate(rebal_dates):
+                for offset, (pos_col, sig_col) in enumerate(
+                    zip(expected_cols, sig_cols)
+                ):
+                    if sig_col in blanked.get(rb, []):
+                        # an interior gap is an explicit flat, not a NaN
+                        self.assertEqual(result.loc[rb, pos_col], 0.0)
                     else:
-                        df_wide.loc[date, fid] = np.nan
-
-                with warnings.catch_warnings():
-                    # the AUM-exceed warning is irrelevant to the position formula here
-                    warnings.simplefilter("ignore")
-                    result = _dollar_per_signal_positions(
-                        df_wide=df_wide.copy(),
-                        sname=self.sname,
-                        pname=self.pname,
-                        fids=fx_fids,
-                        dollar_per_signal=_dollar_per_signal,
-                        aum=_aum,
-                    )
-
-                # col names should be the FID+strat+pos
-                expected_cols = [f"{fid}_{self.sname}_{self.pname}" for fid in fx_fids]
-                found_cols = list(result.columns)
-                self.assertEqual(set(expected_cols), set(found_cols))
-
-                # check nan-locations - should be in the same place
-                for date, fidcsig in nan_tuples:
-                    if fidcsig is None:
-                        self.assertTrue(result.loc[date, :].isnull().all())
-                    else:
-                        posname: str = f"{fidcsig}_{self.pname}".replace("_CSIG", "")
-                        self.assertTrue(np.isnan(result.loc[date, posname]))
-
-                # iterate through all rows
-                for date, row in result.iterrows():
-                    # every non-nan position equals signal(=1) * dollar_per_signal
-                    non_nan = row.dropna()
-                    if len(non_nan) == 0:
-                        continue  # this is the all nan row
-                    unique_values: Set = set(non_nan.values)
-                    self.assertEqual(len(unique_values), 1)
-                    self.assertEqual(unique_values, {1 * _dollar_per_signal})
+                        # position = signal read on that rebalance date * dps
+                        np.testing.assert_allclose(
+                            result.loc[rb, pos_col],
+                            (rb_i + 1 + offset) * _dollar_per_signal,
+                            rtol=1e-9,
+                        )
 
     def test__dollar_per_signal_positions_scales_by_signal_not_gross(self):
         # dollar_per_signal scales each signal directly: position = signal * dps.
@@ -578,7 +605,6 @@ class TestNotionalPositions(unittest.TestCase):
             lback_meth="xma",
             nan_tolerance=0.1,
             remove_zeros=True,
-            cov_freq="M",
         )
 
         df_wide = df_wide[
@@ -590,7 +616,7 @@ class TestNotionalPositions(unittest.TestCase):
         ]
         df_wide = pd.concat([df_wide, df_xr], axis=1)
 
-        result: Tuple[pd.DataFrame, ...] = _vol_target_positions2(
+        result: Tuple[pd.DataFrame, ...] = _vol_target_positions(
             df_wide=df_wide, **good_args
         )
 
@@ -649,7 +675,7 @@ class TestNotionalPositions(unittest.TestCase):
         df_xr = make_test_df(
             cids=cids,
             xcats=[f"{_}XR" for _ in ctypes],
-            start=start,
+            start="1995-01-01",
             end=end,
         )
         hv_args = dict(
@@ -759,9 +785,10 @@ class TestNotionalPositions(unittest.TestCase):
         self.assertTrue(all(x.endswith("_STRAT_POS") for x in out_xcats))
         self.assertFalse(any("_CSIG_" in x for x in out_xcats))
 
-        # position = signal * dollar_per_signal (slip=0 so signals and positions
-        # share an index and can be compared directly).
-        _dollar_per_signal = 2.0
+        # on a rebalance date, position = that date's signal * dollar_per_signal; the
+        # position is then held flat until the next rebalance date (slip=0 so signals
+        # and positions share an index and can be compared directly).
+        _dollar_per_signal, _rebal_freq = 2.0, "m"
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             df_pos: pd.DataFrame = notional_positions(
@@ -770,19 +797,31 @@ class TestNotionalPositions(unittest.TestCase):
                 dollar_per_signal=_dollar_per_signal,
                 sname="STRAT",
                 slip=0,
+                rebal_freq=_rebal_freq,
             )
         pos_wide = qdf_to_ticker_df(df_pos)
         sig_wide = qdf_to_ticker_df(df_cs)
+        rebal_dates = get_sops(dates=sig_wide.index, freq=_rebal_freq)
+        period = pd.Series(
+            pos_wide.index.isin(rebal_dates), index=pos_wide.index
+        ).cumsum()
+        held_dates = [dt for dt in rebal_dates if dt in pos_wide.index]
         for fid in fids:
             pos_col = f"{fid}_STRAT_POS"
             sig_col = f"{fid}_CSIG_STRAT"
-            merged = pd.concat([sig_wide[sig_col], pos_wide[pos_col]], axis=1).dropna()
+            merged = pd.concat(
+                [sig_wide.loc[held_dates, sig_col], pos_wide.loc[held_dates, pos_col]],
+                axis=1,
+            ).dropna()
             self.assertTrue(len(merged) > 0)
             np.testing.assert_allclose(
                 merged[pos_col].values,
                 merged[sig_col].values * _dollar_per_signal,
                 rtol=1e-9,
             )
+            # nothing moves between rebalance dates
+            for _, block in pos_wide[pos_col].groupby(period):
+                self.assertLessEqual(block.nunique(dropna=False), 1)
 
     def test_main_positioning_method_mutual_exclusivity(self):
         # Exactly one of `vol_target`, `leverage` or `dollar_per_signal` may be
