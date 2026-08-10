@@ -416,11 +416,19 @@ class SignalOptimizer(BasePanelLearner):
             else:
                 # Multi output model with less targets than response variables.
                 # This is usually due to excluded assets with insufficient data at training time
-                forecasts_df.loc[idx, [f"{target}_{name}" for target in forecasts.columns]] = forecasts.values
+                predicted = [f"{target}_{name}" for target in forecasts.columns]
+                missing = ~forecasts_df.columns.isin(predicted)
+                forecasts_df.loc[idx, predicted] = forecasts.values
                 if self.multi_target_fill == "zero":
-                    forecasts_df.loc[idx, ~forecasts_df.columns.isin([f"{target}_{name}" for target in forecasts.columns])] = 0
+                    forecasts_df.loc[idx, missing] = 0
                 elif self.multi_target_fill == "mean":
-                    forecasts_df.loc[idx, ~forecasts_df.columns.isin([f"{target}_{name}" for target in forecasts.columns])] = forecasts.mean(axis=1).values
+                    # One fill value per date - the cross-sectional mean of the targets that
+                    # were predicted - repeated across the missing columns. Assigning the bare
+                    # 1-D mean instead raises when the row count differs from the number of
+                    # missing columns, and silently writes the values transposed when the two
+                    # happen to coincide.
+                    fill = forecasts.mean(axis=1).values[:, None]
+                    forecasts_df.loc[idx, missing] = np.repeat(fill, int(missing.sum()), axis=1)
 
         forecasts_df = forecasts_df.groupby(level=0).ffill().dropna()
 

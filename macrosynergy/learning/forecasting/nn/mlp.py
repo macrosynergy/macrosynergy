@@ -15,7 +15,24 @@ from macrosynergy.learning.forecasting.torch.models.mlps import MultiLayerPercep
 
 from copy import deepcopy
 
+import itertools
+import logging
 import numbers
+
+logger = logging.getLogger(__name__)
+
+# Distinguishes the training runs of one process in the diagnostics. The training window is
+# not enough on its own: a sequential run refits the same window for its inner
+# cross-validation as well as for a fold's final fit. Restarts at 1 in each joblib worker
+_FIT_SEQUENCE = itertools.count(1)
+
+# Minimum number of assets with an observed target for a period's cross-sectional
+# diagnostics to carry any information. A correlation over two assets is exactly +/-1
+# whatever the data, and over a handful it is dominated by sampling noise, so periods
+# thinner than this are dropped rather than reported
+_MIN_CROSS_SECTION = 10
+# Epoch interval at which the training diagnostics are logged
+_DIAGNOSTIC_LOG_EVERY = 5
 
 class MLPRegressor(BaseEstimator, RegressorMixin):
     """
@@ -386,11 +403,28 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         # Make tensor datasets
         train_dataset, valid_dataset = self.make_tensor_datasets(X_train_s, y_train_s, X_valid_s, y_valid_s, sample_weight)
 
+        # Recorded alongside the training diagnostics so that each fit can be identified by
+        # its window when screening a full sequential run, where `fit` is called per fold
+        fit_dates = X.index.get_level_values(1)
+        fit_context = {
+            "fit_index": next(_FIT_SEQUENCE),
+            "fit_start": f"{fit_dates.min():%Y-%m-%d}",
+            "fit_end": f"{fit_dates.max():%Y-%m-%d}",
+            "train_end": f"{X_train.index.get_level_values(1).max():%Y-%m-%d}",
+            "n_features": X.shape[1],
+            "n_targets": self.n_targets,
+            # The output constraint, so that runs of different variants stay separable when
+            # several are fitted into one log
+            "long_only": self.long_only,
+            "dollar_neutral": self.dollar_neutral,
+        }
+
         # Iterate through random states
         for optimizer in self.optimizers:
             for random_state in self.random_states:
-                # Set seed 
+                # Set seed
                 torch.manual_seed(random_state)
+                run_context = {**fit_context, "optimizer": optimizer, "random_state": random_state}
 
                 # Make torch dataloaders
                 train_loader, train_loader_eval, valid_loader = self.make_dataloaders(train_dataset, self.batch_size, self.use_ts_sampler, self.aggregate_last, self.drop_last, valid_dataset)
@@ -432,9 +466,10 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
                     loss_func = self.loss_func,
                     sample_weight = sample_weight,
                     sample_weight_strategy = sample_weight_strategy,
-                    reg_turnover = self.reg_turnover, 
-                    patience = self.patience, 
-                    verbose = self.verbose
+                    reg_turnover = self.reg_turnover,
+                    patience = self.patience,
+                    verbose = self.verbose,
+                    context = run_context,
                 )
                 if self.refit:
                     # Create training set dataloader over the full dataset
@@ -738,6 +773,7 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         reg_turnover,
         patience,
         verbose,
+        context = None,
     ):
         best_state = None
         best_score = np.inf
@@ -774,8 +810,12 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
                     )
             
             if patience is not None:
-                train_loss = self._eval_loss(model, train_loader_eval, loss_func)
-                valid_loss = self._eval_loss(model, valid_loader, loss_func)
+                # The cross-sectional diagnostics cost a pass per period, so they are only
+                # computed on the epochs that report them
+                report = (epoch % _DIAGNOSTIC_LOG_EVERY == 0) or (epoch == epochs - 1)
+                train_stats = self._evaluate(model, train_loader_eval, loss_func, report)
+                valid_stats = self._evaluate(model, valid_loader, loss_func, report)
+                train_loss, valid_loss = train_stats["loss"], valid_stats["loss"]
 
                 best_score_new, best_state, counter = self.update_es_stats(
                     model, train_loss, valid_loss, best_score, best_state, counter, patience
@@ -783,7 +823,11 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
                 if best_score_new < best_score:
                     best_score = best_score_new
                     best_epoch  = epoch + 1
-                
+
+                self._record_epoch(
+                    epoch + 1, train_stats, valid_stats, best_score, context, report
+                )
+
                 if verbose and (epoch % 5 == 0 or epoch == epochs - 1):
                     print(f"Epoch {epoch + 1}: Train Loss = {train_loss:.4f}, Valid Loss = {valid_loss:.4f}, Best Valid Loss = {best_score:.4f}")
 
@@ -834,16 +878,166 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         return model
     
     def _eval_loss(self, model, loader, loss_func):
+        return self._evaluate(model, loader, loss_func)["loss"]
+
+    def _evaluate(self, model, loader, loss_func, diagnostics = False):
+        """
+        Evaluate the network over a dataloader.
+
+        Parameters
+        ----------
+        model : torch.nn.Module
+            Network to evaluate.
+        loader : torch.utils.data.DataLoader
+            Batches to evaluate over.
+        loss_func : torch.nn.Module
+            Loss function used to score the predictions.
+        diagnostics : bool, optional
+            Whether to also compute the cross-sectional diagnostics. Default is False,
+            in which case "ic" and "hit_rate" are returned as NaN.
+
+        Returns
+        -------
+        dict
+            "loss", the batch-averaged loss as used for early stopping; "ic", the mean
+            cross-sectional correlation between the network outputs and the realised
+            targets; "hit_rate", the fraction of asset-periods whose output and realised
+            target share a sign; "n_periods", the number of periods behind the latter two.
+        """
         model.eval()
         total_loss = 0.0
+        ics = []
+        hits = 0
+        n_obs = 0
+
         with torch.no_grad():
-            for X_i, y_i in loader:
+            for batch in loader:
+                # Batches carry a third element when sample weights are in use
+                X_i, y_i = batch[0], batch[1]
                 preds = model(X_i)
                 total_loss += loss_func(preds, y_i).item()
-            avg_loss = total_loss / len(loader)
 
-        return avg_loss    
-    
+                if diagnostics:
+                    batch_ics, batch_hits, batch_obs = self._cross_sectional_diagnostics(
+                        preds, y_i, torch.isfinite(y_i)
+                    )
+                    ics.extend(batch_ics)
+                    hits += batch_hits
+                    n_obs += batch_obs
+
+        return {
+            "loss": total_loss / len(loader),
+            "ic": float(np.mean(ics)) if ics else np.nan,
+            "hit_rate": hits / n_obs if n_obs else np.nan,
+            "n_periods": len(ics),
+            # Reported so that a cross-section thin enough to make the diagnostics
+            # meaningless is visible rather than silent
+            "n_names": n_obs / len(ics) if ics else np.nan,
+        }
+
+    def _cross_sectional_diagnostics(self, preds, y_true, mask):
+        """
+        Cross-sectional agreement between the network outputs and the realised targets.
+
+        Parameters
+        ----------
+        preds : torch.Tensor
+            Network outputs. Dimension: (batch_size, n_outputs).
+        y_true : torch.Tensor
+            Realised targets. Dimension: (batch_size, n_outputs).
+        mask : torch.Tensor
+            Boolean tensor marking the entries of `y_true` that were observed.
+
+        Notes
+        -----
+        Both series are demeaned across the assets observed in each period, so that the
+        diagnostics measure ranking skill rather than the level of either series. That is
+        the relevant comparison when the outputs are portfolio weights, which under a
+        dollar-neutral constraint are already demeaned. Assets whose target is missing are
+        excluded from the period rather than counted as a zero return, and periods with
+        fewer than `_MIN_CROSS_SECTION` observed assets are skipped entirely.
+        """
+        ics = []
+        hits = 0
+        n_obs = 0
+
+        for i in range(preds.shape[0]):
+            observed = mask[i]
+            if int(observed.sum().item()) < _MIN_CROSS_SECTION:
+                continue
+
+            weights = preds[i][observed]
+            returns = y_true[i][observed]
+            weights = weights - weights.mean()
+            returns = returns - returns.mean()
+
+            hits += int((torch.sign(weights) == torch.sign(returns)).sum().item())
+            n_obs += weights.numel()
+
+            scale = weights.norm() * returns.norm()
+            if scale > 0:
+                ics.append(float(weights @ returns / scale))
+
+        return ics, hits, n_obs
+
+    def _record_epoch(self, epoch, train_stats, valid_stats, best_valid_loss, context, report):
+        """
+        Record one epoch of training diagnostics.
+
+        Parameters
+        ----------
+        epoch : int
+            One-based index of the epoch just completed.
+        train_stats, valid_stats : dict
+            Output of `_evaluate` over the training and validation splits.
+        best_valid_loss : float
+            Best validation loss seen so far, i.e. the early stopping criterion.
+        context : dict or None
+            Identifying information about the fit, recorded alongside every epoch.
+        report : bool
+            Whether this epoch carries cross-sectional diagnostics.
+
+        Notes
+        -----
+        Every epoch is emitted at debug level as a flat record under the log record's
+        `mlp_diagnostics` attribute, so a handler can persist the whole training history
+        without parsing formatted text. Epochs carrying the cross-sectional diagnostics
+        are additionally reported at warning level, so they surface on a console that is
+        only listening for warnings.
+        """
+        record = dict(context or {})
+        record.update(
+            epoch = epoch,
+            train_loss = train_stats["loss"],
+            valid_loss = valid_stats["loss"],
+            best_valid_loss = best_valid_loss,
+        )
+        for label, stats in (("train", train_stats), ("valid", valid_stats)):
+            record.update({
+                f"{label}_ic": stats["ic"],
+                f"{label}_hit_rate": stats["hit_rate"],
+                f"{label}_periods": stats["n_periods"],
+                f"{label}_names": stats["n_names"],
+            })
+
+        logger.debug("mlp epoch diagnostics", extra={"mlp_diagnostics": record})
+
+        if report:
+            logger.warning(
+                "Epoch %d: train IC = %+.3f, hit rate = %.1f%% (%d periods, %.0f names) | "
+                "valid IC = %+.3f, hit rate = %.1f%% (%d periods, %.0f names)",
+                epoch,
+                record["train_ic"],
+                100 * record["train_hit_rate"],
+                record["train_periods"],
+                record["train_names"],
+                record["valid_ic"],
+                100 * record["valid_hit_rate"],
+                record["valid_periods"],
+                record["valid_names"],
+            )
+
+
     def update_es_stats(self, model, train_loss, valid_loss, best_score, best_state, counter, patience):
         if valid_loss < best_score:
             best_score = valid_loss
