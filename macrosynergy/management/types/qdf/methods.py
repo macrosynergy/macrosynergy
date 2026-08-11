@@ -398,7 +398,7 @@ def reduce_df(
     else:
         cids = [cid for cid in cids if cid in cids_in_df]
 
-    df = df[df["cid"].isin(cids)].reset_index(drop=True)
+    df = df[df["cid"].isin(cids)]
 
     df = _sync_df_categories(df)
 
