@@ -565,8 +565,13 @@ class TestReduceDF(unittest.TestCase):
         # Tested on the helper directly because reduce_df's second mask drops the
         # intermediate frame, and pandas suppresses the warning once the parent is gone.
         qdf = self._ragged_qdf()  # held alive: that is what arms the warning
+        warn_obj = None
         with warnings.catch_warnings():
-            warnings.simplefilter("error", pd.errors.SettingWithCopyWarning)
+            if PD_2_0_OR_LATER:
+                warn_obj = pd.errors.SettingWithCopyWarning
+            else:
+                warn_obj = pd.core.common.SettingWithCopyWarning
+            warnings.simplefilter("error", warn_obj)
             _sync_df_categories(qdf[qdf["xcat"] == "XR"])
 
     def test_reduce_df_basic(self):
