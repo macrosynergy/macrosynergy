@@ -24,6 +24,7 @@ from macrosynergy.management.types.qdf.methods import (
     qdf_to_string_index,
     check_is_categorical,
     _get_tickers_series,
+    _sync_df_categories,
     apply_blacklist,
     reduce_df,
     reduce_df_by_ticker,
@@ -302,7 +303,6 @@ class TestMethods(unittest.TestCase):
 
 class TestQDFMethods(unittest.TestCase):
     def test_drop_nan_series(self):
-
         tickers = helper_random_tickers(50)
         sel_tickers = random.sample(tickers, 10)
         test_df: pd.DataFrame = make_test_df(tickers=tickers)
@@ -476,8 +476,99 @@ class TestQDFMethods(unittest.TestCase):
         with self.assertRaises(TypeError):
             apply_blacklist(df=test_df, blacklist=[])
 
+    def test_apply_blacklist_date_types(self):
+        # str, Timestamp, datetime and date bounds must all blacklist the same rows
+        qdf = QuantamentalDataFrame(
+            make_test_df(
+                cids=["USD", "EUR"],
+                xcats=["XR"],
+                start="2020-01-01",
+                end="2020-01-03",
+                style="linear",
+            )
+        )
+        ts = pd.Timestamp("2020-01-02")
+        variants = {
+            "str": ["2020-01-02", "2020-01-02"],
+            "timestamp": [ts, ts],
+            "datetime": [ts.to_pydatetime(), ts.to_pydatetime()],
+            "date": [ts.date(), ts.date()],
+        }
+
+        expected = apply_blacklist(qdf, {"EUR": variants["str"]})
+        self.assertEqual(len(expected), 5)  # 3 dates x 2 cids, less one EUR row
+
+        for kind, value in variants.items():
+            with self.subTest(kind=kind):
+                self.assertTrue(apply_blacklist(qdf, {"EUR": value}).equals(expected))
+
 
 class TestReduceDF(unittest.TestCase):
+    @staticmethod
+    def _ragged_qdf() -> QuantamentalDataFrame:
+        """Single date, USD_XR + USD_CRY + EUR_XR; i.e. EUR has no CRY."""
+        df = make_test_df(
+            cids=["USD", "EUR"],
+            xcats=["XR", "CRY"],
+            start="2020-01-01",
+            end="2020-01-01",
+            style="linear",
+        )
+        return QuantamentalDataFrame(
+            df[~((df["cid"] == "EUR") & (df["xcat"] == "CRY"))].reset_index(drop=True)
+        )
+
+    def test_reduce_df_cids_narrow_xcats(self):
+        # `cids` must be applied before the xcats/intersect resolution: EUR has no CRY,
+        # so requesting cids=["EUR"] leaves only XR to intersect over.
+        qdf = self._ragged_qdf()
+
+        _, xcats, cids = reduce_df(qdf, cids=["EUR"], xcats=["XR", "CRY"], out_all=True)
+        self.assertEqual(xcats, ["XR"])
+        self.assertEqual(cids, ["EUR"])
+
+        out = reduce_df(qdf, cids=["EUR"], xcats=["XR", "CRY"], intersect=True)
+        self.assertEqual(len(out), 1)
+        self.assertEqual(set(out["cid"].unique()), {"EUR"})
+
+    def test_reduce_df_intersect_without_surviving_xcats(self):
+        # an empty `xcats` leaves nothing to intersect: empty frame, not a TypeError.
+        # Checked on both entry points, which must agree.
+        qdf = self._ragged_qdf()
+        plain = pd.DataFrame(qdf.astype({"cid": "object", "xcat": "object"}))
+
+        cases = {
+            "absent cid": dict(cids=["JPY"], xcats=["XR"]),
+            "empty cids": dict(cids=[], xcats=["XR"]),
+            "empty xcats": dict(xcats=[]),
+        }
+        for label, kwargs in cases.items():
+            for impl, fn, df in (
+                ("qdf", reduce_df, qdf),
+                ("df_utils", _reduce_df, plain),
+            ):
+                with self.subTest(case=label, impl=impl):
+                    self.assertTrue(fn(df=df, intersect=True, **kwargs).empty)
+
+    def test_reduce_df_cids_non_list_iterables(self):
+        # `cids` may arrive as any iterable, not just a list or a str
+        qdf = self._ragged_qdf()
+        expected = reduce_df(qdf, cids=["USD"])
+        self.assertEqual(len(expected), 2)
+
+        for cids in (("USD",), {"USD"}, (c for c in ["USD"])):
+            with self.subTest(cids=type(cids).__name__):
+                self.assertTrue(reduce_df(qdf, cids=cids).equals(expected))
+
+    def test_sync_df_categories_no_chained_assignment(self):
+        # _sync_df_categories receives boolean-mask slices; it must not assign into one.
+        # Tested on the helper directly because reduce_df's second mask drops the
+        # intermediate frame, and pandas suppresses the warning once the parent is gone.
+        qdf = self._ragged_qdf()  # held alive: that is what arms the warning
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", pd.errors.SettingWithCopyWarning)
+            _sync_df_categories(qdf[qdf["xcat"] == "XR"])
+
     def test_reduce_df_basic(self):
         tickers = helper_random_tickers(20)
         test_df: pd.DataFrame = make_test_df(tickers=tickers)
