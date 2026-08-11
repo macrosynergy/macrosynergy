@@ -300,10 +300,10 @@ def _sync_df_categories(
     if not check_is_categorical(df):
         return df
 
-    df["cid"] = df["cid"].cat.remove_unused_categories().astype("category")
-    df["xcat"] = df["xcat"].cat.remove_unused_categories().astype("category")
-
-    return df
+    return df.assign(
+        cid=df["cid"].cat.remove_unused_categories(),
+        xcat=df["xcat"].cat.remove_unused_categories(),
+    )
 
 
 def reduce_df(
