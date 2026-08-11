@@ -374,9 +374,12 @@ def reduce_df(
         xcats = [xcat for xcat in xcats if xcat in xcats_in_df]
 
     if intersect:
-        cids_in_df = set.intersection(
-            *(set(df[df["xcat"] == xcat]["cid"].unique()) for xcat in xcats)
-        )
+        if len(xcats) > 0:
+            cids_in_df = set.intersection(
+                *(set(df[df["xcat"] == xcat]["cid"].unique()) for xcat in xcats)
+            )
+        else:
+            cids_in_df = set()
     else:
         cids_in_df = df["cid"].unique()
 
