@@ -262,19 +262,29 @@ def apply_blacklist(
     if not all([isinstance(v, Iterable) for v in blacklist.values()]):
         raise TypeError("Values of `blacklist` must be iterables.")
 
+    def _check_is_date_like(_v):
+        try:
+            pd.to_datetime(_v)
+            return True
+        except Exception:
+            raise TypeError(
+                "Values of `blacklist` must be lists of start & end dates (str, pd.Timestamp, or datetime)."
+            )
+
     if not all(
-        [isinstance(vv, (str, pd.Timestamp)) for v in blacklist.values() for vv in v]
+        [_check_is_date_like(vv) for v in blacklist.values() for vv in v]
     ) or any([len(v) != 2 for v in blacklist.values()]):
         raise TypeError(
-            "Values of `blacklist` must be lists of start & end dates (str or pd.Timestamp)."
+            "Values of `blacklist` must be lists of start & end dates (str, pd.Timestamp, or datetime)."
         )
 
     for key, value in blacklist.items():
+        start, end = pd.to_datetime(value[0]), pd.to_datetime(value[1])
         df = df[
             ~(
                 (df["cid"] == key[:3])
-                & (df["real_date"] >= value[0])
-                & (df["real_date"] <= value[1])
+                & (df["real_date"] >= start)
+                & (df["real_date"] <= end)
             )
         ]
 
