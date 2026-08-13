@@ -23,7 +23,10 @@ from macrosynergy.management.utils import (
 )
 from macrosynergy.management.types import QuantamentalDataFrame
 from macrosynergy.panel.make_zn_scores import make_zn_scores
-from macrosynergy.pnl.sharpe_stability_ratio import sharpe_stability_ratio
+from macrosynergy.pnl.sharpe_stability_ratio import (
+    _rolling_sharpe,
+    sharpe_stability_ratio,
+)
 from macrosynergy.pnl.pnl_table import (
     DEFAULT_PNL_METRIC_GROUPS,
     HTMLTable,
@@ -1052,6 +1055,230 @@ class NaivePnL:
         plt.axhline(y=0, color="black", linestyle="--", lw=1)
         if return_fig:
             return fg
+        plt.show()
+
+    def plot_pnl_consistency(
+        self,
+        pnl_cat: str,
+        benchmark_pnl_cat: str,
+        pnl_cid: str = "ALL",
+        start: str = None,
+        end: str = None,
+        window: int = 252 * 5,
+        annualization_factor: int = 252,
+        min_periods: int = None,
+        title: str = None,
+        title_fontsize: int = 16,
+        pnl_title: str = None,
+        ir_title: str = None,
+        subtitle_fontsize: int = 14,
+        xcat_labels: Dict[str, str] = None,
+        ylab: str = "% of capital, no compounding",
+        ir_ylab: str = "information ratio",
+        label_fontsize: int = 12,
+        tick_fontsize: int = 12,
+        figsize: Tuple = (12, 8),
+        height_ratios: Tuple = (2, 1),
+        return_fig: bool = False,
+    ) -> Optional[plt.Figure]:
+        """
+        Plot the consistency of the value-add of one PnL over another.
+
+        Produces a two-panel figure for the active return, i.e. the difference between
+        `pnl_cat` and the neutral anchor `benchmark_pnl_cat`. The upper panel shows the
+        cumulative active PnL; the lower panel shows the rolling information ratio of
+        the active return, with the full-sample information ratio as a reference line.
+
+        Parameters
+        ----------
+        pnl_cat : str
+            name of the PnL category whose value-add is assessed.
+        benchmark_pnl_cat : str
+            name of the PnL category used as the neutral anchor, subtracted from
+            `pnl_cat` to give the active return.
+        pnl_cid : str
+            cross section to be plotted; default is 'ALL' (global PnL).
+        start : str
+            earliest date in ISO format. Default is None and earliest date in df is
+            used.
+        end : str
+            latest date in ISO format. Default is None and latest date in df is used.
+        window : int
+            rolling window length in observations for the information ratio. Default is
+            1260, i.e. five years of business-daily data.
+        annualization_factor : int
+            periods per year used to annualize the information ratios. Default is 252.
+        min_periods : int
+            minimum number of observations in a window. Default is None, which requires
+            a full window.
+        title : str
+            allows entering text for a custom chart header. Default is None, in which
+            case the two panels carry their own titles only.
+        title_fontsize : int
+            font size for the chart header. Default is 16.
+        pnl_title : str
+            allows entering text for a custom title of the cumulative PnL panel. Default
+            is None, in which case the panel is titled with the two category labels.
+        ir_title : str
+            allows entering text for a custom title of the information ratio panel.
+            Default is None, in which case the panel is titled with the length of the
+            rolling window.
+        subtitle_fontsize : int
+            font size for the titles of the two panels. Default is 14.
+        xcat_labels : Dict[str, str]
+            custom labels for the two PnL categories, keyed by category name. Default is
+            None and the category names are used.
+        ylab : str
+            label for the y-axis of the cumulative PnL panel.
+        ir_ylab : str
+            label for the y-axis of the information ratio panel.
+        label_fontsize : int
+            font size for the axis labels. Default is 12.
+        tick_fontsize : int
+            font size for the axis ticks. Default is 12.
+        figsize : tuple
+            tuple of plot width and height. Default is (12, 8).
+        height_ratios : tuple
+            relative heights of the cumulative PnL and information ratio panels. Default
+            is (2, 1).
+        return_fig : bool
+            if True the figure is returned rather than displayed. Default is False.
+
+        Returns
+        -------
+        Optional[matplotlib.figure.Figure]
+            the figure, if `return_fig` is True.
+
+
+        .. note::
+            `window` and `annualization_factor` must be set together to match the
+            frequency of the PnL series (business-daily: 1260/252 for a five-year
+            window, monthly: 60/12).
+        """
+        for name, cat in [
+            ("pnl_cat", pnl_cat),
+            ("benchmark_pnl_cat", benchmark_pnl_cat),
+        ]:
+            if not isinstance(cat, str):
+                raise TypeError(f"'{name}' must be a string - received {type(cat)}.")
+            if cat not in self.pnl_names:
+                raise ValueError(
+                    f"The PnL passed to '{name}' is not defined. The possible options "
+                    f"are {self.pnl_names}."
+                )
+
+        if pnl_cat == benchmark_pnl_cat:
+            raise ValueError(
+                "'pnl_cat' and 'benchmark_pnl_cat' must be different categories."
+            )
+
+        if not isinstance(pnl_cid, str):
+            raise TypeError(f"'pnl_cid' must be a string - received {type(pnl_cid)}.")
+
+        if not isinstance(window, int) or window < 2:
+            raise ValueError("'window' must be an integer >= 2.")
+
+        if not isinstance(annualization_factor, int) or annualization_factor <= 0:
+            raise ValueError("'annualization_factor' must be a positive integer.")
+
+        pnl_cats: List[str] = [pnl_cat, benchmark_pnl_cat]
+
+        if xcat_labels is None:
+            xcat_labels = {pnl: pnl for pnl in pnl_cats}
+        elif isinstance(xcat_labels, dict):
+            missing = set(pnl_cats) - set(xcat_labels)
+            if missing:
+                raise ValueError(
+                    f"'xcat_labels' must contain a label for each of {pnl_cats} - "
+                    f"missing {sorted(missing)}."
+                )
+        else:
+            raise TypeError(
+                "'xcat_labels' should be a dictionary with keys as the PnL categories "
+                "and values as the custom labels."
+            )
+
+        dfx = reduce_df(
+            self.df, pnl_cats, [pnl_cid], start, end, self.black, out_all=False
+        )
+        dfw = dfx.pivot(index="real_date", columns="xcat", values="value")
+
+        missing = [pnl for pnl in pnl_cats if pnl not in dfw.columns]
+        if missing:
+            raise ValueError(
+                f"No data available for {missing} on cross section '{pnl_cid}' over the "
+                "requested period."
+            )
+
+        act: pd.Series = (dfw[pnl_cat] - dfw[benchmark_pnl_cat]).dropna()
+
+        if len(act) <= window:
+            raise ValueError(
+                f"The active return series has {len(act)} observations, which is not "
+                f"enough for a rolling window of {window}. Reduce 'window' or widen the "
+                "sample period."
+            )
+
+        act_ir: float = act.mean() / act.std() * np.sqrt(annualization_factor)
+        roll_ir: pd.Series = _rolling_sharpe(
+            act,
+            window=window,
+            annualization_factor=annualization_factor,
+            min_periods=min_periods,
+        )
+
+        sns.set_theme(style="whitegrid", palette="colorblind")
+
+        fig, (ax1, ax2) = plt.subplots(
+            2,
+            1,
+            figsize=figsize,
+            sharex=True,
+            gridspec_kw={"height_ratios": list(height_ratios)},
+        )
+
+        ax1.plot(act.index, act.cumsum(), linewidth=2)
+        ax1.axhline(0, color="black", linewidth=0.5)
+        if pnl_title is None:
+            pnl_title = (
+                f"Cumulative active PnL: {xcat_labels[pnl_cat]} minus "
+                f"{xcat_labels[benchmark_pnl_cat]}"
+            )
+        ax1.set_title(pnl_title, fontsize=subtitle_fontsize)
+        ax1.set_ylabel(ylab, fontsize=label_fontsize)
+
+        ax2.plot(roll_ir.index, roll_ir, linewidth=2)
+        ax2.axhline(0, color="black", linewidth=0.5)
+        ax2.axhline(act_ir, color="gray", linewidth=1, linestyle="--")
+        ax2.annotate(
+            f"full sample: {act_ir:.2f}",
+            xy=(act.index[0], act_ir),
+            xytext=(0, 6),
+            textcoords="offset points",
+            fontsize=9,
+            color="gray",
+        )
+        if ir_title is None:
+            ir_title = (
+                f"Rolling {window / annualization_factor:.3g}-year information ratio of "
+                "the active return"
+            )
+        ax2.set_title(ir_title, fontsize=subtitle_fontsize)
+        ax2.set_ylabel(ir_ylab, fontsize=label_fontsize)
+
+        for ax in (ax1, ax2):
+            ax.tick_params(axis="both", labelsize=tick_fontsize)
+
+        plt.tight_layout()
+
+        if title is not None:
+            # Placed after tight_layout, which is unaware of the suptitle: the top of the
+            # axes is pulled down to make room rather than the title overlapping them.
+            fig.suptitle(title, fontsize=title_fontsize)
+            fig.subplots_adjust(top=0.90)
+
+        if return_fig:
+            return fig
         plt.show()
 
     def get_input_signals(self) -> pd.DataFrame:

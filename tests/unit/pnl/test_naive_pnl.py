@@ -1256,6 +1256,147 @@ class TestAll(unittest.TestCase):
         plt.close("all")
         matplotlib.use(mpl_backend)
 
+    def test_plot_pnl_consistency(self):
+        plt.close("all")
+        patch("matplotlib.pyplot.show").start()
+        mpl_backend = matplotlib.get_backend()
+        matplotlib.use("Agg")
+
+        pnl = NaivePnL(
+            self.dfd,
+            ret="EQXR",
+            sigs=["CRY", "GROWTH", "INFL"],
+            cids=self.cids,
+            start="2000-01-01",
+            blacklist=self.blacklist,
+        )
+
+        pnl.make_pnl(
+            sig="GROWTH",
+            sig_op="zn_score_pan",
+            rebal_freq="daily",
+            vol_scale=None,
+            rebal_slip=0,
+            pnl_name="PNL_GROWTH",
+            min_obs=252,
+            iis=True,
+            sequential=True,
+            neutral="zero",
+            thresh=None,
+        )
+
+        pnl.make_long_pnl(vol_scale=1, label="Unit_Long_EQXR")
+
+        window = 252
+
+        try:
+            pnl.plot_pnl_consistency(
+                pnl_cat="PNL_GROWTH",
+                benchmark_pnl_cat="Unit_Long_EQXR",
+                window=window,
+            )
+        except Exception as e:
+            self.fail(f"plot_pnl_consistency raised {e} unexpectedly")
+
+        # A figure with the two expected panels is returned.
+        fig = pnl.plot_pnl_consistency(
+            pnl_cat="PNL_GROWTH",
+            benchmark_pnl_cat="Unit_Long_EQXR",
+            window=window,
+            title="Consistency of the macro value-add",
+            xcat_labels={"PNL_GROWTH": "Macro", "Unit_Long_EQXR": "Long only"},
+            return_fig=True,
+        )
+        self.assertIsInstance(fig, plt.Figure)
+        self.assertEqual(len(fig.axes), 2)
+
+        # The active return is the first category minus the second: confirm the
+        # full-sample information ratio annotated on the figure.
+        dfp = pnl.pnl_df(["PNL_GROWTH", "Unit_Long_EQXR"]).pivot(
+            index="real_date", columns="xcat", values="value"
+        )
+        act = (dfp["PNL_GROWTH"] - dfp["Unit_Long_EQXR"]).dropna()
+        expected_ir = act.mean() / act.std() * 252**0.5
+
+        annotations = [
+            child.get_text()
+            for child in fig.axes[1].texts
+            if child.get_text().startswith("full sample:")
+        ]
+        self.assertEqual(len(annotations), 1)
+        self.assertEqual(annotations[0], f"full sample: {expected_ir:.2f}")
+
+        # Default panel titles are generated from the labels and the window length.
+        self.assertEqual(
+            fig.axes[0].get_title(), "Cumulative active PnL: Macro minus Long only"
+        )
+        self.assertEqual(
+            fig.axes[1].get_title(),
+            "Rolling 1-year information ratio of the active return",
+        )
+
+        # Both panel titles can be overridden.
+        fig = pnl.plot_pnl_consistency(
+            pnl_cat="PNL_GROWTH",
+            benchmark_pnl_cat="Unit_Long_EQXR",
+            window=window,
+            pnl_title="Value-add of the growth strategy",
+            ir_title="Consistency of the value-add",
+            return_fig=True,
+        )
+        self.assertEqual(fig.axes[0].get_title(), "Value-add of the growth strategy")
+        self.assertEqual(fig.axes[1].get_title(), "Consistency of the value-add")
+
+        with self.assertRaises(TypeError):
+            pnl.plot_pnl_consistency(
+                pnl_cat=1, benchmark_pnl_cat="Unit_Long_EQXR", window=window
+            )
+
+        with self.assertRaises(TypeError):
+            pnl.plot_pnl_consistency(
+                pnl_cat="PNL_GROWTH",
+                benchmark_pnl_cat="Unit_Long_EQXR",
+                window=window,
+                xcat_labels=["Macro", "Long only"],
+            )
+
+        # Label missing for one of the two categories.
+        with self.assertRaises(ValueError):
+            pnl.plot_pnl_consistency(
+                pnl_cat="PNL_GROWTH",
+                benchmark_pnl_cat="Unit_Long_EQXR",
+                window=window,
+                xcat_labels={"PNL_GROWTH": "Macro"},
+            )
+
+        # Category not defined on the class.
+        with self.assertRaises(ValueError):
+            pnl.plot_pnl_consistency(
+                pnl_cat="PNL_GROWTH",
+                benchmark_pnl_cat="PNL_UNDEFINED",
+                window=window,
+            )
+
+        # Identical categories would give a zero active return.
+        with self.assertRaises(ValueError):
+            pnl.plot_pnl_consistency(
+                pnl_cat="PNL_GROWTH",
+                benchmark_pnl_cat="PNL_GROWTH",
+                window=window,
+            )
+
+        # Window longer than the available sample.
+        with self.assertRaises(ValueError):
+            pnl.plot_pnl_consistency(
+                pnl_cat="PNL_GROWTH",
+                benchmark_pnl_cat="Unit_Long_EQXR",
+                window=252 * 100,
+            )
+
+        patch.stopall()
+        plt.close("all")
+        matplotlib.use(mpl_backend)
+
     def test_validation_of_create_results_dataframe(self):
         ret = 1
         sigs = ["CRY", "GROWTH", "INFL"]
