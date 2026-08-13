@@ -362,6 +362,12 @@ def reduce_df(
         if isinstance(xcats, str):
             xcats = [xcats]
 
+    if xcats is not None:
+        df = df[df["xcat"].isin(xcats)]
+    if cids is not None:
+        cids = [cids] if isinstance(cids, str) else list(cids)
+        df = df[df["cid"].isin(cids)]
+
     if start:
         df = df[df["real_date"] >= pd.to_datetime(start)]
 
@@ -370,12 +376,6 @@ def reduce_df(
 
     if blacklist is not None:
         df = apply_blacklist(df, blacklist)
-
-    if xcats is not None:
-        df = df[df["xcat"].isin(xcats)]
-    if cids is not None:
-        cids = [cids] if isinstance(cids, str) else list(cids)
-        df = df[df["cid"].isin(cids)]
 
     if xcats is None:
         xcats = sorted(df["xcat"].unique())
@@ -402,7 +402,7 @@ def reduce_df(
 
     df = _sync_df_categories(df)
 
-    df = df.drop_duplicates().reset_index(drop=True)
+    df = df.drop_duplicates()
 
     if out_all:
         return df, xcats, sorted(cids)
