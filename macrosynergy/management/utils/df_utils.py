@@ -750,7 +750,8 @@ def reduce_df(
         mask &= df["xcat"].isin(xcats)
 
     if cids is not None:
-        cids = [cids] if isinstance(cids, str) else cids
+        # list() to cast generators/pd.Series/np.ndarray etc.
+        cids = [cids] if isinstance(cids, str) else list(cids)
         mask &= df["cid"].isin(cids)
 
     if start:
@@ -761,7 +762,10 @@ def reduce_df(
 
     # cid, xcat, real_date filtering is done
     # filter with mask now
-    df = df[mask]
+    # skipping the copy entirely when nothing was filtered out
+    # the skip saves needless copies of large dataframes when nothing is filtered out
+    if not mask.all():
+        df = df[mask]
 
     if blacklist is not None:
         # using zeros here instead of ones, and then inverting the mask at the end
@@ -800,7 +804,10 @@ def reduce_df(
     else:
         cids = [cid for cid in cids if cid in cids_in_df]
 
-    df = df[df["cid"].isin(cids)]
+    # this last filter is only needed when `intersect=True`, else cids/xcats
+    # have already been filtered above by the boolean mask
+    if intersect:
+        df = df[df["cid"].isin(cids)]
 
     if out_all:
         return df.drop_duplicates(), xcats, sorted(cids)
