@@ -742,30 +742,42 @@ def reduce_df(
             intersect=intersect,
         )
 
+    mask = np.ones(len(df), dtype=bool)
+
     if xcats is not None:
         if isinstance(xcats, str):
             xcats = [xcats]
-        df = df[df["xcat"].isin(xcats)]
+        mask &= df["xcat"].isin(xcats)
 
     if cids is not None:
         cids = [cids] if isinstance(cids, str) else cids
-        df = df[df["cid"].isin(cids)]
+        mask &= df["cid"].isin(cids)
 
     if start:
-        df = df[df["real_date"] >= pd.to_datetime(start)]
+        mask &= df["real_date"] >= pd.to_datetime(start)
 
     if end:
-        df = df[df["real_date"] <= pd.to_datetime(end)]
+        mask &= df["real_date"] <= pd.to_datetime(end)
+
+    # cid, xcat, real_date filtering is done
+    # filter with mask now
+    df = df[mask]
 
     if blacklist is not None:
+        # using zeros here instead of ones, and then inverting the mask at the end
+        bl_mask = np.zeros(len(df), dtype=bool)
         for key, value in blacklist.items():
-            df = df[
-                ~(
-                    (df["cid"] == key[:3])
-                    & (df["real_date"] >= pd.to_datetime(value[0]))
-                    & (df["real_date"] <= pd.to_datetime(value[1]))
-                )
-            ]
+            bl_mask |= (
+                (df["cid"] == key[:3])
+                & (df["real_date"] >= pd.to_datetime(value[0]))
+                & (df["real_date"] <= pd.to_datetime(value[1]))
+            )
+        # filter on the blacklist mask
+        df = df[~bl_mask]
+
+    # filter logic for `intersect` and `out_all` parameters
+    # these need to be regenerated after the filtering above
+    # as the filtering may have removed some cids and xcats
 
     if xcats is None:
         xcats = sorted(df["xcat"].unique())
