@@ -1329,8 +1329,6 @@ class NaivePnL:
         plt.tight_layout()
 
         if title is not None:
-            # Placed after tight_layout, which is unaware of the suptitle: the top of the
-            # axes is pulled down to make room rather than the title overlapping them.
             fig.suptitle(title, fontsize=title_fontsize)
             fig.subplots_adjust(top=0.90)
 
@@ -1405,8 +1403,7 @@ class NaivePnL:
 
         if bar_title is None:
             bar_title = f"Active return: {labels[0]} minus {labels[1]}"
-        # With no figure header the bar title carries the figure, so it takes the
-        # header font size rather than the subplot one.
+
         ax.set_title(
             bar_title,
             fontsize=subtitle_fontsize if title is not None else title_fontsize,
@@ -1616,8 +1613,7 @@ class NaivePnL:
         """
         dfx: pd.DataFrame = self.signal_df[pnl_name]
         dfw: pd.DataFrame = dfx.pivot(index="real_date", columns="cid", values="sig")
-        # A categorical column index would reindex to its own category order rather than
-        # the requested one, so it is cast to a plain index first.
+
         dfw.columns = pd.Index(dfw.columns.astype(str), name="cid")
         dfw = dfw.reindex(columns=pnl_cids).truncate(before=start, after=end)
 
@@ -1721,8 +1717,6 @@ class NaivePnL:
         fig, ax = plt.subplots(figsize=figsize if figsize is not None else (14, 6))
         dfb.plot.bar(stacked=True, ax=ax, colormap=cmap or "tab20")
 
-        # The PnL's own totals: the contributions are a decomposition of these, so any
-        # visible gap means the positions and returns do not span the same dates.
         dfn = self.pnl_df([pnl_name])
         pnl_period = (
             self._group_by_period(
@@ -1985,9 +1979,6 @@ class NaivePnL:
             plt.show()
             return
 
-        # Cross-sections on the vertical axis, periods on the horizontal, so that the
-        # table reads left to right in time and aligns with the cumulative PnL plots.
-        # The groupby sorts the columns, so the requested order is restored here.
         dfp = dfp.reindex(columns=pnl_cids).transpose()
         dfp.index = [cid_labels.get(cid, cid) for cid in dfp.index]
 
