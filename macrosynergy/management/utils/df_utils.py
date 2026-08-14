@@ -809,10 +809,15 @@ def reduce_df(
     if intersect:
         df = df[df["cid"].isin(cids)]
 
+    df = df.drop_duplicates()
+    # df.reset_index(drop=True) scales linearly
+    # the df.index=pd.RangeIndex(len(df)) is constant time
+    df.index = pd.RangeIndex(len(df))
+
     if out_all:
-        return df.drop_duplicates(), xcats, sorted(cids)
+        return df, xcats, sorted(cids)
     else:
-        return df.drop_duplicates()
+        return df
 
 
 def reduce_df_by_ticker(
@@ -1791,7 +1796,9 @@ def _wide_to_long(df: pd.DataFrame, value_name: str = "value") -> pd.DataFrame:
         sorted by cid then real_date, with NaN rows dropped.
     """
     if df.columns.empty:
-        raise ValueError("_wide_to_long: DataFrame has no columns (expected one per cid).")
+        raise ValueError(
+            "_wide_to_long: DataFrame has no columns (expected one per cid)."
+        )
 
     long = (
         df.rename_axis("real_date")
