@@ -34,6 +34,7 @@ from macrosynergy.pnl.pnl_table import (
 )
 from macrosynergy.signal import SignalReturnRelations
 from macrosynergy.visuals.table import view_table
+from macrosynergy.visuals.weights import _plot_weight_area
 
 
 class NaivePnL:
@@ -1661,37 +1662,6 @@ class NaivePnL:
             dfw.index = pd.to_datetime(dfw.index)
         return dfw.reindex(columns=pnl_cids)
 
-    @staticmethod
-    def _plot_weight_area(
-        dfw: pd.DataFrame,
-        cid_labels: Dict[str, str],
-        title: str,
-        title_fontsize: int,
-        xlabel: str,
-        ylabel: str,
-        cmap: str,
-        figsize: Optional[Tuple[float, float]],
-        legend_fontsize: int,
-    ) -> plt.Figure:
-        """
-        Stacked area chart of weights over time.
-        """
-        dfp = dfw.rename(columns=lambda cid: cid_labels.get(cid, cid))
-
-        fig, ax = plt.subplots(figsize=figsize if figsize is not None else (12, 6))
-        dfp.plot.area(ax=ax, linewidth=0, colormap=cmap or "tab20")
-        ax.set_title(
-            title if title is not None else "Allocation weights over time",
-            fontsize=title_fontsize,
-        )
-        ax.set_ylabel(ylabel if ylabel is not None else "weight")
-        ax.set_xlabel(xlabel)
-        ax.legend(
-            loc="upper left", bbox_to_anchor=(1, 1), fontsize=legend_fontsize
-        )
-        plt.tight_layout()
-        return fig
-
     def _plot_contribution_bars(
         self,
         dfp: pd.DataFrame,
@@ -1928,15 +1898,18 @@ class NaivePnL:
             dfw = dfw.truncate(before=start, after=end) * scale
             if dfw.empty:
                 raise ValueError("No weight data available for the requested period.")
-            fig = self._plot_weight_area(
+            fig = _plot_weight_area(
                 dfw=dfw,
                 cid_labels=cid_labels,
-                title=title,
+                title=title if title is not None else "Allocation weights over time",
                 title_fontsize=title_fontsize,
                 xlabel=xlabel,
-                ylabel=ylabel,
-                cmap=cmap,
-                figsize=figsize,
+                ylabel=ylabel if ylabel is not None else "weight",
+                label_fontsize=12,
+                tick_fontsize=None,
+                cmap=cmap or "tab20",
+                figsize=figsize if figsize is not None else (12, 6),
+                legend=True,
                 legend_fontsize=legend_fontsize,
             )
             if return_fig:
