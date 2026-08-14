@@ -278,17 +278,22 @@ def apply_blacklist(
             "Values of `blacklist` must be lists of start & end dates (str, pd.Timestamp, or datetime)."
         )
 
+    # one OR-ed mask over all keys, applied once, instead of a copy per key
+    bl_mask = np.zeros(len(df), dtype=bool)
     for key, value in blacklist.items():
         start, end = pd.to_datetime(value[0]), pd.to_datetime(value[1])
-        df = df[
-            ~(
-                (df["cid"] == key[:3])
-                & (df["real_date"] >= start)
-                & (df["real_date"] <= end)
-            )
-        ]
+        bl_mask |= (
+            (df["cid"] == key[:3])
+            & (df["real_date"] >= start)
+            & (df["real_date"] <= end)
+        )
 
-    return df.reset_index(drop=True)
+    # copy(deep=False) when nothing matched, so the relabel below always acts on a frame
+    # we own rather than the caller's. Relabelling is O(1); reset_index copies the frame.
+    df = df[~bl_mask] if bl_mask.any() else df.copy(deep=False)
+    df.index = pd.RangeIndex(len(df))
+
+    return df
 
 
 def _sync_df_categories(
@@ -358,21 +363,28 @@ def reduce_df(
         The filtered DataFrame. If `out_all` is True, also returns the lists of `xcats`
         and `cids`.
     """
+    mask = np.ones(len(df), dtype=bool)
+
     if xcats is not None:
         if isinstance(xcats, str):
             xcats = [xcats]
+        mask &= df["xcat"].isin(xcats)
 
-    if xcats is not None:
-        df = df[df["xcat"].isin(xcats)]
     if cids is not None:
+        # list() to cast generators/pd.Series/np.ndarray etc.
         cids = [cids] if isinstance(cids, str) else list(cids)
-        df = df[df["cid"].isin(cids)]
+        mask &= df["cid"].isin(cids)
 
     if start:
-        df = df[df["real_date"] >= pd.to_datetime(start)]
+        mask &= df["real_date"] >= pd.to_datetime(start)
 
     if end:
-        df = df[df["real_date"] <= pd.to_datetime(end)]
+        mask &= df["real_date"] <= pd.to_datetime(end)
+
+    # one combined mask means one copy instead of four; skipped entirely when nothing
+    # was filtered out, which saves a full copy of large frames
+    if not mask.all():
+        df = df[mask]
 
     if blacklist is not None:
         df = apply_blacklist(df, blacklist)
@@ -398,11 +410,18 @@ def reduce_df(
     else:
         cids = [cid for cid in cids if cid in cids_in_df]
 
-    df = df[df["cid"].isin(cids)]
+    # this last filter is only needed when `intersect=True`, else cids/xcats
+    # have already been filtered above by the boolean mask
+    if intersect:
+        df = df[df["cid"].isin(cids)]
 
     df = _sync_df_categories(df)
 
     df = df.drop_duplicates()
+    # df.reset_index(drop=True) scales linearly (it copies the whole frame)
+    # assigning a fresh pd.RangeIndex is constant time; drop_duplicates already
+    # handed us a new frame, so relabelling its axis cannot touch the caller's
+    df.index = pd.RangeIndex(len(df))
 
     if out_all:
         return df, xcats, sorted(cids)
