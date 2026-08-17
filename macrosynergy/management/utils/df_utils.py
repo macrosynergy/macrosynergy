@@ -878,7 +878,8 @@ def reduce_df_by_ticker(
     pd.Dataframe
         reduced dataframe that also removes duplicates
     """
-
+    if is_categorical_qdf(df):
+        df = QuantamentalDataFrame(df)
     if type(df) is QuantamentalDataFrame:
         return df.reduce_df_by_ticker(
             tickers=ticks,
@@ -887,38 +888,34 @@ def reduce_df_by_ticker(
             blacklist=blacklist,
         )
 
-    dfx = df.copy()
+    # one combined mask for the date filters
+    mask = np.ones(len(df), dtype=bool)
 
     if start is not None:
-        dfx = dfx[dfx["real_date"] >= pd.to_datetime(start)]
+        mask &= df["real_date"] >= pd.to_datetime(start)
 
     if end is not None:
-        dfx = dfx[dfx["real_date"] <= pd.to_datetime(end)]
+        mask &= df["real_date"] <= pd.to_datetime(end)
 
-    # Blacklisting by cross-section.
+    if not mask.all():
+        df = df[mask]
+
     if blacklist is not None:
-        masks = []
-        for key, value in blacklist.items():
-            filt1 = dfx["cid"] == key[:3]
-            filt2 = dfx["real_date"] >= pd.to_datetime(value[0])
-            filt3 = dfx["real_date"] <= pd.to_datetime(value[1])
-            combined_mask = filt1 & filt2 & filt3
-            masks.append(combined_mask)
+        df = df[~_blacklist_mask(df, blacklist)]
 
-        if masks:
-            combined_mask = pd.concat(masks, axis=1).any(axis=1)
-            dfx = dfx[~combined_mask]
+    # astype(str): pandas has no `+` for Categorical
+    ticker_series = df["cid"].astype(str) + "_" + df["xcat"].astype(str)
+    if ticks is not None:
+        # carried through the filter; absent ticks match nothing anyway
+        keep = ticker_series.isin(ticks)
+        df = df[keep]
+        ticker_series = ticker_series[keep]
 
-    dfx["ticker"] = dfx["cid"] + "_" + dfx["xcat"]
-    ticks_in_df = dfx["ticker"].unique()
-    if ticks is None:
-        ticks = sorted(ticks_in_df)
-    else:
-        ticks = [tick for tick in ticks if tick in ticks_in_df]
+    df = df.assign(ticker=ticker_series).drop_duplicates()
+    # constant time; reset_index would copy
+    df.index = pd.RangeIndex(len(df))
 
-    dfx = dfx[dfx["ticker"].isin(ticks)]
-
-    return dfx.drop_duplicates()
+    return df
 
 
 def categories_df_aggregation_helper(dfx: pd.DataFrame, xcat_agg: str):
