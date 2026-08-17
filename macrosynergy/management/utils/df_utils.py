@@ -774,7 +774,10 @@ def reduce_df(
     if not isinstance(df, QuantamentalDataFrame):
         raise TypeError("Argument `df` must be a standardised Quantamental DataFrame.")
 
-    if type(df) is QuantamentalDataFrame:
+    is_cat_df = is_categorical_qdf(df)
+    if is_cat_df:
+        df = QuantamentalDataFrame(df)
+    if type(df) is QuantamentalDataFrame and is_cat_df:
         return df.reduce_df(
             cids=cids,
             xcats=xcats,
@@ -876,8 +879,10 @@ def reduce_df_by_ticker(
     pd.Dataframe
         reduced dataframe that also removes duplicates
     """
-
-    if type(df) is QuantamentalDataFrame:
+    is_cat_df = is_categorical_qdf(df)
+    if is_cat_df:
+        df = QuantamentalDataFrame(df)
+    if type(df) is QuantamentalDataFrame and is_cat_df:
         return df.reduce_df_by_ticker(
             tickers=ticks,
             start=start,
