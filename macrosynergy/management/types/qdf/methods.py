@@ -278,17 +278,21 @@ def apply_blacklist(
             "Values of `blacklist` must be lists of start & end dates (str, pd.Timestamp, or datetime)."
         )
 
+    # one OR-ed mask over all keys, applied once, instead of a copy per key
+    bl_mask = np.zeros(len(df), dtype=bool)
     for key, value in blacklist.items():
         start, end = pd.to_datetime(value[0]), pd.to_datetime(value[1])
-        df = df[
-            ~(
-                (df["cid"] == key[:3])
-                & (df["real_date"] >= start)
-                & (df["real_date"] <= end)
-            )
-        ]
+        bl_mask |= (
+            (df["cid"] == key[:3])
+            & (df["real_date"] >= start)
+            & (df["real_date"] <= end)
+        )
 
-    return df.reset_index(drop=True)
+    # # `df[...]` returns a new frame, so relabelling cannot reach the caller's frame
+    df = df[~bl_mask]
+    df.index = pd.RangeIndex(len(df))
+
+    return df
 
 
 def _sync_df_categories(
