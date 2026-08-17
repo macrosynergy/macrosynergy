@@ -1,6 +1,6 @@
 from tests.simulate import make_qdf
 from macrosynergy.pnl.naive_pnl import NaivePnL, create_results_dataframe
-from macrosynergy.management.utils import reduce_df
+from macrosynergy.management.utils import reduce_df, update_df
 import re
 import unittest
 from unittest.mock import patch
@@ -1251,6 +1251,458 @@ class TestAll(unittest.TestCase):
             pnl.agg_signal_bars(pnl_name="PNL_GROWTH")
         except Exception as e:
             self.fail(f"agg_signal_bars raised {e} unexpectedly")
+
+        patch.stopall()
+        plt.close("all")
+        matplotlib.use(mpl_backend)
+
+    def test_plot_pnl_consistency(self):
+        plt.close("all")
+        patch("matplotlib.pyplot.show").start()
+        mpl_backend = matplotlib.get_backend()
+        matplotlib.use("Agg")
+
+        pnl = NaivePnL(
+            self.dfd,
+            ret="EQXR",
+            sigs=["CRY", "GROWTH", "INFL"],
+            cids=self.cids,
+            start="2000-01-01",
+            blacklist=self.blacklist,
+        )
+
+        pnl.make_pnl(
+            sig="GROWTH",
+            sig_op="zn_score_pan",
+            rebal_freq="daily",
+            vol_scale=None,
+            rebal_slip=0,
+            pnl_name="PNL_GROWTH",
+            min_obs=252,
+            iis=True,
+            sequential=True,
+            neutral="zero",
+            thresh=None,
+        )
+
+        pnl.make_long_pnl(vol_scale=1, label="Unit_Long_EQXR")
+
+        window = 252
+
+        try:
+            pnl.plot_pnl_consistency(
+                pnl_cat="PNL_GROWTH",
+                benchmark_pnl_cat="Unit_Long_EQXR",
+                window=window,
+            )
+        except Exception as e:
+            self.fail(f"plot_pnl_consistency raised {e} unexpectedly")
+
+        # A figure with the two expected panels is returned.
+        fig = pnl.plot_pnl_consistency(
+            pnl_cat="PNL_GROWTH",
+            benchmark_pnl_cat="Unit_Long_EQXR",
+            window=window,
+            title="Consistency of the macro value-add",
+            xcat_labels={"PNL_GROWTH": "Macro", "Unit_Long_EQXR": "Long only"},
+            return_fig=True,
+        )
+        self.assertIsInstance(fig, plt.Figure)
+        self.assertEqual(len(fig.axes), 2)
+
+        # The active return is the first category minus the second: confirm the
+        # full-sample information ratio annotated on the figure.
+        dfp = pnl.pnl_df(["PNL_GROWTH", "Unit_Long_EQXR"]).pivot(
+            index="real_date", columns="xcat", values="value"
+        )
+        act = (dfp["PNL_GROWTH"] - dfp["Unit_Long_EQXR"]).dropna()
+        expected_ir = act.mean() / act.std() * 252**0.5
+
+        annotations = [
+            child.get_text()
+            for child in fig.axes[1].texts
+            if child.get_text().startswith("full sample:")
+        ]
+        self.assertEqual(len(annotations), 1)
+        self.assertEqual(annotations[0], f"full sample: {expected_ir:.2f}")
+
+        # Default panel titles are generated from the labels and the window length.
+        self.assertEqual(
+            fig.axes[0].get_title(), "Cumulative active PnL: Macro minus Long only"
+        )
+        self.assertEqual(
+            fig.axes[1].get_title(),
+            "Rolling 1-year information ratio of the active return",
+        )
+
+        # Both panel titles can be overridden.
+        fig = pnl.plot_pnl_consistency(
+            pnl_cat="PNL_GROWTH",
+            benchmark_pnl_cat="Unit_Long_EQXR",
+            window=window,
+            pnl_title="Value-add of the growth strategy",
+            ir_title="Consistency of the value-add",
+            return_fig=True,
+        )
+        self.assertEqual(fig.axes[0].get_title(), "Value-add of the growth strategy")
+        self.assertEqual(fig.axes[1].get_title(), "Consistency of the value-add")
+
+        with self.assertRaises(TypeError):
+            pnl.plot_pnl_consistency(
+                pnl_cat=1, benchmark_pnl_cat="Unit_Long_EQXR", window=window
+            )
+
+        with self.assertRaises(TypeError):
+            pnl.plot_pnl_consistency(
+                pnl_cat="PNL_GROWTH",
+                benchmark_pnl_cat="Unit_Long_EQXR",
+                window=window,
+                xcat_labels=["Macro", "Long only"],
+            )
+
+        # Label missing for one of the two categories.
+        with self.assertRaises(ValueError):
+            pnl.plot_pnl_consistency(
+                pnl_cat="PNL_GROWTH",
+                benchmark_pnl_cat="Unit_Long_EQXR",
+                window=window,
+                xcat_labels={"PNL_GROWTH": "Macro"},
+            )
+
+        # Category not defined on the class.
+        with self.assertRaises(ValueError):
+            pnl.plot_pnl_consistency(
+                pnl_cat="PNL_GROWTH",
+                benchmark_pnl_cat="PNL_UNDEFINED",
+                window=window,
+            )
+
+        # Identical categories would give a zero active return.
+        with self.assertRaises(ValueError):
+            pnl.plot_pnl_consistency(
+                pnl_cat="PNL_GROWTH",
+                benchmark_pnl_cat="PNL_GROWTH",
+                window=window,
+            )
+
+        # Window longer than the available sample.
+        with self.assertRaises(ValueError):
+            pnl.plot_pnl_consistency(
+                pnl_cat="PNL_GROWTH",
+                benchmark_pnl_cat="Unit_Long_EQXR",
+                window=252 * 100,
+            )
+
+        # kind="bars": the active return summed by calendar period.
+        fig = pnl.plot_pnl_consistency(
+            pnl_cat="PNL_GROWTH",
+            benchmark_pnl_cat="Unit_Long_EQXR",
+            kind="bars",
+            return_fig=True,
+        )
+        self.assertIsInstance(fig, plt.Figure)
+        ax = fig.axes[0]
+
+        dfp = pnl.pnl_df(["PNL_GROWTH", "Unit_Long_EQXR"]).pivot(
+            index="real_date", columns="xcat", values="value"
+        )
+        act = (dfp["PNL_GROWTH"] - dfp["Unit_Long_EQXR"]).dropna()
+        act_year = act.groupby(act.index.year).sum()
+
+        heights = [p.get_height() for p in ax.patches]
+        np.testing.assert_allclose(heights, act_year.to_numpy(), rtol=1e-9)
+        self.assertEqual(
+            [t.get_text() for t in ax.get_xticklabels()],
+            [str(y) for y in act_year.index],
+        )
+
+        # Bars are coloured by sign, and the count of positive periods is annotated.
+        pos_colors = {
+            tuple(p.get_facecolor())
+            for p, v in zip(ax.patches, act_year)
+            if v > 0
+        }
+        neg_colors = {
+            tuple(p.get_facecolor())
+            for p, v in zip(ax.patches, act_year)
+            if v <= 0
+        }
+        self.assertFalse(pos_colors & neg_colors)
+        self.assertIn(
+            f"positive periods: {int((act_year > 0).sum())} of {len(act_year)}",
+            [t.get_text() for t in ax.texts],
+        )
+
+        # The count annotation can be suppressed, and the bars re-binned by period.
+        fig = pnl.plot_pnl_consistency(
+            pnl_cat="PNL_GROWTH",
+            benchmark_pnl_cat="Unit_Long_EQXR",
+            kind="bars",
+            annotate_count=False,
+            return_fig=True,
+        )
+        self.assertEqual([t.get_text() for t in fig.axes[0].texts], [])
+
+        fig = pnl.plot_pnl_consistency(
+            pnl_cat="PNL_GROWTH",
+            benchmark_pnl_cat="Unit_Long_EQXR",
+            kind="bars",
+            freq="Q",
+            bar_title="Quarterly active return",
+            return_fig=True,
+        )
+        self.assertEqual(fig.axes[0].get_title(), "Quarterly active return")
+        self.assertTrue(
+            all(
+                re.fullmatch(r"\d{4}Q[1-4]", t.get_text())
+                for t in fig.axes[0].get_xticklabels()
+            )
+        )
+
+        # 'bars' does not need a rolling window, so a long window must not block it.
+        try:
+            pnl.plot_pnl_consistency(
+                pnl_cat="PNL_GROWTH",
+                benchmark_pnl_cat="Unit_Long_EQXR",
+                kind="bars",
+                window=252 * 100,
+            )
+        except Exception as e:
+            self.fail(f"plot_pnl_consistency(kind='bars') raised {e} unexpectedly")
+
+        with self.assertRaises(ValueError):
+            pnl.plot_pnl_consistency(
+                pnl_cat="PNL_GROWTH",
+                benchmark_pnl_cat="Unit_Long_EQXR",
+                kind="lines",
+            )
+
+        patch.stopall()
+        plt.close("all")
+        matplotlib.use(mpl_backend)
+
+    def test_plot_pnl_attribution(self):
+        plt.close("all")
+        patch("matplotlib.pyplot.show").start()
+        mpl_backend = matplotlib.get_backend()
+        matplotlib.use("Agg")
+
+        pnl = NaivePnL(
+            self.dfd,
+            ret="EQXR",
+            sigs=["CRY", "GROWTH", "INFL"],
+            cids=self.cids,
+            start="2000-01-01",
+            blacklist=self.blacklist,
+        )
+        pnl.make_pnl(
+            sig="GROWTH",
+            sig_op="zn_score_pan",
+            rebal_freq="monthly",
+            rebal_slip=1,
+            vol_scale=None,
+            pnl_name="PNL_GROWTH",
+        )
+
+        try:
+            pnl.plot_pnl_attribution(pnl_name="PNL_GROWTH")
+        except Exception as e:
+            self.fail(f"signal_table raised {e} unexpectedly")
+
+        fig = pnl.plot_pnl_attribution(pnl_name="PNL_GROWTH", return_fig=True)
+        self.assertIsInstance(fig, plt.Figure)
+
+        # The rendered table is the signal averaged by calendar year, scaled, with
+        # cross-sections on the vertical axis and years on the horizontal.
+        sig = pnl.signal_df["PNL_GROWTH"].pivot(
+            index="real_date", columns="cid", values="sig"
+        )
+        sig.columns = pd.Index(sig.columns.astype(str))
+        expected = (sig.groupby(sig.index.year).mean()[pnl.cids] * 100).T
+
+        fig = pnl.plot_pnl_attribution(
+            pnl_name="PNL_GROWTH", scale=100, fmt=".2f", return_fig=True
+        )
+        ax = fig.axes[0]
+        self.assertEqual(
+            [t.get_text() for t in ax.get_yticklabels()], list(expected.index)
+        )
+        self.assertEqual(
+            [t.get_text() for t in ax.get_xticklabels()],
+            [str(y) for y in expected.columns],
+        )
+        np.testing.assert_allclose(
+            ax.collections[0].get_array().data.reshape(expected.shape),
+            expected.to_numpy(),
+            rtol=1e-9,
+        )
+
+        # Custom labels are applied to the cross-sections, and the requested order is
+        # honoured even when it is not alphabetical.
+        fig = pnl.plot_pnl_attribution(
+            pnl_name="PNL_GROWTH",
+            pnl_cids=["USD", "AUD", "CAD"],
+            cid_labels={"AUD": "Australia"},
+            return_fig=True,
+        )
+        self.assertEqual(
+            [t.get_text() for t in fig.axes[0].get_yticklabels()],
+            ["USD", "Australia", "CAD"],
+        )
+        # ... and the rows carry the right cross-section's data, not just the label.
+        usd_row = ax_arr = fig.axes[0].collections[0].get_array().data.reshape(3, -1)[0]
+        np.testing.assert_allclose(
+            usd_row,
+            sig.groupby(sig.index.year).mean()["USD"].to_numpy(),
+            rtol=1e-9,
+        )
+
+        # Quarterly and monthly periods are labelled within the year.
+        fig = pnl.plot_pnl_attribution(pnl_name="PNL_GROWTH", freq="Q", return_fig=True)
+        xticks = [t.get_text() for t in fig.axes[0].get_xticklabels()]
+        self.assertTrue(all(re.fullmatch(r"\d{4}Q[1-4]", x) for x in xticks))
+
+        fig = pnl.plot_pnl_attribution(pnl_name="PNL_GROWTH", freq="M", return_fig=True)
+        xticks = [t.get_text() for t in fig.axes[0].get_xticklabels()]
+        self.assertTrue(all(re.fullmatch(r"\d{4}-\d{2}", x) for x in xticks))
+
+        # A signal that takes both signs gets a symmetric colour scale; a non-negative
+        # one gets a scale anchored at zero.
+        fig = pnl.plot_pnl_attribution(pnl_name="PNL_GROWTH", return_fig=True)
+        vmin, vmax = fig.axes[0].collections[0].get_clim()
+        self.assertLess(vmin, 0)
+        self.assertAlmostEqual(vmin, -vmax)
+
+        # A portfolio-weight signal: non-negative raw weights summing to one across the
+        # panel, as a wealth-allocation strategy would supply them.
+        wdf = self.dfd[self.dfd["xcat"] == "EQXR"].pivot(
+            index="real_date", columns="cid", values="value"
+        )
+        wdf.columns = pd.Index(wdf.columns.astype(str))
+        wgt = pd.DataFrame(
+            1.0 / len(wdf.columns), index=wdf.index, columns=wdf.columns
+        )
+        dfa = wgt.stack().rename("value").reset_index()
+        dfa.columns = ["real_date", "cid", "value"]
+        dfa["xcat"] = "WEIGHT"
+        dfw_in = update_df(self.dfd, dfa)
+
+        wpnl = NaivePnL(
+            dfw_in,
+            ret="EQXR",
+            sigs=["WEIGHT"],
+            cids=self.cids,
+            start="2000-01-01",
+        )
+        wpnl.make_pnl(
+            sig="WEIGHT",
+            sig_op="raw",
+            rebal_freq="monthly",
+            rebal_slip=1,
+            vol_scale=None,
+            pnl_name="PNL_WEIGHT",
+        )
+        fig = wpnl.plot_pnl_attribution(pnl_name="PNL_WEIGHT", scale=100, return_fig=True)
+        self.assertEqual(fig.axes[0].collections[0].get_clim()[0], 0.0)
+
+        # kind="returns": the return category the PnL was built on, summed per period.
+        fig = wpnl.plot_pnl_attribution(
+            pnl_name="PNL_WEIGHT", kind="returns", return_fig=True
+        )
+        self.assertIsInstance(fig, plt.Figure)
+        pos = wpnl._wide_signal("PNL_WEIGHT", wpnl.cids)
+        rets = wpnl._wide_returns(wpnl.cids, pos.index)
+        expected_r = rets.groupby(rets.index.year).sum().T
+        np.testing.assert_allclose(
+            fig.axes[0].collections[0].get_array().data.reshape(expected_r.shape),
+            expected_r.to_numpy(),
+            rtol=1e-9,
+        )
+
+        # kind="contribution": position times return, and the stacked bars must sum to
+        # the PnL's own period totals.
+        fig = wpnl.plot_pnl_attribution(
+            pnl_name="PNL_WEIGHT", kind="contribution", return_fig=True
+        )
+        self.assertIsInstance(fig, plt.Figure)
+        contrib = (pos * rets).groupby(pos.index.year).sum(min_count=1)
+        dfn = wpnl.pnl_df(["PNL_WEIGHT"])
+        totals = dfn.groupby(dfn["real_date"].dt.year)["value"].sum()
+        common = contrib.index.intersection(totals.index)
+        np.testing.assert_allclose(
+            contrib.loc[common].sum(axis=1).to_numpy(),
+            totals.loc[common].to_numpy(),
+            atol=1e-9,
+        )
+        # The markers plot those totals, so the decomposition is visibly reconciled.
+        offsets = fig.axes[0].collections[-1].get_offsets()
+        np.testing.assert_allclose(
+            np.asarray(offsets)[:, 1],
+            totals.reindex(contrib.index).to_numpy(),
+            atol=1e-9,
+        )
+
+        # kind="area": stacked weights over time, optionally the pre-rebalance series.
+        fig = wpnl.plot_pnl_attribution(
+            pnl_name="PNL_WEIGHT", kind="area", cid_labels={"AUD": "Australia"},
+            return_fig=True,
+        )
+        self.assertIsInstance(fig, plt.Figure)
+        legend = [t.get_text() for t in fig.axes[0].get_legend().get_texts()]
+        self.assertIn("Australia", legend)
+        self.assertEqual(len(legend), len(wpnl.cids))
+
+        # A supplied weights frame is used in place of the applied signal.
+        fig = wpnl.plot_pnl_attribution(
+            pnl_name="PNL_WEIGHT", kind="area", weights=wgt, return_fig=True
+        )
+        stacked_top = fig.axes[0].collections[-1].get_paths()[0].vertices[:, 1].max()
+        self.assertAlmostEqual(stacked_top, 1.0, places=6)
+
+        with self.assertRaises(TypeError):
+            wpnl.plot_pnl_attribution(
+                pnl_name="PNL_WEIGHT", kind="area", weights="not a frame"
+            )
+
+        # A weights frame missing a cross-section is rejected rather than silently
+        # dropping a sleeve from the allocation.
+        with self.assertRaises(ValueError):
+            wpnl.plot_pnl_attribution(
+                pnl_name="PNL_WEIGHT",
+                kind="area",
+                weights=wgt.drop(columns=[wgt.columns[0]]),
+            )
+
+        with self.assertRaises(ValueError):
+            pnl.plot_pnl_attribution(pnl_name="PNL_GROWTH", kind="stacked")
+
+        with self.assertRaises(TypeError):
+            pnl.plot_pnl_attribution(pnl_name=1)
+
+        with self.assertRaises(ValueError):
+            pnl.plot_pnl_attribution(pnl_name="PNL_UNDEFINED")
+
+        with self.assertRaises(ValueError):
+            pnl.plot_pnl_attribution(pnl_name="PNL_GROWTH", freq="D")
+
+        with self.assertRaises(ValueError):
+            pnl.plot_pnl_attribution(pnl_name="PNL_GROWTH", agg="average")
+
+        with self.assertRaises(ValueError):
+            pnl.plot_pnl_attribution(pnl_name="PNL_GROWTH", pnl_cids=["XXX"])
+
+        with self.assertRaises(TypeError):
+            pnl.plot_pnl_attribution(pnl_name="PNL_GROWTH", scale="100")
+
+        with self.assertRaises(TypeError):
+            pnl.plot_pnl_attribution(pnl_name="PNL_GROWTH", cid_labels=["AUD"])
+
+        with self.assertRaises(TypeError):
+            pnl.plot_pnl_attribution(pnl_name="PNL_GROWTH", xlabel=1)
+
+        # No data left after truncation.
+        with self.assertRaises(ValueError):
+            pnl.plot_pnl_attribution(pnl_name="PNL_GROWTH", start="2100-01-01")
 
         patch.stopall()
         plt.close("all")
