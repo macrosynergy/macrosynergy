@@ -288,9 +288,8 @@ def apply_blacklist(
             & (df["real_date"] <= end)
         )
 
-    # copy(deep=False) when nothing matched, so the relabel below always acts on a frame
-    # we own rather than the caller's. Relabelling is O(1); reset_index copies the frame.
-    df = df[~bl_mask] if bl_mask.any() else df.copy(deep=False)
+    # `df[...]` returns a new frame, so relabelling cannot reach the caller's frame
+    df = df[~bl_mask]
     df.index = pd.RangeIndex(len(df))
 
     return df
@@ -381,8 +380,7 @@ def reduce_df(
     if end:
         mask &= df["real_date"] <= pd.to_datetime(end)
 
-    # one combined mask means one copy instead of four; skipped entirely when nothing
-    # was filtered out, which saves a full copy of large frames
+    # one copy instead of four, and none at all when nothing was filtered out
     if not mask.all():
         df = df[mask]
 
@@ -410,17 +408,14 @@ def reduce_df(
     else:
         cids = [cid for cid in cids if cid in cids_in_df]
 
-    # this last filter is only needed when `intersect=True`, else cids/xcats
-    # have already been filtered above by the boolean mask
+    # only `intersect` can narrow `cids` further; otherwise the mask already did
     if intersect:
         df = df[df["cid"].isin(cids)]
 
     df = _sync_df_categories(df)
 
     df = df.drop_duplicates()
-    # df.reset_index(drop=True) scales linearly (it copies the whole frame)
-    # assigning a fresh pd.RangeIndex is constant time; drop_duplicates already
-    # handed us a new frame, so relabelling its axis cannot touch the caller's
+    # constant time, where reset_index(drop=True) copies the whole frame
     df.index = pd.RangeIndex(len(df))
 
     if out_all:
