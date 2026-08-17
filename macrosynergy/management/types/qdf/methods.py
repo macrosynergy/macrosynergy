@@ -362,21 +362,27 @@ def reduce_df(
         The filtered DataFrame. If `out_all` is True, also returns the lists of `xcats`
         and `cids`.
     """
+    mask = np.ones(len(df), dtype=bool)
+
     if xcats is not None:
         if isinstance(xcats, str):
             xcats = [xcats]
+        mask &= df["xcat"].isin(xcats)
 
-    if xcats is not None:
-        df = df[df["xcat"].isin(xcats)]
     if cids is not None:
+        # list() to cast generators/pd.Series/np.ndarray etc.
         cids = [cids] if isinstance(cids, str) else list(cids)
-        df = df[df["cid"].isin(cids)]
+        mask &= df["cid"].isin(cids)
 
     if start:
-        df = df[df["real_date"] >= pd.to_datetime(start)]
+        mask &= df["real_date"] >= pd.to_datetime(start)
 
     if end:
-        df = df[df["real_date"] <= pd.to_datetime(end)]
+        mask &= df["real_date"] <= pd.to_datetime(end)
+
+    # one copy instead of four, and none at all when nothing was filtered out
+    if not mask.all():
+        df = df[mask]
 
     if blacklist is not None:
         df = apply_blacklist(df, blacklist)
@@ -402,11 +408,15 @@ def reduce_df(
     else:
         cids = [cid for cid in cids if cid in cids_in_df]
 
-    df = df[df["cid"].isin(cids)]
+    # only `intersect` can narrow `cids` further; otherwise the mask already did
+    if intersect:
+        df = df[df["cid"].isin(cids)]
 
     df = _sync_df_categories(df)
 
     df = df.drop_duplicates()
+    # constant time, where reset_index(drop=True) copies the whole frame
+    df.index = pd.RangeIndex(len(df))
 
     if out_all:
         return df, xcats, sorted(cids)
