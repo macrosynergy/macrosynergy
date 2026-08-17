@@ -186,7 +186,7 @@ def dataframe_basket(ret="XR_NSA", cry=["CRY_NSA"], start=None, end=None, black=
     ticks_ret = [c + ret for c in contracts]
     tickers = ticks_ret + list(chain.from_iterable(ticks_cry))
     dfx = reduce_df_by_ticker(dfd, start=start, end=end, blacklist=black, ticks=tickers)
-
+    dfx['ticker'] = dfx['cid'] + "_" + dfx['xcat']
     dfw_ret = dfx[dfx["ticker"].isin(ticks_ret)].pivot(
         index="real_date", columns="ticker", values="value"
     )
