@@ -512,8 +512,8 @@ class TestAll(unittest.TestCase):
     def test_reduce_df_by_ticker(self):
         dfd = make_test_df()
         res_df = reduce_df_by_ticker(df=dfd, ticks=None, start=None, end=None)
-        self.assertTrue(dfd.equals(res_df.drop(columns="ticker")))
-
+        self.assertTrue(dfd.equals(res_df))
+        res_df['ticker'] = res_df['cid'] + "_" + res_df['xcat']
         expc_tickers = dfd["cid"] + "_" + dfd["xcat"]
         self.assertTrue(expc_tickers.equals(res_df["ticker"]))
 
