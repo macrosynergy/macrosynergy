@@ -69,9 +69,18 @@ def split_ticker(ticker: Union[str, Iterable[str]], mode: str) -> Union[str, Lis
 
     if not isinstance(ticker, str):
         if isinstance(ticker, Iterable):
-            if len(ticker) == 0:
+            # Convert to a 1-D object array; for non-sequence iterables (dict, set,
+            # generators) np.asarray may produce a 0-d array, so force 1-D first.
+            if not isinstance(ticker, (list, tuple, np.ndarray, pd.Series, pd.Index)):
+                ticker = list(ticker)
+            arr = np.asarray(ticker, dtype=object)
+            if arr.ndim == 0:
+                arr = arr.reshape(1)
+            if arr.size == 0:
                 raise ValueError("Argument `ticker` must not be empty.")
-            return [split_ticker(t, mode) for t in ticker]
+            codes, uniq = pd.factorize(arr, sort=False)
+            split = np.array([split_ticker(t, mode) for t in uniq], dtype=object)
+            return split[codes].tolist()
         else:
             raise TypeError(
                 "Argument `ticker` must be a string or an iterable of strings."

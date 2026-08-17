@@ -197,14 +197,48 @@ def _get_tickers_series(
     if not check_is_categorical(df):
         return df[cid_column] + "_" + df[xcat_column]
 
-    cid_labels = df["cid"].cat.categories[df["cid"].cat.codes]
-    xcat_labels = df["xcat"].cat.categories[df["xcat"].cat.codes]
+    # Vectorized build on unique (cid_code, xcat_code) pairs.
+    # Format only the O(n_cids * n_xcats) unique pairs, then reconstruct codes directly —
+    # avoiding a per-row Python comprehension and a full-length string allocation.
+    cid_ser = df[cid_column]
+    xcat_ser = df[xcat_column]
 
-    ticker_labels = [f"{cid}_{xcat}" for cid, xcat in zip(cid_labels, xcat_labels)]
-    categories = pd.unique(pd.Series(ticker_labels))
+    cid_codes = cid_ser.cat.codes.to_numpy()   # int8/int16 per-row codes
+    xcat_codes = xcat_ser.cat.codes.to_numpy()
 
-    ticker_series = pd.Categorical(
-        ticker_labels,
+    cid_cats = cid_ser.cat.categories          # unique cid strings (small)
+    xcat_cats = xcat_ser.cat.categories        # unique xcat strings (small)
+
+    # Map each (cid_code, xcat_code) pair to a unique integer key.
+    n_xcat = len(xcat_cats)
+    pair_key = cid_codes.astype(np.int64) * n_xcat + xcat_codes.astype(np.int64)
+
+    # Unique pair keys sorted (np.unique is fast C-level); get inverse to map rows.
+    unique_keys, inverse = np.unique(pair_key, return_inverse=True)
+    n_unique = len(unique_keys)
+
+    # First-appearance position of each unique key — pure numpy, no Python loop.
+    # Scanning the inverse array backwards lets us overwrite with earlier positions.
+    first_occurrence = np.empty(n_unique, dtype=np.intp)
+    first_occurrence[inverse[::-1]] = np.arange(len(pair_key) - 1, -1, -1, dtype=np.intp)
+    order = np.argsort(first_occurrence, kind="stable")
+
+    # Build category labels from unique pairs only (a few thousand strings).
+    ordered_keys = unique_keys[order]
+    uniq_cid_codes = (ordered_keys // n_xcat).astype(np.intp)
+    uniq_xcat_codes = (ordered_keys % n_xcat).astype(np.intp)
+    categories = np.array(
+        [f"{cid_cats[c]}_{xcat_cats[x]}" for c, x in zip(uniq_cid_codes, uniq_xcat_codes)],
+        dtype=object,
+    )
+
+    # Remap per-row inverse → category index (position in first-appearance ordered list).
+    rank = np.empty(n_unique, dtype=np.intp)
+    rank[order] = np.arange(n_unique, dtype=np.intp)
+    ticker_codes = rank[inverse]
+
+    ticker_series = pd.Categorical.from_codes(
+        ticker_codes,
         categories=categories,
         ordered=True,
     )
@@ -386,7 +420,13 @@ def reduce_df(
 
     df = _sync_df_categories(df)
 
-    df = df.drop_duplicates().reset_index(drop=True)
+    # Fast dedup: if the natural-key columns (cid, xcat, real_date) are already unique,
+    # there can be no full-row duplicates either — skip the expensive all-column
+    # drop_duplicates() entirely.  When duplicates do exist, fall back to the original
+    # drop_duplicates() so that genuine duplicate rows are still removed.
+    _idx_cols = ["cid", "xcat", "real_date"]
+    if df.duplicated(subset=_idx_cols).any():
+        df = df.drop_duplicates().reset_index(drop=True)
 
     if out_all:
         return df, xcats, sorted(cids)
