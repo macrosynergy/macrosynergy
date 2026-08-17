@@ -434,7 +434,7 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
                 )
                 if self.refit:
                     # Create training set dataloader over the full dataset
-                    X_s, y_s, _, _ = self.scale_data(X_train, y_train, self.x_scaler, self.y_scaler)
+                    X_s, y_s, _, _ = self.scale_data(X, y, self.x_scaler, self.y_scaler)
                     full_train_dataset, _ = self.make_tensor_datasets(X_train_s = X_s, y_train_s = y_s, sample_weight = sample_weight)
                     full_train_loader, _, _ = self.make_dataloaders(full_train_dataset, self.batch_size, self.use_ts_sampler, self.aggregate_last, self.drop_last)
 
