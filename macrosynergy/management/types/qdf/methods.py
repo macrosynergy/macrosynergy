@@ -466,23 +466,30 @@ def reduce_df_by_ticker(
         if tickers is not None:
             raise TypeError("`tickers` must be a list of strings.")
 
+    # one copy instead of two, and none at all when nothing was filtered out
+    mask = np.ones(len(df), dtype=bool)
     if start is not None:
-        df = df.loc[df["real_date"] >= pd.to_datetime(start)]
+        mask &= df["real_date"] >= pd.to_datetime(start)
     if end is not None:
-        df = df.loc[df["real_date"] <= pd.to_datetime(end)]
+        mask &= df["real_date"] <= pd.to_datetime(end)
+
+    if not mask.all():
+        df = df[mask]
 
     if blacklist is not None:
         df = apply_blacklist(df, blacklist)
 
     ticker_series = _get_tickers_series(df)
-    if tickers is None:
-        tickers = sorted(ticker_series.unique())
-
-    df = df[ticker_series.isin(tickers)].reset_index(drop=True)
+    if tickers is not None:
+        df = df[ticker_series.isin(tickers)]
 
     df = _sync_df_categories(df)
 
-    return df.drop_duplicates().reset_index(drop=True)
+    df = df.drop_duplicates()
+    # constant time, where reset_index(drop=True) copies the whole frame
+    df.index = pd.RangeIndex(len(df))
+
+    return df
 
 
 def update_df(
