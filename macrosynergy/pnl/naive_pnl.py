@@ -760,7 +760,8 @@ class NaivePnL:
         rebal_merge["psig"] = (
             rebal_merge
             .groupby(period_cols, observed=True)["psig"]
-            .ffill() #.shift(rebal_slip) TODO: see whether we need to group by again
+            .ffill().shift(rebal_slip)
+            #TODO: see whether we need to groupby again for the shift (this was already done like this)
         )
         
         rebal_merge = rebal_merge.sort_values(["cid", "real_date"])
