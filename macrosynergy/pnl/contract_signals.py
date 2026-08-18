@@ -446,10 +446,18 @@ def contract_signals(
     _initialized_as_categorical: bool = df.InitializedAsCategorical
 
     ## Check the dates
-    if start is None:
-        start: str = pd.Timestamp(df["real_date"].min()).strftime("%Y-%m-%d")
-    if end is None:
-        end: str = pd.Timestamp(df["real_date"].max()).strftime("%Y-%m-%d")
+    if start is None or end is None:
+        scale_cats = [x for x in cscales if isinstance(x, str)] if cscales else []
+        cats = [sig, *scale_cats]
+
+        grouped_dates = (
+            df.loc[df["xcat"].isin(cats)]
+            .groupby("xcat", observed=True)["real_date"]
+        )
+        if start is None:
+            start: str = grouped_dates.min().max().strftime("%Y-%m-%d")
+        if end is None:
+            end: str = grouped_dates.max().min().strftime("%Y-%m-%d")
 
     for dx, nx in [(start, "start"), (end, "end")]:
         if not is_valid_iso_date(dx):
