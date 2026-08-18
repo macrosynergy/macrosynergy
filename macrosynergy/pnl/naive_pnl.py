@@ -739,9 +739,30 @@ class NaivePnL:
         rebal_merge = dfw[["real_date", "cid"]].merge(
             rebal_merge, how="left", on=["real_date", "cid"]
         )
+        if rebal_freq == "annual":
+            rebal_merge["year"] = rebal_merge["real_date"].dt.year
+            period_cols = ["cid", "year"]
+        elif rebal_freq == "quarterly":
+            rebal_merge["quarter"] = rebal_merge["real_date"].dt.quarter
+            rebal_merge["year"] = rebal_merge["real_date"].dt.year
+            period_cols = ["cid", "year", "quarter"]
+        elif rebal_freq == "monthly":
+            rebal_merge["month"] = rebal_merge["real_date"].dt.month
+            rebal_merge["year"] = rebal_merge["real_date"].dt.year
+            period_cols = ["cid", "year", "month"]
+        elif rebal_freq == "weekly":
+            rebal_merge["week"] = rebal_merge["real_date"].apply(lambda x: x.week)
+            rebal_merge["year"] = rebal_merge["real_date"].dt.year
+            period_cols = ["cid", "year", "week"]
+        else:
+            period_cols = ["cid", "real_date"]
+
         rebal_merge["psig"] = (
-            rebal_merge.groupby("cid", observed=True)["psig"].ffill().shift(rebal_slip)
+            rebal_merge
+            .groupby(period_cols, observed=True)["psig"]
+            .ffill() #.shift(rebal_slip) TODO: see whether we need to group by again
         )
+        
         rebal_merge = rebal_merge.sort_values(["cid", "real_date"])
 
         rebal_merge = rebal_merge.set_index("real_date")
