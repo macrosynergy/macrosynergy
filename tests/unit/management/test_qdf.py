@@ -506,7 +506,13 @@ class TestQDFMethods(unittest.TestCase):
 class TestReduceDF(unittest.TestCase):
     @staticmethod
     def _ragged_qdf() -> QuantamentalDataFrame:
-        """Single date, USD_XR + USD_CRY + EUR_XR; i.e. EUR has no CRY."""
+        """
+        Single date, USD_XR + USD_CRY + EUR_XR; i.e. EUR has no CRY.
+
+        3 rows, cid categories [EUR, USD], xcat categories [CRY, XR]. USD carrying both
+        xcats is what lets a cid-only filter strand a `cid` category while `xcat` stays
+        clean, which is the case `_sync_df_categories` has to tell apart.
+        """
         df = make_test_df(
             cids=["USD", "EUR"],
             xcats=["XR", "CRY"],
@@ -573,6 +579,104 @@ class TestReduceDF(unittest.TestCase):
                 warn_obj = pd.core.common.SettingWithCopyWarning
             warnings.simplefilter("error", warn_obj)
             _sync_df_categories(qdf[qdf["xcat"] == "XR"])
+
+    def test_sync_df_categories_prunes_categories_absent_from_rows(self):
+        # A category can sit in the dtype without appearing in any row, so whether pruning is
+        # needed cannot be inferred from the row count. `remove_unused_categories` keeps the
+        # surviving categories in their original order, hence the unsorted expectations.
+        cases = {
+            "every category used": (["USD", "EUR"], ["USD", "EUR"]),
+            "trailing category unused": (["USD"], ["USD"]),
+            "middle category unused": (["USD", "GBP"], ["USD", "GBP"]),
+            "missing value, every category used": (
+                ["USD", None, "EUR"],
+                ["USD", "EUR"],
+            ),
+            "missing value, one category unused": (["USD", None], ["USD"]),
+            "no rows at all": ([], []),
+        }
+        for label, (cids, expected) in cases.items():
+            with self.subTest(case=label):
+                df = pd.DataFrame(
+                    {
+                        "real_date": pd.to_datetime(["2020-01-01"] * len(cids)),
+                        "cid": pd.Categorical(cids, categories=["USD", "EUR", "GBP"]),
+                        "xcat": pd.Categorical(["XR"] * len(cids), categories=["XR"]),
+                        "value": [1.0] * len(cids),
+                    }
+                )
+                synced = _sync_df_categories(df)
+                self.assertEqual(list(synced["cid"].dtype.categories), expected)
+                self.assertEqual(len(synced), len(df))
+
+    def test_sync_df_categories_leaves_fully_used_column_untouched(self):
+        # USD carries both xcats, so narrowing to USD strands a cid category but no xcat one
+        qdf = self._ragged_qdf()
+        self.assertEqual(
+            list(_sync_df_categories(qdf)["cid"].dtype.categories), ["EUR", "USD"]
+        )
+
+        usd_only = _sync_df_categories(qdf[qdf["cid"] == "USD"])
+        self.assertEqual(list(usd_only["cid"].dtype.categories), ["USD"])
+        self.assertEqual(list(usd_only["xcat"].dtype.categories), ["CRY", "XR"])
+
+    def test_reduce_df_prunes_unused_categories(self):
+        out = reduce_df(self._ragged_qdf(), cids=["USD"])
+        self.assertEqual(list(out["cid"].dtype.categories), ["USD"])
+
+    def test_apply_blacklist_rejects_malformed_blacklist(self):
+        cases = {
+            "not a dict": 1,
+            "non-str key": {1: ["2020-01-01", "2020-01-10"]},
+            "non-iterable value": {"USD": 5},
+            "wrong length": {"USD": ["2020-01-01"]},
+            "value that is not date-like": {"USD": ["not-a-date", "2020-01-10"]},
+        }
+        for label, blacklist in cases.items():
+            with self.subTest(case=label):
+                with self.assertRaises(TypeError):
+                    apply_blacklist(self._ragged_qdf(), blacklist)
+
+    def test_reduce_df_entry_points_agree(self):
+        # df_utils delegates here only for a categorical frame and otherwise filters on its
+        # own, so the two implementations are compared directly to stop them drifting apart
+        df = make_test_df(
+            cids=["USD", "EUR", "GBP"],
+            xcats=["XR", "CRY"],
+            start="2020-01-01",
+            end="2020-03-01",
+            style="linear",
+        )
+        df = df[~((df["cid"] == "GBP") & (df["xcat"] == "CRY"))].reset_index(drop=True)
+        # GBP lacking CRY is what makes `intersect` drop a cross-section instead of no-op
+        plain = pd.DataFrame(df.astype({"cid": "object", "xcat": "object"}))
+
+        cases = {
+            "no filters": {},
+            "cids": dict(cids=["USD", "EUR"]),
+            "cids as str": dict(cids="USD"),
+            "xcats as str": dict(xcats="XR"),
+            "dates": dict(start="2020-01-15", end="2020-02-15"),
+            "every filter": dict(
+                cids=["USD", "EUR"], xcats=["XR"], start="2020-01-15", end="2020-02-15"
+            ),
+            "blacklist": dict(blacklist={"USD": ["2020-01-10", "2020-01-20"]}),
+            "intersect": dict(intersect=True),
+            "intersect with no surviving xcats": dict(intersect=True, xcats=["NOPE"]),
+            "out_all": dict(out_all=True),
+            "out_all with intersect": dict(out_all=True, intersect=True),
+            "no rows survive": dict(cids=["ZZZ"]),
+        }
+        for dtype_label, categorical in (("object", False), ("category", True)):
+            frame = QuantamentalDataFrame(plain, categorical=categorical)
+            for label, kwargs in cases.items():
+                with self.subTest(case=label, dtype=dtype_label):
+                    from_qdf = reduce_df(frame, **kwargs)
+                    from_utils = _reduce_df(frame, **kwargs)
+                    if kwargs.get("out_all"):
+                        self.assertEqual(from_qdf[1:], from_utils[1:])
+                        from_qdf, from_utils = from_qdf[0], from_utils[0]
+                    pd.testing.assert_frame_equal(from_qdf, from_utils)
 
     def test_reduce_df_basic(self):
         tickers = helper_random_tickers(20)
@@ -910,7 +1014,6 @@ class TestUpdateDF(unittest.TestCase):
         self.assertTrue(test_df.equals(dfb))
 
     def test_update_categories(self):
-
         cids = ["USD", "EUR", "GBP", "JPY", "AUD"]
         xcatsa = ["FX", "IR", "EQ"]
         xcatsb = ["FX", "PPP", "IR"]
@@ -967,7 +1070,6 @@ class TestUpdateDF(unittest.TestCase):
 
 
 class TestConcatQDFs(unittest.TestCase):
-
     def test_concat_qdfs_simple(self):
         tickers = helper_random_tickers()
         cargs = dict(
@@ -1082,7 +1184,6 @@ class TestConcatQDFs(unittest.TestCase):
         self.assertTrue((non_eq_mask == nan_mask).all().all())
 
     def test_concat_qdfs_errors(self):
-
         dfs = [make_test_df() for _ in range(5)]
         with self.assertRaises(ValueError):
             concat_qdfs([])
@@ -1550,7 +1651,6 @@ class TestQDFClass(unittest.TestCase):
         self.assertEqual(out_xcats, expc_out_xcats)
 
     def test_reduce_df_by_ticker(self):
-
         qdf = QuantamentalDataFrame(self.test_df)
         sel_tickers = random.sample(self.tickers, 10)
 
@@ -1785,7 +1885,6 @@ class TestQDFClassInit(unittest.TestCase):
 
 
 class TestQDFInitializationMethods(unittest.TestCase):
-
     def test_qdf_from_timeseries(self):
         ts = pd.Series(
             np.random.randn(100), index=pd.bdate_range("2020-01-01", periods=100)
@@ -1811,7 +1910,6 @@ class TestQDFInitializationMethods(unittest.TestCase):
         self.assertTrue(qdf_a.equals(qdf_b))
 
     def test_from_long_df(self):
-
         df = pd.DataFrame(
             {
                 "real_date": pd.bdate_range("2020-01-01", periods=100),
@@ -1956,7 +2054,6 @@ class TestQDFInitializationMethods(unittest.TestCase):
             QuantamentalDataFrame.from_wide(df)
 
     def test_qdf_create_empty_df(self):
-
         test_cid, test_xcat = "A", "X"
         test_ticker = f"{test_cid}_{test_xcat}"
         test_metrics = JPMAQS_METRICS[:-1]
@@ -2013,12 +2110,16 @@ class TestQDFInitializationMethods(unittest.TestCase):
 
 class TestGetTickersSeriesEdge(_unittest.TestCase):
     def _qdf(self, categorical):
-        df = _pd.DataFrame({
-            "cid": ["AUD", "AUD", "GBP"],
-            "xcat": ["XR", "INFL", "XR"],
-            "real_date": _pd.to_datetime(["2020-01-01", "2020-01-02", "2020-01-01"]),
-            "value": [1.0, 2.0, 3.0],
-        })
+        df = _pd.DataFrame(
+            {
+                "cid": ["AUD", "AUD", "GBP"],
+                "xcat": ["XR", "INFL", "XR"],
+                "real_date": _pd.to_datetime(
+                    ["2020-01-01", "2020-01-02", "2020-01-01"]
+                ),
+                "value": [1.0, 2.0, 3.0],
+            }
+        )
         return _QDF(df, categorical=categorical)
 
     def test_object_branch_returns_series(self):
@@ -2032,8 +2133,14 @@ class TestGetTickersSeriesEdge(_unittest.TestCase):
         self.assertEqual(list(out), ["AUD_XR", "AUD_INFL", "GBP_XR"])
 
     def test_single_row(self):
-        df = _pd.DataFrame({"cid": ["AUD"], "xcat": ["XR"],
-                            "real_date": _pd.to_datetime(["2020-01-01"]), "value": [1.0]})
+        df = _pd.DataFrame(
+            {
+                "cid": ["AUD"],
+                "xcat": ["XR"],
+                "real_date": _pd.to_datetime(["2020-01-01"]),
+                "value": [1.0],
+            }
+        )
         out = _gts(_QDF(df, categorical=True))
         self.assertEqual(list(out), ["AUD_XR"])
 
@@ -2062,12 +2169,14 @@ class TestAddTickerColumnAPI(_unittest.TestCase):
 
 class TestReduceDfEdgeAPI(_unittest.TestCase):
     def _qdf(self):
-        return _pd.DataFrame({
-            "cid": ["AUD", "AUD", "GBP", "GBP"],
-            "xcat": ["XR", "INFL", "XR", "INFL"],
-            "real_date": _pd.to_datetime(["2020-01-01"] * 4),
-            "value": [1.0, 2.0, 3.0, 4.0],
-        })
+        return _pd.DataFrame(
+            {
+                "cid": ["AUD", "AUD", "GBP", "GBP"],
+                "xcat": ["XR", "INFL", "XR", "INFL"],
+                "real_date": _pd.to_datetime(["2020-01-01"] * 4),
+                "value": [1.0, 2.0, 3.0, 4.0],
+            }
+        )
 
     def test_filter_by_cids(self):
         out = _reduce_df(self._qdf(), cids=["AUD"])
@@ -2090,7 +2199,16 @@ class TestReduceDfEdgeAPI(_unittest.TestCase):
         sig = inspect.signature(_reduce_df)
         self.assertEqual(
             list(sig.parameters),
-            ["df", "xcats", "cids", "start", "end", "blacklist", "out_all", "intersect"],
+            [
+                "df",
+                "xcats",
+                "cids",
+                "start",
+                "end",
+                "blacklist",
+                "out_all",
+                "intersect",
+            ],
         )
         self.assertIs(sig.parameters["out_all"].default, False)
         self.assertIs(sig.parameters["intersect"].default, False)
