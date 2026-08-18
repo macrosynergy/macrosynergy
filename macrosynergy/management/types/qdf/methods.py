@@ -314,9 +314,26 @@ def _sync_df_categories(
     if not check_is_categorical(df):
         return df
 
+    def _has_unused_categories(_col: str) -> bool:
+        """Whether any category of `_col` is absent from every row."""
+        seen = np.zeros(len(df[_col].dtype.categories) + 1, dtype=bool)
+        seen[df[_col].array.codes] = True  # the spare slot absorbs the -1 NaN sentinel
+        return not seen[:-1].all()
+
+    # `remove_unused_categories()` argsorts the codes to filter what is used/unused.
+    # check first if a column has unused cat-codes, and only then call `remove_unused_categories()` on it
+    cols_to_sync = [
+        col
+        for col in QuantamentalDataFrameBase._StrIndexCols
+        if _has_unused_categories(col)
+    ]
+    if not cols_to_sync:
+        return df
+
+    # assigning columns one at a time would reconstruct the dataframe on each assign.
+    # using df.assign(..., inplace=True) would create side-effects
     return df.assign(
-        cid=df["cid"].cat.remove_unused_categories(),
-        xcat=df["xcat"].cat.remove_unused_categories(),
+        **{col: df[col].cat.remove_unused_categories() for col in cols_to_sync}
     )
 
 
