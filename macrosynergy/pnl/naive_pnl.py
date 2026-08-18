@@ -769,7 +769,7 @@ class NaivePnL:
         rebal_merge = rebal_merge.set_index("real_date")
         sig_series = rebal_merge.drop(["cid"], axis=1)
 
-        return sig_series
+        return sig_series["psig"]
 
     @staticmethod
     def long_only_pnl(
@@ -2915,7 +2915,7 @@ if __name__ == "__main__":
     df_xcats.loc["DUXR"] = ["2000-01-01", "2020-12-31", 0.1, 0.5, 0, 0.1]
 
     black = {"AUD": ["2006-01-01", "2015-12-31"], "GBP": ["2022-01-01", "2100-01-01"]}
-    dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
+    dfd = make_qdf(df_cids, df_xcats, back_ar=0.75, seed = 42)
 
     # Instantiate a new instance to test the long-only functionality.
     # Benchmarks are used to calculate correlation against PnL series.
