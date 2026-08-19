@@ -164,27 +164,32 @@ class BasePanelLearner(ABC):
         else:
             features_xcats = self.xcats[:-self.n_targets]
             targets_xcats = self.xcats[-self.n_targets:]
-            dfs = []
-            for target in targets_xcats:
-                df_long = (
-                    categories_df(
-                        df=self.df,
-                        xcats=features_xcats + [target],
-                        cids=self.cids,
-                        start=self.start,
-                        end=self.end,
-                        blacklist=self.blacklist,
-                        freq=self.freq,
-                        lag=self.lag,
-                        xcat_aggs=self.xcat_aggs,
-                    )
-                )
-                dfs.append(df_long)
-            df_long = pd.concat(dfs, axis=1).sort_index()
-            # Filter out duplicate categories
-            df_features = df_long.iloc[:,:len(features_xcats)]
-            df_targets = df_long[targets_xcats]
-            df_long = pd.concat([df_features, df_targets], axis=1)
+
+            df_features = categories_df(
+                df=self.df,
+                xcats=features_xcats + [targets_xcats[0]],
+                cids=self.cids,
+                start=self.start,
+                end=self.end,
+                blacklist=self.blacklist,
+                freq=self.freq,
+                lag=self.lag,
+                xcat_aggs=self.xcat_aggs,
+            )[features_xcats]
+
+            df_targets = categories_df(
+                df=self.df,
+                xcats=targets_xcats,
+                cids=self.cids,
+                start=self.start,
+                end=self.end,
+                blacklist=self.blacklist,
+                freq=self.freq,
+                lag = 0,
+                xcat_aggs=[self.xcat_aggs[1], self.xcat_aggs[1]],
+            )[targets_xcats]
+            
+            df_long = pd.concat([df_features, df_targets], axis=1).sort_index()
 
         # Handle NaNs
         # No matter what, drop rows where all independent variables are NaN
@@ -260,6 +265,7 @@ class BasePanelLearner(ABC):
         store_additional_data=None,
         n_jobs_outer=-1,
         n_jobs_inner=1,
+        skip_validation=False,
     ):
         """
         Run a learning process over a panel.
@@ -310,6 +316,9 @@ class BasePanelLearner(ABC):
         n_jobs_inner : int, optional
             Number of jobs to run in parallel for the inner loop. Default is 1. If no
             hyperparameter tuning is required, this parameter can be disregarded.
+        skip_validation : bool, optional
+            Whether to skip the more intensive validation checks for, primarily, the 
+            model and hyperparameter dictionaries. Default is False.
 
         Returns
         -------
@@ -341,22 +350,24 @@ class BasePanelLearner(ABC):
         # Check models can be fitted on first train set
         X_first = self.X.iloc[train_test_splits[0][0]]
         y_first = self.y.iloc[train_test_splits[0][0]]
-        for key, model in models.items():
-            try:
-                models[key].fit(X_first, y_first)
-            except Exception as e:
-                raise RuntimeError(
-                    f"Initial fit check failed for model '{key}' on the first outer "
-                    f"training split. The model could not be trained with X shape"
-                    f"={X_first.shape} and y shape={y_first.shape}. This may indicate "
-                    f"that the estimator is incompatible with the provided features, "
-                    f"target, or preprocessing configuration. "
-                    f"Original error: {e}"
-                ) from e
-            
-            # Reinitialize the model to ensure the actual learning process is not affected by this check
-            params = models[key].get_params(deep=False)
-            models[key] = type(model)(**params)
+
+        if not skip_validation:
+            for key, model in models.items():
+                try:
+                    models[key].fit(X_first, y_first)
+                except Exception as e:
+                    raise RuntimeError(
+                        f"Initial fit check failed for model '{key}' on the first outer "
+                        f"training split. The model could not be trained with X shape"
+                        f"={X_first.shape} and y shape={y_first.shape}. This may indicate "
+                        f"that the estimator is incompatible with the provided features, "
+                        f"target, or preprocessing configuration. "
+                        f"Original error: {e}"
+                    ) from e
+                
+                # Reinitialize the model to ensure the actual learning process is not affected by this check
+                params = models[key].get_params(deep=False)
+                models[key] = type(model)(**params)
 
         if inner_splitters is not None:
             base_splits = self._get_base_splits(inner_splitters)

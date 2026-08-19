@@ -149,6 +149,7 @@ class NaivePnL:
         exit_barrier: float = None,
         winsorize_first: bool = False,
         normalized_weights: bool = False,
+        ffill_signals: bool = True,
     ):
         """
         Calculate daily PnL and add to class instance.
@@ -234,6 +235,8 @@ class NaivePnL:
             PnL is computed as the mean of the signal-adjusted returns across all
             cross-sections. Default is False, meaning that the PnL is computed as the
             sum of the signal-adjusted returns across all cross-sections.
+        ffill_signals : bool
+            if True, NaNs in the signal are forward filled. Default is True. 
 
         Notes
         -----
@@ -275,6 +278,7 @@ class NaivePnL:
             (sequential, "sequential", bool),
             (neutral, "neutral", str),
             (thresh, "thresh", (Number, type(None))),
+            (ffill_signals, "ffill_signals", bool),
         ):
             if not isinstance(varx, typex):
                 raise TypeError(f"{name} must be a {typex}.")
@@ -364,7 +368,7 @@ class NaivePnL:
 
         # if rebal_freq != "daily":
         sig_series = self.rebalancing(
-            dfw=dfw, rebal_freq=rebal_freq, rebal_slip=rebal_slip
+            dfw=dfw, rebal_freq=rebal_freq, rebal_slip=rebal_slip, ffill_signals=ffill_signals
         )
 
         dfw["sig"] = np.squeeze(sig_series.to_numpy())
@@ -660,7 +664,7 @@ class NaivePnL:
         return pd.concat(dfw_list)
 
     @staticmethod
-    def rebalancing(dfw: pd.DataFrame, rebal_freq: str = "daily", rebal_slip=0):
+    def rebalancing(dfw: pd.DataFrame, rebal_freq: str = "daily", rebal_slip=0, ffill_signals = True):
         """
         The signals are calculated daily and for each individual cross-section defined
         in the panel. However, re-balancing a position can occur more infrequently than
@@ -677,6 +681,8 @@ class NaivePnL:
             'daily' (default), 'weekly', 'monthly', 'quarterly', or 'annual'.
         rebal_slip : str
             re-balancing slippage in days.
+        ffill_signals : bool
+            if True, NaNs in the signal are forward filled. Default is True.
 
         Returns
         -------
@@ -739,9 +745,13 @@ class NaivePnL:
         rebal_merge = dfw[["real_date", "cid"]].merge(
             rebal_merge, how="left", on=["real_date", "cid"]
         )
-        rebal_merge["psig"] = (
-            rebal_merge.groupby("cid", observed=True)["psig"].ffill().shift(rebal_slip)
-        )
+        if ffill_signals:
+            rebal_merge["psig"] = (
+                rebal_merge.groupby("cid", observed=True)["psig"].ffill().shift(rebal_slip)
+            )
+        else:
+            rebal_merge["psig"] = rebal_merge.groupby("cid", observed=True)["psig"].shift(rebal_slip)
+            
         rebal_merge = rebal_merge.sort_values(["cid", "real_date"])
 
         rebal_merge = rebal_merge.set_index("real_date")

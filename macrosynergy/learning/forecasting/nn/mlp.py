@@ -95,6 +95,13 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         Weight decay used by the optimizer. Default is 1e-4.
     reg_turnover : float, optional
         L2 regularization strength for the turnover in model outputs. Default is 0.
+    reg_group : float, optional
+        L2 regularization strength for group shrinkage of model outputs. Default is 0.
+        This is only relevant when multiple outputs are being predicted. 
+    group_labels : dict, optional
+        Dictionary mapping each output variable to a group label. This is only relevant
+        when multiple outputs are being predicted and `reg_group` is greater than zero.
+        Default is None.
     use_ts_sampler : bool, optional
         Whether to use a time-series aware batch sampler during training.
         Default is True.
@@ -256,7 +263,7 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         head_activation = "identity",
         dropout_p = 0,
         long_only = None,
-        dollar_neutral = False, # TODO: for some reason this doesnt work
+        dollar_neutral = False,
         normalization = False,
         torch_model = None,
         # Neural network training dynamics
@@ -267,6 +274,8 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         learning_rate = 3e-4,
         weight_decay = 1e-4,
         reg_turnover = 0, # TODO: implement but this is only useful when transaction costs are included in the loss function, which is not currently the case
+        reg_group = 0,
+        group_labels = None,
         use_ts_sampler = True, # TODO: turn this into an optional sampler object
         aggregate_last = True,
         drop_last = False,
@@ -301,6 +310,8 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
             learning_rate,
             weight_decay,
             reg_turnover,
+            reg_group,
+            group_labels,
             use_ts_sampler,
             aggregate_last,
             drop_last,
@@ -334,6 +345,8 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         self.learning_rate = learning_rate
         self.weight_decay = weight_decay
         self.reg_turnover = reg_turnover
+        self.reg_group = reg_group
+        self.group_labels = group_labels
 
         self.use_ts_sampler = use_ts_sampler
         self.aggregate_last = aggregate_last
@@ -353,9 +366,6 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         self.random_states = [self.random_state] if not isinstance(self.random_state, list) else self.random_state
 
     def fit(self, X, y, sample_weight=None):
-        # Fit checks 
-        self._check_fit_params(X, y, sample_weight)
-
         # Copy data and initialize empty list of models to be trained
         X = X.copy()
         y = y.copy()
@@ -364,7 +374,7 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         # Data checks
         # TODO: if torch_model is provided, check it has the right structure 
         # to be trained by this class by passing a batch through it
-        sample_weight_strategy = self._check_fit_params(X, y, sample_weight)
+        sample_weight_strategy = self._check_fit_params(X, y, sample_weight, self.group_labels)
 
         # Filter assets with insufficient samples to have a head in the network
         target_counts = y.count()
@@ -372,6 +382,22 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         self.n_targets = len(self.targets)
 
         y = y[self.targets]
+
+        # If group shrinkage, create dictionary of sector to column indices
+        if self.reg_group > 0:
+            self.group_dict = {}
+            for target in self.targets:
+                group = self.group_labels.get(target)
+                self.group_dict.setdefault(group, []).append(y.columns.get_loc(target))
+            self.active_groups = [group for group, indices in self.group_dict.items() if len(indices) > 1]
+        else:
+            self.group_dict = None
+            self.active_groups = None
+
+
+        # Check this doesn't interfere with dollar neutrality constraint
+        if self.dollar_neutral and self.n_targets < 3:
+            raise ValueError("Dollar neutrality constraint requires at least 3 assets to be predicted.")
 
         # Create training and validation splits
         X_train, X_valid, y_train, y_valid = self.create_train_valid_splits(X, y, self.train_pct)
@@ -426,6 +452,9 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
                     optimizer = optim, 
                     scheduler = scheduler,
                     loss_func = self.loss_func,
+                    reg_group = self.reg_group,
+                    group_dict = self.group_dict,
+                    active_groups = self.active_groups,
                     sample_weight = sample_weight,
                     sample_weight_strategy = sample_weight_strategy,
                     reg_turnover = self.reg_turnover, 
@@ -472,6 +501,9 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
                         optimizer = optim, 
                         scheduler = scheduler,
                         loss_func = self.loss_func,
+                        reg_group = self.reg_group,
+                        group_dict = self.group_dict,
+                        active_groups = self.active_groups,
                         sample_weight = sample_weight,
                         sample_weight_strategy = sample_weight_strategy,
                         reg_turnover = self.reg_turnover, 
@@ -729,6 +761,9 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         optimizer,
         scheduler,
         loss_func,
+        reg_group,
+        group_dict,
+        active_groups,
         sample_weight,
         sample_weight_strategy,
         reg_turnover,
@@ -751,6 +786,9 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
                         optimizer = optimizer,
                         scheduler = scheduler,
                         loss_func = loss_func,
+                        reg_group = reg_group,
+                        group_dict = group_dict,
+                        active_groups = active_groups,
                         sample_weight = sw_i,
                         sample_weight_strategy = sample_weight_strategy,
                         reg_turnover = reg_turnover
@@ -764,13 +802,20 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
                         optimizer = optimizer,
                         scheduler = scheduler,
                         loss_func = loss_func,
+                        reg_group = reg_group,
+                        group_dict = group_dict,
+                        active_groups = active_groups,
                         sample_weight = None,
                         sample_weight_strategy = sample_weight_strategy,
                         reg_turnover = reg_turnover
                     )
             
             if patience is not None:
-                train_loss = self._eval_loss(model, train_loader_eval, loss_func)
+                if verbose:
+                    train_loss = self._eval_loss(model, train_loader_eval, loss_func)
+                else:
+                    train_loss = None
+
                 valid_loss = self._eval_loss(model, valid_loader, loss_func)
 
                 best_score_new, best_state, counter = self.update_es_stats(
@@ -802,6 +847,9 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         optimizer,
         scheduler,
         loss_func,
+        reg_group,
+        group_dict,
+        active_groups,
         sample_weight,
         sample_weight_strategy,
         reg_turnover
@@ -820,6 +868,15 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
             pweight_changes = preds[1:] - preds[:-1]
             pweight_l2 = torch.mean(torch.sum(pweight_changes ** 2, dim=1))
             loss = loss + reg_turnover * pweight_l2
+
+        if reg_group > 0 and group_dict is not None and active_groups is not None:
+            group_l2 = 0
+            for group in active_groups:
+                group_indices = group_dict[group]
+                group_preds = preds[:, group_indices]
+                group_l2 += torch.mean(torch.sum((group_preds - torch.mean(group_preds, dim=1, keepdim=True)) ** 2, dim=1))
+            group_l2 = group_l2 / len(active_groups)
+            loss = loss + reg_group * group_l2
 
         loss.backward()
         optimizer.step()
@@ -887,6 +944,8 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         learning_rate,
         weight_decay,
         reg_turnover,
+        reg_group,
+        group_labels,
         use_ts_sampler,
         aggregate_last,
         drop_last,
@@ -1040,6 +1099,26 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
             raise TypeError("reg_turnover must be a real number.")
         if reg_turnover < 0:
             raise ValueError("reg_turnover must be non-negative.")
+
+        # reg_group
+        if not isinstance(reg_group, numbers.Real):
+            raise TypeError("reg_group must be a real number.")
+        if reg_group < 0:
+            raise ValueError("reg_group must be non-negative.")
+        if reg_group > 0 and group_labels is None:
+            raise ValueError("group_labels must be provided if reg_group is greater than 0.")
+
+        # group_labels
+        if group_labels is not None:
+            if reg_group == 0:
+                raise ValueError("group_labels can only be provided if reg_group is greater than 0.")
+            if not isinstance(group_labels, dict):
+                raise TypeError("group_labels must be a dictionary or None.")
+            for key, value in group_labels.items():
+                if not isinstance(key, str):
+                    raise TypeError("All keys in group_labels must be strings.")
+                if not isinstance(value, str):
+                    raise TypeError("All values in group_labels must be strings.")
         
         # use_ts_sampler
         if not isinstance(use_ts_sampler, bool):
@@ -1116,7 +1195,7 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         if min_samples < 1:
             raise ValueError("min_samples must be at least 1.")
         
-    def _check_fit_params(self, X, y, sample_weight):
+    def _check_fit_params(self, X, y, sample_weight, group_labels):
         # X 
         if not isinstance(X, pd.DataFrame):
             raise TypeError("X must be a pandas DataFrame.")
@@ -1144,6 +1223,12 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
             raise TypeError("The inner index of y must be datetime.date.")
         if not X.index.equals(y.index):
             raise ValueError("X and y must have the same multi-index.")
+
+        # group_labels 
+        if group_labels is not None:
+            # check group labels is a dict with keys as column names in X and values as strings
+            if set(group_labels.keys()) - set(y.columns):
+                raise ValueError("All keys in group_labels must be column names in y.")
         
         # sample_weight 
         if sample_weight is not None:
@@ -1182,6 +1267,7 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
 if __name__ == "__main__":
     from macrosynergy.learning import (
         SignalOptimizer,
+        NegSharpeRatio,
     )
     from macrosynergy.management.simulate import make_qdf
     import pandas as pd
@@ -1227,7 +1313,7 @@ if __name__ == "__main__":
         cids=["USD"],
         blacklist=black,
         drop_nas="X",
-        n_targets=2,
+        n_targets=3,
     )
     X = so.X.copy(deep=True)
     y = so.y.copy(deep=True)
@@ -1255,19 +1341,21 @@ if __name__ == "__main__":
         fit_encoder_intercept = False,
         fit_head_intercept = True,
         encoder_activation = "tanh",
-        head_activation="identity",
+        head_activation="tanh",
         dropout_p = 0.1,
-        long_only = True,
+        long_only = False,
         dollar_neutral = False,
         normalization = False,
         #torch_model = BasicMLP(n_inputs=X.shape[1], n_latent=16, n_outputs=y.shape[1]),
-        loss_func=torch.nn.MSELoss(),
-        optimizer = ["AdamW","SGD+mom"],
+        loss_func=NegSharpeRatio(),
+        optimizer = "AdamW",
         scheduler = None, 
         batch_size = 16,
         learning_rate = 3e-4, 
         weight_decay = 1e-4,
         reg_turnover = 0,
+        reg_group = 100000000000,
+        group_labels = {"RATES":"test","XR1":"something","XR2":"test"},
         use_ts_sampler = True,
         aggregate_last=True,
         drop_last=False,
@@ -1279,26 +1367,26 @@ if __name__ == "__main__":
         y_scaler = StandardScaler(with_mean=False),
         verbose = False, 
         random_state = [42,43],
-        inverse_transform_preds = True,
-        min_samples = 36,
-    )#.fit(X,y)
-    #print(mlp.predict(X))
+        inverse_transform_preds = False,
+        min_samples = 1,
+    ).fit(X,y)
+    print(mlp.predict(X))
 
-    so.calculate_predictions(
-        name = "MLP",
-        models = {
-            "MLP": mlp
-        },
-        multi_target_fill="mean",
-        min_cids = 1,
-        min_xcats = 1,
-        min_periods = 36,
-    )
+    # so.calculate_predictions(
+    #     name = "MLP",
+    #     models = {
+    #         "MLP": mlp
+    #     },
+    #     multi_target_fill="mean",
+    #     min_cids = 1,
+    #     min_xcats = 1,
+    #     min_periods = 36,
+    # )
 
-    dfa = so.get_optimized_signals()
-    print(dfa)
+    # dfa = so.get_optimized_signals()
+    # print(dfa)
 
-    print(list(mlp.models[0].parameters()))
-    print(list(mlp.models[1].parameters()))
-    preds = mlp.predict(X)
-    print(preds)
+    # print(list(mlp.models[0].parameters()))
+    # print(list(mlp.models[1].parameters()))
+    # preds = mlp.predict(X)
+    # print(preds)

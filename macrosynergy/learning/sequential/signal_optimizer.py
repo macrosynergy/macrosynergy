@@ -215,6 +215,7 @@ class SignalOptimizer(BasePanelLearner):
         min_cids=4,
         min_periods=12 * 3,
         min_xcats=1,
+        start_date = None,
         test_size=1,
         max_periods=None,
         split_functions=None,
@@ -223,6 +224,7 @@ class SignalOptimizer(BasePanelLearner):
         n_jobs_outer=-1,
         n_jobs_inner=1,
         store_correlations=False,
+        skip_validation = False,
     ):
         """
         Determine forecasts and store relevant quantities over time.
@@ -280,6 +282,11 @@ class SignalOptimizer(BasePanelLearner):
             the frequency `freq` specified in the constructor. Default is 36.
         min_xcats : int, optional
             Minimum number of xcats required for the initial training set. Default is 1.
+        start_date = None, optional
+            Start date for the sequential optimization process. Default is None, in which
+            the optimization process is determined by (min_cids, min_periods, min_xcats)
+            and the first date in the dataframe. If this is set, (min_cids, min_periods, min_xcats)
+            should be None.
         test_size : int, optional
             Number of periods to pass before retraining a selected model. Default is 1.
         max_periods : int, optional
@@ -313,6 +320,9 @@ class SignalOptimizer(BasePanelLearner):
         store_correlations : bool
             Whether to store the correlations between input pipeline features and input
             predictor features. Default is False.
+        skip_validation : bool
+            Whether to skip the more intensive validation checks for, primarily, the 
+            model and hyperparameter dictionaries. Default is False.
         """
         # Additional checks
         if not isinstance(store_correlations, bool):
@@ -342,6 +352,7 @@ class SignalOptimizer(BasePanelLearner):
             min_periods=min_periods,
             max_periods=max_periods,
             min_xcats=min_xcats,
+            start_date=start_date
         )
 
         results = self.run(
@@ -360,6 +371,7 @@ class SignalOptimizer(BasePanelLearner):
             n_iter=n_iter,
             n_jobs_outer=n_jobs_outer,
             n_jobs_inner=n_jobs_inner,
+            skip_validation=skip_validation
         )
 
         self._check_duplicate_results(name)
@@ -2019,7 +2031,8 @@ if __name__ == "__main__":
         store_additional_data=[
             "oob_score_",
             "feature_importances_"
-        ]
+        ],
+        start_date="2016-01-29"
     )
 
     so.models_heatmap("LR")
