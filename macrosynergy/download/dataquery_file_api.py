@@ -1768,6 +1768,7 @@ class DataQueryFileAPIClient:
         show_progress: bool = True,
         overwrite: bool = False,
         keep_n_days_old_files: Optional[int] = None,
+        include_source_file: bool = False,
     ) -> Union[pd.DataFrame, pl.DataFrame, pl.LazyFrame]:
         """
         Downloads data for the specified `tickers`, `cids`, or `xcats` and returns it as
@@ -1815,8 +1816,16 @@ class DataQueryFileAPIClient:
             If True, overwrites files if they already exist. Default is False.
         keep_n_days_old_files : int
             Passed to the snapshot download to prune older files after downloading.
-            At 0 (default), only the latest snapshot is kept. If None or -1, no files
-            are deleted. See :func:`DataQueryFileAPIClient.cleanup_old_files`.
+            If None (default) or -1, no files are deleted. At 0, only the latest snapshot
+            is kept; at 1 day 1 day of files is kept, etc.
+            See :func:`DataQueryFileAPIClient.cleanup_old_files` for more details.
+        include_source_file : bool
+            If True, the returned DataFrame will include a column indicating the source
+            file from which each row was loaded. As this loads a large amount of string
+            data, the `"source_file"` column is categorical by default. If False
+            (default), no source file information is included.
+
+            Default is False.
 
         Returns
         -------
@@ -1848,6 +1857,7 @@ class DataQueryFileAPIClient:
             datasets=datasets_to_download,
             include_delta_files=include_delta_files,
             catalog_path=catalog_path,
+            include_source_file=include_source_file,
         )
 
 
@@ -1874,7 +1884,7 @@ def _pd_to_datetime_compat(ts: str, utc: bool) -> pd.Timestamp:
 
 @overload
 def pd_to_datetime_compat(
-    ts: str,
+    ts: Union[str, pd.Timestamp],
     format: str = "mixed",
     utc: bool = True,
 ) -> pd.Timestamp: ...
@@ -1889,7 +1899,7 @@ def pd_to_datetime_compat(
 
 
 def pd_to_datetime_compat(
-    ts: Union[str, pd.Series],
+    ts: Union[str, pd.Timestamp, datetime.date, pd.Series],
     format: str = "mixed",
     utc: bool = True,
 ) -> Union[pd.Timestamp, pd.Series]:
@@ -2318,6 +2328,12 @@ def _check_lazy_load_inputs(
     if dataframe_format not in ["qdf", "wide", "tickers"]:
         raise ValueError("`dataframe_format` must be one of 'qdf', 'wide', 'tickers'.")
 
+    if dataframe_format == "wide" and metrics is not None and len(metrics) > 1:
+        raise ValueError(
+            "`dataframe_format='wide'` only supports a single metric (typically 'value')."
+            " Please provide a single metric in the `metrics` parameter."
+        )
+
     if dataframe_type not in ["pandas", "polars", "polars-lazy"]:
         raise ValueError(
             "`dataframe_type` must be one of 'pandas', 'polars', 'polars-lazy'."
@@ -2396,11 +2412,6 @@ def _filter_to_latest_files(
     files_df: pd.DataFrame,
     include_delta_files: bool = False,
 ) -> pd.DataFrame:
-    # if include_delta_files:
-    #     raise NotImplementedError(
-    #         "Filtering to latest files including delta files is not implemented."
-    #     )
-
     if files_df.empty:
         return files_df
 
@@ -2437,6 +2448,8 @@ def lazy_load_from_parquets(
     include_delta_files: bool = False,
     include_metadata_files: bool = False,
     catalog_path: Union[str, Path] = None,
+    include_source_file: bool = False,
+    categorical_source_file_column: bool = True,
 ) -> pd.DataFrame:
     files_dir = Path(files_dir)
     if (not metrics) or (metrics == "all") or ("all" in metrics):
@@ -2473,16 +2486,36 @@ def lazy_load_from_parquets(
     tickers = tickers or []
     if cids:
         tickers += [f"{c}_{x}" for c in cids for x in xcats]
+    if "source_file" in metrics:
+        warnings.warn(
+            'Please use `include_source_file=True` instead of including "source_file" in metrics.'
+        )
+        include_source_file = True
+        metrics.remove("source_file")
+
+    catalog_df = pd.read_parquet(Path(catalog_path).resolve())
+    valid_tickers = sorted(
+        catalog_df[catalog_df["Ticker"].str.lower().isin([t.lower() for t in tickers])][
+            "Ticker"
+        ].tolist()
+    )
 
     lf: pl.LazyFrame = _lazy_load_filtered_parquets(
         paths=sorted(available_files_df["path"]),
-        tickers=tickers,
+        tickers=valid_tickers,
         start_date=start_date,
         end_date=end_date,
         return_qdf=(dataframe_format == "qdf"),
         catalog_path=catalog_path,
+        include_source_file=include_source_file,
+        categorical_source_file_column=categorical_source_file_column,
     )
-    if metrics and set(metrics) != set(JPMAQS_METRICS):
+    if include_source_file:
+        assert (
+            "source_file" not in metrics
+        ), "source_file should not be in metrics when include_source_file is True"
+        metrics = metrics + ["source_file"]
+    if set(metrics) != set(JPMAQS_METRICS):
         cols_to_keep = ["real_date", "cid", "xcat", "ticker"] + metrics
         if PYTHON_3_8_OR_LATER:
             lf = lf.select(
@@ -2491,9 +2524,25 @@ def lazy_load_from_parquets(
         else:
             lf = lf.select([pl.col(c) for c in cols_to_keep if c in lf.schema.keys()])
 
+    if dataframe_format == "wide" and len(metrics) != 1:
+        raise ValueError(
+            "`dataframe_format='wide'` only supports a single metric (typically 'value')."
+            " Please provide a single metric in the `metrics` parameter."
+        )
+
     cat_cols = ["cid", "xcat", "ticker"]
     if dataframe_type in ["polars", "polars-lazy"]:
-        if categorical_dataframe:
+        if dataframe_format == "wide":
+            metrics = metrics[0]
+            lf = lf.pivot(
+                "ticker",
+                on_columns=valid_tickers,
+                index="real_date",
+                values=metrics,
+                aggregate_function=None,
+                separator=";",
+            ).sort("real_date")
+        if categorical_dataframe and dataframe_format != "wide":
             cols = None
             if PYTHON_3_8_OR_LATER:
                 cols = [c for c in cat_cols if c in lf.collect_schema().names()]
@@ -2506,7 +2555,10 @@ def lazy_load_from_parquets(
         return lf.collect()
     if dataframe_type == "pandas":
         df = lf.collect().to_pandas()
-        if categorical_dataframe:
+        if dataframe_format == "wide":
+            metrics = metrics[0]
+            return df.pivot(index="real_date", columns="ticker", values=metrics)
+        if categorical_dataframe and dataframe_format != "wide":
             cols = [c for c in cat_cols if c in df.columns]
             if cols:
                 df[cols] = df[cols].astype("category")
@@ -2520,62 +2572,15 @@ class JPMaQSParquetSchemaKind(Enum):
     QDF = "qdf"
 
 
-def _identify_schema_type(lf: pl.LazyFrame) -> JPMaQSParquetSchemaKind:
-    if PYTHON_3_8_OR_LATER:
-        cols = set(lf.collect_schema().keys())
-    else:
-        cols = set(lf.schema.keys())
-    if "ticker" in cols:
-        return JPMaQSParquetSchemaKind.TICKER
-    if {"cid", "xcat"}.issubset(cols):
-        return JPMaQSParquetSchemaKind.QDF
-    raise ValueError(
-        "Unknown schema: need either 'ticker' or both 'cid' and 'xcat'. "
-        f"Found columns: {sorted(cols)}"
-    )
-
-
-def _expr_split_ticker(ticker_expr: pl.Expr) -> Tuple[pl.Expr, pl.Expr]:
-    """
-    Robust split of 'CID_XCAT...' into (cid, xcat) WITHOUT using splitn().
-    Works across Polars versions (avoids struct vs list return type issues).
-    """
-    splitx = ticker_expr.str.splitn("_", 2)
-    cid = splitx.struct.field("field_0")
-    xcat = splitx.struct.field("field_1")
-    return cid, xcat
-
-
-def _ensure_columns(lf: pl.LazyFrame, cols: Sequence[str]) -> pl.LazyFrame:
-    """
-    Ensure all `cols` exist before .select(...).
-    This runs schema-only (lf.collect_schema()), not a materialization.
-    """
-    if PYTHON_3_8_OR_LATER:
-        have = set(lf.collect_schema().keys())
-    else:
-        have = set(lf.schema.keys())
-    missing = [c for c in cols if c not in have]
-    return lf.with_columns(**{c: pl.lit(None) for c in missing}) if missing else lf
-
-
 def _filter_lazy_frame_by_tickers(
     lf: pl.LazyFrame,
-    kind: JPMaQSParquetSchemaKind,
     tickers: Sequence[str],
     start_date: Optional[Union[str, pd.Timestamp]],
     end_date: Optional[Union[str, pd.Timestamp]],
 ) -> pl.LazyFrame:
     tickers_list = [t for t in tickers if t]
-    if kind is JPMaQSParquetSchemaKind.TICKER:
-        return lf.filter(pl.col("ticker").is_in(tickers_list))
-    lf = (
-        lf.with_columns(
-            _ticker=pl.concat_str([pl.col("cid"), pl.lit("_"), pl.col("xcat")])
-        )
-        .filter(pl.col("_ticker").is_in(tickers_list))
-        .drop("_ticker")
-    )
+    if tickers_list:
+        lf = lf.filter(pl.col("ticker").is_in(tickers_list))
     if start_date:
         start_date = pd_to_datetime_compat(start_date).strftime("%Y-%m-%d")
         lf = lf.filter(pl.col("real_date") >= pl.lit(start_date).str.to_date())
@@ -2585,27 +2590,108 @@ def _filter_lazy_frame_by_tickers(
     return lf
 
 
+EXPECTED_JPMAQS_PARQUET_SCHEMA = {
+    "real_date": pl.Date,
+    "ticker": pl.String,
+    "value": pl.Float64,
+    "eop_lag": pl.Float64,
+    "mop_lag": pl.Float64,
+    "grading": pl.Float64,
+    "last_updated": pl.Datetime,
+}
+
+
 def _to_output_schema(
-    lf: pl.LazyFrame, src_kind: JPMaQSParquetSchemaKind, want_qdf: bool
+    lf: pl.LazyFrame,
+    want_qdf: bool,
+    include_source_file: bool = False,
 ) -> pl.LazyFrame:
-    """Normalize columns to qdf or ticker-based shape."""
-    cols = "real_date.ticker.value.eop_lag.mop_lag.grading.last_updated"
-    ticker_cols = cols.split(".")
-    qdf_cols = cols.replace("ticker", "cid.xcat").split(".")
+    expc_schema = EXPECTED_JPMAQS_PARQUET_SCHEMA.copy()
+    if include_source_file:
+        expc_schema["source_file"] = pl.Categorical
 
     if want_qdf:
-        if src_kind is JPMaQSParquetSchemaKind.TICKER:
-            cid_expr, xcat_expr = _expr_split_ticker(pl.col("ticker"))
-            lf = lf.with_columns(cid=cid_expr, xcat=xcat_expr)
-        lf = _ensure_columns(lf, qdf_cols)
-        return lf.select(qdf_cols)
-
-    if src_kind is JPMaQSParquetSchemaKind.QDF:
+        expc_schema.pop("ticker", None)
+        expc_schema = {**expc_schema, "cid": pl.String, "xcat": pl.String}
+        ticker_col_split = pl.col("ticker").str.splitn("_", 2)
         lf = lf.with_columns(
-            ticker=pl.concat_str([pl.col("cid"), pl.lit("_"), pl.col("xcat")])
+            cid=ticker_col_split.struct.field("field_0"),
+            xcat=ticker_col_split.struct.field("field_1"),
         )
-    lf = _ensure_columns(lf, ticker_cols)
-    return lf.select(ticker_cols)
+
+    keep_cols = list(expc_schema.keys())
+    curr_cols = lf.collect_schema().keys() if PYTHON_3_8_OR_LATER else lf.schema.keys()
+    missing_cols = [c for c in keep_cols if c not in curr_cols]
+    if missing_cols:
+        raise ValueError(
+            f"Missing expected columns in LazyFrame: {missing_cols}. "
+            f"Current columns: {sorted(curr_cols)}"
+        )
+    lf = lf.select([pl.col(c) for c in keep_cols])
+    return lf
+
+
+def _scan_check_and_cast_single_parquet(
+    path: str,
+    include_source_file: bool = False,
+    categorical_source_file_column: bool = True,
+) -> pl.LazyFrame:
+    lf = pl.scan_parquet(path)
+    schema = dict(lf.collect_schema()) if PYTHON_3_8_OR_LATER else dict(lf.schema)
+    if schema.get("grading", None) == pl.String:
+        lf = lf.with_columns(pl.col("grading").cast(pl.Float64))
+    if include_source_file:
+        if "source_file" in schema:
+            raise ValueError(
+                "The 'source_file' column already exists in the parquet file. Please download a fresh copy of the parquet file to avoid conflicts."
+            )
+        pth_str = Path(path).name.rsplit(".", 1)[0]
+        assert pth_str, f"Invalid path: {path}"
+        lf = lf.with_columns(
+            pl.lit(pth_str)
+            .alias("source_file")
+            .cast(pl.Categorical if categorical_source_file_column else pl.String)
+        )
+
+    if ("cid" in schema) != ("xcat" in schema):
+        raise ValueError(
+            "Parquet file must have both 'cid' and 'xcat' columns or neither."
+        )
+
+    # this conversion is later undone in _to_output_schema() if want_qdf is True
+    # however, the cost of this conversion is small compared to the cost of maintaing
+    # a dual read schema and offers fewer code paths and less complexity.
+    # this is also why reading QDF saved by older version of the package is supported
+    # for now, but the QDF write path has been removed.
+    if "cid" in schema:
+        err_str = (
+            f"A modified schema was detected for file `{path}`. "
+            "Please update the version of the Macrosynergy Package used. "
+            "Modifying the schema of downloaded files will not be supported in future versions of the Macrosynergy Package."
+        )
+        warnings.warn(err_str)
+        if "ticker" not in schema:
+            lf = lf.with_columns(
+                ticker=pl.concat_str([pl.col("cid"), pl.lit("_"), pl.col("xcat")])
+            )
+        lf = lf.drop(["cid", "xcat"])
+
+    # if now missing the ticker or real_date columns, raise an error
+    schema = dict(lf.collect_schema()) if PYTHON_3_8_OR_LATER else dict(lf.schema)
+    must_have_cols = ["real_date", "ticker"]
+    for col in must_have_cols:
+        if col not in schema:
+            raise ValueError(
+                f"Parquet file {path} is missing required column: '{col}'."
+            )
+
+    for col, expected_type in EXPECTED_JPMAQS_PARQUET_SCHEMA.items():
+        if col in schema:
+            if schema[col] != expected_type:
+                lf = lf.with_columns(pl.col(col).cast(expected_type))
+        else:
+            lf = lf.with_columns(pl.lit(None).cast(expected_type).alias(col))
+    return lf
 
 
 def _scan_and_prepare_single_parquet(
@@ -2614,21 +2700,24 @@ def _scan_and_prepare_single_parquet(
     start_date: Optional[Union[str, pd.Timestamp]],
     end_date: Optional[Union[str, pd.Timestamp]],
     return_qdf: bool,
+    include_source_file: bool = False,
+    categorical_source_file_column: bool = True,
 ) -> pl.LazyFrame:
-    lf = pl.scan_parquet(path)
+    lf = _scan_check_and_cast_single_parquet(
+        path=path,
+        include_source_file=include_source_file,
+        categorical_source_file_column=categorical_source_file_column,
+    )
 
-    if dict(lf.collect_schema())["grading"] == pl.String:
-        lf = lf.with_columns(pl.col("grading").cast(pl.Float64))
-
-    kind = _identify_schema_type(lf)
     lf = _filter_lazy_frame_by_tickers(
         lf=lf,
-        kind=kind,
         tickers=tickers,
         start_date=start_date,
         end_date=end_date,
     )
-    lf = _to_output_schema(lf, kind, return_qdf)
+    lf = _to_output_schema(
+        lf=lf, want_qdf=return_qdf, include_source_file=include_source_file
+    )
     return lf
 
 
@@ -2639,12 +2728,21 @@ def _lazy_load_filtered_parquets(
     end_date: Optional[Union[str, pd.Timestamp]],
     catalog_path: Union[str, Path],
     return_qdf: bool = True,
+    include_source_file: bool = False,
+    categorical_source_file_column: bool = True,
 ) -> pl.LazyFrame:
     if not paths:
         raise ValueError("No paths provided")
 
     ticker_lazyframes_df = build_filtered_lazy_frames_df(
-        paths, tickers, start_date, end_date, catalog_path, return_qdf
+        paths=paths,
+        tickers=tickers,
+        start_date=start_date,
+        end_date=end_date,
+        catalog_path=catalog_path,
+        return_qdf=return_qdf,
+        include_source_file=include_source_file,
+        categorical_source_file_column=categorical_source_file_column,
     )
     assert not (
         (ticker_lazyframes_df.empty) or (ticker_lazyframes_df["lazyframe"].isna().any())
@@ -2702,6 +2800,8 @@ def build_filtered_lazy_frames_df(
     end_date: Optional[Union[str, pd.Timestamp]],
     catalog_path: Union[str, Path],
     return_qdf: bool,
+    include_source_file: bool = False,
+    categorical_source_file_column: bool = True,
 ) -> pd.DataFrame:
     tickers_list: List[str] = list(dict.fromkeys(tickers))
     catalog_df = pd.read_parquet(catalog_path)
@@ -2758,6 +2858,8 @@ def build_filtered_lazy_frames_df(
                     start_date=start_date,
                     end_date=end_date,
                     return_qdf=return_qdf,
+                    include_source_file=include_source_file,
+                    categorical_source_file_column=categorical_source_file_column,
                 )
                 for p in curr_paths
             ],
@@ -2773,32 +2875,27 @@ def build_filtered_lazy_frames_df(
 if __name__ == "__main__":
     print("Current time UTC:", utc_now().isoformat())
     path = Path("~/jpmaqs-data").expanduser()
-    start = time.time()
-    since_datetime = pd.Timestamp.now() - pd.offsets.BDay(5)
-    print(
-        f"Downloading full-snapshots, delta-files, and metadata files published since {since_datetime}"
-    )
-    since_datetime = since_datetime.strftime("%Y%m%d")
-    with DataQueryFileAPIClient(out_dir=path) as dq:
-        dq.download_catalog_file()
-        dq.download_files(since_datetime=since_datetime)
-    end = time.time()
+    # start = time.time()
+    # since_datetime = pd.Timestamp.now() - pd.offsets.BDay(5)
+    # print(
+    #     f"Downloading full-snapshots, delta-files, and metadata files published since {since_datetime}"
+    # )
+    # since_datetime = since_datetime.strftime("%Y%m%d")
+    # with DataQueryFileAPIClient(out_dir=path) as dq:
+    #     dq.download_catalog_file()
+    #     dq.download_files(since_datetime=since_datetime)
+    # end = time.time()
 
-    print(f"Download completed in {end - start:.2f} seconds")
+    # print(f"Download completed in {end - start:.2f} seconds")
 
     cids = ["AUD", "BRL", "CAD", "CHF", "CNY", "CZK", "EUR", "GBP", "USD"]
     xcats = ["RIR_NSA", "FXXR_NSA", "FXXR_VT10", "DU05YXR_NSA", "DU05YXR_VT10"]
     tickers = [f"{c}_{x}" for c in cids for x in xcats]
 
-    with DataQueryFileAPIClient(out_dir=path) as dq:
-        df = dq.download(tickers=tickers)
-        print(df.head())
+    # with DataQueryFileAPIClient(out_dir=path) as dq:
+    #     df = dq.download(tickers=tickers)
+    #     print(df.head())
 
-    with DataQueryFileAPIClient(out_dir=path) as dq:
-        pl_df: pl.DataFrame = dq.download(
-            cids=cids,
-            xcats=xcats,
-            dataframe_format="tickers",
-            dataframe_type="polars",
-        )
+    with DataQueryFileAPIClient() as dq:
+        pl_df: pl.DataFrame = dq.download(cids=cids, xcats=xcats, include_source_file=1)
         print(pl_df.head())
