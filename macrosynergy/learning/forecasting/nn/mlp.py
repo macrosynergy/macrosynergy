@@ -24,7 +24,7 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
     Parameters
     ----------
     n_latent : Union[int, List[int]], optional
-        Numer of hidden units in the latent layer(s) of the MLP.
+        Number of hidden units in the latent layer(s) of the MLP.
         If an integer is provided, the MLP will have a single hidden layer with n_latent
         units. If a list of integers is provided, the MLP will have multiple hidden layers
         with the number of units in each layer specified by the corresponding element in
@@ -66,10 +66,11 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         demeaned to sum to 0, before being passed through the adjusted softmax. 
         If provided, all (n_latent, fit_encoder_intercept, fit_head_intercept, encoder_activation, head_activation, dropout_p, dollar_neutral, normalization)
         must be specified, `long_only` should be False and torch_model must be None. Default is False.
-    normalization: bool, optional
-        Whether to apply LayerNorm normalization following each linear layer in the encoder (hidden) component of the network.
+    normalization: str, optional
+        Whether to apply normalization following each linear layer in the encoder (hidden) component of the network.
+        Can be either "layer" for LayerNorm, "batch" for BatchNorm, or "none" for no normalization.
         If provided, all (n_latent, fit_encoder_intercept, fit_head_intercept, encoder_activation, head_activation, dropout_p, dollar_neutral, normalization)
-        must be specified and torch_model must be None. Default is False.
+        must be specified and torch_model must be None. Default is None.
     torch_model : Intersection[torch.nn.Module, BaseEstimator], optional
         Custom PyTorch model to use instead of the default MLP. Must be a subclass of both
         torch.nn.Module and sklearn.base.BaseEstimator. If torch_model is provided, all 
@@ -257,7 +258,7 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         dropout_p = 0,
         long_only = None,
         dollar_neutral = False,
-        normalization = False,
+        normalization = "none",
         torch_model = None,
         # Neural network training dynamics
         loss_func = torch.nn.MSELoss(),
@@ -266,7 +267,7 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         batch_size = 32,
         learning_rate = 3e-4,
         weight_decay = 1e-4,
-        reg_turnover = 0, # TODO: implement but this is only useful when transaction costs are included in the loss function, which is not currently the case
+        reg_turnover = 0,
         use_ts_sampler = True, # TODO: turn this into an optional sampler object
         aggregate_last = True,
         drop_last = False,
@@ -974,9 +975,12 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
                 if long_only is None or long_only:
                     raise ValueError("dollar_neutral can only be True if long_only is False.")
             # normalization
-            if not isinstance(normalization, bool):
-                raise TypeError("normalization must be a boolean.")
-    
+            if normalization != "none":
+                if not isinstance(normalization, str):
+                    raise TypeError("normalization must be a string.")
+                if normalization not in {"batch", "layer", "none"}:
+                    raise ValueError("normalization must be one of 'batch', 'layer', or 'none'.")
+        
         # torch_model
         if torch_model is not None:
             if not isinstance(torch_model, nn.Module):
