@@ -374,6 +374,10 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
 
         y = y[self.targets]
 
+        # Check this doesn't interfere with dollar neutrality constraint
+        if self.dollar_neutral and self.n_targets < 3:
+            raise ValueError("Dollar neutrality constraint requires at least 3 assets to be predicted.")
+
         # Create training and validation splits
         X_train, X_valid, y_train, y_valid = self.create_train_valid_splits(X, y, self.train_pct)
 
@@ -1261,8 +1265,8 @@ if __name__ == "__main__":
         encoder_activation = "tanh",
         head_activation="identity",
         dropout_p = 0.1,
-        long_only = True,
-        dollar_neutral = False,
+        long_only = False,
+        dollar_neutral = True,
         normalization = False,
         #torch_model = BasicMLP(n_inputs=X.shape[1], n_latent=16, n_outputs=y.shape[1]),
         loss_func=torch.nn.MSELoss(),
@@ -1283,26 +1287,26 @@ if __name__ == "__main__":
         y_scaler = StandardScaler(with_mean=False),
         verbose = False, 
         random_state = [42,43],
-        inverse_transform_preds = True,
+        inverse_transform_preds = False,
         min_samples = 36,
-    )#.fit(X,y)
-    #print(mlp.predict(X))
+    ).fit(X,y)
+    print(mlp.predict(X))
 
-    so.calculate_predictions(
-        name = "MLP",
-        models = {
-            "MLP": mlp
-        },
-        multi_target_fill="mean",
-        min_cids = 1,
-        min_xcats = 1,
-        min_periods = 36,
-    )
+    # so.calculate_predictions(
+    #     name = "MLP",
+    #     models = {
+    #         "MLP": mlp
+    #     },
+    #     multi_target_fill="mean",
+    #     min_cids = 1,
+    #     min_xcats = 1,
+    #     min_periods = 36,
+    # )
 
-    dfa = so.get_optimized_signals()
-    print(dfa)
+    # dfa = so.get_optimized_signals()
+    # print(dfa)
 
-    print(list(mlp.models[0].parameters()))
-    print(list(mlp.models[1].parameters()))
-    preds = mlp.predict(X)
-    print(preds)
+    # print(list(mlp.models[0].parameters()))
+    # print(list(mlp.models[1].parameters()))
+    # preds = mlp.predict(X)
+    # print(preds)

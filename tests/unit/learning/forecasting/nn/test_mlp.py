@@ -889,14 +889,14 @@ class TestMLPRegressor(unittest.TestCase):
         """
         Test that the dollar neutral constraint is applied correctly during training.
         """
-        model = MLPRegressor(epochs = 5, patience = 2, dollar_neutral=True, long_only = False).fit(self.X, self.y)
+        model = MLPRegressor(epochs = 5, patience = 2, dollar_neutral=True, long_only = False).fit(self.X.iloc[:, :1], pd.concat((self.X.iloc[:, :1], self.y), axis=1))
         for param in model.models[0].parameters():
             self.assertFalse(torch.isnan(param).any())
             self.assertFalse(torch.isinf(param).any())
 
         # Get forward pass outputs for the training data
         with torch.no_grad():
-            X_tensor = torch.tensor(model.x_scaler.transform(self.X), dtype=torch.float32)
+            X_tensor = torch.tensor(model.x_scaler.transform(self.X.iloc[:, :1]), dtype=torch.float32)
             outputs = model.models[0](X_tensor)
 
         # Check that the sum of the outputs across all samples is approximately zero (dollar neutral constraint)
