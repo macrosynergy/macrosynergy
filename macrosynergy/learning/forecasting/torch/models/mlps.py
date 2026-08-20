@@ -48,7 +48,7 @@ class MultiLayerPerceptron(nn.Module, BaseEstimator):
     normalization : str, optional
         Type of normalization to apply after each linear layer in the encoder.
         Options include "layer" for layer normalization, "batch" for batch normalization,
-        and None for no normalization. Default is None. Batch normalization requires the 
+        and "none" for no normalization. Default is "none". Batch normalization requires the 
         batch size to be greater than 1. 
 
     Notes
@@ -108,7 +108,7 @@ class MultiLayerPerceptron(nn.Module, BaseEstimator):
         dropout_p = 0,
         long_only = None,
         dollar_neutral = False,
-        normalization = None,
+        normalization = "none",
     ):
         super().__init__()
 
@@ -181,7 +181,7 @@ class MultiLayerPerceptron(nn.Module, BaseEstimator):
         activation_func = self.activation_map[encoder_activation]
         # Build encoder
         encoder_modules = [nn.Linear(n_inputs, n_latent[0], bias = fit_encoder_intercept)]
-        if normalization:
+        if normalization != "none":
             if normalization == "batch":
                 encoder_modules.append(nn.BatchNorm1d(n_latent[0]))
             elif normalization == "layer":
@@ -194,7 +194,7 @@ class MultiLayerPerceptron(nn.Module, BaseEstimator):
                 encoder_modules.append(
                     nn.Linear(n_latent[layer_idx - 1], n_latent[layer_idx], bias = fit_encoder_intercept)
                 )
-                if normalization:
+                if normalization != "none":
                     if normalization == "batch":
                         encoder_modules.append(nn.BatchNorm1d(n_latent[layer_idx]))
                     elif normalization == "layer":
@@ -298,11 +298,10 @@ class MultiLayerPerceptron(nn.Module, BaseEstimator):
         if long_only is False and not isinstance(dollar_neutral, bool):
             raise TypeError("dollar_neutral must be a boolean when long_only is False.")
         # normalization
-        if normalization is not None:
-            if not isinstance(normalization, str):
-                raise TypeError("normalization must be a string or None.")
-            if normalization not in {"layer", "batch"}:
-                raise ValueError("normalization must be one of 'layer', 'batch', or None.")
+        if not isinstance(normalization, str):
+            raise TypeError("normalization must be a string.")
+        if normalization not in {"layer", "batch", "none"}:
+            raise ValueError("normalization must be one of 'layer', 'batch', or 'none'.")
         
 if __name__=="__main__":
     print("========================================")
