@@ -398,14 +398,21 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
             {"file-group-id": "FG", "file-datetime": "20230101"},
         )
 
-        client.check_file_availability(filename="file.parquet")
+        client.check_file_availability(
+            filename="JPMAQS_GENERIC_RETURNS_20250501.parquet"
+        )
         mock_get.assert_called_with(
-            "/group/file/availability", {"file-group-id": None, "file-datetime": None}
+            "/group/file/availability",
+            {"file-group-id": "JPMAQS_GENERIC_RETURNS", "file-datetime": "20250501"},
         )
 
         # Invalid cases
         with self.assertRaises(ValueError):
             client.check_file_availability()
+
+        # a filename with no "_" cannot be split into a group id and a datetime
+        with self.assertRaises(ValueError):
+            client.check_file_availability(filename="file.parquet")
 
         with self.assertRaises(ValueError):
             client.check_file_availability(
@@ -420,9 +427,9 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
             client_id="id", client_secret="secret", out_dir=self.test_dir
         )
         mock_final_path = MagicMock()
-        (
-            mock_path.return_value.__truediv__.return_value.__truediv__.return_value
-        ) = mock_final_path
+        mock_path.return_value.__truediv__.return_value.__truediv__.return_value = (
+            mock_final_path
+        )
         mock_final_path.exists.return_value = True
         result = client.download_file(
             filename="TEST_FULL_20230101.parquet", overwrite=False
@@ -442,9 +449,9 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
             client_id="id", client_secret="secret", out_dir=self.test_dir
         )
         mock_final_path = MagicMock()
-        (
-            mock_path.return_value.__truediv__.return_value.__truediv__.return_value
-        ) = mock_final_path
+        mock_path.return_value.__truediv__.return_value.__truediv__.return_value = (
+            mock_final_path
+        )
         mock_final_path.exists.return_value = True
 
         client.download_file(filename="TEST_FULL_20230101.parquet", overwrite=True)
@@ -466,9 +473,9 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
         )
         mock_file_path = MagicMock()
         mock_file_path.exists.return_value = False
-        (
-            mock_path.return_value.__truediv__.return_value.__truediv__.return_value
-        ) = mock_file_path
+        mock_path.return_value.__truediv__.return_value.__truediv__.return_value = (
+            mock_file_path
+        )
 
         client.download_file(filename="TEST_DELTA_20230101.parquet")
         mock_request_wrapper.assert_called_once()
@@ -503,9 +510,9 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
         mock_file_path = MagicMock()
         mock_file_path.exists.return_value = False
         mock_file_path.suffix = ".parquet"
-        (
-            mock_path.return_value.__truediv__.return_value.__truediv__.return_value
-        ) = mock_file_path
+        mock_path.return_value.__truediv__.return_value.__truediv__.return_value = (
+            mock_file_path
+        )
 
         result = client.download_file(filename="TEST_DATA_20230101.parquet")
 
@@ -571,10 +578,8 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
         future_success, future_fail = MagicMock(), MagicMock()
         future_fail.result.side_effect = Exception("Download failed!")
         mock_executor = mock_executor_cls.return_value.__enter__.return_value
-        mock_executor.submit.side_effect = (
-            lambda fn, *args, **kwargs: future_success
-            if kwargs.get("filename") == "f1.parquet"
-            else future_fail
+        mock_executor.submit.side_effect = lambda fn, *args, **kwargs: (
+            future_success if kwargs.get("filename") == "f1.parquet" else future_fail
         )
         mock_as_completed.side_effect = lambda futures_dict: list(futures_dict.keys())
 
@@ -674,6 +679,52 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
         mock_download_catalog.assert_called_once_with()
         mock_read_parquet.assert_called_once_with("catalog.parquet")
         self.assertEqual(datasets, sorted({expected_dataset, "Unknown"}))
+
+    @patch("macrosynergy.download.dataquery_file_api.pd.read_parquet")
+    @patch.object(DataQueryFileAPIClient, "download_catalog_file")
+    def test_get_datasets_for_indicators_as_dict(
+        self, mock_download_catalog, mock_read_parquet
+    ):
+        client = DataQueryFileAPIClient(
+            client_id="id", client_secret="secret", out_dir=self.test_dir
+        )
+        themes = list(JPMAQS_DATASET_THEME_MAPPING.items())
+        (theme_a, dataset_a), (theme_b, dataset_b) = themes[0], themes[1]
+        mock_download_catalog.return_value = "catalog.parquet"
+        mock_read_parquet.return_value = pd.DataFrame(
+            {
+                "Ticker": ["USD_GROWTH", "EUR_GROWTH", "JPY_XR"],
+                "Theme": [theme_a, theme_a, theme_b],
+            }
+        )
+
+        result = client.get_datasets_for_indicators(
+            tickers=["USD_GROWTH", "EUR_GROWTH", "JPY_XR"], as_dict=True
+        )
+        self.assertEqual(
+            result,
+            {dataset_a: ["EUR_GROWTH", "USD_GROWTH"], dataset_b: ["JPY_XR"]},
+        )
+
+    @patch("macrosynergy.download.dataquery_file_api.pd.read_parquet")
+    @patch.object(DataQueryFileAPIClient, "download_catalog_file")
+    def test_get_datasets_for_indicators_as_dict_is_case_insensitive(
+        self, mock_download_catalog, mock_read_parquet
+    ):
+        client = DataQueryFileAPIClient(
+            client_id="id", client_secret="secret", out_dir=self.test_dir
+        )
+        theme, dataset = next(iter(JPMAQS_DATASET_THEME_MAPPING.items()))
+        mock_download_catalog.return_value = "catalog.parquet"
+        mock_read_parquet.return_value = pd.DataFrame(
+            {"Ticker": ["USD_GROWTH"], "Theme": [theme]}
+        )
+
+        result = client.get_datasets_for_indicators(
+            tickers=["usd_growth"], as_dict=True
+        )
+        # matching is case-insensitive, but the catalog's casing is returned
+        self.assertEqual(result, {dataset: ["USD_GROWTH"]})
 
     @patch("macrosynergy.download.dataquery_file_api.logger")
     @patch.object(DataQueryFileAPIClient, "download_multiple_files")
@@ -783,6 +834,57 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
             client.download_files(
                 since_datetime="20230101", file_group_ids="not-a-list"
             )
+
+
+class TestDownloadedFilesSchema(unittest.TestCase):
+    """
+    `list_downloaded_files` must report one schema whether or not anything is on disk -
+    callers index it by name, and `_load_metadata_jsons` does so without an .empty guard.
+    """
+
+    COLS = [
+        "file-name",
+        "file-datetime",
+        "dataset",
+        "file-type",
+        "file-timestamp",
+        "path",
+    ]
+
+    def setUp(self):
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp_dir.cleanup)
+
+    def test_schema_is_stable_when_the_save_dir_is_absent(self):
+        client = _make_client(self.temp_dir.name)
+        self.assertEqual(list(client.list_downloaded_files().columns), self.COLS)
+
+    def test_schema_is_stable_when_the_save_dir_is_empty(self):
+        client = _make_client(self.temp_dir.name)
+        Path(client._get_save_dir()).mkdir(parents=True, exist_ok=True)
+        self.assertEqual(list(client.list_downloaded_files().columns), self.COLS)
+
+    def test_schema_is_stable_when_files_are_present(self):
+        client = _make_client(self.temp_dir.name)
+        save_dir = Path(client._get_save_dir())
+        save_dir.mkdir(parents=True, exist_ok=True)
+        (save_dir / "JPMAQS_MACROECONOMIC_TRENDS_20240102.parquet").write_bytes(b"x")
+        df = client.list_downloaded_files()
+        self.assertEqual(list(df.columns), self.COLS)
+        self.assertEqual(df.iloc[0]["file-type"], "parquet")
+        self.assertEqual(df.iloc[0]["dataset"], "JPMAQS_MACROECONOMIC_TRENDS")
+
+    @suppress_logging
+    def test_notification_loaders_are_graceful_on_an_empty_output_dir(self):
+        client = _make_client(self.temp_dir.name)
+        # no downloaded files at all: report nothing found rather than KeyError
+        self.assertEqual(
+            client._load_metadata_jsons(date="2024-01-02", skip_download=True), {}
+        )
+        Path(client._get_save_dir()).mkdir(parents=True, exist_ok=True)
+        self.assertEqual(
+            client._load_metadata_jsons(date="2024-01-02", skip_download=True), {}
+        )
 
 
 class TestDataQueryFileAPIClientNotificationLoading(unittest.TestCase):
@@ -1555,10 +1657,18 @@ class TestCleanupOldFiles(unittest.TestCase):
         "macrosynergy.download.dataquery_file_api.utc_now",
         return_value=pd.Timestamp("2026-07-28T02:00:00Z"),
     )
-    def test_default_to_datetime_uses_utc_now(self, _now):
+    def test_bare_call_reports_instead_of_deleting(self, _now):
+        # with no anchor the wall clock would destroy a snapshot that has simply not been
+        # replaced yet, so the call warns and deletes nothing
         old = self._make("2026-07-27", "JPMAQS_GENERIC_RETURNS_20260727.parquet")
-        self.client.cleanup_old_files(keep_n_days_old_files=0)
-        self.assertFalse(old.exists())
+        with self.assertWarns(UserWarning) as cm:
+            would_delete = self.client.cleanup_old_files(keep_n_days_old_files=0)
+        self.assertTrue(old.exists())
+        self.assertIn("nothing was deleted", str(cm.warning))
+        self.assertIn("JPMAQS_GENERIC_RETURNS_20260727.parquet", str(cm.warning))
+        self.assertEqual(
+            list(would_delete["file-name"]), ["JPMAQS_GENERIC_RETURNS_20260727.parquet"]
+        )
 
 
 class TestDownloadMultipleFilesReturn(unittest.TestCase):
@@ -1779,11 +1889,37 @@ class TestDownloadLatestSnapshot(unittest.TestCase):
         subset = self.themes[:2]
         _res, mdl, mclean = self._run(self._available(), None, file_group_ids=subset)
         downloaded = mdl.call_args[1]["filenames"]
+        # the catalog comes along: nothing can be loaded without it, and leaving it out
+        # let cleanup prune it and the next call re-download it
         self.assertEqual(
             sorted(downloaded),
-            sorted(f"{t}_20260728.parquet" for t in subset),
+            sorted(
+                [f"{t}_20260728.parquet" for t in subset]
+                + ["JPMAQS_METADATA_CATALOG_20260728.parquet"]
+            ),
         )
         self.assertEqual(mclean.call_args[1]["to_datetime"], "20260728")
+
+    def test_cleanup_protects_every_file_the_snapshot_needs(self):
+        res, mdl, mclean = self._run(self._available(), None)
+        protected = mclean.call_args[1]["protect_files"]
+        # the whole snapshot, not just what this call happened to fetch
+        self.assertEqual(sorted(protected), sorted(mdl.call_args[1]["filenames"]))
+        self.assertEqual(res, mdl.call_args[1]["filenames"])
+
+    def test_cleanup_runs_when_the_snapshot_is_already_on_disk(self):
+        # nothing to download means the snapshot is complete, so old files can still go
+        already = self._available()
+        res, mdl, mclean = self._run(self._available(), already)
+        self.assertEqual(res, [])
+        mdl.assert_not_called()
+        mclean.assert_called_once()
+        self.assertEqual(mclean.call_args[1]["to_datetime"], "20260728")
+        # and the files already on disk are protected, even though nothing was fetched
+        self.assertEqual(
+            sorted(mclean.call_args[1]["protect_files"]),
+            sorted(already["file-name"]),
+        )
 
     def test_empty_file_group_ids_downloads_nothing(self):
         # `download()` passes [] when no requested ticker matches any dataset; that must
@@ -1800,6 +1936,216 @@ class TestDownloadLatestSnapshot(unittest.TestCase):
         self.assertEqual(res, [])
         mdl.assert_not_called()
         mclean.assert_not_called()
+
+
+class TestDownloadLatestSnapshotPrune(unittest.TestCase):
+    """
+    `download_latest_snapshot` end to end against a real directory, with only the network
+    calls stubbed. The prune, the file listing and the snap-date maths all run for real.
+    """
+
+    def setUp(self):
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp_dir.cleanup)
+        self.client = _make_client(self.temp_dir.name)
+        self.save_dir = Path(self.client._get_save_dir())
+        self.themes = list(JPMAQS_DATASET_THEME_MAPPING.values())
+
+    def snapshot_names(self, date):
+        return [f"{theme}_{date}.parquet" for theme in self.themes]
+
+    def put_on_disk(self, date):
+        """Write a complete snapshot for `date`, as `download_file` lays it out."""
+        folder = self.save_dir / f"{date[:4]}-{date[4:6]}-{date[6:]}"
+        folder.mkdir(parents=True, exist_ok=True)
+        for name in self.snapshot_names(date):
+            (folder / name).write_bytes(b"x")
+
+    def available(self, dates):
+        return pd.DataFrame(
+            [
+                {"file-name": name, "file-group-id": theme, "file-datetime": date}
+                for date in dates
+                for theme, name in zip(self.themes, self.snapshot_names(date))
+            ]
+        )
+
+    def on_disk(self):
+        return sorted(p.name for p in self.save_dir.rglob("*.parquet"))
+
+    def run_snapshot(self, dates, keep_n_days_old_files=0):
+        with (
+            patch.object(
+                self.client,
+                "filter_available_files_by_datetime",
+                return_value=self.available(dates),
+            ),
+            # the files are already written to disk by the test; downloading is a no-op
+            patch.object(
+                self.client,
+                "download_multiple_files",
+                side_effect=lambda filenames, **kw: filenames,
+            ) as mock_download,
+        ):
+            result = self.client.download_latest_snapshot(
+                keep_n_days_old_files=keep_n_days_old_files, show_progress=False
+            )
+        return result, mock_download
+
+    @suppress_logging
+    def test_old_snapshot_is_pruned_and_the_latest_survives(self):
+        self.put_on_disk("20260727")
+        self.put_on_disk("20260728")
+        result, mock_download = self.run_snapshot(["20260727", "20260728"])
+
+        self.assertEqual(result, [])  # nothing needed fetching
+        mock_download.assert_not_called()
+        # the prune still ran, and kept exactly the latest snapshot
+        self.assertEqual(self.on_disk(), sorted(self.snapshot_names("20260728")))
+
+    @suppress_logging
+    def test_prune_keeps_the_previous_day_when_asked(self):
+        self.put_on_disk("20260727")
+        self.put_on_disk("20260728")
+        self.run_snapshot(["20260727", "20260728"], keep_n_days_old_files=1)
+        self.assertEqual(
+            self.on_disk(),
+            sorted(self.snapshot_names("20260727") + self.snapshot_names("20260728")),
+        )
+
+    @suppress_logging
+    def test_nothing_is_pruned_when_the_download_fails(self):
+        self.put_on_disk("20260727")  # only the old snapshot is present
+        with (
+            patch.object(
+                self.client,
+                "filter_available_files_by_datetime",
+                return_value=self.available(["20260727", "20260728"]),
+            ),
+            patch.object(
+                self.client,
+                "download_multiple_files",
+                side_effect=DownloadError("boom"),
+            ),
+        ):
+            with self.assertRaises(DownloadError):
+                self.client.download_latest_snapshot(
+                    keep_n_days_old_files=0, show_progress=False
+                )
+        # the replacement never arrived, so the old snapshot must still be there
+        self.assertEqual(self.on_disk(), sorted(self.snapshot_names("20260727")))
+
+    @suppress_logging
+    def test_a_partially_present_latest_snapshot_is_completed_before_pruning(self):
+        self.put_on_disk("20260727")
+        missing = self.snapshot_names("20260728")[0]
+        folder = self.save_dir / "2026-07-28"
+        folder.mkdir(parents=True, exist_ok=True)
+        for name in self.snapshot_names("20260728")[1:]:
+            (folder / name).write_bytes(b"x")
+
+        result, mock_download = self.run_snapshot(["20260727", "20260728"])
+
+        # only the missing file is fetched, and the rest of the snapshot is protected
+        self.assertEqual(result, [missing])
+        self.assertEqual(mock_download.call_args[1]["filenames"], [missing])
+        survivors = set(self.on_disk())
+        self.assertEqual(survivors, set(self.snapshot_names("20260728")[1:]))
+
+
+class TestSnapshotRetentionWindow(unittest.TestCase):
+    """
+    Retention is counted in published snapshot dates, so weekend and holiday gaps do not
+    consume the allowance. Fri 2026-08-14, Sat 15th and Sun 16th are all publish dates
+    here; the 15th and 16th are non-business days.
+    """
+
+    def setUp(self):
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp_dir.cleanup)
+        self.client = _make_client(self.temp_dir.name)
+        self.save_dir = Path(self.client._get_save_dir())
+        self.themes = list(JPMAQS_DATASET_THEME_MAPPING.values())
+
+    def names(self, date):
+        return [f"{theme}_{date}.parquet" for theme in self.themes]
+
+    def put_on_disk(self, date):
+        folder = self.save_dir / f"{date[:4]}-{date[4:6]}-{date[6:]}"
+        folder.mkdir(parents=True, exist_ok=True)
+        for name in self.names(date):
+            (folder / name).write_bytes(b"x")
+
+    def available(self, dates):
+        return pd.DataFrame(
+            [
+                {"file-name": name, "file-group-id": theme, "file-datetime": date}
+                for date in dates
+                for theme, name in zip(self.themes, self.names(date))
+            ]
+        )
+
+    def on_disk_dates(self):
+        return sorted(
+            {p.name.rsplit("_", 1)[-1][:8] for p in self.save_dir.rglob("*.parquet")}
+        )
+
+    def run_snapshot(self, upstream, keep):
+        with (
+            patch.object(
+                self.client,
+                "filter_available_files_by_datetime",
+                return_value=self.available(upstream),
+            ),
+            patch.object(
+                self.client,
+                "download_multiple_files",
+                side_effect=lambda filenames, **kw: filenames,
+            ),
+        ):
+            return self.client.download_latest_snapshot(
+                keep_n_days_old_files=keep, show_progress=False
+            )
+
+    @suppress_logging
+    def test_weekend_snapshot_becomes_the_latest(self):
+        # a Sunday publication is the latest, business day or not
+        self.put_on_disk("20260814")
+        self.put_on_disk("20260816")
+        self.run_snapshot(["20260814", "20260816"], keep=0)
+        self.assertEqual(self.on_disk_dates(), ["20260816"])
+
+    @suppress_logging
+    def test_keep_one_steps_back_a_publication_not_a_day(self):
+        # Sat 15th is the publication before Sun 16th, so keep=1 spans 15th-16th and the
+        # Friday goes, even though the Friday is only two calendar days back
+        for date in ("20260814", "20260815", "20260816"):
+            self.put_on_disk(date)
+        self.run_snapshot(["20260814", "20260815", "20260816"], keep=1)
+        self.assertEqual(self.on_disk_dates(), ["20260815", "20260816"])
+
+    @suppress_logging
+    def test_keep_two_spans_the_whole_weekend(self):
+        for date in ("20260814", "20260815", "20260816"):
+            self.put_on_disk(date)
+        self.run_snapshot(["20260814", "20260815", "20260816"], keep=2)
+        self.assertEqual(self.on_disk_dates(), ["20260814", "20260815", "20260816"])
+
+    def test_warns_when_the_retained_history_is_not_on_disk(self):
+        # the user asked to keep one publication beyond the latest, but never downloaded
+        # Saturday's, so the Friday they do hold falls outside the window and is deleted
+        self.put_on_disk("20260814")
+        self.put_on_disk("20260816")
+        logging.disable(logging.CRITICAL)
+        try:
+            with self.assertWarns(UserWarning) as cm:
+                self.run_snapshot(["20260814", "20260815", "20260816"], keep=1)
+        finally:
+            logging.disable(logging.NOTSET)
+        message = str(cm.warning)
+        self.assertIn("20260815", message)  # the date that is missing locally
+        self.assertIn("20260816", message)  # what is actually held
+        self.assertEqual(self.on_disk_dates(), ["20260816"])
 
 
 class TestDownloadFilesReturn(unittest.TestCase):
@@ -1890,6 +2236,78 @@ class TestDownloadFullSnapshotDeprecated(unittest.TestCase):
             show_progress=False,
         )
         self.assertEqual(result, ["JPMAQS_A_20260201.parquet"])
+
+
+class TestDownloadForwardsLoadOptions(unittest.TestCase):
+    """
+    `download` resolves the datasets for the requested tickers, downloads the latest
+    snapshot and the catalog, then hands the load options to `lazy_load_from_parquets`.
+    """
+
+    def setUp(self):
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp_dir.cleanup)
+        self.client = _make_client(self.temp_dir.name)
+        self.datasets = ["JPMAQS_MACROECONOMIC_TRENDS"]
+
+    def _download(self, **kwargs):
+        with (
+            patch.object(
+                self.client, "get_datasets_for_indicators", return_value=self.datasets
+            ),
+            patch.object(
+                self.client, "download_latest_snapshot", return_value=[]
+            ) as mock_snapshot,
+            patch.object(
+                self.client,
+                "download_catalog_file",
+                return_value=str(Path(self.temp_dir.name) / "catalog.parquet"),
+            ),
+            patch(
+                "macrosynergy.download.dataquery_file_api.lazy_load_from_parquets",
+                return_value="LOADED",
+            ) as mock_load,
+        ):
+            result = self.client.download(tickers=["USD_INFL"], **kwargs)
+        return result, mock_load.call_args.kwargs, mock_snapshot.call_args.kwargs
+
+    def test_include_source_file_is_forwarded(self):
+        result, load_kwargs, _ = self._download(include_source_file=True)
+        self.assertEqual(result, "LOADED")
+        self.assertTrue(load_kwargs["include_source_file"])
+
+    def test_include_source_file_defaults_to_false(self):
+        _, load_kwargs, _ = self._download()
+        self.assertFalse(load_kwargs["include_source_file"])
+
+    def test_load_options_and_datasets_are_forwarded(self):
+        _, load_kwargs, _ = self._download(
+            metrics=["value"],
+            start_date="2020-01-01",
+            end_date="2024-01-01",
+            dataframe_type="polars",
+            include_delta_files=True,
+        )
+        self.assertEqual(load_kwargs["metrics"], ["value"])
+        self.assertEqual(load_kwargs["start_date"], "2020-01-01")
+        self.assertEqual(load_kwargs["end_date"], "2024-01-01")
+        self.assertEqual(load_kwargs["dataframe_type"], "polars")
+        self.assertTrue(load_kwargs["include_delta_files"])
+        self.assertEqual(load_kwargs["datasets"], self.datasets)
+        # the catalog path is resolved to a Path and passed through
+        self.assertEqual(Path(load_kwargs["catalog_path"]).name, "catalog.parquet")
+
+    def test_include_delta_files_defaults_to_true(self):
+        _, load_kwargs, _ = self._download()
+        self.assertTrue(load_kwargs["include_delta_files"])
+
+    def test_snapshot_download_is_scoped_to_the_resolved_datasets(self):
+        _, _, snapshot_kwargs = self._download(overwrite=True, show_progress=False)
+        self.assertEqual(snapshot_kwargs["file_group_ids"], self.datasets)
+        self.assertTrue(snapshot_kwargs["overwrite"])
+        self.assertFalse(snapshot_kwargs["show_progress"])
+        # 0 means "keep only the latest snapshot" - the default prunes older files
+        self.assertEqual(snapshot_kwargs["keep_n_days_old_files"], 0)
 
 
 if __name__ == "__main__":
