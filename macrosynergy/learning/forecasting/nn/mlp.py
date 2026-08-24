@@ -412,6 +412,22 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
                     "bestmodel_train_loss": None,
                     "bestmodel_valid_loss": None,
                     "bestmodel_generalization_gap": None,
+
+                    # Best model gradient information
+                    "gradient_mean_per_layer": {},
+                    "gradient_std_per_layer": {},
+                    "gradient_max_per_layer": {},
+                    "gradient_min_per_layer": {},
+                    "gradient_norm_per_layer": {},
+                    "global_gradient_norm": None,
+
+                    # Best model NaN and inf checks
+                    "train_loss_isnan": None,
+                    "train_loss_isinf": None,
+                    "nan_gradients_per_layer": {},
+                    "inf_gradients_per_layer": {},
+                    "nan_gradients_global": None,
+                    "inf_gradients_global": None,
                 }
 
                 # Make torch dataloaders
@@ -459,6 +475,11 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
                     verbose = self.verbose,
                 )
                 self.early_stopping_dynamics[(optim_idx, random_state_idx)].update(early_stopping_trace)
+
+                # Store model diagnostics on gradients and NaN/inf checks
+                model_es_diagnostics = self._get_model_diagnostics(model_es, torch.Tensor(X_train_s), torch.Tensor(y_train_s))
+                self.early_stopping_dynamics[(optim_idx, random_state_idx)].update(model_es_diagnostics)
+
                 if self.refit:
                     # Create training set dataloader over the full dataset
                     X_s, y_s, _, _ = self.scale_data(X, y, self.x_scaler, self.y_scaler)
@@ -808,7 +829,7 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
                         sample_weight = None,
                         sample_weight_strategy = sample_weight_strategy,
                         reg_turnover = reg_turnover
-                    )
+                    )  
             
             if patience is not None:
                 train_loss = self._eval_loss(model, train_loader_eval, loss_func)
@@ -846,6 +867,8 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
             pass
 
         early_stopping_trace["selected_epoch"] = best_epoch
+        early_stopping_trace["train_loss_isinf"] = np.isinf(early_stopping_trace["train_loss_path"]).any()
+        early_stopping_trace["train_loss_isnan"] = np.isnan(early_stopping_trace["train_loss_path"]).any()
 
         return model, best_epoch, early_stopping_trace
 
@@ -904,6 +927,67 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
             counter += 1
             
         return best_score, best_state, counter
+
+    def _get_model_diagnostics(self, model, X_eval, y_eval):
+        # Set into evaluation mode
+        model.eval()
+        model.zero_grad()
+
+        # Forward pass
+        preds = model(X_eval)
+        eval_loss = self.loss_func(preds, y_eval)
+
+        # Calculate derivatives
+        eval_loss.backward()
+
+        # Create diagnostics dictionary to store gradient statistics and NaN/inf checks
+        diagnostics = {
+            "gradient_mean_per_layer": {},
+            "gradient_std_per_layer": {},
+            "gradient_max_per_layer": {},
+            "gradient_min_per_layer": {},
+            "gradient_norm_per_layer": {},
+            "global_gradient_norm": None,
+            "nan_gradients_per_layer": {},
+            "inf_gradients_per_layer": {},
+            "nan_gradients_global": None,
+            "inf_gradients_global": None,
+        }
+
+        # Get gradient statistics for each layer
+        for name, param in model.named_parameters():
+            if param.grad is not None:
+                grad = param.grad.detach().numpy()
+                diagnostics["gradient_mean_per_layer"][name] = np.mean(grad)
+                diagnostics["gradient_std_per_layer"][name] = np.std(grad)
+                diagnostics["gradient_max_per_layer"][name] = np.max(grad)
+                diagnostics["gradient_min_per_layer"][name] = np.min(grad)
+                diagnostics["gradient_norm_per_layer"][name] = np.linalg.norm(grad)
+
+        # Get global gradient norm
+        grad_list = [param.grad.detach().numpy().flatten() for param in model.parameters() if param.grad is not None]
+        all_grads = np.concatenate(grad_list) if grad_list else np.array([])
+        if all_grads.size:
+            diagnostics["global_gradient_norm"] = np.linalg.norm(all_grads)
+
+        # Get NaN and inf checks for gradients
+        for name, param in model.named_parameters():
+            if param.grad is not None:
+                grad = param.grad.detach().numpy()
+                diagnostics["nan_gradients_per_layer"][name] = np.isnan(grad).any()
+                diagnostics["inf_gradients_per_layer"][name] = np.isinf(grad).any()
+
+        diagnostics["nan_gradients_global"] = (
+            bool(np.isnan(all_grads).any()) if all_grads.size else None
+        )
+        diagnostics["inf_gradients_global"] = (
+            bool(np.isinf(all_grads).any()) if all_grads.size else None
+        )
+
+        # Reset gradients to avoid affecting subsequent computations
+        model.zero_grad()
+        
+        return diagnostics
     
     def _check_predict_params(
         self,
@@ -1315,7 +1399,7 @@ if __name__ == "__main__":
         encoder_activation = "tanh",
         head_activation="identity",
         dropout_p = 0.1,
-        long_only = True,
+        long_only = None,
         dollar_neutral = False,
         normalization = "none",
         #torch_model = BasicMLP(n_inputs=X.shape[1], n_latent=16, n_outputs=y.shape[1]),
@@ -1340,7 +1424,7 @@ if __name__ == "__main__":
         inverse_transform_preds = False,
         min_samples = 36,
     ).fit(X,y)
-    print(mlp.predict(X))
+    print(mlp.early_stopping_dynamics[(0,0)])
 
     # so.calculate_predictions(
     #     name = "MLP",
