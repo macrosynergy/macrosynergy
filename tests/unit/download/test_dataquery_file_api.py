@@ -549,21 +549,23 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
         future1.result.assert_called_once()
         future2.result.assert_called_once()
 
-    @patch("macrosynergy.download.dataquery_file_api.os.cpu_count", return_value=7)
     @patch("macrosynergy.download.dataquery_file_api.cf.as_completed", return_value=[])
     @patch("macrosynergy.download.dataquery_file_api.cf.ThreadPoolExecutor")
     @patch("macrosynergy.download.dataquery_file_api.DataQueryFileAPIOauth")
-    def test_download_multiple_files_n_jobs_all_cores(
-        self, mock_oauth, mock_executor_cls, mock_as_completed, mock_cpu_count
+    def test_download_multiple_files_n_jobs_passed_straight_through(
+        self, mock_oauth, mock_executor_cls, mock_as_completed
     ):
         client = DataQueryFileAPIClient(
             client_id="id", client_secret="secret", out_dir=self.test_dir
         )
-        client.download_multiple_files(
-            filenames=["f1.parquet"], n_jobs=-1, show_progress=False
-        )
-        # n_jobs=-1 resolves to the machine's core count.
-        mock_executor_cls.assert_called_once_with(max_workers=7)
+        for n_jobs in (None, 4):
+            with self.subTest(n_jobs=n_jobs):
+                mock_executor_cls.reset_mock()
+                client.download_multiple_files(
+                    filenames=["f1.parquet"], n_jobs=n_jobs, show_progress=False
+                )
+                # ThreadPoolExecutor decides for itself when max_workers is None
+                mock_executor_cls.assert_called_once_with(max_workers=n_jobs)
 
     @suppress_logging
     @patch("macrosynergy.download.dataquery_file_api.cf.as_completed")
@@ -1959,16 +1961,17 @@ class TestDownloadLatestSnapshot(unittest.TestCase):
         subset = self.themes[:2]
         _res, mdl, mclean = self._run(self._available(), None, file_group_ids=subset)
         downloaded = mdl.call_args[1]["filenames"]
-        # the catalog comes along: nothing can be loaded without it, and leaving it out
-        # let cleanup prune it and the next call re-download it
+        # only what was asked for: a restricted selection does not pull the catalog
         self.assertEqual(
-            sorted(downloaded),
-            sorted(
-                [f"{t}_20260728.parquet" for t in subset]
-                + ["JPMAQS_METADATA_CATALOG_20260728.parquet"]
-            ),
+            sorted(downloaded), sorted(f"{t}_20260728.parquet" for t in subset)
         )
         self.assertEqual(mclean.call_args[1]["to_datetime"], "20260728")
+
+    def test_no_file_group_ids_includes_the_catalog(self):
+        _res, mdl, _mclean = self._run(self._available(), None, file_group_ids=None)
+        self.assertIn(
+            "JPMAQS_METADATA_CATALOG_20260728.parquet", mdl.call_args[1]["filenames"]
+        )
 
     def test_cleanup_protects_every_file_the_snapshot_needs(self):
         res, mdl, mclean = self._run(self._available(), None)
