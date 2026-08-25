@@ -657,10 +657,11 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
         with self.assertRaises(DownloadError):
             client.download_catalog_file()
 
+    @patch("macrosynergy.download.dataquery_file_api.logger")
     @patch("macrosynergy.download.dataquery_file_api.pd.read_parquet")
     @patch.object(DataQueryFileAPIClient, "download_catalog_file")
     def test_get_datasets_for_indicators(
-        self, mock_download_catalog, mock_read_parquet
+        self, mock_download_catalog, mock_read_parquet, mock_logger
     ):
         client = DataQueryFileAPIClient(
             client_id="id", client_secret="secret", out_dir=self.test_dir
@@ -680,7 +681,37 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
         # Catalog is downloaded as-is; the Dataset column is derived in-memory.
         mock_download_catalog.assert_called_once_with()
         mock_read_parquet.assert_called_once_with("catalog.parquet")
-        self.assertEqual(datasets, sorted({expected_dataset, "Unknown"}))
+        # an unmapped theme is no file group, so it is left out and warned about
+        self.assertEqual(datasets, [expected_dataset])
+        self.assertIn("Some unknown theme", str(mock_logger.warning.call_args))
+
+    @patch("macrosynergy.download.dataquery_file_api.logger")
+    @patch("macrosynergy.download.dataquery_file_api.pd.read_parquet")
+    @patch.object(DataQueryFileAPIClient, "download_catalog_file")
+    def test_get_datasets_for_indicators_names_tickers_outside_the_catalog(
+        self, mock_download_catalog, mock_read_parquet, mock_logger
+    ):
+        client = DataQueryFileAPIClient(
+            client_id="id", client_secret="secret", out_dir=self.test_dir
+        )
+        theme, dataset = next(iter(JPMAQS_DATASET_THEME_MAPPING.items()))
+        mock_download_catalog.return_value = "catalog.parquet"
+        mock_read_parquet.return_value = pd.DataFrame(
+            {"Ticker": ["USD_GROWTH"], "Theme": [theme]}
+        )
+
+        # some in the universe, some not: warned about, the rest still resolves
+        datasets = client.get_datasets_for_indicators(
+            tickers=["USD_GROWTH", "ZZZ_MYSTERY"]
+        )
+        self.assertEqual(datasets, [dataset])
+        self.assertIn("ZZZ_MYSTERY", str(mock_logger.warning.call_args))
+
+        # none in the universe: say so up front instead of failing later on the load
+        with self.assertRaises(ValueError) as ctx:
+            client.get_datasets_for_indicators(tickers=["ZZZ_MYSTERY"])
+        self.assertIn("None of the requested tickers", str(ctx.exception))
+        self.assertIn("ZZZ_MYSTERY", str(ctx.exception))
 
     @patch("macrosynergy.download.dataquery_file_api.pd.read_parquet")
     @patch.object(DataQueryFileAPIClient, "download_catalog_file")
