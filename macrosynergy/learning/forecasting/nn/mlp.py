@@ -433,7 +433,7 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
 
                 self.early_stopping_inference[(optim_idx, random_state_idx)] = {
                     "training_loss_sensitivity": [],
-                    "target_sensitivities": {},
+                    "training_target_sensitivities": {},
                 }
 
                 # Make torch dataloaders
@@ -972,7 +972,7 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
 
         model.zero_grad()
 
-        return {"training_loss_sensitivity": loss_sensitivity, "target_sensitivities": target_sensitivities}
+        return {"training_loss_sensitivity": loss_sensitivity, "training_target_sensitivities": target_sensitivities}
     
     def _get_model_diagnostics(self, model, X_eval, y_eval):
         # Set into evaluation mode
@@ -1471,6 +1471,7 @@ if __name__ == "__main__":
         min_samples = 36,
     ).fit(X,y)
     print(mlp.early_stopping_dynamics[(0,0)])
+    print(mlp.early_stopping_inference[(0,0)])
 
     # so.calculate_predictions(
     #     name = "MLP",
