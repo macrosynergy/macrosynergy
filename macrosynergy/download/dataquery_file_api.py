@@ -942,7 +942,7 @@ class DataQueryFileAPIClient:
         filenames: List[str],
         overwrite: bool = False,
         max_retries: int = 3,
-        n_jobs: int = None,
+        n_jobs: Optional[int] = None,
         chunk_size: Optional[int] = None,
         timeout: Optional[float] = DQ_FILE_API_TIMEOUT,
         show_progress: bool = True,
@@ -958,8 +958,9 @@ class DataQueryFileAPIClient:
             If True, overwrites files if they already exist. Default is False.
         max_retries : int
             The number of times to retry downloading the entire list of failed files.
-        n_jobs : int
-            The number of concurrent download jobs. If -1, it uses all available cores.
+        n_jobs : Optional[int]
+            The number of concurrent download jobs, passed to `ThreadPoolExecutor` as
+            `max_workers`. If None (default), it picks the worker count itself.
         chunk_size : Optional[int]
             The chunk size for streaming downloads (in bytes).
         timeout : Optional[float]
@@ -980,8 +981,6 @@ class DataQueryFileAPIClient:
             return []
         logger.info(f"Starting download of {len(filenames)} files.")
         failed_files = []
-        if n_jobs == -1:
-            n_jobs = os.cpu_count()
         completed_file_names = set()
         with cf.ThreadPoolExecutor(max_workers=n_jobs) as executor:
             futures = {}
@@ -1635,6 +1634,12 @@ class DataQueryFileAPIClient:
             from these groups will be downloaded.
         show_progress : bool
             If True, displays a progress bar for downloads.
+
+        Returns
+        -------
+        List[str]
+            The names of the files downloaded, empty if none of the matching files were
+            missing from the output directory.
         """
         out_dir = self._get_save_dir()
         Path(out_dir).mkdir(parents=True, exist_ok=True)
@@ -1753,12 +1758,15 @@ class DataQueryFileAPIClient:
         file_group_ids : Optional[List[str]]
             Restrict the download to these file groups, e.g. "JPMAQS_GENERIC_RETURNS".
             Matching is by prefix, so a group's delta files are downloaded alongside its
-            full snapshot. If None (default), all available file groups are downloaded.
+            full snapshot. Only the groups listed are downloaded, so list the metadata
+            catalog group if the files are to be loaded. If None (default), all available
+            file groups are downloaded, the catalog among them.
         keep_n_days_old_files : int
             How many published snapshots to keep besides the latest, after the download.
-            At 0 (default), only the latest is kept. Counted in published snapshots, not
-            calendar days, so weekends do not consume the allowance. If None, or -1, no
-            files are deleted.
+            At 0 (the default), only the latest day's files are kept: its full snapshots,
+            deltas and metadata. Counted in published snapshots, not calendar days, so
+            weekends do not consume the allowance. If None or negative, no files are
+            deleted.
             See :func:`DataQueryFileAPIClient.cleanup_old_files` for more details.
         overwrite : bool
             If True, overwrites files if they already exist. Default is False.
@@ -1789,26 +1797,14 @@ class DataQueryFileAPIClient:
             return []
 
         files_for_snapshot = files_df[files_df["snap-date"] == latest_snapshot_date]
-        # file_group_ids=None means "all groups"
+        # file_group_ids=None means "all groups", which includes the metadata catalog
         if file_group_ids is not None:
             # an empty or unmatched selection stays empty: nothing was asked for
-            selected = files_for_snapshot[
+            files_for_snapshot = files_for_snapshot[
                 files_for_snapshot["file-group-id"].str.startswith(
                     tuple(file_group_ids)
                 )
             ]
-            if not selected.empty:
-                # the catalog is needed to load any of the others, so keep it in the set
-                # rather than let cleanup prune it and the next call re-download it
-                catalog_rows = files_for_snapshot[
-                    files_for_snapshot["file-group-id"].str.startswith(
-                        self.catalog_file_group_id
-                    )
-                ]
-                selected = pd.concat([selected, catalog_rows]).drop_duplicates(
-                    subset=["file-name"]
-                )
-            files_for_snapshot = selected
         # every file this snapshot consists of, whether or not this call has to fetch it.
         # cleanup must never prune these, so capture them before the dedup below narrows
         # the frame to what is missing.
@@ -1900,9 +1896,10 @@ class DataQueryFileAPIClient:
         Downloads data for the specified `tickers`, `cids`, or `xcats` and returns it as
         a DataFrame for the given date range.
 
-        The latest full snapshots of the relevant datasets are downloaded to disk, then
-        loaded and filtered. The files on disk are unmodified; the conversion to
-        `dataframe_format` (e.g. "qdf") is applied lazily on read.
+        Every file of the latest snapshot for the relevant datasets is downloaded to disk
+        (full snapshots, delta files, metadata files and the metadata catalog), then the
+        requested data is loaded and filtered from them. The files on disk are unmodified;
+        the conversion to `dataframe_format` (e.g. "qdf") is applied lazily on read.
 
         Parameters
         ----------
@@ -1939,15 +1936,18 @@ class DataQueryFileAPIClient:
             categorical dtypes for object columns. Ignored for `dataframe_format="wide"`.
             Default is True.
         include_delta_files : bool
-            If True, delta files will be included in the download. Default is True.
+            If True (default), delta files are included when the data is read. They are
+            downloaded either way.
         show_progress : bool
             If True, displays a progress bar during downloads. Default is True.
         overwrite : bool
             If True, overwrites files if they already exist. Default is False.
         keep_n_days_old_files : int
-            Passed to the snapshot download to prune older files after downloading.
-            If None (default) or -1, no files are deleted. At 0, only the latest snapshot
-            is kept; at 1, the latest and previous day's files are kept, and so on.
+            How many published snapshots to keep besides the latest, after the download.
+            At 0 (the default), only the latest day's files are kept: its full snapshots,
+            deltas and metadata. Counted in published snapshots, not calendar days, so
+            weekends do not consume the allowance. If None or negative, no files are
+            deleted.
             See :func:`DataQueryFileAPIClient.cleanup_old_files` for more details.
         include_source_file : bool
             If True, the returned DataFrame will include a column indicating the source
@@ -2606,7 +2606,36 @@ def lazy_load_from_parquets(
     catalog_path: Union[str, Path] = None,
     include_source_file: bool = False,
     categorical_source_file_column: bool = True,
-) -> pd.DataFrame:
+) -> Union[pd.DataFrame, pl.DataFrame, pl.LazyFrame]:
+    """
+    Loads previously downloaded JPMaQS files into a single DataFrame.
+
+    Scans the files of the latest snapshot found under `files_dir`, applies the ticker,
+    date and metric filters while scanning, and only then materialises the result. The
+    files on disk are never modified. Delta files are folded into the snapshot unless
+    `include_delta_files=False`; metadata files are left out unless
+    `include_metadata_files=True`.
+
+    `catalog_path` is required, as the catalog resolves which dataset holds which ticker.
+    Obtain one from :func:`DataQueryFileAPIClient.download_catalog_file`.
+
+    `dataframe_format` chooses the shape:
+
+    - "qdf" (default): columns (real_date, cid, xcat, <metrics>)
+    - "tickers": columns (real_date, ticker, <metrics>)
+    - "wide": one column per ticker, for a single metric, so `metrics` must name exactly
+      one. `real_date` is the index for "pandas" but a column for the polars types, and
+      the format cannot be combined with `include_source_file`.
+
+    `dataframe_type` chooses the library: "pandas" (default), "polars", or "polars-lazy",
+    which returns the LazyFrame uncollected. `file_format="csv"` raises
+    `NotImplementedError`.
+
+    Returns
+    -------
+    Union[pd.DataFrame, pl.DataFrame, pl.LazyFrame]
+        The filtered data, in the requested format and type.
+    """
     files_dir = Path(files_dir)
     if (not metrics) or (metrics == "all") or ("all" in metrics):
         metrics = list(JPMAQS_METRICS)
