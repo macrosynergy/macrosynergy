@@ -364,6 +364,7 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         self.models = []
 
         self.early_stopping_dynamics = {}
+        self.early_stopping_inference = {}
 
         # Data checks
         # TODO: if torch_model is provided, check it has the right structure 
@@ -396,7 +397,7 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
                 # Set seed 
                 torch.manual_seed(random_state)
 
-                # Initialize early stopping dynamics dictionary
+                # Initialize early stopping dictionaries
                 self.early_stopping_dynamics[(optim_idx, random_state_idx)] = {
                     # Loss paths 
                     "train_loss_path": [],
@@ -428,6 +429,11 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
                     "inf_gradients_per_layer": {},
                     "nan_gradients_global": None,
                     "inf_gradients_global": None,
+                }
+
+                self.early_stopping_inference[(optim_idx, random_state_idx)] = {
+                    "training_loss_sensitivity": [],
+                    "target_sensitivities": {},
                 }
 
                 # Make torch dataloaders
@@ -479,6 +485,10 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
                 # Store model diagnostics on gradients and NaN/inf checks
                 model_es_diagnostics = self._get_model_diagnostics(model_es, torch.Tensor(X_train_s), torch.Tensor(y_train_s))
                 self.early_stopping_dynamics[(optim_idx, random_state_idx)].update(model_es_diagnostics)
+
+                # Infer properties of the trained model
+                model_es_inference = self._inspect_model(model_es, torch.Tensor(X_train_s), torch.Tensor(y_train_s))
+                self.early_stopping_inference[(optim_idx, random_state_idx)].update(model_es_inference)
 
                 if self.refit:
                     # Create training set dataloader over the full dataset
@@ -928,6 +938,42 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
             
         return best_score, best_state, counter
 
+    def _inspect_model(self, model, X_eval, y_eval):
+        # Set into evaluation mode
+        model.eval()
+        X_eval = X_eval.detach().requires_grad_(True)
+        model.zero_grad()
+
+        # Forward pass
+        preds = model(X_eval)
+        eval_loss = self.loss_func(preds, y_eval)
+
+        eval_loss.backward(retain_graph = True)
+
+        # Calculate derivative of loss with respect to inputs
+        input_gradients = X_eval.grad.detach().numpy()
+        abs_gradients = np.abs(input_gradients)
+
+        normalized_sensitivity = (
+            abs_gradients / (np.max(abs_gradients, axis=1, keepdims=True) + 1e-8)
+        )
+        loss_sensitivity = np.mean(normalized_sensitivity, axis=0)
+
+        # Calculate derivatives of each target with respect to inputs
+        target_sensitivities = {}
+
+        for output_idx in range(preds.shape[1]):
+            output_gradients = torch.autograd.grad(
+                preds[:, output_idx].sum(), X_eval, retain_graph=True, create_graph = False
+            )[0]
+            avg_abs_output_gradients = np.mean(np.abs(output_gradients.detach().cpu().numpy()), axis=0)
+
+            target_sensitivities[output_idx] = avg_abs_output_gradients
+
+        model.zero_grad()
+
+        return {"training_loss_sensitivity": loss_sensitivity, "target_sensitivities": target_sensitivities}
+    
     def _get_model_diagnostics(self, model, X_eval, y_eval):
         # Set into evaluation mode
         model.eval()
