@@ -1110,7 +1110,8 @@ class DataQueryFileAPIClient:
         -------
         Union[List[str], Dict[str, List[str]]]
             A list of datasets or a dictionary mapping datasets to tickers, depending on
-            the `as_dict` parameter.
+            the `as_dict` parameter. Tickers absent from the catalog have no dataset: they
+            are warned about, or raise a ValueError if none of them is in the catalog.
         """
 
         for param, name in zip(
@@ -1155,7 +1156,29 @@ class DataQueryFileAPIClient:
                 catalog_df["Ticker"].str.lower().isin(t.lower() for t in tickers)
             ]
 
-        datasets_to_keep = sorted(set(catalog_df["Dataset"]))
+        normalise = str if case_sensitive else str.lower
+        found_tickers = {normalise(t) for t in catalog_df["Ticker"]}
+        missing_tickers = [t for t in tickers if normalise(t) not in found_tickers]
+        if missing_tickers:
+            if len(missing_tickers) == len(tickers):
+                raise ValueError(
+                    "None of the requested tickers are available in the JPMaQS "
+                    f"catalog: {missing_tickers}."
+                )
+            logger.warning(
+                "Tickers not available in the JPMaQS catalog: %s. They have no dataset "
+                "and are skipped.",
+                missing_tickers,
+            )
+
+        unknown_theme_tickers = catalog_df["Dataset"] == "Unknown"
+        if unknown_theme_tickers.any():
+            logger.warning(
+                "Catalog themes missing from `JPMAQS_DATASET_THEME_MAPPING`: %s. "
+                "The requested tickers under them belong to no dataset and are skipped.",
+                sorted(set(catalog_df.loc[unknown_theme_tickers, "Theme"])),
+            )
+        datasets_to_keep = sorted(set(catalog_df["Dataset"]) - {"Unknown"})
         if as_dict:
             rdict = {
                 dataset: sorted(
