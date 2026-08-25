@@ -523,7 +523,7 @@ class DataQueryFileAPIClient:
         file_group_id: Optional[str] = None,
         group_id: str = JPMAQS_GROUP_ID,
         start_date: str = JPMAQS_EARLIEST_FILE_DATE,
-        end_date: str = None,
+        end_date: Optional[str] = None,
         convert_metadata_timestamps: bool = True,
         include_unavailable: bool = False,
     ) -> pd.DataFrame:
@@ -593,7 +593,7 @@ class DataQueryFileAPIClient:
         self,
         group_id: str = JPMAQS_GROUP_ID,
         start_date: str = JPMAQS_EARLIEST_FILE_DATE,
-        end_date: str = None,
+        end_date: Optional[str] = None,
         include_full_snapshots: bool = True,
         include_delta: bool = True,
         include_metadata: bool = True,
@@ -751,8 +751,8 @@ class DataQueryFileAPIClient:
 
     def check_file_availability(
         self,
-        file_group_id: str = None,
-        file_datetime: str = None,
+        file_group_id: Optional[str] = None,
+        file_datetime: Optional[str] = None,
         filename: Optional[str] = None,
     ) -> pd.DataFrame:
         """
@@ -787,8 +787,8 @@ class DataQueryFileAPIClient:
 
     def download_file(
         self,
-        file_group_id: str = None,
-        file_datetime: str = None,
+        file_group_id: Optional[str] = None,
+        file_datetime: Optional[str] = None,
         filename: Optional[str] = None,
         overwrite: bool = False,
         chunk_size: Optional[int] = None,
@@ -2191,7 +2191,7 @@ class SegmentedFileDownloader:
         api_delay: float = DQ_FILE_API_DELAY_PARAM,
         api_delay_margin: float = DQ_FILE_API_DELAY_MARGIN,
         headers_timeout: int = DQ_FILE_API_HEADERS_TIMEOUT,
-        max_concurrent_downloads: int = None,
+        max_concurrent_downloads: Optional[int] = None,
         max_file_retries: int = 3,
         verify_ssl: bool = True,
         start_download: bool = False,
@@ -2603,7 +2603,7 @@ def lazy_load_from_parquets(
     datasets: Optional[List[str]] = None,
     include_delta_files: bool = True,
     include_metadata_files: bool = False,
-    catalog_path: Union[str, Path] = None,
+    catalog_path: Optional[Union[str, Path]] = None,
     include_source_file: bool = False,
     categorical_source_file_column: bool = True,
 ) -> Union[pd.DataFrame, pl.DataFrame, pl.LazyFrame]:
