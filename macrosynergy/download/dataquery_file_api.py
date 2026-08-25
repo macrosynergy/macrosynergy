@@ -603,8 +603,8 @@ class DataQueryFileAPIClient:
         """
         Fetches and consolidates available files for all relevant file groups.
 
-        This method concurrently queries for available files across all specified
-        file group types (full snapshots, deltas, metadata) for a given provider.
+        Makes a single query for the provider's group, then filters the result locally
+        to the requested file types (full snapshots, deltas, metadata).
 
         Parameters
         ----------
@@ -722,7 +722,7 @@ class DataQueryFileAPIClient:
 
         if "T" not in str(to_datetime):
             to_ts = (
-                to_ts.normalize() + pd.DateOffset(days=1) - pd.Timedelta(nanoseconds=1)
+                to_ts.normalize() + pd.DateOffset(days=1) - pd.Timedelta(1, unit="ns")
             )
 
         if since_ts > to_ts:
@@ -798,9 +798,9 @@ class DataQueryFileAPIClient:
         """
         Downloads a single Parquet file to the client's output directory.
 
-        This method can be called with either (`file_group_id` and `file_datetime`) or a
-        `filename`. For large files, it automatically uses the `SegmentedFileDownloader`
-        for a robust, multi-part download.
+        Call with either (`file_group_id` and `file_datetime`) or `filename`, not both.
+        For large files, it automatically uses the `SegmentedFileDownloader` for a
+        robust, multi-part download.
 
         Parameters
         ----------
@@ -809,7 +809,7 @@ class DataQueryFileAPIClient:
         file_datetime : str
             The timestamp of the file to download.
         filename : Optional[str]
-            The full filename to download. Overrides `file_group_id` and `file_datetime`.
+            The full filename, in place of `file_group_id` and `file_datetime`.
         overwrite : bool
             If True, overwrites the file if it already exists. Default is False.
         chunk_size : Optional[int]
@@ -909,8 +909,9 @@ class DataQueryFileAPIClient:
         Parameters
         ----------
         files : Optional[List[str]]
-            A list of file paths to check for corruption. If None, scans all downloaded
-            files in the client's output directory.
+            A list of file names or file paths to check for corruption. A file name
+            checks every copy of that name in the client's output directory; a file path
+            checks only that exact file. If None, scans all downloaded files.
 
         Returns
         -------
@@ -923,9 +924,15 @@ class DataQueryFileAPIClient:
         if files is not None:
             if not all(isinstance(f, str) for f in files):
                 raise ValueError(
-                    "All items in `files` must be strings representing file paths."
+                    "All items in `files` must be strings representing file names or "
+                    "file paths."
                 )
-            avail_files = avail_files[avail_files["file-name"].isin(files)]
+            # the "path" column is resolved, so resolve the given paths to match
+            wanted = {str(Path(f).resolve()) for f in files}
+            avail_files = avail_files[
+                avail_files["file-name"].isin(files)
+                | avail_files["path"].astype(str).isin(wanted)
+            ]
         files = sorted(set(map(str, avail_files["path"])))
         extensions = sorted(set(Path(f).suffix.rsplit(".", 1)[-1] for f in files))
         return _delete_corrupt_files(files=files, extensions=extensions)
@@ -1026,12 +1033,13 @@ class DataQueryFileAPIClient:
         else:
             log_msg += "; no retries left"
         logger.warning(log_msg)
-        if max_retries == 0:
+        if max_retries <= 0:
             logger.error(f"Files failed after retries: {failed_files}")
             raise DownloadError(f"Files failed after retries: {failed_files}")
 
         retried = self.download_multiple_files(
             filenames=failed_files,
+            overwrite=overwrite,
             max_retries=max_retries - 1,
             n_jobs=n_jobs,
             chunk_size=chunk_size,
@@ -1207,7 +1215,7 @@ class DataQueryFileAPIClient:
                 f"Requested: {date.date()}, today (UTC): {today_utc.date()}."
             )
         if not skip_download:
-            to_dt = date + pd.offsets.BDay(1) - pd.Timedelta(seconds=1)
+            to_dt = date + pd.offsets.BDay(1) - pd.Timedelta(1, unit="s")
             self.download_files(
                 since_datetime=date,
                 to_datetime=to_dt,
@@ -1449,7 +1457,7 @@ class DataQueryFileAPIClient:
             anchor = utc_now() if to_datetime is None else to_datetime
             since_dt = pd_to_datetime_compat(
                 anchor, utc=True
-            ).normalize() - pd.Timedelta(days=keep_n_days_old_files)
+            ).normalize() - pd.Timedelta(keep_n_days_old_files, unit="D")
 
         files_to_delete = files_df[snap_dates < since_dt]
         if protect_files:
@@ -1541,7 +1549,7 @@ class DataQueryFileAPIClient:
     def _add_snap_date_column(self, files_df: pd.DataFrame) -> pd.DataFrame:
         SNAP_ASSUMED_TIME = "T060000"
         # files published from 06:00 UTC belong to that day's snapshot, earlier to the previous
-        SNAP_WINDOW_START = pd.Timedelta(hours=6)
+        SNAP_WINDOW_START = pd.Timedelta(6, unit="h")
         files_df = files_df.copy()
         # tail of the filename: "20260728" or "20260728T080000"
         timestamps = (
