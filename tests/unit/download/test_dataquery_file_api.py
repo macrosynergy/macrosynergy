@@ -959,19 +959,23 @@ class TestDataQueryFileAPIClientNotificationLoading(unittest.TestCase):
                 {
                     "file-name": p_missing.name,
                     "dataset": "JPMAQS_METADATA_NOTIFICATIONS",
-                    "file-timestamp": date + pd.Timedelta(hours=6),
+                    "file-timestamp": date + pd.Timedelta(6, unit="h"),
                     "path": str(p_missing),
                 },
                 {
                     "file-name": p_changed.name,
                     "dataset": "JPMAQS_METADATA_NOTIFICATIONS",
-                    "file-timestamp": date + pd.Timedelta(hours=6, minutes=1),
+                    "file-timestamp": date
+                    + pd.Timedelta(6, unit="h")
+                    + pd.Timedelta(1, unit="m"),
                     "path": str(p_changed),
                 },
                 {
                     "file-name": p_addl.name,
                     "dataset": "JPMAQS_METADATA_NOTIFICATIONS",
-                    "file-timestamp": date + pd.Timedelta(hours=7, minutes=24),
+                    "file-timestamp": date
+                    + pd.Timedelta(7, unit="h")
+                    + pd.Timedelta(24, unit="m"),
                     "path": str(p_addl),
                 },
                 {
@@ -1760,12 +1764,78 @@ class TestDownloadMultipleFilesReturn(unittest.TestCase):
             patch.object(self.client, "download_file", side_effect=Exception("boom")),
             patch.object(self.client, "delete_corrupt_files", return_value=[]),
         ):
-            with self.assertRaises(DownloadError):
-                self.client.download_multiple_files(
-                    filenames=["JPMAQS_A_20260728.parquet"],
-                    max_retries=0,
-                    show_progress=False,
-                )
+            for max_retries in (0, -1):
+                with self.subTest(max_retries=max_retries):
+                    with self.assertRaises(DownloadError):
+                        self.client.download_multiple_files(
+                            filenames=["JPMAQS_A_20260728.parquet"],
+                            max_retries=max_retries,
+                            show_progress=False,
+                        )
+
+    @suppress_logging
+    @patch("macrosynergy.download.dataquery_file_api.time.sleep")
+    def test_overwrite_is_forwarded_to_the_retry(self, _sleep):
+        seen = []
+
+        def flaky(filename, overwrite=False, **kw):
+            seen.append(overwrite)
+            if len(seen) == 1:
+                raise Exception("transient")
+            return filename
+
+        with (
+            patch.object(self.client, "download_file", side_effect=flaky),
+            patch.object(self.client, "delete_corrupt_files", return_value=[]),
+        ):
+            self.client.download_multiple_files(
+                filenames=["JPMAQS_A_20260728.parquet"],
+                overwrite=True,
+                max_retries=1,
+                show_progress=False,
+            )
+        self.assertEqual(seen, [True, True])
+
+
+class TestClientDeleteCorruptFiles(unittest.TestCase):
+    """`delete_corrupt_files` accepts file names as well as file paths."""
+
+    NAME = "JPMAQS_MACROECONOMIC_TRENDS_20240102.parquet"
+
+    def setUp(self):
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp_dir.cleanup)
+        self.client = _make_client(self.temp_dir.name)
+        self.save_dir = Path(self.client._get_save_dir())
+
+    def _write_corrupt(self, sub_dir, name=NAME):
+        path = self.save_dir / sub_dir / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"not a parquet file")
+        return path.resolve()
+
+    @suppress_logging
+    def test_a_path_only_touches_that_file(self):
+        target = self._write_corrupt("2024-01-02")
+        other = self._write_corrupt("2024-01-03")
+
+        self.assertEqual(
+            self.client.delete_corrupt_files(files=[str(target)]), [str(target)]
+        )
+        self.assertFalse(target.exists())
+        self.assertTrue(other.exists())
+
+    @suppress_logging
+    def test_a_name_touches_every_copy_of_that_name(self):
+        first = self._write_corrupt("2024-01-02")
+        second = self._write_corrupt("moved")
+
+        self.assertEqual(
+            self.client.delete_corrupt_files(files=[self.NAME]),
+            sorted([str(first), str(second)]),
+        )
+        self.assertFalse(first.exists())
+        self.assertFalse(second.exists())
 
 
 class TestDownloadLatestSnapshot(unittest.TestCase):
