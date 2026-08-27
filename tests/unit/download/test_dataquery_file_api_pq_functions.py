@@ -466,6 +466,21 @@ class TestDownloadedFilesDf(TempDirCase):
     def test_missing_directory_returns_an_empty_frame(self):
         self.assertTrue(_downloaded_files_df(self.tmpdir / "nope", "parquet").empty)
 
+    def test_files_with_an_unparseable_date_are_skipped(self):
+        # JPMaQS-named, so the scan picks them up, but neither has a date to parse
+        for bad in (f"{MACRO_DS}_NOTADATE.parquet", "JPMAQS_BROKEN.parquet"):
+            (self.tmpdir / bad).write_bytes(b"x")
+
+        names = set(_downloaded_files_df(self.tmpdir, "parquet")["file-name"])
+
+        self.assertEqual(
+            names,
+            {
+                f"{MACRO_DS}_20240102.parquet",
+                f"{MACRO_DS}_DELTA_20240102T235959.parquet",
+            },
+        )
+
 
 class TestFilterToLatestFiles(TempDirCase):
     """
