@@ -147,62 +147,26 @@ class BasePanelLearner(ABC):
         self.drop_nas = drop_nas
 
         # Create long-format dataframe
-        if self.n_targets == 1:
-            df_long = (
-                categories_df(
-                    df=self.df,
-                    xcats=self.xcats,
-                    cids=self.cids,
-                    start=self.start,
-                    end=self.end,
-                    blacklist=self.blacklist,
-                    freq=self.freq,
-                    lag=self.lag,
-                    xcat_aggs=self.xcat_aggs,
-                )
-            )
-        else:
-            features_xcats = self.xcats[:-self.n_targets]
-            targets_xcats = self.xcats[-self.n_targets:]
-            dfs = []
-            for target in targets_xcats:
-                df_long = (
-                    categories_df(
-                        df=self.df,
-                        xcats=features_xcats + [target],
-                        cids=self.cids,
-                        start=self.start,
-                        end=self.end,
-                        blacklist=self.blacklist,
-                        freq=self.freq,
-                        lag=self.lag,
-                        xcat_aggs=self.xcat_aggs,
-                    )
-                )
-                dfs.append(df_long)
-            df_long = pd.concat(dfs, axis=1).sort_index()
-            # Filter out duplicate categories
-            df_features = df_long.iloc[:,:len(features_xcats)]
-            df_targets = df_long[targets_xcats]
-            df_long = pd.concat([df_features, df_targets], axis=1)
+        df_long = self._create_long_format_df(
+            df = self.df,
+            xcats = self.xcats,
+            cids = self.cids,
+            start = self.start,
+            end = self.end,
+            blacklist = self.blacklist,
+            freq = self.freq,
+            lag = self.lag,
+            xcat_aggs = self.xcat_aggs,
+            n_targets = self.n_targets,
+        )
 
         # Handle NaNs
-        # No matter what, drop rows where all independent variables are NaN
-        df_long = df_long.dropna(
-            subset=self.xcats[:-self.n_targets], how="all"
-        ).sort_index()
-
-        # Handle remaining NaNs with specified strategy
-        if drop_nas == "X":
-            subset = self.xcats[:-self.n_targets]
-        elif drop_nas == "y":
-            subset = self.xcats[-self.n_targets:]
-        elif drop_nas == True:
-            subset = df_long.columns
-        else:
-            subset = []
-
-        df_long = df_long.dropna(subset=subset)
+        df_long = self._handle_nans(
+            df_long = df_long,
+            xcats = self.xcats,
+            n_targets = self.n_targets,
+            drop_nas=self.drop_nas
+        )
 
         # Create X and y
         self.X = df_long.iloc[:, :-self.n_targets]
@@ -972,6 +936,83 @@ class BasePanelLearner(ABC):
 
         return {"model_choice": data}
 
+    def _create_long_format_df(
+        self,
+        df,
+        xcats,
+        cids,
+        start,
+        end,
+        blacklist,
+        freq,
+        lag,
+        xcat_aggs,
+        n_targets,
+    ):
+        if n_targets == 1:
+            df_long = categories_df(
+                df=df,
+                xcats=xcats,
+                cids=cids,
+                start=start,
+                end=end,
+                blacklist=blacklist,
+                freq=freq,
+                lag=lag,
+                xcat_aggs=xcat_aggs,
+            )
+        else:
+            features_xcats = xcats[:-n_targets]
+            targets_xcats = xcats[-n_targets:]
+
+            df_features = categories_df(
+                df=df,
+                xcats=features_xcats + [targets_xcats[0]],
+                cids=cids,
+                start=start,
+                end=end,
+                blacklist=blacklist,
+                freq=freq,
+                lag=lag,
+                xcat_aggs=xcat_aggs,
+            )[features_xcats]
+
+            df_targets = categories_df(
+                df=df,
+                xcats=targets_xcats,
+                cids = cids,
+                start=start,
+                end=end,
+                blacklist=blacklist,
+                freq=freq,
+                lag=0,
+                xcat_aggs=[xcat_aggs[1], xcat_aggs[1]],
+            )[targets_xcats]
+
+            df_long = pd.concat([df_features, df_targets], axis=1).sort_index()
+
+        return df_long
+
+    def _handle_nans(self, df_long, xcats, n_targets, drop_nas):
+        # No matter what, drop rows where all independent variables are NaN
+        df_long = df_long.dropna(
+            subset=xcats[:-n_targets], how="all"
+        )
+
+        # Handle remaining NaNs with specified strategy
+        if drop_nas == "X":
+            subset = xcats[:-n_targets]
+        elif drop_nas == "y":
+            subset = xcats[-n_targets:]
+        elif drop_nas == True:
+            subset = df_long.columns 
+        else:
+            subset = []
+
+        df_long = df_long.dropna(subset=subset)
+
+        return df_long
+    
     def store_split_data(
         self,
         pipeline_name,
