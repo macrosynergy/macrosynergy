@@ -321,7 +321,7 @@ class BasePanelLearner(ABC):
                         f"={X_first.shape} and y shape={y_first.shape}. This may indicate "
                         f"that the estimator is incompatible with the provided features, "
                         f"target, or preprocessing configuration. "
-                        f"Original error: {e}"s
+                        f"Original error: {e}"
                     ) from e
                 
                 # Reinitialize the model to ensure the actual learning process is not affected by this check
