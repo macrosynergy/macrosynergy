@@ -184,10 +184,10 @@ class NaivePnL:
             which is delimited by the frequency chosen. Additionally, the re-balancing
             frequency will be applied to make_zn_scores() if used as the method to produce
             the raw signals.
-        rebal_slip : str
-            re-balancing slippage in days. Default is 1 which means that it takes one
-            day to re-balance the position and that the new positions produce PnL from the
-            second day after the signal has been recorded.
+        rebal_slip : int
+            re-balancing slippage in days. Default is 0. A value of 1 means that it
+            takes one day to re-balance the position and that the new positions produce
+            PnL from the second day after the signal has been recorded.
         vol_scale : bool
             ex-post scaling of PnL to annualized volatility given. This is for
             comparative visualization and not out-of-sample. Default is none.
