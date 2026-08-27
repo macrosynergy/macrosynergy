@@ -2568,10 +2568,19 @@ def _downloaded_files_df(
     df["dataset"] = df["file-name"].apply(
         lambda x: str(x).split(".")[0].rsplit("_", 1)[0]
     )
+
     df["file-datetime"] = df["file-name"].apply(
         lambda x: str(x).split(".")[0].rsplit("_", 1)[-1]
     )
-    df["file-timestamp"] = df["file-datetime"].apply(lambda x: pd_to_datetime_compat(x))
+
+    def _dt_or_none(x):
+        try:
+            return pd_to_datetime_compat(x)
+        except Exception:
+            return None
+
+    df["file-timestamp"] = df["file-datetime"].apply(lambda x: _dt_or_none(x))
+    df = df[~df["file-timestamp"].isnull()]
     df = df.reset_index(drop=True)
     return df
 
@@ -3173,46 +3182,21 @@ def build_filtered_lazy_frames_df(
 
 
 if __name__ == "__main__":
-    print("Current time UTC:", utc_now().isoformat())
+    now_datetime = datetime.datetime.now(datetime.timezone.utc)
+    print("Current time UTC:", now_datetime.isoformat())
     path = Path("~/jpmaqs-data").expanduser()
     start = time.time()
-    since_datetime = pd.Timestamp.now() - pd.offsets.BDay(5)
     print(
-        f"Downloading full-snapshots, delta-files, and metadata files published since {since_datetime}"
+        "Downloading full-snapshots, delta-files, "
+        f"and metadata files published as of {now_datetime.isoformat()}"
     )
-    since_datetime = since_datetime.strftime("%Y%m%d")
-    with DataQueryFileAPIClient(out_dir=path) as dq:
-        dq.download_catalog_file()
-        dq.download_files(since_datetime=since_datetime)
+
+    with DataQueryFileAPIClient() as dq:
+        dq.download_files(since_datetime=now_datetime - datetime.timedelta(days=3))
+        catalog_df = pd.read_parquet(dq.download_catalog_file())
+        random_tickers = catalog_df["Ticker"].sample(n=20, random_state=42).tolist()
+
+        df = dq.download(tickers=random_tickers, keep_n_days_old_files=3)
+        # print(df.head())
     end = time.time()
-
-    print(f"Download completed in {end - start:.2f} seconds")
-
-    cids = ["AUD", "BRL", "CAD", "CHF", "CNY", "CZK", "EUR", "GBP", "USD"]
-    xcats = ["RIR_NSA", "FXXR_NSA", "FXXR_VT10", "DU05YXR_NSA", "DU05YXR_VT10"]
-    tickers = [f"{c}_{x}" for c in cids for x in xcats]
-
-    with DataQueryFileAPIClient(out_dir=path) as dq:
-        df = dq.download(tickers=tickers)
-        print(df.head())
-
-    with DataQueryFileAPIClient(out_dir=path) as dq:
-        df = dq.download(tickers=tickers, include_source_file=True)
-        print(df.head())
-
-    # every dataframe_format/dataframe_type combination is exercised here on purpose:
-    # these are the only callers of the non-qdf output paths
-    with DataQueryFileAPIClient(out_dir=path) as dq:
-        pl_df: pl.DataFrame = dq.download(
-            cids=cids,
-            xcats=xcats,
-            dataframe_format="tickers",
-            dataframe_type="polars",
-        )
-        print(pl_df.head())
-
-    with DataQueryFileAPIClient(out_dir=path) as dq:
-        wide_df = dq.download(
-            cids=cids, xcats=xcats, dataframe_format="wide", metrics=["value"]
-        )
-        print(wide_df.head())
+    print(f"Download completed in {end - start:.2f} seconds.")
