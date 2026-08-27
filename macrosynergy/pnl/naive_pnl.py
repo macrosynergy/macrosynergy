@@ -688,6 +688,12 @@ class NaivePnL:
         # The re-balancing days are the first of the respective time-periods because of
         # the shift forward by one day applied earlier in the code. Therefore, only
         # concerned with the minimum date of each re-balance period.
+        err_str = "Re-balancing slippage must be a non-negative integer."
+        if not isinstance(rebal_slip, int):
+            raise TypeError(err_str)
+        elif rebal_slip < 0:
+            raise ValueError(err_str)
+
         dfw["year"] = dfw["real_date"].dt.year
         if rebal_freq == "annual":
             rebal_dates = dfw.groupby(["cid", "year"], observed=True)["real_date"].min()
