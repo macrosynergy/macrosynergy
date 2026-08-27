@@ -660,7 +660,7 @@ class NaivePnL:
         return pd.concat(dfw_list)
 
     @staticmethod
-    def rebalancing(dfw: pd.DataFrame, rebal_freq: str = "daily", rebal_slip=0):
+    def rebalancing(dfw: pd.DataFrame, rebal_freq: str = "daily", rebal_slip: int = 0):
         """
         The signals are calculated daily and for each individual cross-section defined
         in the panel. However, re-balancing a position can occur more infrequently than
@@ -675,7 +675,7 @@ class NaivePnL:
         rebal_freq : str
             re-balancing frequency for positions according to signal must be one of
             'daily' (default), 'weekly', 'monthly', 'quarterly', or 'annual'.
-        rebal_slip : str
+        rebal_slip : int
             re-balancing slippage in days.
 
         Returns
@@ -739,9 +739,15 @@ class NaivePnL:
         rebal_merge = dfw[["real_date", "cid"]].merge(
             rebal_merge, how="left", on=["real_date", "cid"]
         )
-        rebal_merge["psig"] = (
-            rebal_merge.groupby("cid", observed=True)["psig"].ffill().shift(rebal_slip)
-        )
+
+        rebal_merge["psig"] = rebal_merge.groupby("cid", observed=True)["psig"].ffill()
+        if rebal_slip:
+            rebal_merge["psig"] = (
+                rebal_merge["psig"]
+                .groupby(rebal_merge["cid"], observed=True)
+                .shift(rebal_slip)
+            )
+
         rebal_merge = rebal_merge.sort_values(["cid", "real_date"])
 
         rebal_merge = rebal_merge.set_index("real_date")
