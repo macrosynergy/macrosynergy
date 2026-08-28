@@ -13,19 +13,6 @@ from macrosynergy.management.types import QuantamentalDataFrame
 from macrosynergy.management.utils import reduce_df, _map_to_business_day_frequency
 
 
-_LEGEND_ANCHOR_LOCS = {
-    "upper right": "lower left",
-    "upper left": "lower right",
-    "lower left": "upper right",
-    "lower right": "upper left",
-    "right": "center left",
-    "center left": "center right",
-    "center right": "center left",
-    "lower center": "upper center",
-    "upper center": "lower center",
-}
-
-
 def view_performance(
     df: pd.DataFrame,
     xcats: Optional[List[str]] = None,
@@ -98,8 +85,8 @@ def view_performance(
         Custom labels for the compared items. If dict, maps from cid/xcat/ticker to
         label. If list, must match the order of items being compared.
     legend_loc : str
-        Location of the legend relative to `legend_bbox_to_anchor`. Default is
-        'upper center'.
+        Location of legend; passed to matplotlib.pyplot.legend(). Default is 'upper
+        center'.
     legend_bbox_to_anchor : Tuple[float], optional
         Passed to matplotlib.pyplot.legend(). Default is None, which positions the
         legend below the plot.
@@ -514,14 +501,7 @@ def _plot_performance_bars(
     if legend_bbox_to_anchor is None:
         legend_bbox_to_anchor = (0.5, -0.15 - 0.05 * max(0, (n_metrics - 2)))
 
-    # With a point bbox, Matplotlib places the named part of the legend on the
-    # anchor, which makes the visible direction appear inverted. Invert the
-    # attachment point so ``legend_loc`` describes where the legend is displayed
-    # relative to the anchor.
-    anchor_loc = legend_loc
-    if len(legend_bbox_to_anchor) == 2:
-        anchor_loc = _LEGEND_ANCHOR_LOCS.get(legend_loc, legend_loc)
-    ax.legend(loc=anchor_loc, bbox_to_anchor=legend_bbox_to_anchor, ncol=3)
+    ax.legend(loc=legend_loc, bbox_to_anchor=legend_bbox_to_anchor, ncol=3)
 
     plt.tight_layout()
 
