@@ -244,6 +244,174 @@ class TestAll(unittest.TestCase):
 
         self.assertTrue(no_months - 1 == len(unique_values_aud))
 
+    def test_rebalancing_slip_no_cross_cid_leak(self):
+        # With rebal_slip >= 1 the slip must be applied within each cross-section: the
+        # first observation(s) of a cid must never inherit the preceding cid's signal.
+        cids = ["AUD", "CAD", "GBP"]
+        signals = {"AUD": 1.0, "CAD": 2.0, "GBP": 3.0}
+        dates = pd.bdate_range("2020-01-01", "2020-06-30")
+
+        dfw = pd.DataFrame(
+            {
+                "real_date": np.tile(dates, len(cids)),
+                "cid": np.repeat(cids, len(dates)),
+                "psig": np.repeat([signals[cid] for cid in cids], len(dates)),
+            }
+        ).sort_values(["cid", "real_date"])
+
+        sig_series = NaivePnL.rebalancing(dfw, rebal_freq="monthly", rebal_slip=1)
+        dfw["sig"] = np.squeeze(sig_series.to_numpy())
+
+        # Each cid's signal is constant, so the only non-NA value it can legitimately
+        # hold is its own. Anything else has leaked across the cid boundary.
+        for cid in cids:
+            observed = set(dfw.loc[dfw["cid"] == cid, "sig"].dropna().unique())
+            self.assertEqual(observed, {signals[cid]})
+
+    def test_rebalancing_slip_type_value_checks(self):
+        # rebal_slip must be a non-negative integer: bad types raise TypeError, a
+        # negative integer raises ValueError, and a valid value must go through.
+        cids = ["AUD", "CAD"]
+        dates = pd.bdate_range("2020-01-01", "2020-03-31")
+        dfw = pd.DataFrame(
+            {
+                "real_date": np.tile(dates, len(cids)),
+                "cid": np.repeat(cids, len(dates)),
+                "psig": np.repeat([1.0, 2.0], len(dates)),
+            }
+        ).sort_values(["cid", "real_date"])
+
+        for bad_slip in ["1", 1.5, None]:
+            with self.assertRaises(TypeError):
+                NaivePnL.rebalancing(
+                    dfw.copy(), rebal_freq="monthly", rebal_slip=bad_slip
+                )
+
+        with self.assertRaises(ValueError):
+            NaivePnL.rebalancing(dfw.copy(), rebal_freq="monthly", rebal_slip=-1)
+
+        # A valid slippage must not raise. Note bools are ints in Python, so they pass.
+        NaivePnL.rebalancing(dfw.copy(), rebal_freq="monthly", rebal_slip=0)
+
+    def test_rebalancing_slip_no_cross_cid_leak_edge_cases(self):
+        cids = ["AUD", "CAD", "GBP"]
+        signals = {"AUD": 1.0, "CAD": 2.0, "GBP": 3.0}
+        dates = pd.bdate_range("2020-01-01", "2020-03-31")
+
+        # (a) A categorical cid column - including one carrying an unused category -
+        # must give the same result as the object-dtype column and must not leak.
+        dfw = pd.DataFrame(
+            {
+                "real_date": np.tile(dates, len(cids)),
+                "cid": np.repeat(cids, len(dates)),
+                "psig": np.repeat([signals[cid] for cid in cids], len(dates)),
+            }
+        ).sort_values(["cid", "real_date"])
+        dfw_cat = dfw.assign(
+            cid=pd.Categorical(dfw["cid"], categories=["AUD", "CAD", "CHF", "GBP"])
+        )
+        obj_sig = np.squeeze(
+            NaivePnL.rebalancing(
+                dfw.copy(), rebal_freq="monthly", rebal_slip=2
+            ).to_numpy()
+        )
+        cat_sig = np.squeeze(
+            NaivePnL.rebalancing(
+                dfw_cat.copy(), rebal_freq="monthly", rebal_slip=2
+            ).to_numpy()
+        )
+        self.assertTrue(np.array_equal(obj_sig, cat_sig, equal_nan=True))
+        dfw_cat["sig"] = cat_sig
+        for cid in cids:
+            cid_sig = dfw_cat.loc[dfw_cat["cid"] == cid, "sig"]
+            # A slip of two blanks exactly the first two dates of each cross-section.
+            self.assertEqual(
+                list(cid_sig.isna()), [True, True] + [False] * (len(dates) - 2)
+            )
+            self.assertEqual(set(cid_sig.dropna().unique()), {signals[cid]})
+
+        # (b) A cid whose signal is entirely NaN, sat between two populated cids, must
+        # stay NaN and must not absorb either neighbour's signal.
+        dfw_nan = pd.DataFrame(
+            {
+                "real_date": np.tile(dates, len(cids)),
+                "cid": np.repeat(cids, len(dates)),
+                "psig": np.concatenate(
+                    [
+                        np.full(len(dates), signals["AUD"]),
+                        np.full(len(dates), np.nan),
+                        np.full(len(dates), signals["GBP"]),
+                    ]
+                ),
+            }
+        ).sort_values(["cid", "real_date"])
+        dfw_nan["sig"] = np.squeeze(
+            NaivePnL.rebalancing(
+                dfw_nan.copy(), rebal_freq="monthly", rebal_slip=1
+            ).to_numpy()
+        )
+        self.assertTrue(dfw_nan.loc[dfw_nan["cid"] == "CAD", "sig"].isna().all())
+        for cid in ["AUD", "GBP"]:
+            cid_sig = dfw_nan.loc[dfw_nan["cid"] == cid, "sig"]
+            self.assertEqual(list(cid_sig.isna()), [True] + [False] * (len(dates) - 1))
+            self.assertEqual(set(cid_sig.dropna().unique()), {signals[cid]})
+
+        # (c) A slip longer than one cid's own history must empty that cid alone; the
+        # longer neighbours lose exactly rebal_slip observations each.
+        dfw_short = pd.concat(
+            [
+                pd.DataFrame(
+                    {"real_date": dates, "cid": "AUD", "psig": signals["AUD"]}
+                ),
+                pd.DataFrame(
+                    {"real_date": dates[:3], "cid": "CAD", "psig": signals["CAD"]}
+                ),
+                pd.DataFrame(
+                    {"real_date": dates, "cid": "GBP", "psig": signals["GBP"]}
+                ),
+            ],
+            ignore_index=True,
+        ).sort_values(["cid", "real_date"])
+        dfw_short["sig"] = np.squeeze(
+            NaivePnL.rebalancing(
+                dfw_short.copy(), rebal_freq="daily", rebal_slip=5
+            ).to_numpy()
+        )
+        self.assertTrue(dfw_short.loc[dfw_short["cid"] == "CAD", "sig"].isna().all())
+        for cid in ["AUD", "GBP"]:
+            cid_sig = dfw_short.loc[dfw_short["cid"] == cid, "sig"]
+            self.assertEqual(
+                list(cid_sig.isna()), [True] * 5 + [False] * (len(dates) - 5)
+            )
+            self.assertEqual(set(cid_sig.dropna().unique()), {signals[cid]})
+
+        # (d) The leak was once per cid boundary, so it scales with the panel width:
+        # with many cross-sections every non-first cid must still hold only its own
+        # signal, blanked for exactly the first observation.
+        for n_cids in (5, 10, 50, 100):
+            many_cids = [f"CID{i:03d}" for i in range(n_cids)]
+            many_signals = {cid: float(i + 1) for i, cid in enumerate(many_cids)}
+            dfw_many = pd.DataFrame(
+                {
+                    "real_date": np.tile(dates, n_cids),
+                    "cid": np.repeat(many_cids, len(dates)),
+                    "psig": np.repeat(
+                        [many_signals[cid] for cid in many_cids], len(dates)
+                    ),
+                }
+            ).sort_values(["cid", "real_date"])
+            dfw_many["sig"] = np.squeeze(
+                NaivePnL.rebalancing(
+                    dfw_many.copy(), rebal_freq="monthly", rebal_slip=1
+                ).to_numpy()
+            )
+            for cid in many_cids:
+                cid_sig = dfw_many.loc[dfw_many["cid"] == cid, "sig"]
+                self.assertEqual(
+                    list(cid_sig.isna()), [True] + [False] * (len(dates) - 1)
+                )
+                self.assertEqual(set(cid_sig.dropna().unique()), {many_signals[cid]})
+
     def test_make_pnl(self):
         self.test_make_signal()
 

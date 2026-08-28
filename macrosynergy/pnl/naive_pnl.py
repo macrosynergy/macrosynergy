@@ -184,10 +184,10 @@ class NaivePnL:
             which is delimited by the frequency chosen. Additionally, the re-balancing
             frequency will be applied to make_zn_scores() if used as the method to produce
             the raw signals.
-        rebal_slip : str
-            re-balancing slippage in days. Default is 1 which means that it takes one
-            day to re-balance the position and that the new positions produce PnL from the
-            second day after the signal has been recorded.
+        rebal_slip : int
+            re-balancing slippage in days. Default is 0. A value of 1 means that it
+            takes one day to re-balance the position and that the new positions produce
+            PnL from the second day after the signal has been recorded.
         vol_scale : bool
             ex-post scaling of PnL to annualized volatility given. This is for
             comparative visualization and not out-of-sample. Default is none.
@@ -660,7 +660,7 @@ class NaivePnL:
         return pd.concat(dfw_list)
 
     @staticmethod
-    def rebalancing(dfw: pd.DataFrame, rebal_freq: str = "daily", rebal_slip=0):
+    def rebalancing(dfw: pd.DataFrame, rebal_freq: str = "daily", rebal_slip: int = 0):
         """
         The signals are calculated daily and for each individual cross-section defined
         in the panel. However, re-balancing a position can occur more infrequently than
@@ -675,7 +675,7 @@ class NaivePnL:
         rebal_freq : str
             re-balancing frequency for positions according to signal must be one of
             'daily' (default), 'weekly', 'monthly', 'quarterly', or 'annual'.
-        rebal_slip : str
+        rebal_slip : int
             re-balancing slippage in days.
 
         Returns
@@ -688,6 +688,12 @@ class NaivePnL:
         # The re-balancing days are the first of the respective time-periods because of
         # the shift forward by one day applied earlier in the code. Therefore, only
         # concerned with the minimum date of each re-balance period.
+        err_str = "Re-balancing slippage must be a non-negative integer."
+        if not isinstance(rebal_slip, int):
+            raise TypeError(err_str)
+        elif rebal_slip < 0:
+            raise ValueError(err_str)
+
         dfw["year"] = dfw["real_date"].dt.year
         if rebal_freq == "annual":
             rebal_dates = dfw.groupby(["cid", "year"], observed=True)["real_date"].min()
@@ -739,9 +745,15 @@ class NaivePnL:
         rebal_merge = dfw[["real_date", "cid"]].merge(
             rebal_merge, how="left", on=["real_date", "cid"]
         )
-        rebal_merge["psig"] = (
-            rebal_merge.groupby("cid", observed=True)["psig"].ffill().shift(rebal_slip)
-        )
+
+        rebal_merge["psig"] = rebal_merge.groupby("cid", observed=True)["psig"].ffill()
+        if rebal_slip:
+            rebal_merge["psig"] = (
+                rebal_merge["psig"]
+                .groupby(rebal_merge["cid"], observed=True)
+                .shift(rebal_slip)
+            )
+
         rebal_merge = rebal_merge.sort_values(["cid", "real_date"])
 
         rebal_merge = rebal_merge.set_index("real_date")
