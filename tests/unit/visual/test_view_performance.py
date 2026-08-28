@@ -95,7 +95,11 @@ class TestViewPerformance(unittest.TestCase):
         )
 
         handles, _ = fig.axes[0].get_legend_handles_labels()
-        legend_colours = [handle.get_facecolor()[:3] for handle in handles]
+        legend_colours = []
+        for handle in handles:
+            if hasattr(handle, "patches"):
+                handle = handle.patches[0]
+            legend_colours.append(handle.get_facecolor()[:3])
 
         self.assertLess(sum(legend_colours[0]), sum(legend_colours[1]))
         self.assertLess(sum(legend_colours[2]), sum(legend_colours[3]))
