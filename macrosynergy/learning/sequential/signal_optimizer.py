@@ -224,6 +224,7 @@ class SignalOptimizer(BasePanelLearner):
         n_jobs_outer=-1,
         n_jobs_inner=1,
         store_correlations=False,
+        skip_validation = False,
     ):
         """
         Determine forecasts and store relevant quantities over time.
@@ -319,6 +320,9 @@ class SignalOptimizer(BasePanelLearner):
         store_correlations : bool
             Whether to store the correlations between input pipeline features and input
             predictor features. Default is False.
+        skip_validation : bool
+            Whether to skip the more intensive validation checks for, primarily, the 
+            model and hyperparameter dictionaries. Default is False.
         """
         # Additional checks
         if not isinstance(store_correlations, bool):
@@ -367,6 +371,7 @@ class SignalOptimizer(BasePanelLearner):
             n_iter=n_iter,
             n_jobs_outer=n_jobs_outer,
             n_jobs_inner=n_jobs_inner,
+            skip_validation=skip_validation
         )
 
         self._check_duplicate_results(name)
