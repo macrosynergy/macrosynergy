@@ -455,9 +455,7 @@ def _plot_performance_bars(
     # Create figure
     fig, ax = plt.subplots(figsize=size)
 
-    # Create grouped bar plot with items on x-axis and metrics as hue. The Paired
-    # palette is arranged light/dark, so reverse each pair to put the dark colour
-    # first.
+    # Reverse each Paired palette pair to put the dark colour first.
     n_metrics = len(metrics_df.index)
     paired_palette = sns.color_palette(
         "Paired", n_colors=2 * int(np.ceil(n_metrics / 2))
