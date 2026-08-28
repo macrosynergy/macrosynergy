@@ -13,6 +13,19 @@ from macrosynergy.management.types import QuantamentalDataFrame
 from macrosynergy.management.utils import reduce_df, _map_to_business_day_frequency
 
 
+_LEGEND_ANCHOR_LOCS = {
+    "upper right": "lower left",
+    "upper left": "lower right",
+    "lower left": "upper right",
+    "lower right": "upper left",
+    "right": "center left",
+    "center left": "center right",
+    "center right": "center left",
+    "lower center": "upper center",
+    "upper center": "lower center",
+}
+
+
 def view_performance(
     df: pd.DataFrame,
     xcats: Optional[List[str]] = None,
@@ -85,8 +98,8 @@ def view_performance(
         Custom labels for the compared items. If dict, maps from cid/xcat/ticker to
         label. If list, must match the order of items being compared.
     legend_loc : str
-        Location of legend; passed to matplotlib.pyplot.legend(). Default is 'upper
-        center'.
+        Location of the legend relative to `legend_bbox_to_anchor`. Default is
+        'upper center'.
     legend_bbox_to_anchor : Tuple[float], optional
         Passed to matplotlib.pyplot.legend(). Default is None, which positions the
         legend below the plot.
@@ -455,15 +468,25 @@ def _plot_performance_bars(
     # Create figure
     fig, ax = plt.subplots(figsize=size)
 
-    # Create grouped bar plot with items on x-axis and metrics as hue
-    # Use Paired palette to match view_ranges
+    # Create grouped bar plot with items on x-axis and metrics as hue. The Paired
+    # palette is arranged light/dark, so reverse each pair to put the dark colour
+    # first.
+    n_metrics = len(metrics_df.index)
+    paired_palette = sns.color_palette(
+        "Paired", n_colors=2 * int(np.ceil(n_metrics / 2))
+    )
+    palette = [
+        color
+        for i in range(0, len(paired_palette), 2)
+        for color in paired_palette[i : i + 2][::-1]
+    ][:n_metrics]
     sns.barplot(
         data=df_long,
         x='item',
         y='value',
         hue='metric',
         ax=ax,
-        palette='Paired',
+        palette=palette,
     )
 
     # Rotate x-axis labels to prevent overlap
@@ -489,10 +512,16 @@ def _plot_performance_bars(
 
     # Position legend to match view_ranges (below the plot)
     if legend_bbox_to_anchor is None:
-        n_metrics = len(metrics_df.index)
         legend_bbox_to_anchor = (0.5, -0.15 - 0.05 * max(0, (n_metrics - 2)))
 
-    ax.legend(loc=legend_loc, bbox_to_anchor=legend_bbox_to_anchor, ncol=3)
+    # With a point bbox, Matplotlib places the named part of the legend on the
+    # anchor, which makes the visible direction appear inverted. Invert the
+    # attachment point so ``legend_loc`` describes where the legend is displayed
+    # relative to the anchor.
+    anchor_loc = legend_loc
+    if len(legend_bbox_to_anchor) == 2:
+        anchor_loc = _LEGEND_ANCHOR_LOCS.get(legend_loc, legend_loc)
+    ax.legend(loc=anchor_loc, bbox_to_anchor=legend_bbox_to_anchor, ncol=3)
 
     plt.tight_layout()
 

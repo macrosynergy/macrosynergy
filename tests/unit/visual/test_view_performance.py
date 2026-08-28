@@ -86,6 +86,47 @@ class TestViewPerformance(unittest.TestCase):
         )
         self.assertIsInstance(fig, plt.Figure)
 
+    def test_paired_palette_starts_with_dark_colour(self):
+        fig = msv.view_performance(
+            self.df,
+            xcats=["FXXR_NSA"],
+            cids=["AUD", "CAD", "GBP"],
+            return_fig=True,
+        )
+
+        handles, _ = fig.axes[0].get_legend_handles_labels()
+        legend_colours = [handle.get_facecolor()[:3] for handle in handles]
+
+        self.assertLess(sum(legend_colours[0]), sum(legend_colours[1]))
+        self.assertLess(sum(legend_colours[2]), sum(legend_colours[3]))
+
+    def test_legend_loc_describes_position_relative_to_anchor(self):
+        anchor = (0.5, 0.5)
+        figures = {}
+        for legend_loc in ["upper center", "lower center"]:
+            figures[legend_loc] = msv.view_performance(
+                self.df,
+                xcats=["FXXR_NSA"],
+                cids=["AUD", "CAD", "GBP"],
+                metrics=["Annualized return, %", "Annualized SD, %"],
+                legend_loc=legend_loc,
+                legend_bbox_to_anchor=anchor,
+                return_fig=True,
+            )
+
+        upper_ax = figures["upper center"].axes[0]
+        lower_ax = figures["lower center"].axes[0]
+        figures["upper center"].canvas.draw()
+        figures["lower center"].canvas.draw()
+
+        upper_anchor_y = upper_ax.transAxes.transform(anchor)[1]
+        lower_anchor_y = lower_ax.transAxes.transform(anchor)[1]
+        upper_bbox = upper_ax.get_legend().get_window_extent()
+        lower_bbox = lower_ax.get_legend().get_window_extent()
+
+        self.assertGreaterEqual(upper_bbox.y0, upper_anchor_y)
+        self.assertLessEqual(lower_bbox.y1, lower_anchor_y)
+
     def test_invalid_dimension_combination_raises(self):
         with self.assertRaises(ValueError):
             msv.view_performance(
