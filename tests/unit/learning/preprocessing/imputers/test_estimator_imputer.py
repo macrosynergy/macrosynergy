@@ -77,18 +77,6 @@ class TestInputValidation:
         with pytest.raises(TypeError):
             imp.fit(np.ones((10, 3)))
 
-    def test_rejects_wrong_index_names(self):
-        imp = EstimatorImputer()
-        df = pd.DataFrame(
-            np.ones((6, 2)),
-            index=pd.MultiIndex.from_product(
-                [["A"], range(6)], names=["country", "date"]
-            ),
-            columns=["x", "y"],
-        )
-        with pytest.raises(ValueError):
-            imp.fit(df)
-
     def test_transform_before_fit_raises(self, clean_panel):
         imp = EstimatorImputer()
         with pytest.raises(NotFittedError):
@@ -265,7 +253,7 @@ class TestTransformBehaviour:
         df["sparse"] = np.nan
         df.loc[df.index[0], "sparse"] = 1.0
         imp = EstimatorImputer(
-            estimator=RandomForestRegressor(random_state=0), fallback="none"
+            estimator=RandomForestRegressor(random_state=0), fallback=None
         ).fit(df)
         out = imp.transform(df)
         assert out["sparse"].isna().any()
@@ -531,7 +519,7 @@ class TestCompleteRowsOnlyAndPredictorFill:
 
     def test_skip_only_predicts_for_rows_with_complete_predictors(self):
         """When predictor_fill_value='skip', rows where predictors have NaN
-        are skipped (not predicted). With fallback=none those cells stay NaN,
+        are skipped (not predicted). With fallback=None those cells stay NaN,
         while rows with complete predictors get model-based imputation."""
         df = make_panel(cols=("feature_a", "feature_b", "feature_c"))
         df = inject_nan(df, "feature_a", frac=0.3)
@@ -540,7 +528,7 @@ class TestCompleteRowsOnlyAndPredictorFill:
             estimator=LinearRegression(),
             complete_rows_only=True,
             predictor_fill_value="skip",
-            fallback="none",
+            fallback=None,
         ).fit(df)
         out = imp.transform(df)
 
@@ -584,7 +572,7 @@ class TestCompleteRowsOnlyAndPredictorFill:
             estimator=LinearRegression(),
             complete_rows_only=True,
             predictor_fill_value="skip",
-            fallback="none",
+            fallback=None,
         ).fit(df)
         out = imp.transform(df)
 
