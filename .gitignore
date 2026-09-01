@@ -196,8 +196,6 @@ coverage.xml
 .trunk/
 launch.json
 
-# perf framework: machine-specific result artifacts and large golden blobs
+# perf framework: machine-specific result artifacts
 tests/perf/results/*
 !tests/perf/results/.gitkeep
-tests/perf/golden/*.parquet
-!tests/perf/golden/index.json

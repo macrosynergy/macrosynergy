@@ -63,6 +63,8 @@ test = [
   "flake8>=4.0.1",
   "parameterized>=0.9.0",
   "pytest-benchmark>=4.0",
+  "psutil>=5.9.0",
+  "py-cpuinfo>=9.0.0",
   "linearmodels>=4.28",
 ]
 excel = ["openpyxl>=3.0.10"]
@@ -107,6 +109,8 @@ all = [
   "coverage>=6.0.0",
   "pytest-xdist>=3.3.1",
   "pytest-benchmark>=4.0",
+  "psutil>=5.9.0",
+  "py-cpuinfo>=9.0.0",
   "flake8>=4.0.1",
   "parameterized>=0.9.0",
   "pydata-sphinx-theme==0.14.4",
@@ -156,7 +160,10 @@ exclude = '''
 [tool.pytest.ini_options]
 minversion = "6.0"
 addopts = "-rEf -rP -n auto --durations=10 --cov=macrosynergy --verbose -m 'not perf'"
-markers = ["perf: performance benchmark (deselected by default; run with -m perf)"]
+markers = [
+  "perf: performance benchmark (deselected by default; run with -m perf)",
+  "perf_group(name): group label for a perf benchmark, stamped into benchmark.extra_info",
+]
 # testpaths = ['./tests/']
 
 [tool.coverage]
