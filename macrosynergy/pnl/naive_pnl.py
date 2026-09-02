@@ -706,8 +706,8 @@ class NaivePnL:
                 "Re-balancing frequency must be one of: daily, weekly, monthly, quarterly or annual."
             )
 
-        dfw = dfw.copy()
-        dfw["real_date"] = pd.to_datetime(dfw["real_date"])
+        if not pd.api.types.is_datetime64_any_dtype(dfw["real_date"]):
+            dfw = dfw.assign(real_date=pd.to_datetime(dfw["real_date"]))
         dfw = dfw.sort_values(["cid", "real_date"])
 
         # One period key per date, on the period edges of get_sops()/get_eops()
