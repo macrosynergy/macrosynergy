@@ -850,9 +850,10 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         
         for epoch in range(epochs):
             model.train()
+            epoch_preds = []
             if sample_weight:
                 for X_i, y_i, sw_i in train_loader:
-                    model = self._fit_one_batch(
+                    model, preds_i = self._fit_one_batch(
                         model = model,
                         X_i = X_i,
                         y_i = y_i,
@@ -863,9 +864,10 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
                         sample_weight_strategy = sample_weight_strategy,
                         reg_turnover = reg_turnover
                     )
+                    epoch_preds.append(preds_i)
             else:
                 for X_i, y_i in train_loader:
-                    model = self._fit_one_batch(
+                    model, preds_i = self._fit_one_batch(
                         model = model,
                         X_i = X_i,
                         y_i = y_i,
@@ -875,8 +877,9 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
                         sample_weight = None,
                         sample_weight_strategy = sample_weight_strategy,
                         reg_turnover = reg_turnover
-                    )  
-            
+                    )
+                    epoch_preds.append(preds_i)
+
             if patience is not None:
                 # The cross-sectional diagnostics cost a pass per period, so they are only
                 # computed on the epochs that report them
@@ -884,6 +887,9 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
                 train_stats = self._evaluate(model, train_loader_eval, loss_func, report)
                 valid_stats = self._evaluate(model, valid_loader, loss_func, report)
                 train_loss, valid_loss = train_stats["loss"], valid_stats["loss"]
+                # The distribution of the raw head outputs actually seen during training
+                # (dropout on, real mini-batches) rather than a separate eval-mode pass
+                weight_stats = self._batch_weight_stats(epoch_preds) if report else None
 
                 early_stopping_trace["train_loss_path"].append(train_loss)
                 early_stopping_trace["valid_loss_path"].append(valid_loss)
@@ -904,7 +910,7 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
 
 
                 self._record_epoch(
-                    epoch + 1, train_stats, valid_stats, best_score, context, report
+                    epoch + 1, train_stats, valid_stats, best_score, context, report, weight_stats
                 )
 
                 if verbose and (epoch % 5 == 0 or epoch == epochs - 1):
@@ -961,8 +967,37 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         if scheduler is not None:
             scheduler.step()
 
-        return model
-    
+        return model, preds.detach()
+
+
+    def _batch_weight_stats(self, batch_preds):
+        """
+        Summarise the distribution of one epoch's training-batch head outputs.
+
+        Parameters
+        ----------
+        batch_preds : list of torch.Tensor
+            The (detached) raw output of the network for every training batch of the
+            epoch, i.e. the portfolio weights actually used in that epoch's optimiser
+            steps (dropout on), pooled across every asset and period in the epoch.
+
+        Returns
+        -------
+        dict
+            "mean", "std", "min", "max", "p10", "p50", "p90" over the pooled values.
+        """
+        all_preds = torch.cat(batch_preds, dim=0).flatten()
+        p10, p50, p90 = torch.quantile(all_preds, torch.tensor([0.1, 0.5, 0.9]))
+        return {
+            "mean": float(all_preds.mean()),
+            "std": float(all_preds.std()),
+            "min": float(all_preds.min()),
+            "max": float(all_preds.max()),
+            "p10": float(p10),
+            "p50": float(p50),
+            "p90": float(p90),
+        }
+
     def _eval_loss(self, model, loader, loss_func):
         return self._evaluate(model, loader, loss_func)["loss"]
 
@@ -1066,7 +1101,7 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
 
         return ics, hits, n_obs
 
-    def _record_epoch(self, epoch, train_stats, valid_stats, best_valid_loss, context, report):
+    def _record_epoch(self, epoch, train_stats, valid_stats, best_valid_loss, context, report, weight_stats=None):
         """
         Record one epoch of training diagnostics.
 
@@ -1082,6 +1117,10 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
             Identifying information about the fit, recorded alongside every epoch.
         report : bool
             Whether this epoch carries cross-sectional diagnostics.
+        weight_stats : dict or None
+            Output of `_batch_weight_stats` over this epoch's training batches, i.e. the
+            distribution of the raw head outputs (portfolio weights) actually used in
+            this epoch's optimiser steps. `None` on epochs that don't report diagnostics.
 
         Notes
         -----
@@ -1105,6 +1144,10 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
                 f"{label}_periods": stats["n_periods"],
                 f"{label}_names": stats["n_names"],
             })
+
+        weight_stats = weight_stats or {}
+        for key in ("mean", "std", "min", "max", "p10", "p50", "p90"):
+            record[f"train_weight_{key}"] = weight_stats.get(key, np.nan)
 
         logger.debug("mlp epoch diagnostics", extra={"mlp_diagnostics": record})
 
