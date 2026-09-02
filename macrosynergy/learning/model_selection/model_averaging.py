@@ -256,12 +256,12 @@ class ModelAveragingRegressor(BaseEstimator, RegressorMixin):
                     "hyperparameters for GridSearchCV. Got {} instead.".format(type(param_grid))
                 )
             # check param_grid keys are valid for the estimator
-            for param in param_grid.keys():
-                if not hasattr(estimator, param):
-                    raise ValueError(
-                        "The hyperparameter '{}' is not valid for the estimator '{}'. "
-                        "Check the estimator's documentation.".format(param, name)
-                    )
+            # for param in param_grid.keys():
+            #     if not hasattr(estimator, param):
+            #         raise ValueError(
+            #             "The hyperparameter '{}' is not valid for the estimator '{}'. "
+            #             "Check the estimator's documentation.".format(param, name)
+            #         )
                 
         # scoring
         if not callable(scoring):

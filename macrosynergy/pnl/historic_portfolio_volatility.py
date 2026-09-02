@@ -523,7 +523,7 @@ def _hist_vol(
 
     nan_dates = pvol_df[pvol_df[portfolio_return_name].isna()]["real_date"].copy()
     if len(nan_dates) > 0:
-        logger.warning(
+        logger.info(
             f"Found NaNs in {portfolio_return_name} at: {nan_dates.tolist()}, dropping all NaNs."
         )
         pvol_df = pvol_df[~pvol_df["real_date"].isin(nan_dates)].copy()
@@ -923,7 +923,7 @@ def _cov_matrix_history(
     for i, estimation_date in enumerate(estimation_dates):
         avails = first_starts[first_starts <= estimation_date].index.tolist()
         if len(avails) == 0:
-            logger.warning(
+            logger.info(
                 f"Insufficient return data available on date: {estimation_date} "
                 f"to compute a covariance matrix estimate using a "
                 f"lookback period of {max(lback_periods)} days."  # todo fix units

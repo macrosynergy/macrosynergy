@@ -226,6 +226,10 @@ def covariance_estimates_scatterplot(
             title=None,
         )
 
+        for text in ax.get_legend().get_texts():
+            if text.get_text() in {"Freq", "Method", "Effective lookback"}:
+                text.set_fontweight("bold")
+
         sns.despine()
         plt.tight_layout()
         plt.show()
@@ -255,11 +259,11 @@ def notional_positions_scatterplot(
         )
         axes = np.atleast_2d(axes)
 
-        piv_sig = sig_df.pivot(index="real_date", columns="cid", values="value")
+        piv_sig = sig_df.pivot(index="real_date", columns=["cid", "xcat"], values="value")
         x_vals = piv_sig.abs().sum(axis=1)  # signals
 
         for i in range(len(pos_dfs)):
-            piv_pos = pos_dfs[i].pivot(index="real_date", columns="cid", values="value")
+            piv_pos = pos_dfs[i].pivot(index="real_date", columns=["cid", "xcat"], values="value")
             y_vals = piv_pos.abs().sum(axis=1) # positions
 
             ax = axes[i // n_cols, i % n_cols]
@@ -381,74 +385,125 @@ def notional_positions_scatterplot(
 #     return fig, ax
 
 def compare_proxy_pnls(
-    pnl_dfs: Union[pd.DataFrame, List[pd.DataFrame]],
-    pnle_dfs: Union[pd.DataFrame, List[pd.DataFrame]],
-    portfolio_names: Union[str, List[str]],
+    pnl_dfs: List[pd.DataFrame],
+    pnle_dfs: List[pd.DataFrame],
+    portfolio_names: List[str],
     pnl_names: Optional[List[str]] = None,
-    title: str = "Proxy PnL Comparison",
-    title_fontsize: int = 22,
-    pnl_incl_costs_name="PNL",
-    include_exclude_cost_labels=["Incl. Costs", "Excl. Costs"],
+    title: str = "PnL with and without costs",
+    ylabel: str = "USD mn",
+    title_fontsize: int = 18,
+    incl_costs_label: str = "Incl. Costs",
+    excl_costs_label: str = "Excl. Costs",
+    sharey: bool = False,
+    ncols: Optional[int] = None,
     cumsum: bool = True,
-    return_fig: bool = False,
-    **kwargs,
-) -> plt.Figure:
-    if isinstance(pnl_dfs, pd.DataFrame):
-        pnl_dfs = [pnl_dfs]
-    if isinstance(pnle_dfs, pd.DataFrame):
-        pnle_dfs = [pnle_dfs]
-
+    line_width: float = 1,
+    figsize: Tuple[float, float] = (12, 6),
+):
     assert len(pnl_dfs) == len(pnle_dfs) == len(portfolio_names)
+
+    if pnl_names is None:
+        pnl_names = portfolio_names
+
+    assert len(pnl_names) == len(portfolio_names)
 
     pnlcount = len(pnl_dfs)
 
-    pnl_names = portfolio_names if pnl_names is None else pnl_names
+    if ncols is None:
+        ncols = min(3, pnlcount)
 
-    comp_dfs = []
-    for i in range(pnlcount):
-        pnl_df = reduce_df(
-            pd.concat([pnl_dfs[i], pnle_dfs[i]], axis=0, ignore_index=True),
-            cids=[portfolio_names[i]],
+    nrows = (pnlcount + ncols - 1) // ncols
+
+    sns.set_theme(style="whitegrid", palette="colorblind")
+
+    fig, axes = plt.subplots(
+        nrows=nrows,
+        ncols=ncols,
+        figsize=figsize,
+        squeeze=False,
+        sharex=False,
+        sharey=sharey,
+    )
+
+    axes_flat = axes.ravel()
+
+    legend_handles = None
+    legend_labels = None
+
+    for i, (pnl_df, pnle_df, portfolio_name, pnl_name) in enumerate(
+        zip(pnl_dfs, pnle_dfs, portfolio_names, pnl_names)
+    ):
+        ax = axes_flat[i]
+
+        pnl = pnl_df.copy()
+        pnle = pnle_df.copy()
+
+        pnl["cost_type"] = incl_costs_label
+        pnle["cost_type"] = excl_costs_label
+
+        data = pd.concat([pnl, pnle], ignore_index=True)
+        data = reduce_df(data, cids=[portfolio_name])
+        data = data.sort_values(["cid", "cost_type", "real_date"])
+
+        if cumsum:
+            data["plot_value"] = data.groupby(["cid", "cost_type"])["value"].cumsum()
+        else:
+            data["plot_value"] = data["value"]
+
+        sns.lineplot(
+            data=data,
+            x="real_date",
+            y="plot_value",
+            hue="cost_type",
+            estimator=None,
+            lw=line_width,
+            ax=ax,
         )
 
-        pnl_xcats_found = []
-        for pnlcatname in [pnl_incl_costs_name, pnl_incl_costs_name + "e"]:
-            pnl_xcat = (
-                pnl_df["xcat"][pnl_df["xcat"].str.endswith(pnlcatname)]
-                .unique()
-                .tolist()
-            )
-            if len(pnl_xcat) != 1:
-                raise ValueError(
-                    f"Expected exactly one xcat ending with {pnlcatname}, "
-                    f"found {len(pnl_xcat)}: {pnl_xcat}"
-                )
-            pnl_xcats_found.append(pnl_xcat[0])
+        ax.set_title(pnl_name)
+        ax.set_xlabel("")
 
-        if len(pnl_xcats_found) != 2:
-            raise ValueError(
-                f"Expected exactly two xcats for PnL (including and excluding costs), "
-                f"found {len(pnl_xcats_found)}: {pnl_xcats_found}"
-            )
-        pnlname, pnle_name = sorted(pnl_xcats_found)
-        rename_map = dict(zip([pnlname, pnle_name], include_exclude_cost_labels))
-        pnl_df["xcat"] = pnl_df["xcat"].replace(rename_map)
-        pnl_df["cid"] = pnl_names[i]
-        comp_dfs.append(pnl_df)
+        # Only show y-axis label on leftmost subplot in each row
+        if i % ncols == 0:
+            ax.set_ylabel(ylabel)
+        else:
+            ax.set_ylabel("")
 
-    fig = timelines(
-        pd.concat(comp_dfs, axis=0),
-        title=title,
-        cumsum=cumsum,
-        return_fig=True,
-        cid_labels=pnl_names,
-        ax_hline=0.0,
-        title_fontsize=title_fontsize,
-        **kwargs,
+        ax.axhline(
+            y=0,
+            color="black",
+            linestyle="--",
+            lw=1,
+        )
+
+        # Capture legend entries once
+        if legend_handles is None:
+            legend_handles, legend_labels = ax.get_legend_handles_labels()
+
+        # Remove subplot-level legend
+        legend = ax.get_legend()
+        if legend is not None:
+            legend.remove()
+
+    # Remove empty subplots
+    for ax in axes_flat[pnlcount:]:
+        ax.remove()
+
+    fig.suptitle(
+        title,
+        fontsize=title_fontsize,
     )
-    if return_fig:
-        return fig
-    plt.show()
+
+    fig.legend(
+        legend_handles,
+        legend_labels,
+        loc="lower center",
+        bbox_to_anchor=(0.5, -0.02),
+        ncol=2,
+        frameon=False,
+    )
+
+    return fig, axes
 
 
 def implied_leverage_plot(
@@ -688,3 +743,70 @@ def proxy_pnl_plot(
         plt.show()
 
     return fig, (axes[0] if n_panels == 1 else axes)
+
+
+def vol_target_scaling_factor_plot(
+    vol_df: pd.DataFrame,
+    vol_target: int,
+    vol_xcat: str,
+    x_label: str = "",
+    y_label_pvol: str = "Annualized volatility (%)",
+    y_label_scale: str = "Scale factor",
+    figsize: Tuple[float, float] = (13, 6)
+):
+    df = reduce_df(vol_df, xcats=[vol_xcat]).sort_values(by="real_date")
+
+    x_vals = df["real_date"].values
+    y_vals_pvol = df["value"].values
+    y_vals_scale = vol_target / y_vals_pvol
+
+    fig, ax = plt.subplots(1, 2, figsize=figsize)
+
+    # Portfolio volatility
+    sns.lineplot(
+        x=x_vals,
+        y=y_vals_pvol,
+        ax=ax[0],
+        linewidth=1,
+        alpha=0.8,
+        label=r"$\sqrt{s_{t}^{\top} \Sigma s_{t}}$",
+    )
+    ax[0].set_title("Portfolio volatility prior to volatility targeting")
+    ax[0].set_xlabel(x_label)
+    ax[0].set_ylabel(y_label_pvol)
+    ax[0].legend()
+    ax[0].grid(alpha=0.3)
+
+    mean_vol = np.nanmean(y_vals_pvol)
+    median_vol = np.nanmedian(y_vals_pvol)
+
+    ax[0].plot([], [], " ", label=f"Mean: {mean_vol:.1f}")
+    ax[0].plot([], [], " ", label=f"Median: {median_vol:.1f}")
+    ax[0].legend()
+
+    # Volatility scaling factor
+    sns.lineplot(
+        x=x_vals,
+        y=y_vals_scale,
+        ax=ax[1],
+        linewidth=0.6,
+        alpha=0.8,
+        label=rf"$\frac{{{vol_target}}}{{\sqrt{{s_{{t}}^{{\top}} \Sigma s_{{t}}}}}}$",
+    )
+    ax[1].set_title("Scaling factor needed to achieve volatility target")
+    ax[1].set_xlabel(x_label)
+    ax[1].set_ylabel(y_label_scale)
+    ax[1].legend()
+    ax[1].grid(alpha=0.3)
+
+    mean_scale = np.nanmean(y_vals_scale)
+    median_scale = np.nanmedian(y_vals_scale)
+
+    ax[1].plot([], [], " ", label=f"Mean: {mean_scale:.1f}")
+    ax[1].plot([], [], " ", label=f"Median: {median_scale:.1f}")
+    ax[1].legend()
+
+    fig.autofmt_xdate()
+    fig.tight_layout()
+
+    return fig, ax

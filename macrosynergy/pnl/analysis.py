@@ -5,6 +5,11 @@ import pandas as pd
 
 from macrosynergy.management.simulate import SignalsAndReturnsGenerator
 from macrosynergy.pnl import notional_positions
+from macrosynergy.pnl.historic_portfolio_volatility import (
+    flat_weights_arr,
+    expo_weights_arr,
+    _cov_matrix_history,
+)
 
 
 def _long_cov_to_dict(
@@ -88,7 +93,8 @@ def realized_to_forecast_vol_ratios(
     forecast variance low (the optimizer picks what looks cheapest under its own
     estimation noise), inflating the ratio for noisy estimators.
     """
-    cov_true_dict = _long_cov_to_dict(cov_true)
+    # cov_true_dict = _long_cov_to_dict(cov_true)
+    cov_true_dict = cov_true
     true_dates = sorted(cov_true_dict.keys())
     weights_by_date = {
         date: weights if weights is not None else _min_var_weights(cov_true_dict[date])
@@ -99,7 +105,8 @@ def realized_to_forecast_vol_ratios(
     # across estimators with different date coverage
     ratios = np.full(shape=(len(true_dates), len(cov_ests)), fill_value=np.nan)
     for j, cov_est in enumerate(cov_ests):
-        cov_est_dict = _long_cov_to_dict(cov_est)
+        # cov_est_dict = _long_cov_to_dict(cov_est)
+        cov_est_dict = cov_est
 
         for i, date in enumerate(true_dates):
             est: Optional[np.ndarray] = cov_est_dict.get(date)
@@ -121,61 +128,63 @@ def realized_to_forecast_vol_ratios(
 
 
 def cov_estimators_bias_variance(
-    n_fids: int,
+    configs: List[Dict[str, Any]],
     corr: np.ndarray,
     base_vol: np.ndarray,
-    signal_ic: float,
-    signal_autocorr: float,
     vol_persistence: float,
     vol_of_vol: float,
-    mean_return: float,
-    freq: str,
-    signal_names: List[str],
-    return_names: List[str],
     fid_names: List[str],
-    configs: List[Dict[str, Any]],
     n_periods: int,
-    end_date: str,
     n_iter: int = 20,
     seed: int = 42,
 ):
     rng = np.random.default_rng(seed=seed)
     data_generator = SignalsAndReturnsGenerator(
-        n_fids=n_fids,
+        n_fids=len(fid_names),
         corr=corr,
         base_vol=base_vol,
-        signal_ic=signal_ic,
-        signal_autocorr=signal_autocorr,
         vol_persistence=vol_persistence,
         vol_of_vol=vol_of_vol,
-        mean_return=mean_return,
     )
 
     results = []
     for seed in rng.integers(low=0, high=10000, size=n_iter):
         data_generator.simulate_signals_and_returns(
             n_periods=n_periods,
-            end_date=end_date,
+            signal_names=[f"{fid}SIG" for fid in fid_names],
+            return_names=[f"{fid}XR" for fid in fid_names],
             seed=seed,
-            signal_names=signal_names,
-            return_names=return_names,
-            freq=freq,
         )
-        signals_and_returns = data_generator.quantamental_returns_and_signals()
 
-        cov_true = data_generator.realized_cov()
-        cov_ests = [
-            # todo have a special function for getting the covariance matrix
-            notional_positions(
-                df=signals_and_returns,
-                sname="STRAT",
-                fids=fid_names,
-                vol_target=10,
-                return_vcv=True,
-                **config,
-            )[1]
-            for config in configs
-        ]
+        cov_true = data_generator.realized_cov(long=False)
+        
+        estimation_dates = np.array(list(cov_true.keys()))
+        cov_ests = []
+        for config in configs:
+            est_freqs = config["est_freqs"]
+            est_weights = config.get("est_weights", [1])
+            lback_meth = config["lback_meth"]
+            lback_periods = config.get("lback_periods", config.get("half_life"))
+            half_life = config.get("half_life", config.get("lback_periods"))
+
+            weights_func = flat_weights_arr if lback_meth == "ma" else expo_weights_arr
+
+            cov_est = _cov_matrix_history(
+                pivot_returns=100 * data_generator.returns,
+                estimation_dates=estimation_dates,
+                est_freqs=est_freqs,
+                est_weights=est_weights,
+                lback_periods=lback_periods,
+                half_life=half_life,
+                nan_tolerance=0,
+                remove_zeros=False,
+                weights_func=weights_func,
+                lback_min_obs=[1 for _ in est_freqs],
+            )
+
+            cov_est = {date: cov for date, cov in zip(estimation_dates, cov_est)}
+
+            cov_ests.append(cov_est)
 
         ratios = realized_to_forecast_vol_ratios(cov_true=cov_true, cov_ests=cov_ests)
 
@@ -212,19 +221,11 @@ if __name__ == "__main__":
     )
 
     bias, std = cov_estimators_bias_variance(
-        n_fids=5,
         corr=corr,
         base_vol=np.array([0.010, 0.015, 0.008, 0.012, 0.009]),
-        signal_ic=0.05,
-        signal_autocorr=0.9,
         vol_persistence=0.94,
         vol_of_vol=0.15,
-        mean_return=0.0003,
         n_periods=2520,
-        freq="B",
-        end_date="2025-12-31",
-        signal_names=[f"CID{i}_FX_CSIG_STRAT" for i in range(5)],
-        return_names=[f"CID{i}_FXXR" for i in range(5)],
         fid_names=[f"CID{i}_FX" for i in range(5)],
         configs=cov_est_configs,
         n_iter=5,

@@ -266,7 +266,7 @@ class SignalsAndReturnsGenerator:
         returns = self.quantamental_returns()
         return pd.concat((signals, returns), ignore_index=True)
 
-    def realized_cov(self, freq: str = "BMS") -> pd.DataFrame:
+    def realized_cov(self, freq: str = "BMS", long: bool = True) -> pd.DataFrame:
         """
         Ground-truth realized covariance for each interval [dates[t], dates[t+1]].
 
@@ -291,7 +291,7 @@ class SignalsAndReturnsGenerator:
         tri = i <= j
         i, j = i[tri], j[tri]
 
-        frames = []
+        out = [] if long else {}
         dates = pd.date_range(
             start=self.realized_vol.index[0],
             end=self.realized_vol.index[-1],
@@ -299,22 +299,23 @@ class SignalsAndReturnsGenerator:
         )
         for start_date, end_date in zip(dates, dates[1:]):
             vol = self.realized_vol.loc[start_date:end_date].to_numpy()  # (days, n)
-            cov = (vol[:, :, None] * self.corr[None, :, :] * vol[:, None, :]).mean(
-                axis=0
-            )
+            cov = (vol[:, :, None] * self.corr[None, :, :] * vol[:, None, :]).mean(axis=0)
 
-            frames.append(
-                pd.DataFrame(
-                    {
-                        "fid1": names[i],
-                        "fid2": names[j],
-                        "value": 10_000 * annualization * cov[i, j],
-                        "real_date": start_date,
-                    }
+            if long:
+                out.append(
+                    pd.DataFrame(
+                        {
+                            "fid1": names[i],
+                            "fid2": names[j],
+                            "value": 10_000 * annualization * cov[i, j],
+                            "real_date": start_date,
+                        }
+                    )
                 )
-            )
+            else:
+                out[start_date] = 10_000 * annualization * cov
 
-        return pd.concat(frames, ignore_index=True)
+        return pd.concat(out, ignore_index=True) if long else out
 
 
 
