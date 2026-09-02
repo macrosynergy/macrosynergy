@@ -1952,7 +1952,7 @@ class TestDownloadLatestSnapshot(unittest.TestCase):
             ) as mdl,
             patch.object(self.client, "cleanup_old_files") as mclean,
         ):
-            res = self.client.download_latest_snapshot(
+            res = self.client.download_latest_files(
                 overwrite=overwrite,
                 file_group_ids=file_group_ids,
                 show_progress=False,
@@ -2116,7 +2116,7 @@ class TestDownloadLatestSnapshotPrune(unittest.TestCase):
                 side_effect=lambda filenames, **kw: filenames,
             ) as mock_download,
         ):
-            result = self.client.download_latest_snapshot(
+            result = self.client.download_latest_files(
                 keep_n_days_old_files=keep_n_days_old_files, show_progress=False
             )
         return result, mock_download
@@ -2158,7 +2158,7 @@ class TestDownloadLatestSnapshotPrune(unittest.TestCase):
             ),
         ):
             with self.assertRaises(DownloadError):
-                self.client.download_latest_snapshot(
+                self.client.download_latest_files(
                     keep_n_days_old_files=0, show_progress=False
                 )
         # the replacement never arrived, so the old snapshot must still be there
@@ -2232,7 +2232,7 @@ class TestSnapshotRetentionWindow(unittest.TestCase):
                 side_effect=lambda filenames, **kw: filenames,
             ),
         ):
-            return self.client.download_latest_snapshot(
+            return self.client.download_latest_files(
                 keep_n_days_old_files=keep, show_progress=False
             )
 
