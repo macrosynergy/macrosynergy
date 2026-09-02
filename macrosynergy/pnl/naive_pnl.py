@@ -184,10 +184,10 @@ class NaivePnL:
             which is delimited by the frequency chosen. Additionally, the re-balancing
             frequency will be applied to make_zn_scores() if used as the method to produce
             the raw signals.
-        rebal_slip : str
-            re-balancing slippage in days. Default is 1 which means that it takes one
-            day to re-balance the position and that the new positions produce PnL from the
-            second day after the signal has been recorded.
+        rebal_slip : int
+            re-balancing slippage in days. Default is 0. A value of 1 means that it
+            takes one day to re-balance the position and that the new positions produce
+            PnL from the second day after the signal has been recorded.
         vol_scale : bool
             ex-post scaling of PnL to annualized volatility given. This is for
             comparative visualization and not out-of-sample. Default is none.
@@ -660,7 +660,7 @@ class NaivePnL:
         return pd.concat(dfw_list)
 
     @staticmethod
-    def rebalancing(dfw: pd.DataFrame, rebal_freq: str = "daily", rebal_slip=0):
+    def rebalancing(dfw: pd.DataFrame, rebal_freq: str = "daily", rebal_slip: int = 0):
         """
         The signals are calculated daily and for each individual cross-section defined
         in the panel. However, re-balancing a position can occur more infrequently than
@@ -675,52 +675,51 @@ class NaivePnL:
         rebal_freq : str
             re-balancing frequency for positions according to signal must be one of
             'daily' (default), 'weekly', 'monthly', 'quarterly', or 'annual'.
-        rebal_slip : str
+        rebal_slip : int
             re-balancing slippage in days.
 
         Returns
         -------
-        ~pandas.Series
-            will return a pd.Series containing the associated signals according to the
-            re-balancing frequency.
+        ~pandas.DataFrame
+            will return a pd.DataFrame containing the associated signals according to
+            the re-balancing frequency.
         """
 
         # The re-balancing days are the first of the respective time-periods because of
         # the shift forward by one day applied earlier in the code. Therefore, only
         # concerned with the minimum date of each re-balance period.
-        dfw["year"] = dfw["real_date"].dt.year
-        if rebal_freq == "annual":
-            rebal_dates = dfw.groupby(["cid", "year"], observed=True)["real_date"].min()
-        elif rebal_freq == "quarterly":
-            dfw["quarter"] = dfw["real_date"].dt.quarter
-            rebal_dates = dfw.groupby(
-                ["cid", "year", "quarter"],
-                observed=True,
-            )["real_date"].min()
-        elif rebal_freq == "monthly":
-            dfw["month"] = dfw["real_date"].dt.month
-            rebal_dates = dfw.groupby(
-                ["cid", "year", "month"],
-                observed=True,
-            )["real_date"].min()
-        elif rebal_freq == "weekly":
-            dfw["week"] = dfw["real_date"].apply(lambda x: x.week)
-            rebal_dates = dfw.groupby(["cid", "year", "week"], observed=True)[
-                "real_date"
-            ].min()
-        elif rebal_freq == "daily":
-            rebal_dates = dfw.groupby(["cid", "year", "real_date"], observed=True)[
-                "real_date"
-            ].min()
-        else:
+        err_str = "Re-balancing slippage must be a non-negative integer."
+        if not isinstance(rebal_slip, int):
+            raise TypeError(err_str)
+        elif rebal_slip < 0:
+            raise ValueError(err_str)
+
+        period_alias = {
+            "daily": "D",
+            "weekly": "W",
+            "monthly": "M",
+            "quarterly": "Q",
+            "annual": "Y",
+        }
+        if rebal_freq not in period_alias:
             raise ValueError(
                 "Re-balancing frequency must be one of: daily, weekly, monthly, quarterly or annual."
             )
 
+        if not pd.api.types.is_datetime64_any_dtype(dfw["real_date"]):
+            dfw = dfw.assign(real_date=pd.to_datetime(dfw["real_date"]))
+        dfw = dfw.sort_values(["cid", "real_date"])
+
+        # One period key per date, on the period edges of get_sops()/get_eops()
+        # (macrosynergy.management.utils). The re-balancing date remains each
+        # cross-section's own first available date within the period.
+        dfw["period"] = dfw["real_date"].dt.to_period(period_alias[rebal_freq])
+        rebal_dates = dfw.groupby(["cid", "period"], observed=True)["real_date"].min()
+
         # Convert the index, 'cid', to a formal column aligned to the re-balancing dates.
         r_dates_df = rebal_dates.reset_index(level=0)
         r_dates_df.reset_index(drop=True, inplace=True)
-        dfw = dfw[["real_date", "psig", "cid"]]
+        dfw = dfw[["real_date", "psig", "cid", "period"]]
 
         # Isolate the required signals on the re-balancing dates. Only concerned with the
         # respective signal on the re-balancing date. However, the produced DataFrame
@@ -729,25 +728,32 @@ class NaivePnL:
         # days are included. The intermediary dates, dates between re-balancing dates,
         # will initially be populated by NA values. To ensure the signal is used for the
         # duration between re-balancing dates, forward fill the computed signal over the
-        # associated dates.
+        # associated dates, without carrying it beyond the re-balancing period.
 
         # The signal is computed for each individual cross-section. Therefore, merge on
         # the real_date and the cross-section.
-        rebal_merge = r_dates_df.merge(dfw, how="left", on=["real_date", "cid"])
+        rebal_merge = r_dates_df.merge(
+            dfw[["real_date", "cid", "psig"]], how="left", on=["real_date", "cid"]
+        )
         # Re-establish the daily date series index where the intermediary dates, between
         # the re-balancing dates, will be populated using a forward fill.
-        rebal_merge = dfw[["real_date", "cid"]].merge(
+        rebal_merge = dfw[["real_date", "cid", "period"]].merge(
             rebal_merge, how="left", on=["real_date", "cid"]
         )
-        rebal_merge["psig"] = (
-            rebal_merge.groupby("cid", observed=True)["psig"].ffill().shift(rebal_slip)
-        )
-        rebal_merge = rebal_merge.sort_values(["cid", "real_date"])
 
-        rebal_merge = rebal_merge.set_index("real_date")
-        sig_series = rebal_merge.drop(["cid"], axis=1)
+        # Filling by period as well as cross-section bounds the carry to the period the
+        # signal was recorded in.
+        rebal_merge["psig"] = rebal_merge.groupby(["cid", "period"], observed=True)[
+            "psig"
+        ].ffill()
+        if rebal_slip:
+            rebal_merge["psig"] = (
+                rebal_merge["psig"]
+                .groupby(rebal_merge["cid"], observed=True)
+                .shift(rebal_slip)
+            )
 
-        return sig_series
+        return rebal_merge.set_index(["cid", "real_date"])[["psig"]]
 
     @staticmethod
     def long_only_pnl(
@@ -1708,13 +1714,9 @@ class NaivePnL:
             title if title is not None else "PnL decomposed by cross-section",
             fontsize=title_fontsize,
         )
-        ax.set_ylabel(
-            ylabel if ylabel is not None else "% of capital, no compounding"
-        )
+        ax.set_ylabel(ylabel if ylabel is not None else "% of capital, no compounding")
         ax.set_xlabel(xlabel)
-        ax.legend(
-            loc="upper left", bbox_to_anchor=(1, 1), fontsize=legend_fontsize
-        )
+        ax.legend(loc="upper left", bbox_to_anchor=(1, 1), fontsize=legend_fontsize)
         plt.tight_layout()
         return fig
 
@@ -2024,9 +2026,9 @@ class NaivePnL:
             PnL.
         """
 
-        assert isinstance(
-            pnl_name, str
-        ), "The method expects to receive a single PnL name."
+        assert isinstance(pnl_name, str), (
+            "The method expects to receive a single PnL name."
+        )
         error_cats = (
             f"The PnL passed to 'pnl_name' parameter is not defined. The "
             f"possible options are {self.pnl_names}."

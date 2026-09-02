@@ -1,14 +1,16 @@
 from tests.simulate import make_qdf
 from macrosynergy.pnl.naive_pnl import NaivePnL, create_results_dataframe
-from macrosynergy.management.utils import reduce_df, update_df
+from macrosynergy.management.utils import reduce_df, update_df, get_sops
 import re
 import unittest
+import warnings
 from unittest.mock import patch
 import numpy as np
 import pandas as pd
 from typing import List, Dict
 import matplotlib
 from matplotlib import pyplot as plt
+from packaging import version
 from macrosynergy.management.types import QuantamentalDataFrame
 from macrosynergy.pnl.pnl_table import HTMLTable
 
@@ -235,7 +237,9 @@ class TestAll(unittest.TestCase):
         # time-series.
         dfw_signal_rebal_aud = dfw_signal_rebal.loc[:, "AUD"]
         aud_array = np.squeeze(dfw_signal_rebal_aud.to_numpy())
-        unique_values_aud = set(aud_array)
+        # A signal is only carried within its own re-balancing period, so the months
+        # after the signal category ends hold no position: count the live signals.
+        unique_values_aud = set(aud_array[~np.isnan(aud_array)])
 
         start_date = dfw_signal_rebal.index[0]
         end_date = dfw_signal_rebal.index[-1]
@@ -243,6 +247,473 @@ class TestAll(unittest.TestCase):
         no_months = self.diff_month(end_date, start_date)
 
         self.assertTrue(no_months - 1 == len(unique_values_aud))
+
+        # 'GROWTH' ends 2020-10-30 while the returns run to year end. Without a signal
+        # on their re-balancing date, the remaining months close the position instead
+        # of holding the last live signal to the end of the sample.
+        self.assertTrue(dfw_signal_rebal_aud.loc["2020-11-01":].isna().all())
+
+    def test_rebalancing_period_calendar_and_carry(self):
+        # (a) A week belongs to exactly one re-balancing period. The Gregorian year
+        # combined with the ISO week number used to split the turn of the year, dropping
+        # the last week of December and re-balancing on January 1st instead. The dates
+        # must match the package's own period edges.
+        dates = pd.bdate_range("2018-01-01", "2021-12-31")
+        dfw = pd.DataFrame(
+            {
+                "cid": "AUD",
+                "real_date": dates,
+                # psig is the row ordinal, so each output value names its rebal date.
+                "psig": np.arange(len(dates), dtype=float),
+            }
+        )
+        sig = np.squeeze(NaivePnL.rebalancing(dfw, rebal_freq="weekly").to_numpy())
+        self.assertEqual(
+            set(dates[np.unique(sig).astype(int)]),
+            set(pd.to_datetime(get_sops(dates=dates, freq="W"))),
+        )
+
+        # (b) A signal is only carried within its own re-balancing period: once the
+        # signal has ended the position closes at the end of that period.
+        dates = pd.bdate_range("2020-01-01", "2020-12-31")
+        dfw = pd.DataFrame({"cid": "AUD", "real_date": dates, "psig": 1.0})
+        dfw.loc[dfw["real_date"] > "2020-06-15", "psig"] = np.nan
+        dfw["sig"] = np.squeeze(
+            NaivePnL.rebalancing(dfw, rebal_freq="monthly").to_numpy()
+        )
+        self.assertEqual(
+            dfw.loc[dfw["sig"].notna(), "real_date"].max(), pd.Timestamp("2020-06-30")
+        )
+
+    def test_rebalancing_weekly_year_boundary(self):
+        # A week must belong to exactly one re-balancing period. Keying on the Gregorian
+        # year together with the ISO week number collided at every turn of the year: the
+        # last week of December inherited the previous week's signal and the re-balance
+        # was displaced onto January 1st.
+        cids = ["AUD", "CAD"]
+        dates = pd.bdate_range("2018-01-01", "2021-12-31")  # spans three year-ends.
+        dfw = pd.DataFrame(
+            {
+                "real_date": np.tile(dates, len(cids)),
+                "cid": np.repeat(cids, len(dates)),
+                # psig is the row's date ordinal, so each output value names the date
+                # its signal was taken from, i.e. the re-balancing date.
+                "psig": np.tile(np.arange(len(dates), dtype=float), len(cids)),
+            }
+        ).sort_values(["cid", "real_date"])
+
+        dfw["sig"] = np.squeeze(
+            NaivePnL.rebalancing(dfw.copy(), rebal_freq="weekly").to_numpy()
+        )
+
+        # The single-calendar grouping: one period per Monday-to-Sunday week.
+        expected = set(dates.to_series().groupby(dates.to_period("W")).min())
+        for cid in cids:
+            observed = set(
+                dates[dfw.loc[dfw["cid"] == cid, "sig"].to_numpy().astype(int)]
+            )
+            self.assertEqual(observed, expected)
+
+            # The two calendars disagree only around the year-end, so pin those dates
+            # explicitly. The final week of December owns its own re-balancing date.
+            for boundary in ["2018-12-31", "2019-12-30", "2020-12-28"]:
+                self.assertIn(pd.Timestamp(boundary), observed)
+            # And no re-balance is displaced onto January 1st, which always falls
+            # mid-week within the period that started in December.
+            for spurious in ["2019-01-01", "2020-01-01", "2021-01-01"]:
+                self.assertNotIn(pd.Timestamp(spurious), observed)
+
+    def test_rebalancing_ffill_one_period_only(self):
+        # A signal is carried within its own re-balancing period and no further, so a
+        # signal category that ends while the returns continue closes the position at
+        # the end of the period it died in, rather than holding it to the end of the
+        # sample.
+        dates = pd.bdate_range("2020-01-01", "2020-12-31")
+        # 2020-06-15 is a Monday, hence both the first day of its week and mid-month:
+        # the weekly carry expires on the Friday, the monthly carry at month end.
+        for rebal_freq, last_live in [
+            ("monthly", "2020-06-30"),
+            ("weekly", "2020-06-19"),
+        ]:
+            dfw = pd.DataFrame({"cid": "AUD", "real_date": dates, "psig": 1.0})
+            dfw.loc[dfw["real_date"] > "2020-06-15", "psig"] = np.nan
+            dfw["sig"] = np.squeeze(
+                NaivePnL.rebalancing(dfw.copy(), rebal_freq=rebal_freq).to_numpy()
+            )
+
+            live = dfw.loc[dfw["real_date"] <= last_live, "sig"]
+            dead = dfw.loc[dfw["real_date"] > last_live, "sig"]
+            # The period the signal died in keeps the value taken on its re-balancing
+            # date; every subsequent period re-balances onto a missing signal.
+            self.assertEqual(set(live.unique()), {1.0})
+            self.assertTrue(dead.isna().all())
+            self.assertTrue(len(dead) > 0)
+
+        # Where the signal is fully populated the period bound never bites: the output
+        # is identical to an unbounded forward fill of the re-balancing signals, at
+        # every frequency and on a ragged panel.
+        period_alias = {
+            "daily": "D",
+            "weekly": "W",
+            "monthly": "M",
+            "quarterly": "Q",
+            "annual": "Y",
+        }
+        dates = pd.bdate_range("2015-01-01", "2020-12-31")
+        rng = np.random.default_rng(1)
+        dfw = (
+            pd.concat(
+                [
+                    pd.DataFrame(
+                        {
+                            "cid": cid,
+                            "real_date": dates[i * 53 :],
+                            "psig": rng.standard_normal(len(dates) - i * 53),
+                        }
+                    )
+                    for i, cid in enumerate(["AUD", "GBP", "USD"])
+                ]
+            )
+            .sort_values(["cid", "real_date"])
+            .reset_index(drop=True)
+        )
+        for rebal_freq, alias in period_alias.items():
+            first_of_period = ~pd.MultiIndex.from_arrays(
+                [dfw["cid"], dfw["real_date"].dt.to_period(alias)]
+            ).duplicated()
+            unbounded = (
+                dfw["psig"]
+                .where(first_of_period)
+                .groupby(dfw["cid"], observed=True)
+                .ffill()
+            )
+            sig = np.squeeze(
+                NaivePnL.rebalancing(dfw.copy(), rebal_freq=rebal_freq).to_numpy()
+            )
+            self.assertTrue(np.array_equal(unbounded.to_numpy(), sig))
+            self.assertFalse(np.isnan(sig).any())
+
+    def test_rebalancing_input_flexibility(self):
+        # The signal is returned labelled by (cid, real_date) in canonical sort order,
+        # so neither the row order nor the dtype of 'cid' can attach a signal to the
+        # wrong cross-section.
+        cids = ["AUD", "CAD", "GBP"]
+        dates = pd.bdate_range("2020-01-01", "2020-06-30")
+        # psig is unique per row, so a misaligned signal cannot coincide with the
+        # correct one: every output value names the row it was taken from.
+        sorted_dfw = pd.DataFrame(
+            {
+                "cid": np.repeat(cids, len(dates)),
+                "real_date": np.tile(dates, len(cids)),
+                "psig": np.arange(len(cids) * len(dates), dtype=float),
+            }
+        )
+
+        def str_keyed(sig):
+            # 'cid' may come back as a Categorical; compare on the labels themselves.
+            return sig.set_axis(
+                pd.MultiIndex.from_arrays(
+                    [
+                        sig.index.get_level_values("cid").astype(str),
+                        sig.index.get_level_values("real_date"),
+                    ],
+                    names=["cid", "real_date"],
+                )
+            )
+
+        expected = str_keyed(
+            NaivePnL.rebalancing(sorted_dfw.copy(), rebal_freq="monthly")["psig"]
+        )
+        # The reference actually re-balances: one signal per cid per month, not the
+        # daily signal handed in.
+        self.assertEqual(expected.nunique(), len(cids) * 6)
+
+        def check(dfw):
+            out = NaivePnL.rebalancing(dfw, rebal_freq="monthly")
+            # Canonical order: the panel sorted by cross-section then date, whatever
+            # order and date dtype it was handed in.
+            canonical = dfw.assign(
+                real_date=pd.to_datetime(dfw["real_date"])
+            ).sort_values(["cid", "real_date"])
+            pd.testing.assert_index_equal(
+                out.index,
+                pd.MultiIndex.from_arrays([canonical["cid"], canonical["real_date"]]),
+            )
+            # Every row carries the signal belonging to its own label.
+            labelled = str_keyed(out["psig"])
+            pd.testing.assert_series_equal(labelled.sort_index(), expected.sort_index())
+            # Independent of the reference above: psig is the row ordinal of the
+            # cid-major frame, so a value's block of ordinals names its cross-section.
+            np.testing.assert_array_equal(
+                (labelled.to_numpy() // len(dates)).astype(int),
+                [cids.index(c) for c in labelled.index.get_level_values("cid")],
+            )
+
+        # Cross-section-major order, as make_pnl hands it over.
+        check(sorted_dfw.copy())
+        # Date-major order: cross-sections interleaved on every row.
+        check(sorted_dfw.sort_values(["real_date", "cid"]))
+        # Fully shuffled order.
+        check(sorted_dfw.sample(frac=1, random_state=0))
+        # 'cid' as a Categorical whose category order is the reverse of the lexical
+        # one, both cid-major and date-major, and as plain strings (above).
+        reversed_cat = sorted_dfw.assign(
+            cid=pd.Categorical(sorted_dfw["cid"], categories=cids[::-1])
+        )
+        check(reversed_cat.sort_values(["cid", "real_date"]))
+        check(reversed_cat.sort_values(["real_date", "cid"]))
+        # 'real_date' handed over as ISO strings is coerced in flow.
+        check(
+            sorted_dfw.assign(
+                real_date=sorted_dfw["real_date"].dt.strftime("%Y-%m-%d")
+            ).sort_values(["real_date", "cid"])
+        )
+
+        # A genuinely unparseable date is left to raise pandas' own error.
+        with self.assertRaises(ValueError):
+            NaivePnL.rebalancing(
+                sorted_dfw.assign(real_date="not-a-date"), rebal_freq="monthly"
+            )
+
+    def test_rebalancing_no_input_mutation(self):
+        # The method takes no defensive copy of dfw, so it must leave the caller's
+        # frame - and the panel a slice was taken from - exactly as handed in.
+        cids = ["AUD", "CAD", "GBP"]
+        dates = pd.bdate_range("2019-01-01", "2021-03-31")
+        base = pd.DataFrame(
+            {
+                "cid": np.repeat(cids, len(dates)),
+                "real_date": np.tile(dates, len(cids)),
+                "psig": np.arange(len(cids) * len(dates), dtype=float),
+            }
+        )
+        # NaN holes so the period-bounded forward fill is actually exercised.
+        base.loc[base.index % 37 == 0, "psig"] = np.nan
+        base_before = base.copy(deep=True)
+
+        variants = {
+            "sorted": base,
+            "shuffled": base.sample(frac=1, random_state=0),
+            "categorical": base.assign(cid=base["cid"].astype("category")),
+            "str_dates": base.assign(
+                real_date=base["real_date"].dt.strftime("%Y-%m-%d")
+            ),
+            # A slice of a larger panel: the usual source of SettingWithCopyWarning.
+            "slice": base[base["cid"] != "GBP"],
+        }
+
+        for name, dfw in variants.items():
+            before = dfw.copy(deep=True)
+            for rebal_freq in ["daily", "weekly", "monthly", "quarterly", "annual"]:
+                with self.subTest(variant=name, freq=rebal_freq):
+                    # rebal_slip is applied to the output, never to dfw.
+                    NaivePnL.rebalancing(dfw, rebal_freq=rebal_freq, rebal_slip=1)
+                    # Checks dtypes and the index as well as the values.
+                    pd.testing.assert_frame_equal(before, dfw, check_exact=True)
+        # The panel the "slice" variant was taken from is untouched as well.
+        pd.testing.assert_frame_equal(base_before, base, check_exact=True)
+
+    def test_rebalancing_no_freq_alias_warnings(self):
+        # The period aliases D/W/M/Q/Y are warning-free on every supported pandas,
+        # unlike 'A', deprecated in 2.2 and removed in 3.0. Only that warning family
+        # is inspected: unrelated pandas noise must not fail this test.
+        def freq_alias(records):
+            return [
+                str(w.message)
+                for w in records
+                if issubclass(w.category, (FutureWarning, DeprecationWarning))
+                and "deprecat" in str(w.message).lower()
+                and re.search(r"'\w{1,3}'|freq|alias|period", str(w.message), re.I)
+            ]
+
+        dates = pd.bdate_range("2019-01-01", "2021-03-31")
+        dfw = pd.DataFrame({"cid": "AUD", "real_date": dates, "psig": 1.0})
+
+        # Negative control: on the versions that still have it, the deprecated alias
+        # does warn, proving the filter above catches this warning family.
+        if version.parse("2.2") <= version.parse(pd.__version__) < version.parse("3"):
+            with warnings.catch_warnings(record=True) as caught:
+                warnings.simplefilter("always")
+                dfw["real_date"].dt.to_period("A")
+            self.assertTrue(freq_alias(caught))
+
+        for rebal_freq in ["daily", "weekly", "monthly", "quarterly", "annual"]:
+            for rebal_slip in (0, 1):
+                with self.subTest(freq=rebal_freq, slip=rebal_slip):
+                    with warnings.catch_warnings(record=True) as caught:
+                        warnings.simplefilter("always")
+                        NaivePnL.rebalancing(
+                            dfw, rebal_freq=rebal_freq, rebal_slip=rebal_slip
+                        )
+                    self.assertEqual(freq_alias(caught), [])
+
+    def test_rebalancing_slip_no_cross_cid_leak(self):
+        # With rebal_slip >= 1 the slip must be applied within each cross-section: the
+        # first observation(s) of a cid must never inherit the preceding cid's signal.
+        cids = ["AUD", "CAD", "GBP"]
+        signals = {"AUD": 1.0, "CAD": 2.0, "GBP": 3.0}
+        dates = pd.bdate_range("2020-01-01", "2020-06-30")
+
+        dfw = pd.DataFrame(
+            {
+                "real_date": np.tile(dates, len(cids)),
+                "cid": np.repeat(cids, len(dates)),
+                "psig": np.repeat([signals[cid] for cid in cids], len(dates)),
+            }
+        ).sort_values(["cid", "real_date"])
+
+        sig_series = NaivePnL.rebalancing(dfw, rebal_freq="monthly", rebal_slip=1)
+        dfw["sig"] = np.squeeze(sig_series.to_numpy())
+
+        # Each cid's signal is constant, so the only non-NA value it can legitimately
+        # hold is its own. Anything else has leaked across the cid boundary.
+        for cid in cids:
+            observed = set(dfw.loc[dfw["cid"] == cid, "sig"].dropna().unique())
+            self.assertEqual(observed, {signals[cid]})
+
+    def test_rebalancing_slip_type_value_checks(self):
+        # rebal_slip must be a non-negative integer: bad types raise TypeError, a
+        # negative integer raises ValueError, and a valid value must go through.
+        cids = ["AUD", "CAD"]
+        dates = pd.bdate_range("2020-01-01", "2020-03-31")
+        dfw = pd.DataFrame(
+            {
+                "real_date": np.tile(dates, len(cids)),
+                "cid": np.repeat(cids, len(dates)),
+                "psig": np.repeat([1.0, 2.0], len(dates)),
+            }
+        ).sort_values(["cid", "real_date"])
+
+        for bad_slip in ["1", 1.5, None]:
+            with self.assertRaises(TypeError):
+                NaivePnL.rebalancing(
+                    dfw.copy(), rebal_freq="monthly", rebal_slip=bad_slip
+                )
+
+        with self.assertRaises(ValueError):
+            NaivePnL.rebalancing(dfw.copy(), rebal_freq="monthly", rebal_slip=-1)
+
+        # A valid slippage must not raise. Note bools are ints in Python, so they pass.
+        NaivePnL.rebalancing(dfw.copy(), rebal_freq="monthly", rebal_slip=0)
+
+    def test_rebalancing_slip_no_cross_cid_leak_edge_cases(self):
+        cids = ["AUD", "CAD", "GBP"]
+        signals = {"AUD": 1.0, "CAD": 2.0, "GBP": 3.0}
+        dates = pd.bdate_range("2020-01-01", "2020-03-31")
+
+        # (a) A categorical cid column - including one carrying an unused category -
+        # must give the same result as the object-dtype column and must not leak.
+        dfw = pd.DataFrame(
+            {
+                "real_date": np.tile(dates, len(cids)),
+                "cid": np.repeat(cids, len(dates)),
+                "psig": np.repeat([signals[cid] for cid in cids], len(dates)),
+            }
+        ).sort_values(["cid", "real_date"])
+        dfw_cat = dfw.assign(
+            cid=pd.Categorical(dfw["cid"], categories=["AUD", "CAD", "CHF", "GBP"])
+        )
+        obj_sig = np.squeeze(
+            NaivePnL.rebalancing(
+                dfw.copy(), rebal_freq="monthly", rebal_slip=2
+            ).to_numpy()
+        )
+        cat_sig = np.squeeze(
+            NaivePnL.rebalancing(
+                dfw_cat.copy(), rebal_freq="monthly", rebal_slip=2
+            ).to_numpy()
+        )
+        self.assertTrue(np.array_equal(obj_sig, cat_sig, equal_nan=True))
+        dfw_cat["sig"] = cat_sig
+        for cid in cids:
+            cid_sig = dfw_cat.loc[dfw_cat["cid"] == cid, "sig"]
+            # A slip of two blanks exactly the first two dates of each cross-section.
+            self.assertEqual(
+                list(cid_sig.isna()), [True, True] + [False] * (len(dates) - 2)
+            )
+            self.assertEqual(set(cid_sig.dropna().unique()), {signals[cid]})
+
+        # (b) A cid whose signal is entirely NaN, sat between two populated cids, must
+        # stay NaN and must not absorb either neighbour's signal.
+        dfw_nan = pd.DataFrame(
+            {
+                "real_date": np.tile(dates, len(cids)),
+                "cid": np.repeat(cids, len(dates)),
+                "psig": np.concatenate(
+                    [
+                        np.full(len(dates), signals["AUD"]),
+                        np.full(len(dates), np.nan),
+                        np.full(len(dates), signals["GBP"]),
+                    ]
+                ),
+            }
+        ).sort_values(["cid", "real_date"])
+        dfw_nan["sig"] = np.squeeze(
+            NaivePnL.rebalancing(
+                dfw_nan.copy(), rebal_freq="monthly", rebal_slip=1
+            ).to_numpy()
+        )
+        self.assertTrue(dfw_nan.loc[dfw_nan["cid"] == "CAD", "sig"].isna().all())
+        for cid in ["AUD", "GBP"]:
+            cid_sig = dfw_nan.loc[dfw_nan["cid"] == cid, "sig"]
+            self.assertEqual(list(cid_sig.isna()), [True] + [False] * (len(dates) - 1))
+            self.assertEqual(set(cid_sig.dropna().unique()), {signals[cid]})
+
+        # (c) A slip longer than one cid's own history must empty that cid alone; the
+        # longer neighbours lose exactly rebal_slip observations each.
+        dfw_short = pd.concat(
+            [
+                pd.DataFrame(
+                    {"real_date": dates, "cid": "AUD", "psig": signals["AUD"]}
+                ),
+                pd.DataFrame(
+                    {"real_date": dates[:3], "cid": "CAD", "psig": signals["CAD"]}
+                ),
+                pd.DataFrame(
+                    {"real_date": dates, "cid": "GBP", "psig": signals["GBP"]}
+                ),
+            ],
+            ignore_index=True,
+        ).sort_values(["cid", "real_date"])
+        dfw_short["sig"] = np.squeeze(
+            NaivePnL.rebalancing(
+                dfw_short.copy(), rebal_freq="daily", rebal_slip=5
+            ).to_numpy()
+        )
+        self.assertTrue(dfw_short.loc[dfw_short["cid"] == "CAD", "sig"].isna().all())
+        for cid in ["AUD", "GBP"]:
+            cid_sig = dfw_short.loc[dfw_short["cid"] == cid, "sig"]
+            self.assertEqual(
+                list(cid_sig.isna()), [True] * 5 + [False] * (len(dates) - 5)
+            )
+            self.assertEqual(set(cid_sig.dropna().unique()), {signals[cid]})
+
+        # (d) The leak was once per cid boundary, so it scales with the panel width:
+        # with many cross-sections every non-first cid must still hold only its own
+        # signal, blanked for exactly the first observation.
+        for n_cids in (5, 10, 50, 100):
+            many_cids = [f"CID{i:03d}" for i in range(n_cids)]
+            many_signals = {cid: float(i + 1) for i, cid in enumerate(many_cids)}
+            dfw_many = pd.DataFrame(
+                {
+                    "real_date": np.tile(dates, n_cids),
+                    "cid": np.repeat(many_cids, len(dates)),
+                    "psig": np.repeat(
+                        [many_signals[cid] for cid in many_cids], len(dates)
+                    ),
+                }
+            ).sort_values(["cid", "real_date"])
+            dfw_many["sig"] = np.squeeze(
+                NaivePnL.rebalancing(
+                    dfw_many.copy(), rebal_freq="monthly", rebal_slip=1
+                ).to_numpy()
+            )
+            for cid in many_cids:
+                cid_sig = dfw_many.loc[dfw_many["cid"] == cid, "sig"]
+                self.assertEqual(
+                    list(cid_sig.isna()), [True] + [False] * (len(dates) - 1)
+                )
+                self.assertEqual(set(cid_sig.dropna().unique()), {many_signals[cid]})
 
     def test_make_pnl(self):
         self.test_make_signal()
@@ -1418,14 +1889,10 @@ class TestAll(unittest.TestCase):
 
         # Bars are coloured by sign, and the count of positive periods is annotated.
         pos_colors = {
-            tuple(p.get_facecolor())
-            for p, v in zip(ax.patches, act_year)
-            if v > 0
+            tuple(p.get_facecolor()) for p, v in zip(ax.patches, act_year) if v > 0
         }
         neg_colors = {
-            tuple(p.get_facecolor())
-            for p, v in zip(ax.patches, act_year)
-            if v <= 0
+            tuple(p.get_facecolor()) for p, v in zip(ax.patches, act_year) if v <= 0
         }
         self.assertFalse(pos_colors & neg_colors)
         self.assertIn(
@@ -1579,9 +2046,7 @@ class TestAll(unittest.TestCase):
             index="real_date", columns="cid", values="value"
         )
         wdf.columns = pd.Index(wdf.columns.astype(str))
-        wgt = pd.DataFrame(
-            1.0 / len(wdf.columns), index=wdf.index, columns=wdf.columns
-        )
+        wgt = pd.DataFrame(1.0 / len(wdf.columns), index=wdf.index, columns=wdf.columns)
         dfa = wgt.stack().rename("value").reset_index()
         dfa.columns = ["real_date", "cid", "value"]
         dfa["xcat"] = "WEIGHT"
@@ -1602,7 +2067,9 @@ class TestAll(unittest.TestCase):
             vol_scale=None,
             pnl_name="PNL_WEIGHT",
         )
-        fig = wpnl.plot_pnl_attribution(pnl_name="PNL_WEIGHT", scale=100, return_fig=True)
+        fig = wpnl.plot_pnl_attribution(
+            pnl_name="PNL_WEIGHT", scale=100, return_fig=True
+        )
         self.assertEqual(fig.axes[0].collections[0].get_clim()[0], 0.0)
 
         # kind="returns": the return category the PnL was built on, summed per period.
@@ -1644,7 +2111,9 @@ class TestAll(unittest.TestCase):
 
         # kind="area": stacked weights over time, optionally the pre-rebalance series.
         fig = wpnl.plot_pnl_attribution(
-            pnl_name="PNL_WEIGHT", kind="area", cid_labels={"AUD": "Australia"},
+            pnl_name="PNL_WEIGHT",
+            kind="area",
+            cid_labels={"AUD": "Australia"},
             return_fig=True,
         )
         self.assertIsInstance(fig, plt.Figure)
