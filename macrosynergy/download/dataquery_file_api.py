@@ -29,7 +29,7 @@ Before using the client, ensure your API credentials are set as environment vari
     client = DataQueryFileAPIClient()
 
     # Fetch a DataFrame of all available files for the JPMaQS group
-    available_files_df = client.list_available_files_for_all_file_groups()
+    available_files_df = client.list_available_files()
     print("Available JPMaQS files:")
     print(available_files_df.head())
 
@@ -44,7 +44,7 @@ including full datasets, deltas, and metadata.
     client = DataQueryFileAPIClient(out_dir="./jpmaqs_data")
 
     print(f"Downloading today's files to {client.out_dir}...")
-    client.download_files()
+    client.download_latest_files()
     print("Download complete.")
 
 **Example 3: Download all new or updated files for the day, and load data from them
@@ -118,7 +118,7 @@ Reading that output:
 - Rows 4 and 5 have one version each, and look exactly as they do by default.
 
 Rows are ordered by `cid`, `xcat` (or `ticker`), `real_date`, then `last_updated`, so each
-observation reads oldest first. `dropna=False` is required here, as the all-NaN metrics 
+observation reads oldest first. `dropna=False` is required here, as the all-NaN metrics
 rows are the record of removal.
 
 
@@ -1810,7 +1810,7 @@ class DataQueryFileAPIClient:
             show_progress=show_progress,
         )
 
-    def download_latest_snapshot(
+    def download_latest_files(
         self,
         file_group_ids: Optional[List[str]] = None,
         keep_n_days_old_files: Optional[int] = 0,
@@ -1820,8 +1820,6 @@ class DataQueryFileAPIClient:
         show_progress: bool = True,
     ) -> List[str]:
         """
-        Downloads the latest snapshot to the output directory.
-
         Downloads the files for the latest snapshot date (full snapshots, deltas and
         metadata), optionally restricted to `file_group_ids`. Files already on disk are
         skipped unless `overwrite` is set, and older files are removed according to
@@ -2082,7 +2080,7 @@ class DataQueryFileAPIClient:
                     f"indicators, which live in {sorted(datasets_to_download)}."
                 )
             datasets_to_download = narrowed
-        self.download_latest_snapshot(
+        self.download_latest_files(
             overwrite=overwrite,
             show_progress=show_progress,
             keep_n_days_old_files=keep_n_days_old_files,
