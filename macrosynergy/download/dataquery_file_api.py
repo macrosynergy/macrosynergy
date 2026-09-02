@@ -80,6 +80,48 @@ The resulting dataframe is returned to the user in the chosen dataframe format
     4 2000-01-07  AUD  RIR_NSA  3.697      0.0     57.0     1.25 2024-07-25 07:27:22
 
 
+**Example 3a: Every version of a row, with `delta_treatment="all"`.**
+
+By default `download` returns one row per (cid, xcat, real_date): the most recently
+published one. `delta_treatment="all"` keeps every version instead, so the same
+(cid, xcat, real_date) can appear more than once, told apart by `last_updated`.
+
+.. code-block:: python
+
+    from macrosynergy.download import DataQueryFileAPIClient
+
+    with DataQueryFileAPIClient(out_dir="./jpmaqs_data") as client:
+        df = client.download(
+            cids=["AUD", "CAD"],
+            xcats=["EQXR_NSA"],
+            delta_treatment="all",
+            dropna=False,
+        )
+
+
+.. code-block:: text
+
+       real_date  cid      xcat  value  eop_lag  mop_lag  grading        last_updated
+    0 2024-01-02  AUD  EQXR_NSA  0.400      0.0      1.0      1.0 2024-01-02 06:00:00
+    1 2024-01-02  AUD  EQXR_NSA  0.412      0.0      1.0      1.0 2024-01-04 06:00:00
+    2 2024-01-03  AUD  EQXR_NSA -0.118      0.0      2.0      1.0 2024-01-03 06:00:00
+    3 2024-01-03  AUD  EQXR_NSA    NaN      NaN      NaN      NaN 2024-01-05 06:00:00
+    4 2024-01-02  CAD  EQXR_NSA  0.221      0.0      1.0      1.0 2024-01-02 06:00:00
+    5 2024-01-03  CAD  EQXR_NSA  0.305      0.0      2.0      1.0 2024-01-03 06:00:00
+
+Reading that output:
+
+- Rows 0 and 1 are the same (cid, xcat, real_date) at two `last_updated` values: row 1 is
+  an updated value for that observation.
+- Row 3 has all four metrics NaN. That is a removal of data for (AUD, EQXR_NSA,
+  2024-01-03), recorded at its own `last_updated`.
+- Rows 4 and 5 have one version each, and look exactly as they do by default.
+
+Rows are ordered by `cid`, `xcat` (or `ticker`), `real_date`, then `last_updated`, so each
+observation reads oldest first. `dropna=False` is required here, as the all-NaN metrics 
+rows are the record of removal.
+
+
 **Example 4: Download all new or updated delta-files since a specific date/time.**
 
 .. code-block:: python
@@ -146,6 +188,7 @@ window) if needed, and return the notifications as pandas DataFrames.
 
         print(missing_df.head())
         print(revisions_df.head())
+
 """
 
 import calendar
@@ -1080,6 +1123,14 @@ class DataQueryFileAPIClient:
 
         return file_path
 
+    def load_catalog(self) -> pd.DataFrame:
+        """Loads the latest catalog file into a DataFrame."""
+        return pd.read_parquet(self.download_catalog_file())
+
+    def list_all_tickers(self) -> List[str]:
+        """Returns a list of all available tickers in the catalog."""
+        return sorted(self.load_catalog()["Ticker"].unique())
+
     def get_datasets_for_indicators(
         self,
         tickers: Optional[List[str]] = None,
@@ -1910,10 +1961,14 @@ class DataQueryFileAPIClient:
         dataframe_type: str = "pandas",
         categorical_dataframe: bool = True,
         include_delta_files: bool = True,
+        delta_treatment: str = "latest",
         show_progress: bool = True,
         overwrite: bool = False,
         keep_n_days_old_files: Optional[int] = 0,
         include_source_file: bool = False,
+        dropna: bool = True,
+        datasets: Optional[List[str]] = None,
+        categorical_source_file_column: bool = True,
     ) -> Union[pd.DataFrame, pl.DataFrame, pl.LazyFrame]:
         """
         Downloads data for the specified `tickers`, `cids`, or `xcats` and returns it as
@@ -1940,10 +1995,13 @@ class DataQueryFileAPIClient:
             is None, in which case all metrics are returned.
         start_date : Optional[str]
             The start date for the returned data in the ISO format "YYYY-MM-DD".
-            If None, data is returned from the earliest available date.
+            If None, data is returned from the earliest available date. A range given
+            the wrong way round is swapped, with a warning, rather than returning
+            nothing.
         end_date : Optional[str]
             The end date for the returned data in the ISO format "YYYY-MM-DD".
-            If None, data is returned up to the latest available date.
+            If None, data is returned up to the latest available date. Equal bounds
+            return that single date.
         dataframe_format : str
             The format of the returned DataFrame, default is "qdf". Options are:
                 - "qdf": QuantamentalDataFrame with columns (real_date, cid, xcat, metric1, ..., metricN)
@@ -1959,8 +2017,14 @@ class DataQueryFileAPIClient:
             categorical dtypes for object columns. Ignored for `dataframe_format="wide"`.
             Default is True.
         include_delta_files : bool
-            If True (default), delta files are included when the data is read. They are
-            downloaded either way.
+            Whether delta files are folded in when the data is read. Default is True.
+            This controls reading only - delta files are always downloaded, as the
+            local snapshot would otherwise be incomplete for any later load.
+        delta_treatment : str
+            How rows restated by a delta file are resolved, per (ticker, real_date):
+            "latest" (the default) keeps the row with the newest `last_updated`,
+            "earliest" the oldest, and "all" keeps every version. "all" requires
+            `dropna=False`, and cannot be used with `dataframe_format="wide"`.
         show_progress : bool
             If True, displays a progress bar during downloads. Default is True.
         overwrite : bool
@@ -1979,6 +2043,25 @@ class DataQueryFileAPIClient:
             (default), no source file information is included.
 
             Default is False.
+        dropna : bool
+            If True (the default), no null reaches the output: a row is kept only where
+            every requested metric is populated. That drops expiry rows - JPMaQS withdraws
+            a (ticker, real_date) observation by publishing one whose metrics are all null,
+            which under `delta_treatment="latest"` is the row that survives - and equally
+            any other row null in a requested metric. Scoped to `metrics`, so a row null
+            only in a metric you did not ask for is kept. Applied after delta resolution,
+            so an expiry still supersedes the row it withdraws before being dropped itself.
+            Pass False to keep every null, and see the `last_updated` each expiry landed at.
+        datasets : Optional[List[str]]
+            Restrict the download and the load to these JPMaQS datasets, e.g.
+            `["JPMAQS_MACROECONOMIC_TRENDS"]`. The datasets holding the requested
+            indicators are derived from the catalog, and this narrows that set rather than
+            replacing it; naming only datasets that hold none of them raises. If None
+            (default), every dataset holding a requested indicator is used.
+        categorical_source_file_column : bool
+            If True (default), the `"source_file"` column added by `include_source_file`
+            uses a categorical dtype, which is much cheaper than storing the file name as a
+            string on every row. Ignored unless `include_source_file=True`.
 
         Returns
         -------
@@ -1989,6 +2072,16 @@ class DataQueryFileAPIClient:
         datasets_to_download = self.get_datasets_for_indicators(
             tickers=tickers, cids=cids, xcats=xcats
         )
+        if datasets is not None:
+            # narrow rather than replace: downloading a dataset that holds none of the
+            # requested indicators would only fetch files the load then ignores
+            narrowed = [d for d in datasets_to_download if d in set(datasets)]
+            if not narrowed:
+                raise ValueError(
+                    f"`datasets={sorted(set(datasets))}` holds none of the requested "
+                    f"indicators, which live in {sorted(datasets_to_download)}."
+                )
+            datasets_to_download = narrowed
         self.download_latest_snapshot(
             overwrite=overwrite,
             show_progress=show_progress,
@@ -2011,6 +2104,9 @@ class DataQueryFileAPIClient:
             include_delta_files=include_delta_files,
             catalog_path=catalog_path,
             include_source_file=include_source_file,
+            delta_treatment=delta_treatment,
+            dropna=dropna,
+            categorical_source_file_column=categorical_source_file_column,
         )
 
 
@@ -2152,6 +2248,29 @@ def large_delta_file_datetimes(as_str: bool = True) -> List[str]:
         return dt_list
 
     return [d.strftime("%Y%m%dT%H%M%S") for d in dt_list]
+
+
+def _ordered_date_range(
+    start_date: Optional[Union[str, pd.Timestamp]],
+    end_date: Optional[Union[str, pd.Timestamp]],
+) -> Tuple[Optional[pd.Timestamp], Optional[pd.Timestamp]]:
+    """
+    Warn and swap a reversed range, so `start_date` is always the earlier bound.
+
+    Matches `_filter_available_files_by_datetime`, which does the same for file
+    datetimes; without it a reversed range quietly returned no rows at all.
+    """
+    if start_date is None or end_date is None:
+        return start_date, end_date
+    start_ts = pd_to_datetime_compat(start_date)
+    end_ts = pd_to_datetime_compat(end_date)
+    if start_ts > end_ts:
+        logger.warning(
+            f"`start_date` ({start_ts.date()}) is after `end_date` "
+            f"({end_ts.date()}). Swapping values."
+        )
+        return end_ts, start_ts
+    return start_date, end_date
 
 
 @cache_decorator(ttl=60)
@@ -2445,6 +2564,8 @@ def _check_lazy_load_inputs(
     dataframe_type: str,
     categorical_dataframe: bool,
     datasets: Optional[List[str]] = None,
+    delta_treatment: str = "latest",
+    dropna: bool = True,
 ):
     files_dir = Path(files_dir)
     if not files_dir.is_dir():
@@ -2477,6 +2598,15 @@ def _check_lazy_load_inputs(
             "Both `cids` and `xcats` must be provided together, or neither."
         )
 
+    if not tickers and not cids and not xcats:
+        # an empty selection is a request for every ticker on disk, which is far too
+        # much to load by accident. Loading everything has to be asked for explicitly
+        raise ValueError(
+            "At least one of `tickers`, `cids`, or `xcats` must be set. To load "
+            "every ticker, pass them explicitly: "
+            "`tickers=client.list_all_tickers()`."
+        )
+
     for param, name in [
         (start_date, "start_date"),
         (end_date, "end_date"),
@@ -2499,6 +2629,27 @@ def _check_lazy_load_inputs(
         )
     if not isinstance(categorical_dataframe, bool):
         raise ValueError("`categorical_dataframe` must be a boolean.")
+
+    if delta_treatment not in DELTA_TREATMENTS:
+        raise ValueError(_delta_treatment_error())
+    if not isinstance(dropna, bool):
+        raise ValueError("`dropna` must be a boolean.")
+    # checked before the `dropna` pairing below, so that `wide` + "all" reports the
+    # incompatibility that cannot be worked around first
+    if dataframe_format == "wide" and delta_treatment == "all":
+        raise ValueError(
+            "`dataframe_format='wide'` cannot be combined with "
+            "`delta_treatment='all'`: a wide frame holds one cell per "
+            "(ticker, real_date), which cannot hold several restatements of it. Use "
+            "'latest' or 'earliest', or a long format ('qdf' or 'tickers')."
+        )
+    if delta_treatment == "all" and dropna:
+        raise ValueError(
+            "`dropna=True` cannot be combined with `delta_treatment='all'`: dropping "
+            "the expiry rows would leave the very rows they expire, so an expired "
+            "observation would reappear with its stale value. Pass `dropna=False` to "
+            "keep the full restatement history."
+        )
 
 
 def _split_jpmaqs_filename(filename: str) -> Tuple[str, str]:
@@ -2634,10 +2785,11 @@ def lazy_load_from_parquets(
     categorical_dataframe: bool = True,
     datasets: Optional[List[str]] = None,
     include_delta_files: bool = True,
-    include_metadata_files: bool = False,
+    delta_treatment: str = "latest",
     catalog_path: Optional[Union[str, Path]] = None,
     include_source_file: bool = False,
     categorical_source_file_column: bool = True,
+    dropna: bool = True,
 ) -> Union[pd.DataFrame, pl.DataFrame, pl.LazyFrame]:
     """
     Loads previously downloaded JPMaQS files into a single DataFrame.
@@ -2645,11 +2797,30 @@ def lazy_load_from_parquets(
     Scans the files of the latest snapshot found under `files_dir`, applies the ticker,
     date and metric filters while scanning, and only then materialises the result. The
     files on disk are never modified. Delta files are folded into the snapshot unless
-    `include_delta_files=False`; metadata files are left out unless
-    `include_metadata_files=True`.
+    `include_delta_files=False`. Metadata files are never read as data: the catalog is
+    passed separately as `catalog_path`, and the notification JSONs are served by
+    :func:`DataQueryFileAPIClient.get_missing_data_notifications` and
+    :func:`DataQueryFileAPIClient.get_revisions_notifications`.
+
+    At least one of `tickers`, `cids` or `xcats` is required. To load every ticker,
+    ask for them explicitly with
+    :func:`DataQueryFileAPIClient.list_all_tickers`, rather than leaving the
+    selection empty.
 
     `catalog_path` is required, as the catalog resolves which dataset holds which ticker.
     Obtain one from :func:`DataQueryFileAPIClient.download_catalog_file`.
+
+    `delta_treatment` resolves rows a delta file restated, per (ticker, real_date):
+    "latest" (default) keeps the newest `last_updated`; "earliest" the first print, which
+    skips expiry rows, a withdrawal not being a print; "all" keeps every version.
+
+    `dropna=True` (default) means no null reaches the output: a row survives only where
+    every requested metric is populated. That covers expiry rows - an observation is
+    withdrawn by publishing one whose metrics are all null - and any other row null in a
+    requested metric. It is applied after delta resolution, so an expiry still supersedes
+    the row it withdraws. "all" requires `dropna=False`, as dropping the nulls while keeping
+    the rows they expire would resurrect stale values, and cannot be combined with
+    `dataframe_format="wide"`, which has only one cell per (ticker, real_date).
 
     `dataframe_format` chooses the shape:
 
@@ -2684,23 +2855,28 @@ def lazy_load_from_parquets(
             raise ValueError(f"`{flag_name}` must be a boolean.")
 
     _check_lazy_load_inputs(
-        files_dir,
-        file_format,
-        tickers,
-        cids,
-        xcats,
-        metrics,
-        start_date,
-        end_date,
-        dataframe_format,
-        dataframe_type,
-        categorical_dataframe,
+        files_dir=files_dir,
+        file_format=file_format,
+        tickers=tickers,
+        cids=cids,
+        xcats=xcats,
+        metrics=metrics,
+        start_date=start_date,
+        end_date=end_date,
+        dataframe_format=dataframe_format,
+        dataframe_type=dataframe_type,
+        categorical_dataframe=categorical_dataframe,
+        delta_treatment=delta_treatment,
+        dropna=dropna,
     )
+    start_date, end_date = _ordered_date_range(start_date, end_date)
 
     available_files_df: pd.DataFrame = _downloaded_files_df(
         files_dir=files_dir,
         file_format=file_format,
-        include_metadata_files=include_metadata_files,
+        # metadata files are not quantamental data; the notification JSONs are served
+        # by `get_missing_data_notifications` and `get_revisions_notifications`
+        include_metadata_files=False,
     )
     available_files_df: pd.DataFrame = _filter_to_latest_files(
         files_df=available_files_df,
@@ -2759,6 +2935,9 @@ def lazy_load_from_parquets(
         catalog_path=catalog_path,
         include_source_file=include_source_file,
         categorical_source_file_column=categorical_source_file_column,
+        delta_treatment=delta_treatment,
+        dropna=dropna,
+        metrics=metrics,
     )
     if include_source_file:
         metrics = metrics + ["source_file"]
@@ -2800,9 +2979,11 @@ def lazy_load_from_parquets(
         if dataframe_format == "wide":
             # reindex so the column set matches the polars path: one column per
             # requested ticker, even where the data holds no rows for it
-            return df.pivot(
+            wide = df.pivot(
                 index="real_date", columns="ticker", values=metrics[0]
             ).reindex(columns=valid_tickers)
+            # gated, so `dropna=False` keeps the all-null dates the polars path keeps
+            return wide.dropna(how="all") if dropna else wide
         if categorical_dataframe and dataframe_format != "wide":
             cols = [c for c in cat_cols if c in df.columns]
             if cols:
@@ -2839,6 +3020,11 @@ EXPECTED_JPMAQS_PARQUET_SCHEMA = {
     "grading": pl.Float64,
     "last_updated": pl.Datetime,
 }
+
+DELTA_TREATMENTS = ("latest", "earliest", "all")
+
+# an expiry row nulls every one of these; `last_updated` records when it was withdrawn
+JPMAQS_VALUE_METRICS = [c for c in JPMAQS_METRICS if c != "last_updated"]
 
 
 def _to_output_schema(
@@ -2980,8 +3166,11 @@ def _lazy_load_filtered_parquets(
     end_date: Optional[Union[str, pd.Timestamp]],
     catalog_path: Union[str, Path],
     return_qdf: bool = True,
+    delta_treatment: str = "latest",
     include_source_file: bool = False,
     categorical_source_file_column: bool = True,
+    dropna: bool = True,
+    metrics: Optional[List[str]] = None,
 ) -> pl.LazyFrame:
     if not paths:
         raise ValueError("No paths provided")
@@ -3004,7 +3193,11 @@ def _lazy_load_filtered_parquets(
     for _, row in ticker_lazyframes_df.iterrows():
         lf = row["lazyframe"]
         # dedup restated rows for both output shapes; `return_qdf` selects the key columns
-        lf = _apply_delta_treatment(lf, "latest", return_qdf=return_qdf)
+        lf = _apply_delta_treatment(
+            lf=lf,
+            delta_treatment=delta_treatment,
+            return_qdf=return_qdf,
+        )
         ticker_lazyframes_df.loc[_, "lazyframe"] = lf
     out_lf: pl.LazyFrame = pl.concat(
         [
@@ -3015,7 +3208,23 @@ def _lazy_load_filtered_parquets(
         how="vertical",
     )
     sort_cols = (["cid", "xcat"] if return_qdf else ["ticker"]) + ["real_date"]
-    out_lf = out_lf.sort(sort_cols)
+    # `last_updated` breaks ties, so `delta_treatment="all"` returns each row's versions
+    # oldest first instead of in whatever order the files happened to concatenate. The
+    # other treatments leave one row per key, where it never gets consulted
+    out_lf = out_lf.sort(sort_cols + ["last_updated"])
+    if dropna:
+        # `dropna` governs only what reaches the output: keep the rows whose requested
+        # metrics are all populated. Expiring a row is `delta_treatment`'s job and has
+        # already happened above, so an expiry has superseded the row it withdraws
+        # before being dropped here for being null. Named from the metrics rather than
+        # by subtracting the key columns: in qdf shape "ticker" has given way to
+        # cid/xcat, so subtraction would leave it behind
+        cols = [
+            c for c in (metrics or JPMAQS_VALUE_METRICS) if c in JPMAQS_VALUE_METRICS
+        ]
+        if cols:
+            out_lf = out_lf.filter(pl.all_horizontal(pl.col(cols).is_not_null()))
+
     return out_lf
 
 
@@ -3033,6 +3242,14 @@ def _collect_naming_paths(
         raise ValueError(f"Failed to load data from {shown}: {e}") from e
 
 
+def _delta_treatment_error() -> str:
+    """One message for both entry points, so the same input reads the same way."""
+    return (
+        "`delta_treatment` must be one of "
+        f"{', '.join(repr(t) for t in DELTA_TREATMENTS)}."
+    )
+
+
 def _apply_delta_treatment(
     lf: pl.LazyFrame,
     delta_treatment: str = "latest",
@@ -3042,10 +3259,8 @@ def _apply_delta_treatment(
     Resolve rows restated by delta files: keep the "latest" or "earliest" row per
     (key, real_date) by `last_updated`, or "all" of them.
     """
-    if delta_treatment not in ["latest", "all", "earliest"]:
-        raise ValueError(
-            "delta_treatment must be one of 'latest', 'all', or 'earliest'"
-        )
+    if delta_treatment not in DELTA_TREATMENTS:
+        raise ValueError(_delta_treatment_error())
     key_cols = ["cid", "xcat"] if return_qdf else ["ticker"]
     full_key = key_cols + ["real_date"]
 
@@ -3055,6 +3270,18 @@ def _apply_delta_treatment(
                 full_key + ["last_updated"], descending=[False] * len(full_key) + [True]
             ).unique(subset=full_key, keep="first")
         elif delta_treatment == "earliest":
+            # "earliest" answers what the first print said, and an expiry is never that:
+            # it records a withdrawal, not a print. Dropping expiries before the dedup
+            # keeps the first real print however the expiry happens to sort. Only the
+            # metrics present are tested, as callers may pass a narrower frame
+            names = (
+                lf.collect_schema().names()
+                if PYTHON_3_8_OR_LATER
+                else list(lf.schema.keys())
+            )
+            metric_cols = [c for c in JPMAQS_VALUE_METRICS if c in names]
+            if metric_cols:
+                lf = lf.filter(pl.any_horizontal(pl.col(metric_cols).is_not_null()))
             lf = lf.sort(
                 full_key + ["last_updated"],
                 descending=[False] * len(full_key) + [False],
@@ -3193,7 +3420,7 @@ if __name__ == "__main__":
 
     with DataQueryFileAPIClient() as dq:
         dq.download_files(since_datetime=now_datetime - datetime.timedelta(days=3))
-        catalog_df = pd.read_parquet(dq.download_catalog_file())
+        catalog_df = dq.load_catalog()
         random_tickers = catalog_df["Ticker"].sample(n=20, random_state=42).tolist()
 
         df = dq.download(tickers=random_tickers, keep_n_days_old_files=3)
