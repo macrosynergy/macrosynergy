@@ -343,7 +343,7 @@ class TestCheckLazyLoadInputs(TempDirCase):
         args = dict(
             files_dir=self.tmpdir,
             file_format="parquet",
-            tickers=[],
+            tickers=["USD_INFL"],
             cids=[],
             xcats=[],
             metrics=["value"],
@@ -375,6 +375,8 @@ class TestCheckLazyLoadInputs(TempDirCase):
             "wide with the default metric set": dict(
                 dataframe_format="wide", metrics=list(JPMAQS_METRICS)
             ),
+            # an unfiltered load would read every ticker on disk
+            "no ticker selection at all": dict(tickers=[], cids=[], xcats=[]),
         }
         for label, overrides in cases.items():
             with self.subTest(case=label):
@@ -1036,6 +1038,175 @@ class TestLazyLoadDeltas(LazyLoadFixture):
                 else:
                     value = df.filter(pl.col("real_date") == D2)["USD_INFL"][0]
                 self.assertEqual(value, 9.9)
+
+
+class TestLazyLoadDateRange(LazyLoadFixture):
+    @patch("macrosynergy.download.dataquery_file_api.logger")
+    def test_a_reversed_range_warns_and_swaps(self, mock_logger):
+        # the same treatment `_filter_available_files_by_datetime` gives file datetimes;
+        # without it a reversed range quietly returned nothing
+        df = self.load(
+            tickers=["USD_INFL"], start_date="2023-12-31", end_date="2023-01-01"
+        )
+        self.assertEqual(len(df), 1)
+        self.assertIn("Swapping values", str(mock_logger.warning.call_args))
+
+    def test_equal_bounds_keep_that_one_date(self):
+        stamp = D2.isoformat()
+        df = self.load(tickers=["USD_INFL"], start_date=stamp, end_date=stamp)
+        self.assertEqual(df["real_date"].tolist(), [pd.Timestamp(D2)])
+
+
+class TestLazyLoadExpiredRows(LazyLoadFixture):
+    """
+    JPMaQS expires a (ticker, real_date) observation by publishing a row whose metrics
+    are all null. Under `delta_treatment="latest"` that row is the one that survives, so
+    `dropna` decides whether the pair disappears or shows up as the expiry record.
+    """
+
+    LU_EXPIRY = datetime.datetime(2024, 1, 3, 23, 59, 59)
+
+    def expire(self, tickers):
+        """Publish an all-null row for each of `tickers` on D2, after the snapshot."""
+        n = len(tickers)
+        return write_rows(
+            self.tmpdir / f"{MACRO_DS}_DELTA_20240103T235959.parquet",
+            tickers,
+            [D2] * n,
+            [None] * n,
+            [self.LU_EXPIRY] * n,
+            grading=[None] * n,
+            eop_lag=[None] * n,
+            mop_lag=[None] * n,
+        )
+
+    def test_expired_pair_is_dropped_from_the_default_qdf_load(self):
+        self.expire(["EUR_INFL"])
+        df = self.load(tickers=["USD_INFL", "EUR_INFL"])
+        self.assertEqual(list(df["cid"].astype(str)), ["USD"])
+        self.assertEqual(df["value"].tolist(), [9.9])
+
+    def test_dropna_false_keeps_the_expiry_row_and_its_timestamp(self):
+        self.expire(["EUR_INFL"])
+        df = self.load(tickers=["EUR_INFL"], dropna=False)
+        self.assertTrue(df["value"].isna().all())
+        self.assertEqual(df["last_updated"].tolist(), [pd.Timestamp(self.LU_EXPIRY)])
+
+    def partially_null(self):
+        """A row whose grading survives: a restatement to a null value, not an expiry."""
+        return write_rows(
+            self.tmpdir / f"{MACRO_DS}_DELTA_20240103T235959.parquet",
+            ["EUR_INFL"],
+            [D2],
+            [None],
+            [self.LU_EXPIRY],
+            eop_lag=[None],
+            mop_lag=[None],
+        )
+
+    def test_a_partially_null_row_is_not_an_expiry_but_dropna_still_drops_it(self):
+        # the two jobs are separate: `delta_treatment` decides what expires, `dropna`
+        # only decides whether a null reaches the output
+        self.partially_null()
+        kept = self.load(tickers=["EUR_INFL"], dropna=False)
+        self.assertEqual(kept["grading"].tolist(), [1.0])  # survived dedup, not expired
+        self.assertTrue(kept["value"].isna().all())
+
+        self.assertEqual(len(self.load(tickers=["EUR_INFL"], dropna=True)), 0)
+
+    def test_dropna_is_scoped_to_the_requested_metrics(self):
+        self.partially_null()
+        # "grading" is populated on that row, so nothing null reaches this output
+        df = self.load(tickers=["EUR_INFL"], metrics=["grading"])
+        self.assertEqual(df["grading"].tolist(), [1.0])
+        # "value" is not, so the row cannot survive a request that includes it
+        self.assertEqual(len(self.load(tickers=["EUR_INFL"], metrics=["value"])), 0)
+
+    def test_earliest_returns_the_first_published_value(self):
+        self.expire(["EUR_INFL"])
+        df = self.load(tickers=["EUR_INFL"], delta_treatment="earliest")
+        self.assertEqual(df["value"].tolist(), [2.1])
+
+    def test_earliest_skips_an_expiry_that_sorts_first(self):
+        # "earliest" is the first *print*, and a withdrawal is not a print, so the value
+        # published after it wins however the expiry sorts. `dropna` cannot apply here
+        write_rows(
+            self.tmpdir / f"{MACRO_DS}_20240102.parquet",
+            ["EUR_INFL"],
+            [D2],
+            [None],
+            [LU_SNAPSHOT],
+            grading=[None],
+            eop_lag=[None],
+            mop_lag=[None],
+        )
+        write_rows(
+            self.tmpdir / f"{MACRO_DS}_DELTA_20240102T235959.parquet",
+            ["EUR_INFL"],
+            [D2],
+            [7.7],
+            [LU_DELTA],
+        )
+        for dropna in (True, False):
+            with self.subTest(dropna=dropna):
+                df = self.load(
+                    tickers=["EUR_INFL"],
+                    dataframe_format="tickers",
+                    delta_treatment="earliest",
+                    dropna=dropna,
+                )
+                self.assertEqual(df["value"].tolist(), [7.7])
+
+    def test_all_keeps_every_version_including_the_expiry(self):
+        # returned oldest first, so the restatement history reads in publication order
+        self.expire(["EUR_INFL"])
+        df = self.load(tickers=["EUR_INFL"], delta_treatment="all", dropna=False)
+        self.assertEqual(
+            df["last_updated"].tolist(),
+            [pd.Timestamp(LU_SNAPSHOT), pd.Timestamp(self.LU_EXPIRY)],
+        )
+        self.assertEqual(df["value"].tolist()[0], 2.1)
+        self.assertTrue(pd.isna(df["value"].tolist()[1]))
+
+    def test_all_with_dropna_raises_rather_than_resurrecting_the_stale_row(self):
+        with self.assertRaises(ValueError) as ctx:
+            self.load(tickers=["EUR_INFL"], delta_treatment="all")
+        self.assertIn("stale value", str(ctx.exception))
+
+    def test_wide_rejects_all_even_when_no_delta_makes_it_fail_yet(self):
+        # without a delta the pivot would succeed, so the guard has to be unconditional:
+        # the call would start failing the day a restatement arrives
+        for include_delta_files in (True, False):
+            with self.subTest(include_delta_files=include_delta_files):
+                with self.assertRaises(ValueError) as ctx:
+                    self.load(
+                        tickers=["USD_INFL"],
+                        dataframe_format="wide",
+                        metrics=["value"],
+                        delta_treatment="all",
+                        dropna=False,
+                        include_delta_files=include_delta_files,
+                    )
+                self.assertIn("one cell per", str(ctx.exception))
+
+    def test_unknown_delta_treatment_is_rejected(self):
+        with self.assertRaises(ValueError) as ctx:
+            self.load(tickers=["USD_INFL"], delta_treatment="LATEST")
+        self.assertIn("delta_treatment", str(ctx.exception))
+
+    def test_wide_backends_agree_on_a_fully_expired_date(self):
+        self.expire(["USD_INFL", "EUR_INFL"])
+        for dropna, expected_rows in ((True, 0), (False, 1)):
+            for dataframe_type in ("pandas", "polars"):
+                with self.subTest(dropna=dropna, dataframe_type=dataframe_type):
+                    df = self.load(
+                        tickers=["USD_INFL", "EUR_INFL"],
+                        dataframe_format="wide",
+                        metrics=["value"],
+                        dataframe_type=dataframe_type,
+                        dropna=dropna,
+                    )
+                    self.assertEqual(len(df), expected_rows)
 
 
 class TestLazyLoadSourceFile(LazyLoadFixture):

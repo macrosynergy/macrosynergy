@@ -685,6 +685,31 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
         self.assertEqual(datasets, [expected_dataset])
         self.assertIn("Some unknown theme", str(mock_logger.warning.call_args))
 
+    @patch("macrosynergy.download.dataquery_file_api.lazy_load_from_parquets")
+    @patch.object(DataQueryFileAPIClient, "download_catalog_file")
+    @patch.object(DataQueryFileAPIClient, "download_latest_snapshot")
+    @patch.object(DataQueryFileAPIClient, "get_datasets_for_indicators")
+    @patch("macrosynergy.download.dataquery_file_api.DataQueryFileAPIOauth")
+    def test_download_datasets_narrows_the_derived_set(
+        self, mock_oauth, mock_get_datasets, mock_snapshot, mock_catalog, mock_load
+    ):
+        client = DataQueryFileAPIClient(
+            client_id="id", client_secret="secret", out_dir=self.test_dir
+        )
+        mock_get_datasets.return_value = ["JPMAQS_A", "JPMAQS_B"]
+        mock_catalog.return_value = "catalog.parquet"
+
+        client.download(cids=["USD"], xcats=["INFL"], datasets=["JPMAQS_B"])
+        # both the download and the load are narrowed to the requested dataset
+        self.assertEqual(mock_snapshot.call_args.kwargs["file_group_ids"], ["JPMAQS_B"])
+        self.assertEqual(mock_load.call_args.kwargs["datasets"], ["JPMAQS_B"])
+
+        # a dataset holding none of the requested indicators is an error, not an
+        # empty download
+        with self.assertRaises(ValueError) as ctx:
+            client.download(cids=["USD"], xcats=["INFL"], datasets=["JPMAQS_Z"])
+        self.assertIn("holds none of the requested", str(ctx.exception))
+
     @patch("macrosynergy.download.dataquery_file_api.logger")
     @patch("macrosynergy.download.dataquery_file_api.pd.read_parquet")
     @patch.object(DataQueryFileAPIClient, "download_catalog_file")
