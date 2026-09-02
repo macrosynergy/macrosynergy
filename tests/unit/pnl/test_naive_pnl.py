@@ -3,12 +3,14 @@ from macrosynergy.pnl.naive_pnl import NaivePnL, create_results_dataframe
 from macrosynergy.management.utils import reduce_df, update_df, get_sops
 import re
 import unittest
+import warnings
 from unittest.mock import patch
 import numpy as np
 import pandas as pd
 from typing import List, Dict
 import matplotlib
 from matplotlib import pyplot as plt
+from packaging import version
 from macrosynergy.management.types import QuantamentalDataFrame
 from macrosynergy.pnl.pnl_table import HTMLTable
 
@@ -472,6 +474,78 @@ class TestAll(unittest.TestCase):
             NaivePnL.rebalancing(
                 sorted_dfw.assign(real_date="not-a-date"), rebal_freq="monthly"
             )
+
+    def test_rebalancing_no_input_mutation(self):
+        # The method takes no defensive copy of dfw, so it must leave the caller's
+        # frame - and the panel a slice was taken from - exactly as handed in.
+        cids = ["AUD", "CAD", "GBP"]
+        dates = pd.bdate_range("2019-01-01", "2021-03-31")
+        base = pd.DataFrame(
+            {
+                "cid": np.repeat(cids, len(dates)),
+                "real_date": np.tile(dates, len(cids)),
+                "psig": np.arange(len(cids) * len(dates), dtype=float),
+            }
+        )
+        # NaN holes so the period-bounded forward fill is actually exercised.
+        base.loc[base.index % 37 == 0, "psig"] = np.nan
+        base_before = base.copy(deep=True)
+
+        variants = {
+            "sorted": base,
+            "shuffled": base.sample(frac=1, random_state=0),
+            "categorical": base.assign(cid=base["cid"].astype("category")),
+            "str_dates": base.assign(
+                real_date=base["real_date"].dt.strftime("%Y-%m-%d")
+            ),
+            # A slice of a larger panel: the usual source of SettingWithCopyWarning.
+            "slice": base[base["cid"] != "GBP"],
+        }
+
+        for name, dfw in variants.items():
+            before = dfw.copy(deep=True)
+            for rebal_freq in ["daily", "weekly", "monthly", "quarterly", "annual"]:
+                with self.subTest(variant=name, freq=rebal_freq):
+                    # rebal_slip is applied to the output, never to dfw.
+                    NaivePnL.rebalancing(dfw, rebal_freq=rebal_freq, rebal_slip=1)
+                    # Checks dtypes and the index as well as the values.
+                    pd.testing.assert_frame_equal(before, dfw, check_exact=True)
+        # The panel the "slice" variant was taken from is untouched as well.
+        pd.testing.assert_frame_equal(base_before, base, check_exact=True)
+
+    def test_rebalancing_no_freq_alias_warnings(self):
+        # The period aliases D/W/M/Q/Y are warning-free on every supported pandas,
+        # unlike 'A', deprecated in 2.2 and removed in 3.0. Only that warning family
+        # is inspected: unrelated pandas noise must not fail this test.
+        def freq_alias(records):
+            return [
+                str(w.message)
+                for w in records
+                if issubclass(w.category, (FutureWarning, DeprecationWarning))
+                and "deprecat" in str(w.message).lower()
+                and re.search(r"'\w{1,3}'|freq|alias|period", str(w.message), re.I)
+            ]
+
+        dates = pd.bdate_range("2019-01-01", "2021-03-31")
+        dfw = pd.DataFrame({"cid": "AUD", "real_date": dates, "psig": 1.0})
+
+        # Negative control: on the versions that still have it, the deprecated alias
+        # does warn, proving the filter above catches this warning family.
+        if version.parse("2.2") <= version.parse(pd.__version__) < version.parse("3"):
+            with warnings.catch_warnings(record=True) as caught:
+                warnings.simplefilter("always")
+                dfw["real_date"].dt.to_period("A")
+            self.assertTrue(freq_alias(caught))
+
+        for rebal_freq in ["daily", "weekly", "monthly", "quarterly", "annual"]:
+            for rebal_slip in (0, 1):
+                with self.subTest(freq=rebal_freq, slip=rebal_slip):
+                    with warnings.catch_warnings(record=True) as caught:
+                        warnings.simplefilter("always")
+                        NaivePnL.rebalancing(
+                            dfw, rebal_freq=rebal_freq, rebal_slip=rebal_slip
+                        )
+                    self.assertEqual(freq_alias(caught), [])
 
     def test_rebalancing_slip_no_cross_cid_leak(self):
         # With rebal_slip >= 1 the slip must be applied within each cross-section: the
