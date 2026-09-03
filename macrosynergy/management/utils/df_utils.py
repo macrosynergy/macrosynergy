@@ -685,6 +685,49 @@ def update_categories(df: pd.DataFrame, df_add):
     return df
 
 
+def _check_value_is_date_like(_v):
+    try:
+        pd.to_datetime(_v)
+        return True
+    except Exception:
+        raise TypeError(
+            "Values of `blacklist` must be lists of start & end dates (str, pd.Timestamp, or datetime)."
+        )
+
+
+def _blacklist_mask(df: pd.DataFrame, blacklist: dict) -> np.ndarray:
+    """
+    Rows to drop for `blacklist`. Validation mirrors `QuantamentalDataFrame.apply_blacklist`
+    so both entry points reject malformed input the same way.
+    """
+    if not isinstance(blacklist, dict):
+        raise TypeError("`blacklist` must be a dictionary.")
+
+    if not all([isinstance(k, str) for k in blacklist.keys()]):
+        raise TypeError("Keys of `blacklist` must be strings.")
+
+    if not all([isinstance(v, Iterable) for v in blacklist.values()]):
+        raise TypeError("Values of `blacklist` must be iterables.")
+
+    if not all(
+        [_check_value_is_date_like(vv) for v in blacklist.values() for vv in v]
+    ) or any([len(v) != 2 for v in blacklist.values()]):
+        raise TypeError(
+            "Values of `blacklist` must be lists of start & end dates (str, pd.Timestamp, or datetime)."
+        )
+
+    # zeros then inverted by the caller: drop a row matching any entry
+    mask = np.zeros(len(df), dtype=bool)
+    for key, value in blacklist.items():
+        mask |= (
+            (df["cid"] == key[:3])
+            & (df["real_date"] >= pd.to_datetime(value[0]))
+            & (df["real_date"] <= pd.to_datetime(value[1]))
+        )
+
+    return mask
+
+
 def reduce_df(
     df: pd.DataFrame,
     xcats: Union[str, List[str]] = None,
@@ -731,7 +774,10 @@ def reduce_df(
     if not isinstance(df, QuantamentalDataFrame):
         raise TypeError("Argument `df` must be a standardised Quantamental DataFrame.")
 
-    if type(df) is QuantamentalDataFrame:
+    is_cat_df = is_categorical_qdf(df)
+    if is_cat_df:
+        df = QuantamentalDataFrame(df)
+    if type(df) is QuantamentalDataFrame and is_cat_df:
         return df.reduce_df(
             cids=cids,
             xcats=xcats,
@@ -742,31 +788,32 @@ def reduce_df(
             intersect=intersect,
         )
 
+    mask = np.ones(len(df), dtype=bool)
+
     if xcats is not None:
         if isinstance(xcats, str):
             xcats = [xcats]
-        df = df[df["xcat"].isin(xcats)]
+        mask &= df["xcat"].isin(xcats)
 
     if cids is not None:
-        cids = [cids] if isinstance(cids, str) else cids
-        df = df[df["cid"].isin(cids)]
+        # materialise generators; `cids` is reused below
+        cids = [cids] if isinstance(cids, str) else list(cids)
+        mask &= df["cid"].isin(cids)
 
     if start:
-        df = df[df["real_date"] >= pd.to_datetime(start)]
+        mask &= df["real_date"] >= pd.to_datetime(start)
 
     if end:
-        df = df[df["real_date"] <= pd.to_datetime(end)]
+        mask &= df["real_date"] <= pd.to_datetime(end)
+
+    # one copy, or none if nothing was filtered
+    if not mask.all():
+        df = df[mask]
 
     if blacklist is not None:
-        for key, value in blacklist.items():
-            df = df[
-                ~(
-                    (df["cid"] == key[:3])
-                    & (df["real_date"] >= pd.to_datetime(value[0]))
-                    & (df["real_date"] <= pd.to_datetime(value[1]))
-                )
-            ]
+        df = df[~_blacklist_mask(df, blacklist)]
 
+    # recomputed: filtering may have dropped cids/xcats
     if xcats is None:
         xcats = sorted(df["xcat"].unique())
     else:
@@ -774,9 +821,12 @@ def reduce_df(
         xcats = [xcat for xcat in xcats if xcat in xcats_in_df]
 
     if intersect:
-        cids_in_df = set.intersection(
-            *(set(df[df["xcat"] == xcat]["cid"].unique()) for xcat in xcats)
-        )
+        if len(xcats) > 0:
+            cids_in_df = set.intersection(
+                *(set(df[df["xcat"] == xcat]["cid"].unique()) for xcat in xcats)
+            )
+        else:
+            cids_in_df = set()
     else:
         cids_in_df = df["cid"].unique()
 
@@ -785,12 +835,18 @@ def reduce_df(
     else:
         cids = [cid for cid in cids if cid in cids_in_df]
 
-    df = df[df["cid"].isin(cids)]
+    # only intersect narrows cids further
+    if intersect:
+        df = df[df["cid"].isin(cids)]
+
+    df = df.drop_duplicates()
+    # constant time; reset_index would copy
+    df.index = pd.RangeIndex(len(df))
 
     if out_all:
-        return df.drop_duplicates(), xcats, sorted(cids)
+        return df, xcats, sorted(cids)
     else:
-        return df.drop_duplicates()
+        return df
 
 
 def reduce_df_by_ticker(
@@ -823,8 +879,10 @@ def reduce_df_by_ticker(
     pd.Dataframe
         reduced dataframe that also removes duplicates
     """
-
-    if type(df) is QuantamentalDataFrame:
+    is_cat_df = is_categorical_qdf(df)
+    if is_cat_df:
+        df = QuantamentalDataFrame(df)
+    if type(df) is QuantamentalDataFrame and is_cat_df:
         return df.reduce_df_by_ticker(
             tickers=ticks,
             start=start,
@@ -832,38 +890,36 @@ def reduce_df_by_ticker(
             blacklist=blacklist,
         )
 
-    dfx = df.copy()
+    # one combined mask for the date filters
+    mask = np.ones(len(df), dtype=bool)
 
     if start is not None:
-        dfx = dfx[dfx["real_date"] >= pd.to_datetime(start)]
+        mask &= df["real_date"] >= pd.to_datetime(start)
 
     if end is not None:
-        dfx = dfx[dfx["real_date"] <= pd.to_datetime(end)]
+        mask &= df["real_date"] <= pd.to_datetime(end)
 
-    # Blacklisting by cross-section.
+    if not mask.all():
+        df = df[mask]
+
     if blacklist is not None:
-        masks = []
-        for key, value in blacklist.items():
-            filt1 = dfx["cid"] == key[:3]
-            filt2 = dfx["real_date"] >= pd.to_datetime(value[0])
-            filt3 = dfx["real_date"] <= pd.to_datetime(value[1])
-            combined_mask = filt1 & filt2 & filt3
-            masks.append(combined_mask)
+        df = df[~_blacklist_mask(df, blacklist)]
 
-        if masks:
-            combined_mask = pd.concat(masks, axis=1).any(axis=1)
-            dfx = dfx[~combined_mask]
+    if ticks is not None:
+        if (df["cid"].dtype.name != "object") or (df["xcat"].dtype.name != "object"):
+            ticker_series = df["cid"].astype(str) + "_" + df["xcat"].astype(str)
+        else:
+            ticker_series = df["cid"] + "_" + df["xcat"]
+        # carried through the filter; absent ticks match nothing anyway
+        keep = ticker_series.isin(ticks)
+        df = df[keep]
+        ticker_series = ticker_series[keep]
 
-    dfx["ticker"] = dfx["cid"] + "_" + dfx["xcat"]
-    ticks_in_df = dfx["ticker"].unique()
-    if ticks is None:
-        ticks = sorted(ticks_in_df)
-    else:
-        ticks = [tick for tick in ticks if tick in ticks_in_df]
+    df = df.drop_duplicates()
+    # constant time; reset_index would copy
+    df.index = pd.RangeIndex(len(df))
 
-    dfx = dfx[dfx["ticker"].isin(ticks)]
-
-    return dfx.drop_duplicates()
+    return df
 
 
 def categories_df_aggregation_helper(dfx: pd.DataFrame, xcat_agg: str):
@@ -1769,7 +1825,9 @@ def _wide_to_long(df: pd.DataFrame, value_name: str = "value") -> pd.DataFrame:
         sorted by cid then real_date, with NaN rows dropped.
     """
     if df.columns.empty:
-        raise ValueError("_wide_to_long: DataFrame has no columns (expected one per cid).")
+        raise ValueError(
+            "_wide_to_long: DataFrame has no columns (expected one per cid)."
+        )
 
     long = (
         df.rename_axis("real_date")

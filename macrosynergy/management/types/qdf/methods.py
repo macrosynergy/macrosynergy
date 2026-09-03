@@ -262,23 +262,37 @@ def apply_blacklist(
     if not all([isinstance(v, Iterable) for v in blacklist.values()]):
         raise TypeError("Values of `blacklist` must be iterables.")
 
+    def _check_is_date_like(_v):
+        try:
+            pd.to_datetime(_v)
+            return True
+        except Exception:
+            raise TypeError(
+                "Values of `blacklist` must be lists of start & end dates (str, pd.Timestamp, or datetime)."
+            )
+
     if not all(
-        [isinstance(vv, (str, pd.Timestamp)) for v in blacklist.values() for vv in v]
+        [_check_is_date_like(vv) for v in blacklist.values() for vv in v]
     ) or any([len(v) != 2 for v in blacklist.values()]):
         raise TypeError(
-            "Values of `blacklist` must be lists of start & end dates (str or pd.Timestamp)."
+            "Values of `blacklist` must be lists of start & end dates (str, pd.Timestamp, or datetime)."
         )
 
+    # one OR-ed mask over all keys, applied once, instead of a copy per key
+    bl_mask = np.zeros(len(df), dtype=bool)
     for key, value in blacklist.items():
-        df = df[
-            ~(
-                (df["cid"] == key[:3])
-                & (df["real_date"] >= value[0])
-                & (df["real_date"] <= value[1])
-            )
-        ]
+        start, end = pd.to_datetime(value[0]), pd.to_datetime(value[1])
+        bl_mask |= (
+            (df["cid"] == key[:3])
+            & (df["real_date"] >= start)
+            & (df["real_date"] <= end)
+        )
 
-    return df.reset_index(drop=True)
+    # `df[...]` returns a new frame, so relabelling cannot reach the caller's frame
+    df = df[~bl_mask]
+    df.index = pd.RangeIndex(len(df))
+
+    return df
 
 
 def _sync_df_categories(
@@ -300,10 +314,27 @@ def _sync_df_categories(
     if not check_is_categorical(df):
         return df
 
-    df["cid"] = df["cid"].cat.remove_unused_categories().astype("category")
-    df["xcat"] = df["xcat"].cat.remove_unused_categories().astype("category")
+    def _has_unused_categories(_col: str) -> bool:
+        """Whether any category of `_col` is absent from every row."""
+        seen = np.zeros(len(df[_col].dtype.categories) + 1, dtype=bool)
+        seen[df[_col].array.codes] = True  # the spare slot absorbs the -1 NaN sentinel
+        return not seen[:-1].all()
 
-    return df
+    # `remove_unused_categories()` argsorts the codes to filter what is used/unused.
+    # check first if a column has unused cat-codes, and only then call `remove_unused_categories()` on it
+    cols_to_sync = [
+        col
+        for col in QuantamentalDataFrameBase._StrIndexCols
+        if _has_unused_categories(col)
+    ]
+    if not cols_to_sync:
+        return df
+
+    # assigning columns one at a time would reconstruct the dataframe on each assign.
+    # using df.assign(..., inplace=True) would create side-effects
+    return df.assign(
+        **{col: df[col].cat.remove_unused_categories() for col in cols_to_sync}
+    )
 
 
 def reduce_df(
@@ -348,15 +379,27 @@ def reduce_df(
         The filtered DataFrame. If `out_all` is True, also returns the lists of `xcats`
         and `cids`.
     """
+    mask = np.ones(len(df), dtype=bool)
+
     if xcats is not None:
         if isinstance(xcats, str):
             xcats = [xcats]
+        mask &= df["xcat"].isin(xcats)
+
+    if cids is not None:
+        # list() to cast generators/pd.Series/np.ndarray etc.
+        cids = [cids] if isinstance(cids, str) else list(cids)
+        mask &= df["cid"].isin(cids)
 
     if start:
-        df = df[df["real_date"] >= pd.to_datetime(start)]
+        mask &= df["real_date"] >= pd.to_datetime(start)
 
     if end:
-        df = df[df["real_date"] <= pd.to_datetime(end)]
+        mask &= df["real_date"] <= pd.to_datetime(end)
+
+    # one copy instead of four, and none at all when nothing was filtered out
+    if not mask.all():
+        df = df[mask]
 
     if blacklist is not None:
         df = apply_blacklist(df, blacklist)
@@ -367,26 +410,30 @@ def reduce_df(
         xcats_in_df = df["xcat"].unique()
         xcats = [xcat for xcat in xcats if xcat in xcats_in_df]
 
-    df = df[df["xcat"].isin(xcats)]
-
     if intersect:
-        cids_in_df = set.intersection(
-            *(set(df[df["xcat"] == xcat]["cid"].unique()) for xcat in xcats)
-        )
+        if len(xcats) > 0:
+            cids_in_df = set.intersection(
+                *(set(df[df["xcat"] == xcat]["cid"].unique()) for xcat in xcats)
+            )
+        else:
+            cids_in_df = set()
     else:
         cids_in_df = df["cid"].unique()
 
     if cids is None:
         cids = sorted(cids_in_df)
     else:
-        cids = [cids] if isinstance(cids, str) else cids
         cids = [cid for cid in cids if cid in cids_in_df]
 
-    df = df[df["cid"].isin(cids)].reset_index(drop=True)
+    # only `intersect` can narrow `cids` further; otherwise the mask already did
+    if intersect:
+        df = df[df["cid"].isin(cids)]
 
     df = _sync_df_categories(df)
 
-    df = df.drop_duplicates().reset_index(drop=True)
+    df = df.drop_duplicates()
+    # constant time, where reset_index(drop=True) copies the whole frame
+    df.index = pd.RangeIndex(len(df))
 
     if out_all:
         return df, xcats, sorted(cids)
@@ -436,23 +483,30 @@ def reduce_df_by_ticker(
         if tickers is not None:
             raise TypeError("`tickers` must be a list of strings.")
 
+    # one copy instead of two, and none at all when nothing was filtered out
+    mask = np.ones(len(df), dtype=bool)
     if start is not None:
-        df = df.loc[df["real_date"] >= pd.to_datetime(start)]
+        mask &= df["real_date"] >= pd.to_datetime(start)
     if end is not None:
-        df = df.loc[df["real_date"] <= pd.to_datetime(end)]
+        mask &= df["real_date"] <= pd.to_datetime(end)
+
+    if not mask.all():
+        df = df[mask]
 
     if blacklist is not None:
         df = apply_blacklist(df, blacklist)
 
     ticker_series = _get_tickers_series(df)
-    if tickers is None:
-        tickers = sorted(ticker_series.unique())
-
-    df = df[ticker_series.isin(tickers)].reset_index(drop=True)
+    if tickers is not None:
+        df = df[ticker_series.isin(tickers)]
 
     df = _sync_df_categories(df)
 
-    return df.drop_duplicates().reset_index(drop=True)
+    df = df.drop_duplicates()
+    # constant time, where reset_index(drop=True) copies the whole frame
+    df.index = pd.RangeIndex(len(df))
+
+    return df
 
 
 def update_df(

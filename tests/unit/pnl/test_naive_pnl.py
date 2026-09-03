@@ -1,14 +1,16 @@
 from tests.simulate import make_qdf
 from macrosynergy.pnl.naive_pnl import NaivePnL, create_results_dataframe
-from macrosynergy.management.utils import reduce_df
+from macrosynergy.management.utils import reduce_df, update_df, get_sops
 import re
 import unittest
+import warnings
 from unittest.mock import patch
 import numpy as np
 import pandas as pd
 from typing import List, Dict
 import matplotlib
 from matplotlib import pyplot as plt
+from packaging import version
 from macrosynergy.management.types import QuantamentalDataFrame
 from macrosynergy.pnl.pnl_table import HTMLTable
 
@@ -235,7 +237,9 @@ class TestAll(unittest.TestCase):
         # time-series.
         dfw_signal_rebal_aud = dfw_signal_rebal.loc[:, "AUD"]
         aud_array = np.squeeze(dfw_signal_rebal_aud.to_numpy())
-        unique_values_aud = set(aud_array)
+        # A signal is only carried within its own re-balancing period, so the months
+        # after the signal category ends hold no position: count the live signals.
+        unique_values_aud = set(aud_array[~np.isnan(aud_array)])
 
         start_date = dfw_signal_rebal.index[0]
         end_date = dfw_signal_rebal.index[-1]
@@ -243,6 +247,473 @@ class TestAll(unittest.TestCase):
         no_months = self.diff_month(end_date, start_date)
 
         self.assertTrue(no_months - 1 == len(unique_values_aud))
+
+        # 'GROWTH' ends 2020-10-30 while the returns run to year end. Without a signal
+        # on their re-balancing date, the remaining months close the position instead
+        # of holding the last live signal to the end of the sample.
+        self.assertTrue(dfw_signal_rebal_aud.loc["2020-11-01":].isna().all())
+
+    def test_rebalancing_period_calendar_and_carry(self):
+        # (a) A week belongs to exactly one re-balancing period. The Gregorian year
+        # combined with the ISO week number used to split the turn of the year, dropping
+        # the last week of December and re-balancing on January 1st instead. The dates
+        # must match the package's own period edges.
+        dates = pd.bdate_range("2018-01-01", "2021-12-31")
+        dfw = pd.DataFrame(
+            {
+                "cid": "AUD",
+                "real_date": dates,
+                # psig is the row ordinal, so each output value names its rebal date.
+                "psig": np.arange(len(dates), dtype=float),
+            }
+        )
+        sig = np.squeeze(NaivePnL.rebalancing(dfw, rebal_freq="weekly").to_numpy())
+        self.assertEqual(
+            set(dates[np.unique(sig).astype(int)]),
+            set(pd.to_datetime(get_sops(dates=dates, freq="W"))),
+        )
+
+        # (b) A signal is only carried within its own re-balancing period: once the
+        # signal has ended the position closes at the end of that period.
+        dates = pd.bdate_range("2020-01-01", "2020-12-31")
+        dfw = pd.DataFrame({"cid": "AUD", "real_date": dates, "psig": 1.0})
+        dfw.loc[dfw["real_date"] > "2020-06-15", "psig"] = np.nan
+        dfw["sig"] = np.squeeze(
+            NaivePnL.rebalancing(dfw, rebal_freq="monthly").to_numpy()
+        )
+        self.assertEqual(
+            dfw.loc[dfw["sig"].notna(), "real_date"].max(), pd.Timestamp("2020-06-30")
+        )
+
+    def test_rebalancing_weekly_year_boundary(self):
+        # A week must belong to exactly one re-balancing period. Keying on the Gregorian
+        # year together with the ISO week number collided at every turn of the year: the
+        # last week of December inherited the previous week's signal and the re-balance
+        # was displaced onto January 1st.
+        cids = ["AUD", "CAD"]
+        dates = pd.bdate_range("2018-01-01", "2021-12-31")  # spans three year-ends.
+        dfw = pd.DataFrame(
+            {
+                "real_date": np.tile(dates, len(cids)),
+                "cid": np.repeat(cids, len(dates)),
+                # psig is the row's date ordinal, so each output value names the date
+                # its signal was taken from, i.e. the re-balancing date.
+                "psig": np.tile(np.arange(len(dates), dtype=float), len(cids)),
+            }
+        ).sort_values(["cid", "real_date"])
+
+        dfw["sig"] = np.squeeze(
+            NaivePnL.rebalancing(dfw.copy(), rebal_freq="weekly").to_numpy()
+        )
+
+        # The single-calendar grouping: one period per Monday-to-Sunday week.
+        expected = set(dates.to_series().groupby(dates.to_period("W")).min())
+        for cid in cids:
+            observed = set(
+                dates[dfw.loc[dfw["cid"] == cid, "sig"].to_numpy().astype(int)]
+            )
+            self.assertEqual(observed, expected)
+
+            # The two calendars disagree only around the year-end, so pin those dates
+            # explicitly. The final week of December owns its own re-balancing date.
+            for boundary in ["2018-12-31", "2019-12-30", "2020-12-28"]:
+                self.assertIn(pd.Timestamp(boundary), observed)
+            # And no re-balance is displaced onto January 1st, which always falls
+            # mid-week within the period that started in December.
+            for spurious in ["2019-01-01", "2020-01-01", "2021-01-01"]:
+                self.assertNotIn(pd.Timestamp(spurious), observed)
+
+    def test_rebalancing_ffill_one_period_only(self):
+        # A signal is carried within its own re-balancing period and no further, so a
+        # signal category that ends while the returns continue closes the position at
+        # the end of the period it died in, rather than holding it to the end of the
+        # sample.
+        dates = pd.bdate_range("2020-01-01", "2020-12-31")
+        # 2020-06-15 is a Monday, hence both the first day of its week and mid-month:
+        # the weekly carry expires on the Friday, the monthly carry at month end.
+        for rebal_freq, last_live in [
+            ("monthly", "2020-06-30"),
+            ("weekly", "2020-06-19"),
+        ]:
+            dfw = pd.DataFrame({"cid": "AUD", "real_date": dates, "psig": 1.0})
+            dfw.loc[dfw["real_date"] > "2020-06-15", "psig"] = np.nan
+            dfw["sig"] = np.squeeze(
+                NaivePnL.rebalancing(dfw.copy(), rebal_freq=rebal_freq).to_numpy()
+            )
+
+            live = dfw.loc[dfw["real_date"] <= last_live, "sig"]
+            dead = dfw.loc[dfw["real_date"] > last_live, "sig"]
+            # The period the signal died in keeps the value taken on its re-balancing
+            # date; every subsequent period re-balances onto a missing signal.
+            self.assertEqual(set(live.unique()), {1.0})
+            self.assertTrue(dead.isna().all())
+            self.assertTrue(len(dead) > 0)
+
+        # Where the signal is fully populated the period bound never bites: the output
+        # is identical to an unbounded forward fill of the re-balancing signals, at
+        # every frequency and on a ragged panel.
+        period_alias = {
+            "daily": "D",
+            "weekly": "W",
+            "monthly": "M",
+            "quarterly": "Q",
+            "annual": "Y",
+        }
+        dates = pd.bdate_range("2015-01-01", "2020-12-31")
+        rng = np.random.default_rng(1)
+        dfw = (
+            pd.concat(
+                [
+                    pd.DataFrame(
+                        {
+                            "cid": cid,
+                            "real_date": dates[i * 53 :],
+                            "psig": rng.standard_normal(len(dates) - i * 53),
+                        }
+                    )
+                    for i, cid in enumerate(["AUD", "GBP", "USD"])
+                ]
+            )
+            .sort_values(["cid", "real_date"])
+            .reset_index(drop=True)
+        )
+        for rebal_freq, alias in period_alias.items():
+            first_of_period = ~pd.MultiIndex.from_arrays(
+                [dfw["cid"], dfw["real_date"].dt.to_period(alias)]
+            ).duplicated()
+            unbounded = (
+                dfw["psig"]
+                .where(first_of_period)
+                .groupby(dfw["cid"], observed=True)
+                .ffill()
+            )
+            sig = np.squeeze(
+                NaivePnL.rebalancing(dfw.copy(), rebal_freq=rebal_freq).to_numpy()
+            )
+            self.assertTrue(np.array_equal(unbounded.to_numpy(), sig))
+            self.assertFalse(np.isnan(sig).any())
+
+    def test_rebalancing_input_flexibility(self):
+        # The signal is returned labelled by (cid, real_date) in canonical sort order,
+        # so neither the row order nor the dtype of 'cid' can attach a signal to the
+        # wrong cross-section.
+        cids = ["AUD", "CAD", "GBP"]
+        dates = pd.bdate_range("2020-01-01", "2020-06-30")
+        # psig is unique per row, so a misaligned signal cannot coincide with the
+        # correct one: every output value names the row it was taken from.
+        sorted_dfw = pd.DataFrame(
+            {
+                "cid": np.repeat(cids, len(dates)),
+                "real_date": np.tile(dates, len(cids)),
+                "psig": np.arange(len(cids) * len(dates), dtype=float),
+            }
+        )
+
+        def str_keyed(sig):
+            # 'cid' may come back as a Categorical; compare on the labels themselves.
+            return sig.set_axis(
+                pd.MultiIndex.from_arrays(
+                    [
+                        sig.index.get_level_values("cid").astype(str),
+                        sig.index.get_level_values("real_date"),
+                    ],
+                    names=["cid", "real_date"],
+                )
+            )
+
+        expected = str_keyed(
+            NaivePnL.rebalancing(sorted_dfw.copy(), rebal_freq="monthly")["psig"]
+        )
+        # The reference actually re-balances: one signal per cid per month, not the
+        # daily signal handed in.
+        self.assertEqual(expected.nunique(), len(cids) * 6)
+
+        def check(dfw):
+            out = NaivePnL.rebalancing(dfw, rebal_freq="monthly")
+            # Canonical order: the panel sorted by cross-section then date, whatever
+            # order and date dtype it was handed in.
+            canonical = dfw.assign(
+                real_date=pd.to_datetime(dfw["real_date"])
+            ).sort_values(["cid", "real_date"])
+            pd.testing.assert_index_equal(
+                out.index,
+                pd.MultiIndex.from_arrays([canonical["cid"], canonical["real_date"]]),
+            )
+            # Every row carries the signal belonging to its own label.
+            labelled = str_keyed(out["psig"])
+            pd.testing.assert_series_equal(labelled.sort_index(), expected.sort_index())
+            # Independent of the reference above: psig is the row ordinal of the
+            # cid-major frame, so a value's block of ordinals names its cross-section.
+            np.testing.assert_array_equal(
+                (labelled.to_numpy() // len(dates)).astype(int),
+                [cids.index(c) for c in labelled.index.get_level_values("cid")],
+            )
+
+        # Cross-section-major order, as make_pnl hands it over.
+        check(sorted_dfw.copy())
+        # Date-major order: cross-sections interleaved on every row.
+        check(sorted_dfw.sort_values(["real_date", "cid"]))
+        # Fully shuffled order.
+        check(sorted_dfw.sample(frac=1, random_state=0))
+        # 'cid' as a Categorical whose category order is the reverse of the lexical
+        # one, both cid-major and date-major, and as plain strings (above).
+        reversed_cat = sorted_dfw.assign(
+            cid=pd.Categorical(sorted_dfw["cid"], categories=cids[::-1])
+        )
+        check(reversed_cat.sort_values(["cid", "real_date"]))
+        check(reversed_cat.sort_values(["real_date", "cid"]))
+        # 'real_date' handed over as ISO strings is coerced in flow.
+        check(
+            sorted_dfw.assign(
+                real_date=sorted_dfw["real_date"].dt.strftime("%Y-%m-%d")
+            ).sort_values(["real_date", "cid"])
+        )
+
+        # A genuinely unparseable date is left to raise pandas' own error.
+        with self.assertRaises(ValueError):
+            NaivePnL.rebalancing(
+                sorted_dfw.assign(real_date="not-a-date"), rebal_freq="monthly"
+            )
+
+    def test_rebalancing_no_input_mutation(self):
+        # The method takes no defensive copy of dfw, so it must leave the caller's
+        # frame - and the panel a slice was taken from - exactly as handed in.
+        cids = ["AUD", "CAD", "GBP"]
+        dates = pd.bdate_range("2019-01-01", "2021-03-31")
+        base = pd.DataFrame(
+            {
+                "cid": np.repeat(cids, len(dates)),
+                "real_date": np.tile(dates, len(cids)),
+                "psig": np.arange(len(cids) * len(dates), dtype=float),
+            }
+        )
+        # NaN holes so the period-bounded forward fill is actually exercised.
+        base.loc[base.index % 37 == 0, "psig"] = np.nan
+        base_before = base.copy(deep=True)
+
+        variants = {
+            "sorted": base,
+            "shuffled": base.sample(frac=1, random_state=0),
+            "categorical": base.assign(cid=base["cid"].astype("category")),
+            "str_dates": base.assign(
+                real_date=base["real_date"].dt.strftime("%Y-%m-%d")
+            ),
+            # A slice of a larger panel: the usual source of SettingWithCopyWarning.
+            "slice": base[base["cid"] != "GBP"],
+        }
+
+        for name, dfw in variants.items():
+            before = dfw.copy(deep=True)
+            for rebal_freq in ["daily", "weekly", "monthly", "quarterly", "annual"]:
+                with self.subTest(variant=name, freq=rebal_freq):
+                    # rebal_slip is applied to the output, never to dfw.
+                    NaivePnL.rebalancing(dfw, rebal_freq=rebal_freq, rebal_slip=1)
+                    # Checks dtypes and the index as well as the values.
+                    pd.testing.assert_frame_equal(before, dfw, check_exact=True)
+        # The panel the "slice" variant was taken from is untouched as well.
+        pd.testing.assert_frame_equal(base_before, base, check_exact=True)
+
+    def test_rebalancing_no_freq_alias_warnings(self):
+        # The period aliases D/W/M/Q/Y are warning-free on every supported pandas,
+        # unlike 'A', deprecated in 2.2 and removed in 3.0. Only that warning family
+        # is inspected: unrelated pandas noise must not fail this test.
+        def freq_alias(records):
+            return [
+                str(w.message)
+                for w in records
+                if issubclass(w.category, (FutureWarning, DeprecationWarning))
+                and "deprecat" in str(w.message).lower()
+                and re.search(r"'\w{1,3}'|freq|alias|period", str(w.message), re.I)
+            ]
+
+        dates = pd.bdate_range("2019-01-01", "2021-03-31")
+        dfw = pd.DataFrame({"cid": "AUD", "real_date": dates, "psig": 1.0})
+
+        # Negative control: on the versions that still have it, the deprecated alias
+        # does warn, proving the filter above catches this warning family.
+        if version.parse("2.2") <= version.parse(pd.__version__) < version.parse("3"):
+            with warnings.catch_warnings(record=True) as caught:
+                warnings.simplefilter("always")
+                dfw["real_date"].dt.to_period("A")
+            self.assertTrue(freq_alias(caught))
+
+        for rebal_freq in ["daily", "weekly", "monthly", "quarterly", "annual"]:
+            for rebal_slip in (0, 1):
+                with self.subTest(freq=rebal_freq, slip=rebal_slip):
+                    with warnings.catch_warnings(record=True) as caught:
+                        warnings.simplefilter("always")
+                        NaivePnL.rebalancing(
+                            dfw, rebal_freq=rebal_freq, rebal_slip=rebal_slip
+                        )
+                    self.assertEqual(freq_alias(caught), [])
+
+    def test_rebalancing_slip_no_cross_cid_leak(self):
+        # With rebal_slip >= 1 the slip must be applied within each cross-section: the
+        # first observation(s) of a cid must never inherit the preceding cid's signal.
+        cids = ["AUD", "CAD", "GBP"]
+        signals = {"AUD": 1.0, "CAD": 2.0, "GBP": 3.0}
+        dates = pd.bdate_range("2020-01-01", "2020-06-30")
+
+        dfw = pd.DataFrame(
+            {
+                "real_date": np.tile(dates, len(cids)),
+                "cid": np.repeat(cids, len(dates)),
+                "psig": np.repeat([signals[cid] for cid in cids], len(dates)),
+            }
+        ).sort_values(["cid", "real_date"])
+
+        sig_series = NaivePnL.rebalancing(dfw, rebal_freq="monthly", rebal_slip=1)
+        dfw["sig"] = np.squeeze(sig_series.to_numpy())
+
+        # Each cid's signal is constant, so the only non-NA value it can legitimately
+        # hold is its own. Anything else has leaked across the cid boundary.
+        for cid in cids:
+            observed = set(dfw.loc[dfw["cid"] == cid, "sig"].dropna().unique())
+            self.assertEqual(observed, {signals[cid]})
+
+    def test_rebalancing_slip_type_value_checks(self):
+        # rebal_slip must be a non-negative integer: bad types raise TypeError, a
+        # negative integer raises ValueError, and a valid value must go through.
+        cids = ["AUD", "CAD"]
+        dates = pd.bdate_range("2020-01-01", "2020-03-31")
+        dfw = pd.DataFrame(
+            {
+                "real_date": np.tile(dates, len(cids)),
+                "cid": np.repeat(cids, len(dates)),
+                "psig": np.repeat([1.0, 2.0], len(dates)),
+            }
+        ).sort_values(["cid", "real_date"])
+
+        for bad_slip in ["1", 1.5, None]:
+            with self.assertRaises(TypeError):
+                NaivePnL.rebalancing(
+                    dfw.copy(), rebal_freq="monthly", rebal_slip=bad_slip
+                )
+
+        with self.assertRaises(ValueError):
+            NaivePnL.rebalancing(dfw.copy(), rebal_freq="monthly", rebal_slip=-1)
+
+        # A valid slippage must not raise. Note bools are ints in Python, so they pass.
+        NaivePnL.rebalancing(dfw.copy(), rebal_freq="monthly", rebal_slip=0)
+
+    def test_rebalancing_slip_no_cross_cid_leak_edge_cases(self):
+        cids = ["AUD", "CAD", "GBP"]
+        signals = {"AUD": 1.0, "CAD": 2.0, "GBP": 3.0}
+        dates = pd.bdate_range("2020-01-01", "2020-03-31")
+
+        # (a) A categorical cid column - including one carrying an unused category -
+        # must give the same result as the object-dtype column and must not leak.
+        dfw = pd.DataFrame(
+            {
+                "real_date": np.tile(dates, len(cids)),
+                "cid": np.repeat(cids, len(dates)),
+                "psig": np.repeat([signals[cid] for cid in cids], len(dates)),
+            }
+        ).sort_values(["cid", "real_date"])
+        dfw_cat = dfw.assign(
+            cid=pd.Categorical(dfw["cid"], categories=["AUD", "CAD", "CHF", "GBP"])
+        )
+        obj_sig = np.squeeze(
+            NaivePnL.rebalancing(
+                dfw.copy(), rebal_freq="monthly", rebal_slip=2
+            ).to_numpy()
+        )
+        cat_sig = np.squeeze(
+            NaivePnL.rebalancing(
+                dfw_cat.copy(), rebal_freq="monthly", rebal_slip=2
+            ).to_numpy()
+        )
+        self.assertTrue(np.array_equal(obj_sig, cat_sig, equal_nan=True))
+        dfw_cat["sig"] = cat_sig
+        for cid in cids:
+            cid_sig = dfw_cat.loc[dfw_cat["cid"] == cid, "sig"]
+            # A slip of two blanks exactly the first two dates of each cross-section.
+            self.assertEqual(
+                list(cid_sig.isna()), [True, True] + [False] * (len(dates) - 2)
+            )
+            self.assertEqual(set(cid_sig.dropna().unique()), {signals[cid]})
+
+        # (b) A cid whose signal is entirely NaN, sat between two populated cids, must
+        # stay NaN and must not absorb either neighbour's signal.
+        dfw_nan = pd.DataFrame(
+            {
+                "real_date": np.tile(dates, len(cids)),
+                "cid": np.repeat(cids, len(dates)),
+                "psig": np.concatenate(
+                    [
+                        np.full(len(dates), signals["AUD"]),
+                        np.full(len(dates), np.nan),
+                        np.full(len(dates), signals["GBP"]),
+                    ]
+                ),
+            }
+        ).sort_values(["cid", "real_date"])
+        dfw_nan["sig"] = np.squeeze(
+            NaivePnL.rebalancing(
+                dfw_nan.copy(), rebal_freq="monthly", rebal_slip=1
+            ).to_numpy()
+        )
+        self.assertTrue(dfw_nan.loc[dfw_nan["cid"] == "CAD", "sig"].isna().all())
+        for cid in ["AUD", "GBP"]:
+            cid_sig = dfw_nan.loc[dfw_nan["cid"] == cid, "sig"]
+            self.assertEqual(list(cid_sig.isna()), [True] + [False] * (len(dates) - 1))
+            self.assertEqual(set(cid_sig.dropna().unique()), {signals[cid]})
+
+        # (c) A slip longer than one cid's own history must empty that cid alone; the
+        # longer neighbours lose exactly rebal_slip observations each.
+        dfw_short = pd.concat(
+            [
+                pd.DataFrame(
+                    {"real_date": dates, "cid": "AUD", "psig": signals["AUD"]}
+                ),
+                pd.DataFrame(
+                    {"real_date": dates[:3], "cid": "CAD", "psig": signals["CAD"]}
+                ),
+                pd.DataFrame(
+                    {"real_date": dates, "cid": "GBP", "psig": signals["GBP"]}
+                ),
+            ],
+            ignore_index=True,
+        ).sort_values(["cid", "real_date"])
+        dfw_short["sig"] = np.squeeze(
+            NaivePnL.rebalancing(
+                dfw_short.copy(), rebal_freq="daily", rebal_slip=5
+            ).to_numpy()
+        )
+        self.assertTrue(dfw_short.loc[dfw_short["cid"] == "CAD", "sig"].isna().all())
+        for cid in ["AUD", "GBP"]:
+            cid_sig = dfw_short.loc[dfw_short["cid"] == cid, "sig"]
+            self.assertEqual(
+                list(cid_sig.isna()), [True] * 5 + [False] * (len(dates) - 5)
+            )
+            self.assertEqual(set(cid_sig.dropna().unique()), {signals[cid]})
+
+        # (d) The leak was once per cid boundary, so it scales with the panel width:
+        # with many cross-sections every non-first cid must still hold only its own
+        # signal, blanked for exactly the first observation.
+        for n_cids in (5, 10, 50, 100):
+            many_cids = [f"CID{i:03d}" for i in range(n_cids)]
+            many_signals = {cid: float(i + 1) for i, cid in enumerate(many_cids)}
+            dfw_many = pd.DataFrame(
+                {
+                    "real_date": np.tile(dates, n_cids),
+                    "cid": np.repeat(many_cids, len(dates)),
+                    "psig": np.repeat(
+                        [many_signals[cid] for cid in many_cids], len(dates)
+                    ),
+                }
+            ).sort_values(["cid", "real_date"])
+            dfw_many["sig"] = np.squeeze(
+                NaivePnL.rebalancing(
+                    dfw_many.copy(), rebal_freq="monthly", rebal_slip=1
+                ).to_numpy()
+            )
+            for cid in many_cids:
+                cid_sig = dfw_many.loc[dfw_many["cid"] == cid, "sig"]
+                self.assertEqual(
+                    list(cid_sig.isna()), [True] + [False] * (len(dates) - 1)
+                )
+                self.assertEqual(set(cid_sig.dropna().unique()), {many_signals[cid]})
 
     def test_make_pnl(self):
         self.test_make_signal()
@@ -1251,6 +1722,456 @@ class TestAll(unittest.TestCase):
             pnl.agg_signal_bars(pnl_name="PNL_GROWTH")
         except Exception as e:
             self.fail(f"agg_signal_bars raised {e} unexpectedly")
+
+        patch.stopall()
+        plt.close("all")
+        matplotlib.use(mpl_backend)
+
+    def test_plot_pnl_consistency(self):
+        plt.close("all")
+        patch("matplotlib.pyplot.show").start()
+        mpl_backend = matplotlib.get_backend()
+        matplotlib.use("Agg")
+
+        pnl = NaivePnL(
+            self.dfd,
+            ret="EQXR",
+            sigs=["CRY", "GROWTH", "INFL"],
+            cids=self.cids,
+            start="2000-01-01",
+            blacklist=self.blacklist,
+        )
+
+        pnl.make_pnl(
+            sig="GROWTH",
+            sig_op="zn_score_pan",
+            rebal_freq="daily",
+            vol_scale=None,
+            rebal_slip=0,
+            pnl_name="PNL_GROWTH",
+            min_obs=252,
+            iis=True,
+            sequential=True,
+            neutral="zero",
+            thresh=None,
+        )
+
+        pnl.make_long_pnl(vol_scale=1, label="Unit_Long_EQXR")
+
+        window = 252
+
+        try:
+            pnl.plot_pnl_consistency(
+                pnl_cat="PNL_GROWTH",
+                benchmark_pnl_cat="Unit_Long_EQXR",
+                window=window,
+            )
+        except Exception as e:
+            self.fail(f"plot_pnl_consistency raised {e} unexpectedly")
+
+        # A figure with the two expected panels is returned.
+        fig = pnl.plot_pnl_consistency(
+            pnl_cat="PNL_GROWTH",
+            benchmark_pnl_cat="Unit_Long_EQXR",
+            window=window,
+            title="Consistency of the macro value-add",
+            xcat_labels={"PNL_GROWTH": "Macro", "Unit_Long_EQXR": "Long only"},
+            return_fig=True,
+        )
+        self.assertIsInstance(fig, plt.Figure)
+        self.assertEqual(len(fig.axes), 2)
+
+        # The active return is the first category minus the second: confirm the
+        # full-sample information ratio annotated on the figure.
+        dfp = pnl.pnl_df(["PNL_GROWTH", "Unit_Long_EQXR"]).pivot(
+            index="real_date", columns="xcat", values="value"
+        )
+        act = (dfp["PNL_GROWTH"] - dfp["Unit_Long_EQXR"]).dropna()
+        expected_ir = act.mean() / act.std() * 252**0.5
+
+        annotations = [
+            child.get_text()
+            for child in fig.axes[1].texts
+            if child.get_text().startswith("full sample:")
+        ]
+        self.assertEqual(len(annotations), 1)
+        self.assertEqual(annotations[0], f"full sample: {expected_ir:.2f}")
+
+        # Default panel titles are generated from the labels and the window length.
+        self.assertEqual(
+            fig.axes[0].get_title(), "Cumulative active PnL: Macro minus Long only"
+        )
+        self.assertEqual(
+            fig.axes[1].get_title(),
+            "Rolling 1-year information ratio of the active return",
+        )
+
+        # Both panel titles can be overridden.
+        fig = pnl.plot_pnl_consistency(
+            pnl_cat="PNL_GROWTH",
+            benchmark_pnl_cat="Unit_Long_EQXR",
+            window=window,
+            pnl_title="Value-add of the growth strategy",
+            ir_title="Consistency of the value-add",
+            return_fig=True,
+        )
+        self.assertEqual(fig.axes[0].get_title(), "Value-add of the growth strategy")
+        self.assertEqual(fig.axes[1].get_title(), "Consistency of the value-add")
+
+        with self.assertRaises(TypeError):
+            pnl.plot_pnl_consistency(
+                pnl_cat=1, benchmark_pnl_cat="Unit_Long_EQXR", window=window
+            )
+
+        with self.assertRaises(TypeError):
+            pnl.plot_pnl_consistency(
+                pnl_cat="PNL_GROWTH",
+                benchmark_pnl_cat="Unit_Long_EQXR",
+                window=window,
+                xcat_labels=["Macro", "Long only"],
+            )
+
+        # Label missing for one of the two categories.
+        with self.assertRaises(ValueError):
+            pnl.plot_pnl_consistency(
+                pnl_cat="PNL_GROWTH",
+                benchmark_pnl_cat="Unit_Long_EQXR",
+                window=window,
+                xcat_labels={"PNL_GROWTH": "Macro"},
+            )
+
+        # Category not defined on the class.
+        with self.assertRaises(ValueError):
+            pnl.plot_pnl_consistency(
+                pnl_cat="PNL_GROWTH",
+                benchmark_pnl_cat="PNL_UNDEFINED",
+                window=window,
+            )
+
+        # Identical categories would give a zero active return.
+        with self.assertRaises(ValueError):
+            pnl.plot_pnl_consistency(
+                pnl_cat="PNL_GROWTH",
+                benchmark_pnl_cat="PNL_GROWTH",
+                window=window,
+            )
+
+        # Window longer than the available sample.
+        with self.assertRaises(ValueError):
+            pnl.plot_pnl_consistency(
+                pnl_cat="PNL_GROWTH",
+                benchmark_pnl_cat="Unit_Long_EQXR",
+                window=252 * 100,
+            )
+
+        # kind="bars": the active return summed by calendar period.
+        fig = pnl.plot_pnl_consistency(
+            pnl_cat="PNL_GROWTH",
+            benchmark_pnl_cat="Unit_Long_EQXR",
+            kind="bars",
+            return_fig=True,
+        )
+        self.assertIsInstance(fig, plt.Figure)
+        ax = fig.axes[0]
+
+        dfp = pnl.pnl_df(["PNL_GROWTH", "Unit_Long_EQXR"]).pivot(
+            index="real_date", columns="xcat", values="value"
+        )
+        act = (dfp["PNL_GROWTH"] - dfp["Unit_Long_EQXR"]).dropna()
+        act_year = act.groupby(act.index.year).sum()
+
+        heights = [p.get_height() for p in ax.patches]
+        np.testing.assert_allclose(heights, act_year.to_numpy(), rtol=1e-9)
+        self.assertEqual(
+            [t.get_text() for t in ax.get_xticklabels()],
+            [str(y) for y in act_year.index],
+        )
+
+        # Bars are coloured by sign, and the count of positive periods is annotated.
+        pos_colors = {
+            tuple(p.get_facecolor()) for p, v in zip(ax.patches, act_year) if v > 0
+        }
+        neg_colors = {
+            tuple(p.get_facecolor()) for p, v in zip(ax.patches, act_year) if v <= 0
+        }
+        self.assertFalse(pos_colors & neg_colors)
+        self.assertIn(
+            f"positive periods: {int((act_year > 0).sum())} of {len(act_year)}",
+            [t.get_text() for t in ax.texts],
+        )
+
+        # The count annotation can be suppressed, and the bars re-binned by period.
+        fig = pnl.plot_pnl_consistency(
+            pnl_cat="PNL_GROWTH",
+            benchmark_pnl_cat="Unit_Long_EQXR",
+            kind="bars",
+            annotate_count=False,
+            return_fig=True,
+        )
+        self.assertEqual([t.get_text() for t in fig.axes[0].texts], [])
+
+        fig = pnl.plot_pnl_consistency(
+            pnl_cat="PNL_GROWTH",
+            benchmark_pnl_cat="Unit_Long_EQXR",
+            kind="bars",
+            freq="Q",
+            bar_title="Quarterly active return",
+            return_fig=True,
+        )
+        self.assertEqual(fig.axes[0].get_title(), "Quarterly active return")
+        self.assertTrue(
+            all(
+                re.fullmatch(r"\d{4}Q[1-4]", t.get_text())
+                for t in fig.axes[0].get_xticklabels()
+            )
+        )
+
+        # 'bars' does not need a rolling window, so a long window must not block it.
+        try:
+            pnl.plot_pnl_consistency(
+                pnl_cat="PNL_GROWTH",
+                benchmark_pnl_cat="Unit_Long_EQXR",
+                kind="bars",
+                window=252 * 100,
+            )
+        except Exception as e:
+            self.fail(f"plot_pnl_consistency(kind='bars') raised {e} unexpectedly")
+
+        with self.assertRaises(ValueError):
+            pnl.plot_pnl_consistency(
+                pnl_cat="PNL_GROWTH",
+                benchmark_pnl_cat="Unit_Long_EQXR",
+                kind="lines",
+            )
+
+        patch.stopall()
+        plt.close("all")
+        matplotlib.use(mpl_backend)
+
+    def test_plot_pnl_attribution(self):
+        plt.close("all")
+        patch("matplotlib.pyplot.show").start()
+        mpl_backend = matplotlib.get_backend()
+        matplotlib.use("Agg")
+
+        pnl = NaivePnL(
+            self.dfd,
+            ret="EQXR",
+            sigs=["CRY", "GROWTH", "INFL"],
+            cids=self.cids,
+            start="2000-01-01",
+            blacklist=self.blacklist,
+        )
+        pnl.make_pnl(
+            sig="GROWTH",
+            sig_op="zn_score_pan",
+            rebal_freq="monthly",
+            rebal_slip=1,
+            vol_scale=None,
+            pnl_name="PNL_GROWTH",
+        )
+
+        try:
+            pnl.plot_pnl_attribution(pnl_name="PNL_GROWTH")
+        except Exception as e:
+            self.fail(f"signal_table raised {e} unexpectedly")
+
+        fig = pnl.plot_pnl_attribution(pnl_name="PNL_GROWTH", return_fig=True)
+        self.assertIsInstance(fig, plt.Figure)
+
+        # The rendered table is the signal averaged by calendar year, scaled, with
+        # cross-sections on the vertical axis and years on the horizontal.
+        sig = pnl.signal_df["PNL_GROWTH"].pivot(
+            index="real_date", columns="cid", values="sig"
+        )
+        sig.columns = pd.Index(sig.columns.astype(str))
+        expected = (sig.groupby(sig.index.year).mean()[pnl.cids] * 100).T
+
+        fig = pnl.plot_pnl_attribution(
+            pnl_name="PNL_GROWTH", scale=100, fmt=".2f", return_fig=True
+        )
+        ax = fig.axes[0]
+        self.assertEqual(
+            [t.get_text() for t in ax.get_yticklabels()], list(expected.index)
+        )
+        self.assertEqual(
+            [t.get_text() for t in ax.get_xticklabels()],
+            [str(y) for y in expected.columns],
+        )
+        np.testing.assert_allclose(
+            ax.collections[0].get_array().data.reshape(expected.shape),
+            expected.to_numpy(),
+            rtol=1e-9,
+        )
+
+        # Custom labels are applied to the cross-sections, and the requested order is
+        # honoured even when it is not alphabetical.
+        fig = pnl.plot_pnl_attribution(
+            pnl_name="PNL_GROWTH",
+            pnl_cids=["USD", "AUD", "CAD"],
+            cid_labels={"AUD": "Australia"},
+            return_fig=True,
+        )
+        self.assertEqual(
+            [t.get_text() for t in fig.axes[0].get_yticklabels()],
+            ["USD", "Australia", "CAD"],
+        )
+        # ... and the rows carry the right cross-section's data, not just the label.
+        usd_row = ax_arr = fig.axes[0].collections[0].get_array().data.reshape(3, -1)[0]
+        np.testing.assert_allclose(
+            usd_row,
+            sig.groupby(sig.index.year).mean()["USD"].to_numpy(),
+            rtol=1e-9,
+        )
+
+        # Quarterly and monthly periods are labelled within the year.
+        fig = pnl.plot_pnl_attribution(pnl_name="PNL_GROWTH", freq="Q", return_fig=True)
+        xticks = [t.get_text() for t in fig.axes[0].get_xticklabels()]
+        self.assertTrue(all(re.fullmatch(r"\d{4}Q[1-4]", x) for x in xticks))
+
+        fig = pnl.plot_pnl_attribution(pnl_name="PNL_GROWTH", freq="M", return_fig=True)
+        xticks = [t.get_text() for t in fig.axes[0].get_xticklabels()]
+        self.assertTrue(all(re.fullmatch(r"\d{4}-\d{2}", x) for x in xticks))
+
+        # A signal that takes both signs gets a symmetric colour scale; a non-negative
+        # one gets a scale anchored at zero.
+        fig = pnl.plot_pnl_attribution(pnl_name="PNL_GROWTH", return_fig=True)
+        vmin, vmax = fig.axes[0].collections[0].get_clim()
+        self.assertLess(vmin, 0)
+        self.assertAlmostEqual(vmin, -vmax)
+
+        # A portfolio-weight signal: non-negative raw weights summing to one across the
+        # panel, as a wealth-allocation strategy would supply them.
+        wdf = self.dfd[self.dfd["xcat"] == "EQXR"].pivot(
+            index="real_date", columns="cid", values="value"
+        )
+        wdf.columns = pd.Index(wdf.columns.astype(str))
+        wgt = pd.DataFrame(1.0 / len(wdf.columns), index=wdf.index, columns=wdf.columns)
+        dfa = wgt.stack().rename("value").reset_index()
+        dfa.columns = ["real_date", "cid", "value"]
+        dfa["xcat"] = "WEIGHT"
+        dfw_in = update_df(self.dfd, dfa)
+
+        wpnl = NaivePnL(
+            dfw_in,
+            ret="EQXR",
+            sigs=["WEIGHT"],
+            cids=self.cids,
+            start="2000-01-01",
+        )
+        wpnl.make_pnl(
+            sig="WEIGHT",
+            sig_op="raw",
+            rebal_freq="monthly",
+            rebal_slip=1,
+            vol_scale=None,
+            pnl_name="PNL_WEIGHT",
+        )
+        fig = wpnl.plot_pnl_attribution(
+            pnl_name="PNL_WEIGHT", scale=100, return_fig=True
+        )
+        self.assertEqual(fig.axes[0].collections[0].get_clim()[0], 0.0)
+
+        # kind="returns": the return category the PnL was built on, summed per period.
+        fig = wpnl.plot_pnl_attribution(
+            pnl_name="PNL_WEIGHT", kind="returns", return_fig=True
+        )
+        self.assertIsInstance(fig, plt.Figure)
+        pos = wpnl._wide_signal("PNL_WEIGHT", wpnl.cids)
+        rets = wpnl._wide_returns(wpnl.cids, pos.index)
+        expected_r = rets.groupby(rets.index.year).sum().T
+        np.testing.assert_allclose(
+            fig.axes[0].collections[0].get_array().data.reshape(expected_r.shape),
+            expected_r.to_numpy(),
+            rtol=1e-9,
+        )
+
+        # kind="contribution": position times return, and the stacked bars must sum to
+        # the PnL's own period totals.
+        fig = wpnl.plot_pnl_attribution(
+            pnl_name="PNL_WEIGHT", kind="contribution", return_fig=True
+        )
+        self.assertIsInstance(fig, plt.Figure)
+        contrib = (pos * rets).groupby(pos.index.year).sum(min_count=1)
+        dfn = wpnl.pnl_df(["PNL_WEIGHT"])
+        totals = dfn.groupby(dfn["real_date"].dt.year)["value"].sum()
+        common = contrib.index.intersection(totals.index)
+        np.testing.assert_allclose(
+            contrib.loc[common].sum(axis=1).to_numpy(),
+            totals.loc[common].to_numpy(),
+            atol=1e-9,
+        )
+        # The markers plot those totals, so the decomposition is visibly reconciled.
+        offsets = fig.axes[0].collections[-1].get_offsets()
+        np.testing.assert_allclose(
+            np.asarray(offsets)[:, 1],
+            totals.reindex(contrib.index).to_numpy(),
+            atol=1e-9,
+        )
+
+        # kind="area": stacked weights over time, optionally the pre-rebalance series.
+        fig = wpnl.plot_pnl_attribution(
+            pnl_name="PNL_WEIGHT",
+            kind="area",
+            cid_labels={"AUD": "Australia"},
+            return_fig=True,
+        )
+        self.assertIsInstance(fig, plt.Figure)
+        legend = [t.get_text() for t in fig.axes[0].get_legend().get_texts()]
+        self.assertIn("Australia", legend)
+        self.assertEqual(len(legend), len(wpnl.cids))
+
+        # A supplied weights frame is used in place of the applied signal.
+        fig = wpnl.plot_pnl_attribution(
+            pnl_name="PNL_WEIGHT", kind="area", weights=wgt, return_fig=True
+        )
+        stacked_top = fig.axes[0].collections[-1].get_paths()[0].vertices[:, 1].max()
+        self.assertAlmostEqual(stacked_top, 1.0, places=6)
+
+        with self.assertRaises(TypeError):
+            wpnl.plot_pnl_attribution(
+                pnl_name="PNL_WEIGHT", kind="area", weights="not a frame"
+            )
+
+        # A weights frame missing a cross-section is rejected rather than silently
+        # dropping a sleeve from the allocation.
+        with self.assertRaises(ValueError):
+            wpnl.plot_pnl_attribution(
+                pnl_name="PNL_WEIGHT",
+                kind="area",
+                weights=wgt.drop(columns=[wgt.columns[0]]),
+            )
+
+        with self.assertRaises(ValueError):
+            pnl.plot_pnl_attribution(pnl_name="PNL_GROWTH", kind="stacked")
+
+        with self.assertRaises(TypeError):
+            pnl.plot_pnl_attribution(pnl_name=1)
+
+        with self.assertRaises(ValueError):
+            pnl.plot_pnl_attribution(pnl_name="PNL_UNDEFINED")
+
+        with self.assertRaises(ValueError):
+            pnl.plot_pnl_attribution(pnl_name="PNL_GROWTH", freq="D")
+
+        with self.assertRaises(ValueError):
+            pnl.plot_pnl_attribution(pnl_name="PNL_GROWTH", agg="average")
+
+        with self.assertRaises(ValueError):
+            pnl.plot_pnl_attribution(pnl_name="PNL_GROWTH", pnl_cids=["XXX"])
+
+        with self.assertRaises(TypeError):
+            pnl.plot_pnl_attribution(pnl_name="PNL_GROWTH", scale="100")
+
+        with self.assertRaises(TypeError):
+            pnl.plot_pnl_attribution(pnl_name="PNL_GROWTH", cid_labels=["AUD"])
+
+        with self.assertRaises(TypeError):
+            pnl.plot_pnl_attribution(pnl_name="PNL_GROWTH", xlabel=1)
+
+        # No data left after truncation.
+        with self.assertRaises(ValueError):
+            pnl.plot_pnl_attribution(pnl_name="PNL_GROWTH", start="2100-01-01")
 
         patch.stopall()
         plt.close("all")

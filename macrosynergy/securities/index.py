@@ -1,3 +1,8 @@
+"""
+Functions for building index-level weights, returns and excess returns from
+single-security constituent data.
+"""
+
 import logging
 from typing import Optional, Dict, Tuple, Union
 
@@ -12,6 +17,7 @@ from macrosynergy.securities.validate import (
     _validate_constituents,
     _validate_returns,
     _validate_index_returns,
+    _validate_weights_col,
 )
 
 logger = logging.getLogger(__name__)
@@ -27,15 +33,15 @@ def _resolve_reconstitution_freq(
     Parameters
     ----------
     rebalance_freq : str
-        Base rebalancing frequency used when "reconstitution_freq" is None.
+        Base rebalancing frequency used when ``reconstitution_freq`` is None.
     reconstitution_freq : str or None
         Explicit reconstitution frequency, or None to inherit from
-        "rebalance_freq".
+        ``rebalance_freq``.
 
     Returns
     -------
     str
-        "reconstitution_freq" if not None; otherwise "rebalance_freq".
+        ``reconstitution_freq`` if not None; otherwise ``rebalance_freq``.
     """
     return reconstitution_freq if reconstitution_freq is not None else rebalance_freq
 
@@ -73,8 +79,8 @@ def _build_reconstitution_membership(
     Parameters
     ----------
     membership_wide : pd.DataFrame
-        Wide-format binary membership matrix with a DatetimeIndex (business days)
-        and one column per security (cid).
+        Wide-format matrix with a DatetimeIndex (business days) and one column per
+        security (cid), holding either binary membership flags or target weights.
     recon_freq : str
         Pandas period frequency alias defining the reconstitution cadence,
         e.g. "M" for monthly snapshots.
@@ -135,36 +141,51 @@ def compute_daily_weights(
     rebalance_freq: str = "M",
     reconstitution_freq: Optional[str] = None,
     blacklist: Optional[Dict[str, Tuple[pd.Timestamp, pd.Timestamp]]] = None,
+    weights_col: str = "membership",
 ) -> pd.DataFrame:
     """
-    Compute daily float-adjusted equal weights for an index constituent set.
+    Compute daily drifting weights for an index constituent set.
 
-    Starting from an equal-weighted portfolio at the beginning of each rebalancing
-    period, weights drift with realized returns within the period.  At each rebalance
-    date the portfolio is reset to equal weights over the current constituent set.
-    Reconstitution (membership changes) can be snapped to a coarser frequency than
-    rebalancing via ``reconstitution_freq``.
+    At the start of each rebalancing period the portfolio is set to the target
+    weights implied by ``weights_col``: equal weights over the current constituent
+    set for ``"membership"``, or the supplied raw weights (e.g. float-adjusted market
+    caps) rescaled to sum to one for ``"raw_weight"``. Within the period the weights
+    drift with realized returns, and on the next rebalance date they are reset to
+    target. Reconstitution (membership changes) can be snapped to a coarser frequency
+    than rebalancing via ``reconstitution_freq``.
 
     Parameters
     ----------
     constituents : pd.DataFrame or QuantamentalDataFrame
-        Long-format DataFrame with columns "cid", "real_date", and
-        "membership" (binary 0/1).  Each row records whether a security was a
-        constituent on a given date.
+        Long-format DataFrame with columns ``"cid"``, ``"real_date"``, and
+        ``"membership"`` (binary 0/1). Each row records whether a security was a
+        constituent on a given date. A non-negative ``"raw_weight"`` column is
+        additionally required when ``weights_col`` is ``"raw_weight"``.
     returns : pd.DataFrame or QuantamentalDataFrame
-        Long-format DataFrame with columns "cid", "real_date", "xcat",
-        and "value" (daily return in percentage points).  Must be filtered to a
+        Long-format DataFrame with columns ``"cid"``, ``"real_date"``, ``"xcat"``,
+        and ``"value"`` (daily return in percentage points). Must be filtered to a
         single xcat before passing.
     rebalance_freq : str, default "M"
-        Pandas period alias controlling how often the portfolio is reset to equal
-        weights.  Must be one of {"B", "W", "M", "Q", "Y"}.
+        Pandas period alias controlling how often the portfolio is reset to its
+        target weights. Must be one of {"B", "W", "M", "Q", "Y"}.
     reconstitution_freq : str or None, default None
         Pandas period alias controlling how often membership changes take effect.
-        If None, defaults to "rebalance_freq".
+        If None, defaults to ``rebalance_freq``.
     blacklist : dict or None, default None
-        Mapping of "cid" to (start, end) pd.Timestamp pairs
-        identifying securities to exclude.  Exclusions are snapped to rebalance
+        Mapping of ``"cid"`` to (start, end) pd.Timestamp pairs
+        identifying securities to exclude. Exclusions are snapped to rebalance
         period starts, matching the weight-reset cadence.
+    weights_col : str, default "membership"
+        Column of ``constituents`` holding the target weighting input. Must be one of
+        {"membership", "raw_weight"}. ``"membership"`` yields the equal-weighted
+        index: the binary flag is divided by the number of constituents in force at
+        the rebalance date. ``"raw_weight"`` yields a custom weighting (e.g. a
+        cap-weighted index): the column is forward-filled over gaps, masked by
+        ``"membership"`` so that only current constituents receive weight, held
+        constant over each reconstitution period, and normalised across
+        constituents. Raw weights need not sum to one on input, as weights are
+        rescaled row-wise. Members whose raw weight is zero or missing receive no
+        weight, and are reported via a warning.
 
     Returns
     -------
@@ -176,38 +197,65 @@ def compute_daily_weights(
     _validate_frequency(rebalance_freq, "rebalance_freq")
     if reconstitution_freq is not None:
         _validate_frequency(reconstitution_freq, "reconstitution_freq")
-    _validate_constituents(constituents)
+    _validate_constituents(constituents) # TODO should they be daily ?
     _validate_returns(returns)
+    _validate_weights_col(constituents, weights_col)
 
     recon_freq = _resolve_reconstitution_freq(rebalance_freq, reconstitution_freq)
 
-    # Pivot to wide
+    # Pivot to wide. Membership always defines the constituent set; "weights_col"
+    # only defines the target weighting *within* that set. All matrices are held as
+    # floats so that fractional target weights survive the alignment steps below.
     constituents["real_date"] = pd.to_datetime(constituents["real_date"])
     mem_wide = (
         _long_to_wide(constituents[["cid", "real_date", "membership"]], "membership")
-        .fillna(0)
-        .astype(int)
+        .fillna(0.0)
+        .astype(float)
     )
+    if weights_col == "membership":
+        target_wide = mem_wide
+    else:
+        # Raw weights are carried forward over gaps, then masked by membership so
+        # that only current constituents can receive weight.
+        raw_wide = (
+            _long_to_wide(constituents[["cid", "real_date", weights_col]], weights_col)
+            .ffill()
+            .fillna(0.0)
+            .astype(float)
+        )
+        target_wide = raw_wide.mul(mem_wide)
+
+        # A member with no raw weight is silently dropped from the index, so report it
+        unweighted = (mem_wide.gt(0) & target_wide.le(0)).any()
+        if unweighted.any():
+            logger.warning(
+                "'%s' is zero or missing for %d security(ies) on dates where they are "
+                "index members; these receive no weight: %s",
+                weights_col,
+                int(unweighted.sum()),
+                sorted(unweighted[unweighted].index.astype(str)),
+            )
+
     returns["real_date"] = pd.to_datetime(returns["real_date"])
     ret_wide = _long_to_wide(returns[["cid", "real_date", "value"]], "value")
 
     # Align columns
-    common_cids = mem_wide.columns.intersection(ret_wide.columns)
+    common_cids = target_wide.columns.intersection(ret_wide.columns)
     assert (
         len(common_cids) > 0
     ), "No common cids between constituents and returns DataFrames."
-    mem_wide = mem_wide[common_cids]
+    target_wide = target_wide[common_cids]
     ret_wide = ret_wide[common_cids]
 
     # Reindex both to a common complete business-day calendar, then align
-    all_dates = mem_wide.index.union(ret_wide.index).sort_values()
+    all_dates = target_wide.index.union(ret_wide.index).sort_values()
     full_bdays = pd.bdate_range(all_dates.min(), all_dates.max(), freq="B")
 
-    mem_wide = mem_wide.reindex(full_bdays).ffill().fillna(0).astype(int)
+    target_wide = target_wide.reindex(full_bdays).ffill().fillna(0.0)
     ret_wide = ret_wide.reindex(full_bdays).fillna(0.0) / 100.0  # pct -> decimal
 
     # Apply reconstitution: snapshot at period start, hold through period
-    mem_effective = _build_reconstitution_membership(mem_wide, recon_freq)
+    target_effective = _build_reconstitution_membership(target_wide, recon_freq)
 
     # Apply blacklist: zero out blacklisted securities on each rebalance date.
     # Snapshot blacklist state at the first day of each rebalancing period and
@@ -216,14 +264,16 @@ def compute_daily_weights(
     if blacklist:
         rebal_periods_pre = _assign_period_labels(full_bdays, rebalance_freq)
         active_periods_before = (
-            mem_effective.groupby(rebal_periods_pre)
+            target_effective.groupby(rebal_periods_pre)
             .first()
             .gt(0)
             .sum()
             .rename("active_periods_before")
         )
 
-        bl_mask = pd.DataFrame(False, index=full_bdays, columns=mem_effective.columns)
+        bl_mask = pd.DataFrame(
+            False, index=full_bdays, columns=target_effective.columns
+        )
         for cid, (start, end) in blacklist.items():
             if cid in bl_mask.columns:
                 bl_mask.loc[(bl_mask.index >= start) & (bl_mask.index <= end), cid] = (
@@ -235,12 +285,12 @@ def compute_daily_weights(
                     cid,
                 )
         bl_effective = _build_reconstitution_membership(
-            bl_mask.astype(int), rebalance_freq
+            bl_mask.astype(float), rebalance_freq
         ).astype(bool)
-        mem_effective = mem_effective.where(~bl_effective, 0)
+        target_effective = target_effective.where(~bl_effective, 0.0)
 
         active_periods_after = (
-            mem_effective.groupby(rebal_periods_pre)
+            target_effective.groupby(rebal_periods_pre)
             .first()
             .gt(0)
             .sum()
@@ -265,7 +315,8 @@ def compute_daily_weights(
 
     # Vectorized weight drift using cumprod within each rebalancing period.
     #
-    # On rebalancing day 1, weight_i = (1/N) * membership_i.
+    # On rebalancing day 1, weight_i = target_i / sum_j(target_j), i.e. 1/N for
+    # equal weighting and target_i / total_target for a custom weighting.
     # On day d within the period, the unnormalized weight is:
     #   w_i(d) = w_i(0) * prod_{t=0}^{d-1}(1 + r_i(t))
     #
@@ -273,9 +324,13 @@ def compute_daily_weights(
     # (cumprod hasn't started yet) and day d reflects returns through day d-1.
     # Then we normalize row-wise so weights sum to 1.
 
-    # Initial equal weights per period: 1/N for members, 0 for non-members
-    n_members = mem_effective.groupby(rebal_periods).transform("first").sum(axis=1)
-    initial_w = mem_effective.div(n_members.replace(0, np.nan), axis=0).fillna(0.0)
+    # Initial target weights per period, normalized over the period's constituents
+    total_w_denominator = (
+        target_effective.groupby(rebal_periods).transform("first").sum(axis=1)
+    )
+    initial_w = target_effective.div(
+        total_w_denominator.replace(0, np.nan), axis=0
+    ).fillna(0.0)
 
     # Cumulative growth factor within each period, shifted so day 0 = 1.0
     growth = (1 + ret_wide).groupby(rebal_periods).cumprod()
@@ -301,30 +356,37 @@ def compute_index_returns(
     rebalance_freq: str = "M",
     reconstitution_freq: Optional[str] = None,
     blacklist: Optional[Dict[str, Tuple[pd.Timestamp, pd.Timestamp]]] = None,
+    weights_col: str = "membership",
 ) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
     Compute daily index-level returns from constituent weights and individual returns.
 
-    Wraps :func:`compute_daily_weights` to obtain daily float-adjusted weights, then
+    Wraps :func:`compute_daily_weights` to obtain the daily drifting weights, then
     computes the weighted-average return across constituents for each business day.
 
     Parameters
     ----------
     constituents : pd.DataFrame or QuantamentalDataFrame
-        Long-format DataFrame with columns "cid", "real_date", and
-        "membership" (binary 0/1).
+        Long-format DataFrame with columns ``"cid"``, ``"real_date"``, and
+        ``"membership"`` (binary 0/1). A ``"raw_weight"`` column is additionally
+        required when ``weights_col`` is ``"raw_weight"``.
     returns : pd.DataFrame or QuantamentalDataFrame
-        Long-format DataFrame with columns "cid", "real_date", "xcat",
-        and "value" (daily return in percentage points).  Must be filtered to a
+        Long-format DataFrame with columns ``"cid"``, ``"real_date"``, ``"xcat"``,
+        and ``"value"`` (daily return in percentage points). Must be filtered to a
         single xcat before passing.
     rebalance_freq : str, default "M"
-        Portfolio rebalancing frequency.  Must be one of {"B", "W", "M", "Q", "Y"}.
+        Portfolio rebalancing frequency. Must be one of {"B", "W", "M", "Q", "Y"}.
     reconstitution_freq : str or None, default None
-        Membership reconstitution frequency.  Defaults to "rebalance_freq" when
+        Membership reconstitution frequency. Defaults to ``rebalance_freq`` when
         None.
     blacklist : dict or None, default None
-        Mapping of "cid" to (start, end) pd.Timestamp pairs for
+        Mapping of ``"cid"`` to (start, end) pd.Timestamp pairs for
         securities to exclude.
+    weights_col : str, default "membership"
+        Column of ``constituents`` holding the target weighting input, passed
+        through to :func:`compute_daily_weights`. Must be one of
+        {"membership", "raw_weight"}: ``"membership"`` produces an equal-weighted
+        index, ``"raw_weight"`` a custom (e.g. cap-weighted) index.
 
     Returns
     -------
@@ -332,10 +394,15 @@ def compute_index_returns(
         DataFrame with columns ["real_date", "value"] containing the daily
         index return in percentage points.
     weights_long : pd.DataFrame
-        Long-format weight DataFrame as returned by "compute_daily_weights".
+        Long-format weight DataFrame as returned by :func:`compute_daily_weights`.
     """
     weights_long = compute_daily_weights(
-        constituents, returns, rebalance_freq, reconstitution_freq, blacklist
+        constituents,
+        returns,
+        rebalance_freq,
+        reconstitution_freq,
+        blacklist,
+        weights_col,
     )
 
     # Pivot weights to wide for multiplication
@@ -385,25 +452,25 @@ def compute_excess_returns(
     Parameters
     ----------
     returns : pd.DataFrame or QuantamentalDataFrame
-        Long-format DataFrame with columns "cid", "real_date", "xcat",
-        and "value" (daily return in percentage points).
+        Long-format DataFrame with columns ``"cid"``, ``"real_date"``, ``"xcat"``,
+        and ``"value"`` (daily return in percentage points).
     index_returns : pd.DataFrame or QuantamentalDataFrame
-        DataFrame with columns "real_date" and "value" (daily index return
-        in percentage points).  Must contain one row per date (no duplicates).
+        DataFrame with columns ``"real_date"`` and ``"value"`` (daily index return
+        in percentage points). Must contain one row per date (no duplicates).
     method : str, default "ratio"
-        Excess-return formula.  One of {"ratio", "log", "diff"}.
+        Excess-return formula. One of {"ratio", "log", "diff"}.
     output_freq : str or None, default None
         If provided, daily returns are compounded to this frequency before the
-        excess-return formula is applied.  Must be one of
-        {"B", "W", "M", "Q", "Y"}.  When None, excess returns are
+        excess-return formula is applied. Must be one of
+        {"B", "W", "M", "Q", "Y"}. When None, excess returns are
         computed at daily frequency.
 
     Returns
     -------
     pd.DataFrame
         Long-format DataFrame with columns ["real_date", "cid", "value"]
-        containing excess returns in percentage points.  Dates correspond to
-        period-end timestamps when "output_freq" is set.
+        containing excess returns in percentage points. Dates correspond to
+        period-end timestamps when ``output_freq`` is set.
     """
     _validate_returns(returns)
     _validate_index_returns(index_returns)

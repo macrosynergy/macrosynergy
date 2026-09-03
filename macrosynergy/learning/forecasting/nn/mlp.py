@@ -24,7 +24,7 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
     Parameters
     ----------
     n_latent : Union[int, List[int]], optional
-        Numer of hidden units in the latent layer(s) of the MLP.
+        Number of hidden units in the latent layer(s) of the MLP.
         If an integer is provided, the MLP will have a single hidden layer with n_latent
         units. If a list of integers is provided, the MLP will have multiple hidden layers
         with the number of units in each layer specified by the corresponding element in
@@ -66,10 +66,11 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         demeaned to sum to 0, before being passed through the adjusted softmax. 
         If provided, all (n_latent, fit_encoder_intercept, fit_head_intercept, encoder_activation, head_activation, dropout_p, dollar_neutral, normalization)
         must be specified, `long_only` should be False and torch_model must be None. Default is False.
-    normalization: bool, optional
-        Whether to apply LayerNorm normalization following each linear layer in the encoder (hidden) component of the network.
+    normalization: str, optional
+        Whether to apply normalization following each linear layer in the encoder (hidden) component of the network.
+        Can be either "layer" for LayerNorm, "batch" for BatchNorm, or "none" for no normalization.
         If provided, all (n_latent, fit_encoder_intercept, fit_head_intercept, encoder_activation, head_activation, dropout_p, dollar_neutral, normalization)
-        must be specified and torch_model must be None. Default is False.
+        must be specified and torch_model must be None. Default is None.
     torch_model : Intersection[torch.nn.Module, BaseEstimator], optional
         Custom PyTorch model to use instead of the default MLP. Must be a subclass of both
         torch.nn.Module and sklearn.base.BaseEstimator. If torch_model is provided, all 
@@ -256,8 +257,8 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         head_activation = "identity",
         dropout_p = 0,
         long_only = None,
-        dollar_neutral = False, # TODO: for some reason this doesnt work
-        normalization = False,
+        dollar_neutral = False,
+        normalization = "none",
         torch_model = None,
         # Neural network training dynamics
         loss_func = torch.nn.MSELoss(),
@@ -266,7 +267,7 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         batch_size = 32,
         learning_rate = 3e-4,
         weight_decay = 1e-4,
-        reg_turnover = 0, # TODO: implement but this is only useful when transaction costs are included in the loss function, which is not currently the case
+        reg_turnover = 0,
         use_ts_sampler = True, # TODO: turn this into an optional sampler object
         aggregate_last = True,
         drop_last = False,
@@ -373,6 +374,10 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
 
         y = y[self.targets]
 
+        # Check this doesn't interfere with dollar neutrality constraint
+        if self.dollar_neutral and self.n_targets < 3:
+            raise ValueError("Dollar neutrality constraint requires at least 3 assets to be predicted.")
+
         # Create training and validation splits
         X_train, X_valid, y_train, y_valid = self.create_train_valid_splits(X, y, self.train_pct)
 
@@ -434,7 +439,7 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
                 )
                 if self.refit:
                     # Create training set dataloader over the full dataset
-                    X_s, y_s, _, _ = self.scale_data(X_train, y_train, self.x_scaler, self.y_scaler)
+                    X_s, y_s, _, _ = self.scale_data(X, y, self.x_scaler, self.y_scaler)
                     full_train_dataset, _ = self.make_tensor_datasets(X_train_s = X_s, y_train_s = y_s, sample_weight = sample_weight)
                     full_train_loader, _, _ = self.make_dataloaders(full_train_dataset, self.batch_size, self.use_ts_sampler, self.aggregate_last, self.drop_last)
 
@@ -970,9 +975,12 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
                 if long_only is None or long_only:
                     raise ValueError("dollar_neutral can only be True if long_only is False.")
             # normalization
-            if not isinstance(normalization, bool):
-                raise TypeError("normalization must be a boolean.")
-    
+            if normalization != "none":
+                if not isinstance(normalization, str):
+                    raise TypeError("normalization must be a string.")
+                if normalization not in {"batch", "layer", "none"}:
+                    raise ValueError("normalization must be one of 'batch', 'layer', or 'none'.")
+        
         # torch_model
         if torch_model is not None:
             if not isinstance(torch_model, nn.Module):
@@ -1257,8 +1265,8 @@ if __name__ == "__main__":
         encoder_activation = "tanh",
         head_activation="identity",
         dropout_p = 0.1,
-        long_only = True,
-        dollar_neutral = False,
+        long_only = False,
+        dollar_neutral = True,
         normalization = False,
         #torch_model = BasicMLP(n_inputs=X.shape[1], n_latent=16, n_outputs=y.shape[1]),
         loss_func=torch.nn.MSELoss(),
@@ -1279,26 +1287,26 @@ if __name__ == "__main__":
         y_scaler = StandardScaler(with_mean=False),
         verbose = False, 
         random_state = [42,43],
-        inverse_transform_preds = True,
+        inverse_transform_preds = False,
         min_samples = 36,
-    )#.fit(X,y)
-    #print(mlp.predict(X))
+    ).fit(X,y)
+    print(mlp.predict(X))
 
-    so.calculate_predictions(
-        name = "MLP",
-        models = {
-            "MLP": mlp
-        },
-        multi_target_fill="mean",
-        min_cids = 1,
-        min_xcats = 1,
-        min_periods = 36,
-    )
+    # so.calculate_predictions(
+    #     name = "MLP",
+    #     models = {
+    #         "MLP": mlp
+    #     },
+    #     multi_target_fill="mean",
+    #     min_cids = 1,
+    #     min_xcats = 1,
+    #     min_periods = 36,
+    # )
 
-    dfa = so.get_optimized_signals()
-    print(dfa)
+    # dfa = so.get_optimized_signals()
+    # print(dfa)
 
-    print(list(mlp.models[0].parameters()))
-    print(list(mlp.models[1].parameters()))
-    preds = mlp.predict(X)
-    print(preds)
+    # print(list(mlp.models[0].parameters()))
+    # print(list(mlp.models[1].parameters()))
+    # preds = mlp.predict(X)
+    # print(preds)

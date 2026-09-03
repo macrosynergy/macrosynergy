@@ -11,6 +11,7 @@ from .correlation import view_correlation
 from .ranges import view_ranges
 from .performance import view_performance
 from .table import view_table
+from .weights import view_weights
 from .view_availability import view_availability
 from .multiple_reg_scatter import multiple_reg_scatter
 from .score_visualisers import ScoreVisualisers
@@ -29,6 +30,7 @@ __all__ = [
     "view_ranges",
     "view_performance",
     "view_table",
+    "view_weights",
     "view_availability",
     "timelines",
     "view_panel_dates",

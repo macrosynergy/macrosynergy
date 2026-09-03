@@ -68,6 +68,46 @@ def _validate_constituents(df: pd.DataFrame) -> None:
     )
 
 
+def _validate_weights_col(df: pd.DataFrame, weights_col: str) -> None:
+    """
+    Assert that *weights_col* is a supported weighting column present in *df*.
+
+    Parameters
+    ----------
+    df : pd.DataFrame or QuantamentalDataFrame
+        Constituents DataFrame expected to contain "weights_col".
+    weights_col : str
+        Name of the column holding the target weighting input. Must be one of
+        {"membership", "raw_weight"}.
+
+    Raises
+    ------
+    AssertionError
+        If "weights_col" is not one of the supported options, is absent from "df",
+        or - for "raw_weight" - holds non-numeric or negative values.
+    """
+    VALID_WEIGHTS_COLS = {"membership", "raw_weight"}
+    assert isinstance(weights_col, str) and weights_col in VALID_WEIGHTS_COLS, (
+        f"'weights_col' must be one of {sorted(VALID_WEIGHTS_COLS)}, got "
+        f"'{weights_col}'. Use 'membership' for equal weighting, or 'raw_weight' "
+        "for a custom weighting option."
+    )
+    assert weights_col in df.columns, (
+        f"constituents DataFrame missing column '{weights_col}', required for "
+        f"weights_col='{weights_col}'."
+    )
+    if weights_col != "membership":
+        assert pd.api.types.is_numeric_dtype(df[weights_col]), (
+            f"constituents['{weights_col}'] must be numeric, got dtype "
+            f"'{df[weights_col].dtype}'."
+        )
+        negatives = df[weights_col].dropna() < 0
+        assert not negatives.any(), (
+            f"constituents['{weights_col}'] must be non-negative. "
+            f"Found {int(negatives.sum())} negative value(s)."
+        )
+
+
 def _validate_returns(df: pd.DataFrame) -> None:
     """
     Assert that *df* meets the minimum contract for a (single-xcat) returns DataFrame.
