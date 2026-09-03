@@ -29,7 +29,7 @@ Before using the client, ensure your API credentials are set as environment vari
     client = DataQueryFileAPIClient()
 
     # Fetch a DataFrame of all available files for the JPMaQS group
-    available_files_df = client.list_available_files_for_all_file_groups()
+    available_files_df = client.list_available_files()
     print("Available JPMaQS files:")
     print(available_files_df.head())
 
@@ -44,7 +44,7 @@ including full datasets, deltas, and metadata.
     client = DataQueryFileAPIClient(out_dir="./jpmaqs_data")
 
     print(f"Downloading today's files to {client.out_dir}...")
-    client.download_full_snapshot()
+    client.download_latest_files()
     print("Download complete.")
 
 **Example 3: Download all new or updated files for the day, and load data from them
@@ -72,12 +72,54 @@ The resulting dataframe is returned to the user in the chosen dataframe format
 
 .. code-block:: python
 
-       real_date  cid     xcat  value  eop_lag  mop_lag  grading        last_updated
-    0 2000-01-03  AUD  RIR_NSA  4.078      0.0     55.0     1.25 2024-07-25 07:27:22
-    1 2000-01-04  AUD  RIR_NSA  3.778      0.0     56.0     1.25 2024-07-25 07:27:22
-    2 2000-01-05  AUD  RIR_NSA  3.747      0.0     56.0     1.25 2024-07-25 07:27:22
-    3 2000-01-06  AUD  RIR_NSA  3.710      0.0     56.0     1.25 2024-07-25 07:27:22
-    4 2000-01-07  AUD  RIR_NSA  3.697      0.0     57.0     1.25 2024-07-25 07:27:22
+       real_date  cid     xcat  value  grading  eop_lag  mop_lag        last_updated
+    0 2000-01-03  AUD  RIR_NSA  4.078     1.25      0.0     55.0 2024-07-25 07:27:22
+    1 2000-01-04  AUD  RIR_NSA  3.778     1.25      0.0     56.0 2024-07-25 07:27:22
+    2 2000-01-05  AUD  RIR_NSA  3.747     1.25      0.0     56.0 2024-07-25 07:27:22
+    3 2000-01-06  AUD  RIR_NSA  3.710     1.25      0.0     56.0 2024-07-25 07:27:22
+    4 2000-01-07  AUD  RIR_NSA  3.697     1.25      0.0     57.0 2024-07-25 07:27:22
+
+
+**Example 3a: Every version of a row, with `delta_treatment="all"`.**
+
+By default `download` returns one row per (cid, xcat, real_date): the most recently
+published one. `delta_treatment="all"` keeps every version instead, so the same
+(cid, xcat, real_date) can appear more than once, told apart by `last_updated`.
+
+.. code-block:: python
+
+    from macrosynergy.download import DataQueryFileAPIClient
+
+    with DataQueryFileAPIClient(out_dir="./jpmaqs_data") as client:
+        df = client.download(
+            cids=["AUD", "CAD"],
+            xcats=["EQXR_NSA"],
+            delta_treatment="all",
+            dropna=False,
+        )
+
+
+.. code-block:: text
+
+       real_date  cid      xcat  value  grading  eop_lag  mop_lag        last_updated
+    0 2024-01-02  AUD  EQXR_NSA  0.400      1.0      0.0      1.0 2024-01-02 06:00:00
+    1 2024-01-02  AUD  EQXR_NSA  0.412      1.0      0.0      1.0 2024-01-04 06:00:00
+    2 2024-01-03  AUD  EQXR_NSA -0.118      1.0      0.0      2.0 2024-01-03 06:00:00
+    3 2024-01-03  AUD  EQXR_NSA    NaN      NaN      NaN      NaN 2024-01-05 06:00:00
+    4 2024-01-02  CAD  EQXR_NSA  0.221      1.0      0.0      1.0 2024-01-02 06:00:00
+    5 2024-01-03  CAD  EQXR_NSA  0.305      1.0      0.0      2.0 2024-01-03 06:00:00
+
+Reading that output:
+
+- Rows 0 and 1 are the same (cid, xcat, real_date) at two `last_updated` values: row 1 is
+  an updated value for that observation.
+- Row 3 has all four metrics NaN. That is a removal of data for (AUD, EQXR_NSA,
+  2024-01-03), recorded at its own `last_updated`.
+- Rows 4 and 5 have one version each, and look exactly as they do by default.
+
+Rows are ordered by `cid`, `xcat` (or `ticker`), `real_date`, then `last_updated`, so each
+observation reads oldest first. `dropna=False` is required here, as the all-NaN metrics
+rows are the record of removal.
 
 
 **Example 4: Download all new or updated delta-files since a specific date/time.**
@@ -90,7 +132,7 @@ The resulting dataframe is returned to the user in the chosen dataframe format
     client = DataQueryFileAPIClient("./jpmaqs_data")
     since_datetime = pd.Timestamp.today() - pd.DateOffset(days=10)
 
-    client.download_full_snapshot(
+    client.download_files(
         since_datetime=since_datetime,
         include_full_snapshots=False,
         include_metadata=True,
@@ -146,43 +188,40 @@ window) if needed, and return the notifications as pandas DataFrames.
 
         print(missing_df.head())
         print(revisions_df.head())
+
 """
 
-import os
-import pandas as pd
-import polars as pl
-
-import functools
-import time
-import warnings
-from pathlib import Path
-from enum import Enum
-
+import calendar
 import concurrent.futures as cf
+import contextlib
+import datetime
+import json
 import logging
+import os
 import shutil
+import time
 import traceback as tb
 import uuid
-from typing import Dict, Any, Optional, List, Tuple, Union, Sequence
-from tqdm import tqdm
-import json
-import datetime
-import calendar
+import warnings
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Union, overload
 
+import pandas as pd
+import polars as pl
 import requests
+from tqdm import tqdm
+
 from macrosynergy.compat import PD_2_0_OR_LATER, PYTHON_3_8_OR_LATER
-from macrosynergy.management.constants import JPMAQS_METRICS
-from macrosynergy.download.dataquery import JPMAQS_GROUP_ID
+from macrosynergy.download.dataquery import JPMAQS_GROUP_ID, OAUTH_TOKEN_URL
+from macrosynergy.download.exceptions import DownloadError, InvalidResponseError
 from macrosynergy.download.fusion_interface import (
+    _wait_for_api_call,
+    cache_decorator,
     request_wrapper,
     request_wrapper_stream_bytes_to_disk,
-    _wait_for_api_call,
-    convert_ticker_based_parquet_file_to_qdf,
-    cache_decorator,
 )
-from macrosynergy.download.dataquery import OAUTH_TOKEN_URL
-from macrosynergy.download.exceptions import DownloadError, InvalidResponseError
 from macrosynergy.download.jpm_oauth import JPMorganOAuth
+from macrosynergy.management.constants import JPMAQS_METRICS
 
 DQ_FILE_API_BASE_URL: str = (
     "https://api-dataquery.jpmchase.com/research/dataquery-authe/api/v2"
@@ -212,6 +251,38 @@ JPMAQS_DATASET_THEME_MAPPING = {
 JPMAQS_EARLIEST_FILE_DATE = "20220101"
 
 logger = logging.getLogger(__name__)
+
+
+def _abbreviate_tickers_list(items: List[str], limit: int = 10) -> str:
+    """Render a list for a message, naming how many were left out rather than eliding."""
+    if len(items) <= limit:
+        return str(items)
+    return f"{items[:limit]} (+{len(items) - limit} more)"
+
+
+@contextlib.contextmanager
+def _suppressed_warnings(active: bool):
+    """
+    Silence both warning channels for the duration, restoring them even on an exception.
+    """
+    if not active:
+        yield
+        return
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        previous_level = logger.level
+        logger.setLevel(logging.ERROR)
+        try:
+            yield
+        finally:
+            logger.setLevel(previous_level)
+
+
+def utc_now() -> pd.Timestamp:
+    """
+    Returns the current UTC timestamp as a pandas Timestamp object.
+    """
+    return pd.Timestamp(datetime.datetime.now(datetime.timezone.utc))
 
 
 class DataQueryFileAPIOauth(JPMorganOAuth):
@@ -302,6 +373,10 @@ class DataQueryFileAPIClient:
     authentication, API requests, and file downloads, including large file downloads
     using a segmented, concurrent approach.
 
+    Files are saved to disk unmodified, in the ticker-based Parquet format in which they
+    are delivered. Conversion to a QuantamentalDataFrame (or other format) is performed
+    on read, when the data is loaded via `download`.
+
     Parameters
     ----------
     client_id : Optional[str]
@@ -311,7 +386,9 @@ class DataQueryFileAPIClient:
         Client Secret for authentication. If not provided, it will be sourced from
         environment variables (`DQ_CLIENT_SECRET` or `DATAQUERY_CLIENT_SECRET`).
     out_dir : Optional[str]
-        Default output directory for downloads. Can be overridden in download methods.
+        Output directory for all downloads. Files are saved under a "jpmaqs-download"
+        subdirectory of this path (e.g. "~/jpmaqs-data/jpmaqs-download"). Defaults to
+        "~/jpmaqs-data".
     base_url : str
         The base URL for the DataQuery File API. Defaults to `DQ_FILE_API_BASE_URL`.
     scope : str
@@ -326,11 +403,11 @@ class DataQueryFileAPIClient:
         self,
         client_id: Optional[str] = None,
         client_secret: Optional[str] = None,
-        out_dir: Optional[str] = None,
         base_url: str = DQ_FILE_API_BASE_URL,
         scope: str = DQ_FILE_API_SCOPE,
         proxies: Optional[Dict[str, str]] = None,
         verify_ssl: bool = True,
+        out_dir: Optional[str] = None,
     ):
         if not (bool(client_id) and bool(client_secret)):
             client_id, client_secret = get_client_id_secret()
@@ -344,8 +421,8 @@ class DataQueryFileAPIClient:
 
         self.client_id = client_id
         self.client_secret = client_secret
-        self.out_dir = out_dir or "./jpmaqs-download"
-
+        self.out_dir = out_dir or "~/jpmaqs-data"
+        self.out_dir = Path(self.out_dir).expanduser().resolve()
         self.base_url = _resolve_base_url(
             primary=base_url,
             fallback=DQ_FILE_API_FALLBACK_BASE_URL,
@@ -372,8 +449,13 @@ class DataQueryFileAPIClient:
             logger.error(tb.format_exc())
         return False
 
-    def _get_save_dir(self, out_dir: Optional[str] = None) -> str:
-        base_dir = Path(out_dir or self.out_dir)
+    def _get_save_dir(self) -> str:
+        """
+        Return the directory files are saved to: a "jpmaqs-download" subdirectory of
+        `self.out_dir`. If `self.out_dir` is already named "jpmaqs-download", it is used
+        as-is, so the suffix is never doubled.
+        """
+        base_dir = Path(self.out_dir)
         if base_dir.name != "jpmaqs-download":
             return str(base_dir / "jpmaqs-download")
         return str(base_dir)
@@ -450,7 +532,7 @@ class DataQueryFileAPIClient:
         payload = self._get(endpoint, {"keywords": keywords})
         return pd.json_normalize(payload, record_path=["groups"])
 
-    @functools.lru_cache(maxsize=None)
+    @cache_decorator(ttl=60)
     def list_group_files(
         self,
         group_id: str = JPMAQS_GROUP_ID,
@@ -510,7 +592,7 @@ class DataQueryFileAPIClient:
         file_group_id: Optional[str] = None,
         group_id: str = JPMAQS_GROUP_ID,
         start_date: str = JPMAQS_EARLIEST_FILE_DATE,
-        end_date: str = None,
+        end_date: Optional[str] = None,
         convert_metadata_timestamps: bool = True,
         include_unavailable: bool = False,
     ) -> pd.DataFrame:
@@ -539,7 +621,7 @@ class DataQueryFileAPIClient:
             A DataFrame of available files with their details.
         """
         if end_date is None:
-            end_date = pd.Timestamp.utcnow().strftime("%Y%m%d")
+            end_date = utc_now().strftime("%Y%m%d")
         endpoint = "/group/files/available-files"
         params = {
             "group-id": group_id,
@@ -580,7 +662,7 @@ class DataQueryFileAPIClient:
         self,
         group_id: str = JPMAQS_GROUP_ID,
         start_date: str = JPMAQS_EARLIEST_FILE_DATE,
-        end_date: str = None,
+        end_date: Optional[str] = None,
         include_full_snapshots: bool = True,
         include_delta: bool = True,
         include_metadata: bool = True,
@@ -590,8 +672,8 @@ class DataQueryFileAPIClient:
         """
         Fetches and consolidates available files for all relevant file groups.
 
-        This method concurrently queries for available files across all specified
-        file group types (full snapshots, deltas, metadata) for a given provider.
+        Makes a single query for the provider's group, then filters the result locally
+        to the requested file types (full snapshots, deltas, metadata).
 
         Parameters
         ----------
@@ -695,9 +777,9 @@ class DataQueryFileAPIClient:
             A DataFrame of files modified within the specified time window.
         """
         if since_datetime is None:
-            since_datetime = pd.Timestamp.utcnow().strftime("%Y%m%d")
+            since_datetime = utc_now().strftime("%Y%m%d")
         if to_datetime is None:
-            to_datetime = pd.Timestamp.utcnow().strftime("%Y%m%dT%H%M%S")
+            to_datetime = utc_now().strftime("%Y%m%dT%H%M%S")
         validate_dq_timestamp(since_datetime, var_name="since_datetime")
         validate_dq_timestamp(to_datetime, var_name="to_datetime")
 
@@ -709,16 +791,16 @@ class DataQueryFileAPIClient:
 
         if "T" not in str(to_datetime):
             to_ts = (
-                to_ts.normalize() + pd.DateOffset(days=1) - pd.Timedelta(nanoseconds=1)
+                to_ts.normalize() + pd.DateOffset(days=1) - pd.Timedelta(1, unit="ns")
             )
-
-        filter_date = since_ts.normalize()
 
         if since_ts > to_ts:
             logger.warning(
                 f"`since_datetime` ({since_ts}) is after `to_datetime` ({to_ts}). Swapping values."
             )
             since_ts, to_ts = to_ts, since_ts
+
+        filter_date = since_ts.normalize()
 
         # Using DQ's internal filtering does not work as expected for JPMaQS end users,
         # hence filtering is done locally instead of passing API parameters.
@@ -738,8 +820,8 @@ class DataQueryFileAPIClient:
 
     def check_file_availability(
         self,
-        file_group_id: str = None,
-        file_datetime: str = None,
+        file_group_id: Optional[str] = None,
+        file_datetime: Optional[str] = None,
         filename: Optional[str] = None,
     ) -> pd.DataFrame:
         """
@@ -765,6 +847,8 @@ class DataQueryFileAPIClient:
             raise ValueError(
                 "One of `file_group_id` & `file_datetime`, or `filename` must be provided."
             )
+        if filename:
+            file_group_id, file_datetime = _split_jpmaqs_filename(filename)
         endpoint = "/group/file/availability"
         params = {"file-group-id": file_group_id, "file-datetime": file_datetime}
         payload = self._get(endpoint, params)
@@ -772,24 +856,20 @@ class DataQueryFileAPIClient:
 
     def download_file(
         self,
-        file_group_id: str = None,
-        file_datetime: str = None,
+        file_group_id: Optional[str] = None,
+        file_datetime: Optional[str] = None,
         filename: Optional[str] = None,
-        out_dir: Optional[str] = None,
         overwrite: bool = False,
-        qdf: bool = False,
-        as_csv: bool = False,
-        keep_raw_data: bool = False,
         chunk_size: Optional[int] = None,
         timeout: Optional[float] = DQ_FILE_API_TIMEOUT,
         max_retries: int = 3,
     ) -> str:
         """
-        Downloads a single Parquet file to a specified directory.
+        Downloads a single Parquet file to the client's output directory.
 
-        This method can be called with either (`file_group_id` and `file_datetime`)
-        or a `filename`. For large files, it automatically uses the
-        `SegmentedFileDownloader` for a robust, multi-part download.
+        Call with either (`file_group_id` and `file_datetime`) or `filename`, not both.
+        For large files, it automatically uses the `SegmentedFileDownloader` for a
+        robust, multi-part download.
 
         Parameters
         ----------
@@ -798,19 +878,9 @@ class DataQueryFileAPIClient:
         file_datetime : str
             The timestamp of the file to download.
         filename : Optional[str]
-            The full filename to download. Overrides `file_group_id` and `file_datetime`.
-        out_dir : str
-            The directory where the file will be saved.
+            The full filename, in place of `file_group_id` and `file_datetime`.
         overwrite : bool
             If True, overwrites the file if it already exists. Default is False.
-        qdf : bool
-            If True, converts the DataFrame to a QuantamentalDataFrame. If False, files
-            are saved as-is in the ticker-based Parquet format. Default is False.
-        as_csv : bool
-            If True, saves the downloaded datasets as CSV files. Default is False, with
-            Parquet as the default format.
-        keep_raw_data : bool
-            If True, keeps the raw data files after conversion. Default is False.
         chunk_size : Optional[int]
             The chunk size for streaming downloads (in bytes).
         timeout : Optional[float]
@@ -823,17 +893,13 @@ class DataQueryFileAPIClient:
         str
             The full path to the downloaded file.
         """
-        out_dir = self._get_save_dir(out_dir)
+        out_dir = self._get_save_dir()
         if not ((bool(file_group_id) and bool(file_datetime)) ^ bool(filename)):
             raise ValueError(
                 "One of `file_group_id` & `file_datetime`, or `filename` must be provided."
             )
         if not file_group_id:
-            try:
-                file_group_id, file_datetime_with_ext = filename.rsplit("_", 1)
-                file_datetime = file_datetime_with_ext.split(".")[0]
-            except ValueError:
-                raise ValueError(f"Invalid filename format: {filename}")
+            file_group_id, file_datetime = _split_jpmaqs_filename(filename)
         endpoint = "/group/file/download"
         url = f"{self.base_url}{endpoint}"
         headers = self.oauth.get_headers()
@@ -849,7 +915,7 @@ class DataQueryFileAPIClient:
                 logger.warning(f"File {file_path} already exists. Skipping download.")
                 return str(file_path)
             logger.warning(f"File {file_path} already exists. It will be overwritten.")
-            file_path.unlink()
+            _delete_jpmaqs_file(file_path)
 
         logger.info(f"Starting download of {file_name}...")
         start = time.time()
@@ -870,7 +936,6 @@ class DataQueryFileAPIClient:
         if "_DELTA" in file_group_id:
             is_small_file = file_datetime not in large_delta_file_datetimes()
 
-        is_catalog_file = file_group_id == self.catalog_file_group_id
         if is_small_file:
             request_wrapper_stream_bytes_to_disk(**download_args)
         else:
@@ -882,7 +947,6 @@ class DataQueryFileAPIClient:
                     f"Retrying with segmented download..."
                 )
                 try:
-
                     SegmentedFileDownloader(
                         **download_args,
                         max_file_retries=max_retries,
@@ -893,8 +957,7 @@ class DataQueryFileAPIClient:
                         f"Segmented download also failed for {file_name}: {seg_e}. "
                         f"Cleaning up partial file and raising exception."
                     )
-                    if file_path.exists():
-                        file_path.unlink()
+                    _delete_jpmaqs_file(file_path)
                     raise DownloadError(
                         f"Failed to download {file_name} after {max_retries} retries."
                     ) from seg_e
@@ -903,32 +966,10 @@ class DataQueryFileAPIClient:
         logger.info(
             f"Downloaded {file_name} in {time_taken:.2f} seconds to {file_path}"
         )
-        if not (qdf or as_csv) or is_catalog_file or not file_path.suffix == ".parquet":
-            return str(file_path)
-
-        convert_args = dict(
-            filename=str(file_path),
-            as_csv=as_csv,
-            qdf=qdf,
-            keep_raw_data=keep_raw_data,
-        )
-
-        if PYTHON_3_8_OR_LATER:
-            convert_ticker_based_parquet_file_to_qdf_pl(**convert_args)
-        else:
-            convert_ticker_based_parquet_file_to_qdf(**convert_args)
-        if qdf:
-            msg_str = (
-                f"Successfully converted {filename} to Quantamental Data Format (QDF)"
-            )
-            if as_csv:
-                msg_str += " and saved as CSV"
-            logger.info(msg_str)
         return str(file_path)
 
     def delete_corrupt_files(
         self,
-        out_dir: Optional[str] = None,
         files: Optional[List[str]] = None,
     ) -> List[str]:
         """
@@ -936,28 +977,31 @@ class DataQueryFileAPIClient:
 
         Parameters
         ----------
-        out_dir : Optional[str]
-            The directory to scan for corrupt files. If None, uses the client's default
-            output directory.
         files : Optional[List[str]]
-            A list of file paths to check for corruption. If None, scans all downloaded
-            files in the specified output directory.
+            A list of file names or file paths to check for corruption. A file name
+            checks every copy of that name in the client's output directory; a file path
+            checks only that exact file. If None, scans all downloaded files.
 
         Returns
         -------
         List[str]
             A list of file paths that were identified as corrupt and deleted.
         """
-        out_dir = self._get_save_dir(out_dir)
-        avail_files = self.list_downloaded_files(out_dir=out_dir)
+        avail_files = self.list_downloaded_files()
         if avail_files.empty:
             return []
         if files is not None:
             if not all(isinstance(f, str) for f in files):
                 raise ValueError(
-                    "All items in `files` must be strings representing file paths."
+                    "All items in `files` must be strings representing file names or "
+                    "file paths."
                 )
-            avail_files = avail_files[avail_files["file-name"].isin(files)]
+            # the "path" column is resolved, so resolve the given paths to match
+            wanted = {str(Path(f).resolve()) for f in files}
+            avail_files = avail_files[
+                avail_files["file-name"].isin(files)
+                | avail_files["path"].astype(str).isin(wanted)
+            ]
         files = sorted(set(map(str, avail_files["path"])))
         extensions = sorted(set(Path(f).suffix.rsplit(".", 1)[-1] for f in files))
         return _delete_corrupt_files(files=files, extensions=extensions)
@@ -965,53 +1009,48 @@ class DataQueryFileAPIClient:
     def download_multiple_files(
         self,
         filenames: List[str],
-        out_dir: Optional[str] = None,
         overwrite: bool = False,
-        qdf: bool = False,
-        as_csv: bool = False,
-        keep_raw_data: bool = False,
         max_retries: int = 3,
-        n_jobs: int = None,
+        n_jobs: Optional[int] = None,
         chunk_size: Optional[int] = None,
         timeout: Optional[float] = DQ_FILE_API_TIMEOUT,
         show_progress: bool = True,
-    ) -> None:
+    ) -> List[str]:
         """
-        Downloads a list of files concurrently with progress indication.
+        Downloads a list of files concurrently, with a progress bar.
 
         Parameters
         ----------
         filenames : List[str]
             A list of full filenames to be downloaded.
-        out_dir : str
-            The directory to save the downloaded files.
         overwrite : bool
             If True, overwrites files if they already exist. Default is False.
-        qdf : bool
-            If True, converts the DataFrame to a QuantamentalDataFrame. If False, files
-            are saved as-is in the ticker-based Parquet format. Default is False.
-        as_csv : bool
-            If True, saves the DataFrame as a CSV file. Default is False.
-        keep_raw_data : bool
-            If True, keeps the raw data files after conversion. Default is False.
         max_retries : int
             The number of times to retry downloading the entire list of failed files.
-        n_jobs : int
-            The number of concurrent download jobs. If -1, it uses all available cores.
+        n_jobs : Optional[int]
+            The number of concurrent download jobs, passed to `ThreadPoolExecutor` as
+            `max_workers`. If None (default), it picks the worker count itself.
         chunk_size : Optional[int]
             The chunk size for streaming downloads (in bytes).
         timeout : Optional[float]
             The timeout for each download request in seconds.
         show_progress : bool
             If True, displays a progress bar for the downloads.
+
+        Returns
+        -------
+        List[str]
+            The filenames that were downloaded successfully.
         """
-        out_dir = self._get_save_dir(out_dir)
+        out_dir = self._get_save_dir()
         Path(out_dir).mkdir(parents=True, exist_ok=True)
         start_time = time.time()
+        if len(filenames) == 0:
+            logger.info("No files to download.")
+            return []
         logger.info(f"Starting download of {len(filenames)} files.")
         failed_files = []
-        if n_jobs == -1:
-            n_jobs = None
+        completed_file_names = set()
         with cf.ThreadPoolExecutor(max_workers=n_jobs) as executor:
             futures = {}
             for filename in tqdm(
@@ -1023,11 +1062,7 @@ class DataQueryFileAPIClient:
                     executor.submit(
                         self.download_file,
                         filename=filename,
-                        out_dir=out_dir,
                         overwrite=overwrite,
-                        qdf=qdf,
-                        as_csv=as_csv,
-                        keep_raw_data=keep_raw_data,
                         chunk_size=chunk_size,
                         timeout=timeout,
                     )
@@ -1043,22 +1078,22 @@ class DataQueryFileAPIClient:
                 fname = futures[future]
                 try:
                     future.result()
+                    completed_file_names.add(fname)
                 except KeyboardInterrupt:
                     executor.shutdown(wait=False, cancel_futures=True)
                     raise
                 except Exception as e:
                     logger.error(f"Failed to download {fname}: {e}")
                     failed_files.append(fname)
-        found_corrupt_files = self.delete_corrupt_files(
-            out_dir=out_dir, files=filenames
-        )
+        found_corrupt_files = self.delete_corrupt_files(files=filenames)
+        completed_file_names -= set(found_corrupt_files)
         failed_files = sorted(set(failed_files + found_corrupt_files))
         if not failed_files:
             total_time = time.time() - start_time
             logger.info(
                 f"Successfully downloaded {len(filenames)} files in {total_time:.2f} seconds."
             )
-            return  # All downloads scuccessful
+            return sorted(completed_file_names)  # All downloads successful
 
         log_msg = f"Failed to download {len(failed_files)} files"
         if max_retries > 0:
@@ -1066,30 +1101,27 @@ class DataQueryFileAPIClient:
         else:
             log_msg += "; no retries left"
         logger.warning(log_msg)
-        if max_retries == 0:
+        if max_retries <= 0:
             logger.error(f"Files failed after retries: {failed_files}")
             raise DownloadError(f"Files failed after retries: {failed_files}")
 
-        return self.download_multiple_files(
+        retried = self.download_multiple_files(
             filenames=failed_files,
-            out_dir=out_dir,
+            overwrite=overwrite,
             max_retries=max_retries - 1,
             n_jobs=n_jobs,
             chunk_size=chunk_size,
             timeout=timeout,
             show_progress=show_progress,
         )
+        return sorted(completed_file_names | set(retried))
 
     def download_catalog_file(
         self,
-        out_dir: Optional[str] = None,
-        add_dataset_column: bool = False,
-        as_csv: bool = False,
         overwrite: bool = False,
-        keep_raw_data: bool = False,
         timeout: Optional[float] = DQ_FILE_API_TIMEOUT,
     ) -> str:
-        out_dir = self._get_save_dir(out_dir)
+        """Downloads the latest JPMaQS metadata catalog file and returns its path."""
         available_catalogs = self.list_available_files(self.catalog_file_group_id)
         if available_catalogs.empty:
             raise DownloadError("No catalog files available for download.")
@@ -1101,7 +1133,7 @@ class DataQueryFileAPIClient:
 
         # check if file already exists
         file_path = None
-        existing_files = self.list_downloaded_files(out_dir=out_dir)
+        existing_files = self.list_downloaded_files()
         if not overwrite and not existing_files.empty:
             if latest_filename in sorted(existing_files["file-name"]):
                 file_path = existing_files[
@@ -1111,31 +1143,19 @@ class DataQueryFileAPIClient:
         if file_path is None:
             file_path = self.download_file(
                 filename=latest_filename,
-                out_dir=out_dir,
                 overwrite=overwrite,
                 timeout=timeout,
             )
 
-        if not (add_dataset_column or as_csv):
-            return file_path
-
-        df = pd.read_parquet(file_path)
-
-        if add_dataset_column:
-            df.loc[:, "Dataset"] = (
-                df["Theme"].map(JPMAQS_DATASET_THEME_MAPPING).fillna("Unknown")
-            )
-
-        if as_csv:
-            csv_file_path = Path(file_path).with_suffix(".csv")
-            df.to_csv(csv_file_path, index=False)
-            if not keep_raw_data:
-                Path(file_path).unlink()
-            file_path = str(csv_file_path)
-        else:
-            df.to_parquet(file_path, index=False)
-
         return file_path
+
+    def load_catalog(self) -> pd.DataFrame:
+        """Loads the latest catalog file into a DataFrame."""
+        return pd.read_parquet(self.download_catalog_file())
+
+    def list_all_tickers(self) -> List[str]:
+        """Returns a list of all available tickers in the catalog."""
+        return sorted(self.load_catalog()["Ticker"].unique())
 
     def get_datasets_for_indicators(
         self,
@@ -1143,8 +1163,34 @@ class DataQueryFileAPIClient:
         cids: Optional[List[str]] = None,
         xcats: Optional[List[str]] = None,
         case_sensitive: bool = False,
-        out_dir: Optional[str] = None,
-    ) -> List[str]:
+        as_dict: bool = False,
+    ) -> Union[List[str], Dict[str, List[str]]]:
+        """
+        Returns a list of datasets (or a dictionary mapping datasets to tickers) that
+        contain the specified tickers, CIDs, or XCATs.
+
+        Parameters
+        ----------
+        tickers : Optional[List[str]]
+            A list of tickers to search for.
+        cids : Optional[List[str]]
+            A list of CIDs to search for (must be used in conjunction with `xcats`).
+        xcats : Optional[List[str]]
+            A list of XCATs to search for (must be used in conjunction with `cids`).
+        case_sensitive : bool
+            If True, the search will be case-sensitive. Defaults to False.
+        as_dict : bool
+            If True, returns a dictionary mapping datasets to lists of tickers. Defaults
+            to False, which returns a list of datasets.
+
+        Returns
+        -------
+        Union[List[str], Dict[str, List[str]]]
+            A list of datasets or a dictionary mapping datasets to tickers, depending on
+            the `as_dict` parameter. Tickers absent from the catalog have no dataset: they
+            are warned about, or raise a ValueError if none of them is in the catalog.
+        """
+
         for param, name in zip(
             [tickers, cids, xcats],
             ["tickers", "cids", "xcats"],
@@ -1173,13 +1219,12 @@ class DataQueryFileAPIClient:
         if not tickers or not any(t.strip() for t in tickers):
             raise ValueError("No valid tickers to search for.")
 
-        catalog_file = self.download_catalog_file(
-            out_dir=out_dir,
-            add_dataset_column=True,
-            as_csv=False,
-        )
+        catalog_file = self.download_catalog_file()
 
         catalog_df = pd.read_parquet(catalog_file)
+        catalog_df["Dataset"] = (
+            catalog_df["Theme"].map(JPMAQS_DATASET_THEME_MAPPING).fillna("Unknown")
+        )
 
         if case_sensitive:
             catalog_df = catalog_df[catalog_df["Ticker"].isin(tickers)]
@@ -1188,19 +1233,54 @@ class DataQueryFileAPIClient:
                 catalog_df["Ticker"].str.lower().isin(t.lower() for t in tickers)
             ]
 
-        datasets_to_keep = sorted(set(catalog_df["Dataset"]))
+        normalise = str if case_sensitive else str.lower
+        found_tickers = {normalise(t) for t in catalog_df["Ticker"]}
+        missing_tickers = [t for t in tickers if normalise(t) not in found_tickers]
+        if missing_tickers:
+            if len(missing_tickers) == len(tickers):
+                raise ValueError(
+                    "None of the requested tickers are available in the JPMaQS "
+                    f"catalog: {_abbreviate_tickers_list(missing_tickers)}."
+                )
+            logger.warning(
+                "Tickers not available in the JPMaQS catalog: %s",
+                _abbreviate_tickers_list(missing_tickers),
+            )
+
+        unknown_theme_tickers = catalog_df["Dataset"] == "Unknown"
+        if unknown_theme_tickers.any():
+            logger.warning(
+                "Catalog themes missing from `JPMAQS_DATASET_THEME_MAPPING`: %s. "
+                "The requested tickers under them belong to no dataset and are skipped.",
+                sorted(set(catalog_df.loc[unknown_theme_tickers, "Theme"])),
+            )
+        datasets_to_keep = sorted(set(catalog_df["Dataset"]) - {"Unknown"})
+        if as_dict:
+            rdict = {
+                dataset: sorted(
+                    set(catalog_df[catalog_df["Dataset"] == dataset]["Ticker"])
+                )
+                for dataset in datasets_to_keep
+            }
+            return rdict
         return datasets_to_keep
 
-    def list_downloaded_files(
-        self,
-        out_dir: Optional[str] = None,
-    ) -> pd.DataFrame:
+    def list_downloaded_files(self) -> pd.DataFrame:
+        """
+        Lists the files already downloaded to the output directory.
+
+        Returns
+        -------
+        pd.DataFrame
+            One row per file, with columns "file-name", "file-datetime", "dataset",
+            "file-type", "file-timestamp" and "path".
+        """
         out_dir = self._get_save_dir()
         col_order = [
-            "filename",
+            "file-name",
             "file-datetime",
             "dataset",
-            "filetype",
+            "file-type",
             "file-timestamp",
             "path",
         ]
@@ -1208,15 +1288,13 @@ class DataQueryFileAPIClient:
             _downloaded_files_df(out_dir, file_format=fmt, include_metadata_files=True)
             for fmt in ["parquet", "csv", "json"]
         ]
-        dfs = [_ for _ in dfs if _ is not _.empty]
+        # `_downloaded_files_df` returns a narrower frame when it finds nothing, so drop
+        # the empties before concatenating: the result then always has `col_order`.
+        dfs = [_ for _ in dfs if not _.empty]
         if not dfs:
             return pd.DataFrame(columns=col_order)
         files_df = pd.concat(dfs).reset_index(drop=True)
-        if files_df.empty:
-            return files_df
-
-        files_df = files_df[col_order].rename(columns={"filename": "file-name"})
-        return files_df
+        return files_df[col_order]
 
     def _load_metadata_jsons(
         self,
@@ -1226,17 +1304,17 @@ class DataQueryFileAPIClient:
     ) -> Dict[str, pd.DataFrame]:
         """Load JPMaQS metadata notification JSONs for a date."""
         date: pd.Timestamp = (
-            pd_to_datetime_compat(date) if date is not None else pd.Timestamp.utcnow()
+            pd_to_datetime_compat(date) if date is not None else utc_now()
         ).normalize()
-        if date > pd.Timestamp.utcnow().normalize():
-            today_utc = pd.Timestamp.utcnow().normalize()
+        if date > utc_now().normalize():
+            today_utc = utc_now().normalize()
             raise ValueError(
                 "Provided `date` is in the future (UTC). "
                 f"Requested: {date.date()}, today (UTC): {today_utc.date()}."
             )
         if not skip_download:
-            to_dt = date + pd.offsets.BDay(1) - pd.Timedelta(seconds=1)
-            self.download_full_snapshot(
+            to_dt = date + pd.offsets.BDay(1) - pd.Timedelta(1, unit="s")
+            self.download_files(
                 since_datetime=date,
                 to_datetime=to_dt,
                 include_full_snapshots=False,
@@ -1244,6 +1322,9 @@ class DataQueryFileAPIClient:
                 include_metadata=True,
             )
         df = self.list_downloaded_files()
+        if df.empty:
+            logger.warning(f"No notification files found for date: {date.date()}")
+            return {}
         df: pd.DataFrame = df[
             (df["dataset"] == "JPMAQS_METADATA_NOTIFICATIONS")
             & df["file-name"].str.lower().str.endswith(".json")
@@ -1396,16 +1477,226 @@ class DataQueryFileAPIClient:
         )
         return df1
 
-    def download_full_snapshot(
+    def cleanup_old_files(
         self,
-        out_dir: Optional[str] = None,
+        keep_n_days_old_files: int = 0,
+        to_datetime: Optional[Union[str, pd.Timestamp]] = None,
+        dry_run: bool = False,
+        show_progress: bool = True,
+        protect_files: Optional[Sequence[str]] = None,
+        retain_snap_dates: Optional[Sequence[str]] = None,
+    ) -> Optional[pd.DataFrame]:
+        """
+        Deletes old files from the output directory, judged on the snapshot date in each
+        file name rather than when it was downloaded.
+
+        Pass `retain_snap_dates` to keep a number of published snapshots, or `to_datetime`
+        to count back in calendar days. With neither, nothing is deleted: the method warns
+        and returns what today's date would have removed.
+
+        Parameters
+        ----------
+        keep_n_days_old_files : Optional[int]
+            How much history to keep beyond the latest, in snapshot dates when
+            `retain_snap_dates` is given and in calendar days otherwise. At 0 (default),
+            only the latest is kept. If None, or -1, no files are deleted.
+        to_datetime : Optional[Union[str, pd.Timestamp]]
+            The date to count back from, used only when `retain_snap_dates` is not given.
+            Counts calendar days, so a weekend consumes the allowance. Time is ignored.
+        dry_run : bool
+            If True, logs and returns the files that would be deleted without deleting
+            them. Default is False.
+        show_progress : bool
+            If True, displays a progress bar for the deletion process.
+        protect_files : Optional[Sequence[str]]
+            File names never to delete, whatever their snapshot date.
+        retain_snap_dates : Optional[Sequence[str]]
+            Snapshot dates ("YYYYMMDD") to keep; files dated before the oldest of them are
+            deleted. Counted in published snapshots, so weekends do not consume the
+            allowance. Takes precedence over `to_datetime`. An empty sequence deletes
+            nothing. A date that is not on disk is warned about.
+
+        Returns
+        -------
+        Optional[pd.DataFrame]
+            The files deleted, or the files that would be deleted in dry-run mode and when
+            no retention is given; otherwise None.
+        """
+        MAX_FILES_LISTED_IN_WARNING: int = 50
+        if keep_n_days_old_files is None or keep_n_days_old_files < 0:
+            return
+
+        downloaded_df = self.list_downloaded_files()
+        if downloaded_df.empty:
+            return
+
+        files_df = self._add_snap_date_column(downloaded_df)
+        snap_dates = pd.to_datetime(files_df["snap-date"], format="%Y%m%d", utc=True)
+        on_disk_dates = set(files_df["snap-date"])
+        no_anchor = retain_snap_dates is None and to_datetime is None
+
+        if retain_snap_dates is not None:
+            if not retain_snap_dates:
+                logger.info("No snapshot dates to retain were given. No files deleted.")
+                return
+            oldest_kept = min(retain_snap_dates)
+            since_dt = pd.Timestamp(oldest_kept, tz="UTC").normalize()
+            missing = sorted(set(retain_snap_dates) - on_disk_dates)
+            if missing:
+                held = sorted(set(retain_snap_dates) & on_disk_dates)
+                warnings.warn(
+                    f"Asked to keep {keep_n_days_old_files} snapshot date(s) beyond the "
+                    f"latest, but {missing} is not in the output directory, so that "
+                    f"history is not available locally. Held: {held}. Files dated before "
+                    f"{oldest_kept} are still deleted.",
+                    stacklevel=2,
+                )
+        else:
+            anchor = utc_now() if to_datetime is None else to_datetime
+            since_dt = pd_to_datetime_compat(
+                anchor, utc=True
+            ).normalize() - pd.Timedelta(keep_n_days_old_files, unit="D")
+
+        files_to_delete = files_df[snap_dates < since_dt]
+        if protect_files:
+            files_to_delete = files_to_delete[
+                ~files_to_delete["file-name"].isin(set(protect_files))
+            ]
+
+        if no_anchor:
+            # deleting against the wall clock destroys a snapshot that has simply not been
+            # replaced yet: at weekends, on holidays, and before the daily publication.
+            # Report what it would take out instead of doing it.
+
+            listed = sorted(files_to_delete["file-name"])[:MAX_FILES_LISTED_IN_WARNING]
+            unlisted = len(files_to_delete) - len(listed)
+            warnings.warn(
+                f"`cleanup_old_files` needs `retain_snap_dates` or `to_datetime` to know "
+                f"what to keep, so nothing was deleted. Anchored on today "
+                f"({since_dt.date()}) it would have deleted {len(files_to_delete)} "
+                f"file(s): {listed}"
+                + (f" ... and {unlisted} more" if unlisted > 0 else ""),
+                stacklevel=2,
+            )
+            return files_to_delete
+
+        if files_to_delete.empty:
+            logger.info(
+                "No files found with snap-date before %s. No files deleted.",
+                since_dt.date(),
+            )
+            return
+
+        if dry_run:
+            logger.info(
+                "Dry run: %d files with snap-date before %s would be deleted.",
+                len(files_to_delete),
+                since_dt.date(),
+            )
+            return files_to_delete
+
+        for file_path in tqdm(
+            sorted(files_to_delete["path"]),
+            desc=f"Cleaning up files older than {since_dt.date()}",
+            disable=not show_progress,
+        ):
+            _delete_jpmaqs_file(file_path)
+
+        # remove any date folders left empty by the deletion
+        for parent_dir in {Path(p).parent for p in files_to_delete["path"]}:
+            try:
+                parent_dir.rmdir()
+            except OSError:
+                pass
+
+        logger.info(
+            "Deleted %d files with snap-date before %s.",
+            len(files_to_delete),
+            since_dt.date(),
+        )
+
+    def _sort_file_for_download_order(self, files_df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Sorts files for download order based on priority:
+        1. Full snapshots
+        2. Delta files
+        3. Metadata files
+
+        Within each category, files are sorted by 'file-datetime' and then by 'file-name'.
+
+        Parameters
+        ----------
+        files_df : pd.DataFrame
+            DataFrame containing file details.
+
+        Returns
+        -------
+        pd.DataFrame
+            Sorted DataFrame ready for download.
+        """
+        sorted_df = files_df.copy()
+        sorted_df["download-priority"] = sorted_df["file-name"].apply(
+            lambda x: 3 if "_METADATA" in x else (2 if "_DELTA" in x else 1)
+        )
+        sorted_df = sorted_df.sort_values(
+            by=["download-priority", "file-datetime", "file-name"],
+            ascending=[True, True, True],
+        ).reset_index(drop=True)
+        return sorted_df
+
+    def _add_snap_date_column(self, files_df: pd.DataFrame) -> pd.DataFrame:
+        SNAP_ASSUMED_TIME = "T060000"
+        # files published from 06:00 UTC belong to that day's snapshot, earlier to the previous
+        SNAP_WINDOW_START = pd.Timedelta(6, unit="h")
+        files_df = files_df.copy()
+        # tail of the filename: "20260728" or "20260728T080000"
+        timestamps = (
+            files_df["file-name"]
+            .astype(str)
+            .str.rsplit("_", n=1)
+            .str[-1]
+            .str.split(".")
+            .str[0]
+        )
+        snap_dt_col = pd.to_datetime(
+            timestamps.where(
+                timestamps.str.contains("T"), timestamps + SNAP_ASSUMED_TIME
+            ),
+            format="%Y%m%dT%H%M%S",
+            errors="coerce",
+        )
+        if snap_dt_col.isna().any():
+            bad = files_df.loc[snap_dt_col.isna(), "file-name"].tolist()
+            raise ValueError(
+                f"Incorrectly named file(s), cannot parse timestamp: {bad}"
+            )
+        files_df["snap-date"] = (snap_dt_col - SNAP_WINDOW_START).dt.strftime("%Y%m%d")
+        return files_df
+
+    def _latest_complete_snapshot_date(self, files_df: pd.DataFrame) -> Optional[str]:
+        """
+        Returns the latest snap-date whose full-snapshot set covers every JPMaQS theme,
+        or None if no snap-date has a complete set.
+        """
+        if files_df.empty:
+            return None
+        expected = set(JPMAQS_DATASET_THEME_MAPPING.values())
+        checkfile = lambda x: any(s in x for s in ["_DELTA", "_METADATA"])  # noqa: E731
+        snap_df = files_df[~files_df["file-name"].apply(checkfile)]
+        if "snap-date" not in snap_df.columns:
+            snap_df = self._add_snap_date_column(snap_df)
+        complete_dates = [
+            snap_date
+            for snap_date, group_ids in snap_df.groupby("snap-date")["file-group-id"]
+            if expected.issubset(group_ids)
+        ]
+        return max(complete_dates) if len(complete_dates) else None
+
+    def download_files(
+        self,
         since_datetime: Optional[str] = None,
         to_datetime: Optional[str] = None,
-        file_datetime: Optional[str] = None,
         overwrite: bool = False,
-        qdf: bool = False,
-        as_csv: bool = False,
-        keep_raw_data: bool = False,
         chunk_size: Optional[int] = None,
         timeout: Optional[float] = DQ_FILE_API_TIMEOUT,
         include_full_snapshots: bool = True,
@@ -1413,7 +1704,7 @@ class DataQueryFileAPIClient:
         include_metadata: bool = True,
         file_group_ids: Optional[List[str]] = None,
         show_progress: bool = True,
-    ) -> None:
+    ) -> List[str]:
         """
         Downloads a complete snapshot of files based on specified criteria.
 
@@ -1423,25 +1714,13 @@ class DataQueryFileAPIClient:
 
         Parameters
         ----------
-        out_dir : str
-            The directory where files will be saved.
         since_datetime : Optional[str]
             Download files modified since this timestamp (inclusive).
-            Defaults to the start of the current day (UTC) if `file_datetime` is not set.
+            Defaults to the start of the current day (UTC).
         to_datetime : Optional[str]
             Download files modified up to this timestamp (inclusive).
-        file_datetime : Optional[str]
-            A specific file date to check for. Overrides `since_datetime`.
         overwrite : bool
             If True, overwrites files if they already exist. Default is False.
-        qdf : bool
-            If True, converts the DataFrame to a QuantamentalDataFrame. If False, files
-            are saved as-is in the ticker-based Parquet format. Default is False.
-        as_csv : bool
-            If True, saves the downloaded datasets as CSV files. Default is False, with
-            Parquet as the default format.
-        keep_raw_data : bool
-            If True, keeps the raw data files after conversion. Default is False.
         chunk_size : Optional[int]
             The chunk size for streaming downloads (in bytes).
         timeout : Optional[float]
@@ -1457,23 +1736,25 @@ class DataQueryFileAPIClient:
             from these groups will be downloaded.
         show_progress : bool
             If True, displays a progress bar for downloads.
+
+        Returns
+        -------
+        List[str]
+            The names of the files downloaded, empty if none of the matching files were
+            missing from the output directory.
         """
-        out_dir = self._get_save_dir(out_dir)
+        out_dir = self._get_save_dir()
         Path(out_dir).mkdir(parents=True, exist_ok=True)
         start_time = time.time()
 
-        if file_datetime is None and since_datetime is None:
-            since_datetime = pd.Timestamp.utcnow().strftime("%Y%m%d")
+        if since_datetime is None:
+            since_datetime = utc_now().strftime("%Y%m%d")
 
-        effective_ts = file_datetime or since_datetime
         logger.info(
-            f"Starting snapshot download to '{out_dir}' for files since {effective_ts}."
+            f"Starting snapshot download to '{out_dir}' for files since {since_datetime}."
         )
 
-        validate_dq_timestamp(
-            effective_ts,
-            var_name="file_datetime" if file_datetime else "since_datetime",
-        )
+        validate_dq_timestamp(since_datetime, var_name="since_datetime")
 
         files_df = self.filter_available_files_by_datetime(
             since_datetime=since_datetime,
@@ -1490,7 +1771,7 @@ class DataQueryFileAPIClient:
                 raise ValueError("`file_group_ids` must be a list of strings.")
             files_df = files_df[files_df["file-group-id"].isin(file_group_ids)].copy()
 
-        downloaded_files_df = self.list_downloaded_files(out_dir=out_dir)
+        downloaded_files_df = self.list_downloaded_files()
         if not overwrite and not downloaded_files_df.empty:
             files_df = files_df[
                 ~(files_df["file-name"].isin(downloaded_files_df["file-name"]))
@@ -1501,24 +1782,14 @@ class DataQueryFileAPIClient:
         logger.info(f"Found {num_files_to_download} new files to download.")
         if not num_files_to_download:
             logger.info("No new files to download.")
-            return
+            return []
 
-        files_df["download-priority"] = (
-            files_df["file-name"]
-            .str.lower()
-            .apply(lambda x: (3 if "_metadata" in x else (2 if "_delta" in x else 1)))
-        )
-        download_order = files_df.sort_values(
-            by=["download-priority", "file-datetime", "file-name"],
-        )["file-name"].tolist()
-
-        self.download_multiple_files(
+        download_order = self._sort_file_for_download_order(files_df)[
+            "file-name"
+        ].tolist()
+        downloaded_files = self.download_multiple_files(
             filenames=download_order,
-            out_dir=out_dir,
             overwrite=overwrite,
-            qdf=qdf,
-            as_csv=as_csv,
-            keep_raw_data=keep_raw_data,
             chunk_size=chunk_size,
             timeout=timeout,
             show_progress=show_progress,
@@ -1526,6 +1797,183 @@ class DataQueryFileAPIClient:
 
         total_time = time.time() - start_time
         logger.info(f"Snapshot download completed in {total_time:.2f} seconds.")
+        logger.info(f"Downloaded {len(downloaded_files)} files to '{out_dir}'.")
+        return downloaded_files
+
+    def download_full_snapshot(
+        self,
+        since_datetime: Optional[str] = None,
+        to_datetime: Optional[str] = None,
+        overwrite: bool = False,
+        chunk_size: Optional[int] = None,
+        timeout: Optional[float] = DQ_FILE_API_TIMEOUT,
+        include_full_snapshots: bool = True,
+        include_delta: bool = True,
+        include_metadata: bool = True,
+        file_group_ids: Optional[List[str]] = None,
+        show_progress: bool = True,
+    ) -> List[str]:
+        """
+        Deprecated method to download files, now superseded by
+        :func:`DataQueryFileAPIClient.download_files`. This method will be removed in a
+        future release.
+        """
+        warnings.warn(
+            "The `DataQueryFileAPIClient.download_full_snapshot` method is deprecated "
+            "and will be removed in a future release. "
+            "Please use `DataQueryFileAPIClient.download_files` instead.",
+            FutureWarning,
+            stacklevel=2,
+        )
+        return self.download_files(
+            since_datetime=since_datetime,
+            to_datetime=to_datetime,
+            overwrite=overwrite,
+            chunk_size=chunk_size,
+            timeout=timeout,
+            include_full_snapshots=include_full_snapshots,
+            include_delta=include_delta,
+            include_metadata=include_metadata,
+            file_group_ids=file_group_ids,
+            show_progress=show_progress,
+        )
+
+    def download_latest_files(
+        self,
+        file_group_ids: Optional[List[str]] = None,
+        keep_n_days_old_files: Optional[int] = 0,
+        overwrite: bool = False,
+        chunk_size: Optional[int] = None,
+        timeout: Optional[float] = DQ_FILE_API_TIMEOUT,
+        show_progress: bool = True,
+    ) -> List[str]:
+        """
+        Downloads the files for the latest snapshot date (full snapshots, deltas and
+        metadata), optionally restricted to `file_group_ids`. Files already on disk are
+        skipped unless `overwrite` is set, and older files are removed according to
+        `keep_n_days_old_files`.
+
+        Parameters
+        ----------
+        file_group_ids : Optional[List[str]]
+            Restrict the download to these file groups, e.g. "JPMAQS_GENERIC_RETURNS".
+            Matching is by prefix, so a group's delta files are downloaded alongside its
+            full snapshot. Only the groups listed are downloaded, so list the metadata
+            catalog group if the files are to be loaded. If None (default), all available
+            file groups are downloaded, the catalog among them.
+        keep_n_days_old_files : int
+            How many published snapshots to keep besides the latest, after the download.
+            At 0 (the default), only the latest day's files are kept: its full snapshots,
+            deltas and metadata. Counted in published snapshots, not calendar days, so
+            weekends do not consume the allowance. If None or negative, no files are
+            deleted.
+            See :func:`DataQueryFileAPIClient.cleanup_old_files` for more details.
+        overwrite : bool
+            If True, overwrites files if they already exist. Default is False.
+        chunk_size : Optional[int]
+            The chunk size for streaming downloads (in bytes).
+        timeout : Optional[float]
+            The timeout for each download request in seconds.
+        show_progress : bool
+            If True, displays a progress bar for downloads.
+
+        Returns
+        -------
+        List[str]
+            The list of files downloaded.
+        """
+        files_df = self._add_snap_date_column(
+            self.filter_available_files_by_datetime(
+                since_datetime=JPMAQS_EARLIEST_FILE_DATE,
+                include_delta=True,
+                include_full_snapshots=True,
+                include_metadata=True,
+            )
+        )
+        # resolve and filter by the latest snapshot date across all groups
+        latest_snapshot_date = self._latest_complete_snapshot_date(files_df)
+        if latest_snapshot_date is None:
+            logger.warning("No snapshot available to download.")
+            return []
+
+        files_for_snapshot = files_df[files_df["snap-date"] == latest_snapshot_date]
+        # file_group_ids=None means "all groups", which includes the metadata catalog
+        if file_group_ids is not None:
+            # an empty or unmatched selection stays empty: nothing was asked for
+            files_for_snapshot = files_for_snapshot[
+                files_for_snapshot["file-group-id"].str.startswith(
+                    tuple(file_group_ids)
+                )
+            ]
+        # every file this snapshot consists of, whether or not this call has to fetch it.
+        # cleanup must never prune these, so capture them before the dedup below narrows
+        # the frame to what is missing.
+        required_files = files_for_snapshot["file-name"].tolist()
+        if not required_files:
+            # the request selected no files at all, e.g. file_group_ids matched nothing.
+            # Nothing is needed, so nothing may be pruned on the strength of it either.
+            logger.info(
+                f"No files match the requested file groups for the latest snapshot "
+                f"dated {latest_snapshot_date}."
+            )
+            return []
+
+        # Retention is counted in snapshot dates that exist upstream, not calendar days,
+        # so it steps over weekends and holidays. Any date carrying files counts, whether
+        # it is a business day or not.
+        retain_snap_dates = None
+        if keep_n_days_old_files is not None and keep_n_days_old_files >= 0:
+            published = sorted(
+                {d for d in files_df["snap-date"] if d <= latest_snapshot_date},
+                reverse=True,
+            )
+            retain_snap_dates = published[: keep_n_days_old_files + 1]
+
+        files_to_download = files_for_snapshot
+        avail_files_df = self.list_downloaded_files()
+        if not avail_files_df.empty and not overwrite:
+            files_to_download = files_to_download[
+                ~files_to_download["file-name"].isin(avail_files_df["file-name"])
+            ]
+        download_order = self._sort_file_for_download_order(files_to_download)[
+            "file-name"
+        ].tolist()
+        if not download_order:
+            logger.info(
+                f"No new files to download for the latest snapshot dated "
+                f"{latest_snapshot_date}."
+            )
+            # every required file is already on disk, so the snapshot is complete and
+            # older files can go. `required_files` is non-empty here, checked above.
+            self.cleanup_old_files(
+                keep_n_days_old_files=keep_n_days_old_files,
+                to_datetime=latest_snapshot_date,
+                protect_files=required_files,
+                retain_snap_dates=retain_snap_dates,
+                show_progress=show_progress,
+            )
+            return []
+
+        downloaded_files = self.download_multiple_files(
+            filenames=download_order,
+            overwrite=overwrite,
+            chunk_size=chunk_size,
+            timeout=timeout,
+            show_progress=show_progress,
+        )
+        logger.info(
+            f"Downloaded {len(downloaded_files)} files for the latest snapshot "
+            f"dated {latest_snapshot_date}."
+        )
+
+        self.cleanup_old_files(
+            keep_n_days_old_files=keep_n_days_old_files,
+            to_datetime=latest_snapshot_date,
+            protect_files=required_files,
+            retain_snap_dates=retain_snap_dates,
+            show_progress=show_progress,
+        )
+        return downloaded_files
 
     def download(
         self,
@@ -1538,17 +1986,25 @@ class DataQueryFileAPIClient:
         dataframe_format: str = "qdf",
         dataframe_type: str = "pandas",
         categorical_dataframe: bool = True,
-        include_delta_files: bool = False,
+        include_delta_files: bool = True,
+        delta_treatment: str = "latest",
         show_progress: bool = True,
-        out_dir: Optional[str] = None,
         overwrite: bool = False,
-        qdf: bool = False,
-        keep_raw_data: bool = False,
-        as_csv: bool = False,
+        keep_n_days_old_files: Optional[int] = 0,
+        include_source_file: bool = False,
+        dropna: bool = True,
+        datasets: Optional[List[str]] = None,
+        categorical_source_file_column: bool = True,
+        suppress_warnings: bool = False,
     ) -> Union[pd.DataFrame, pl.DataFrame, pl.LazyFrame]:
         """
-        A method to download data and load it as a DataFrame based on specified
-        indicators, and specified date range.
+        Downloads data for the specified `tickers`, `cids`, or `xcats` and returns it as
+        a DataFrame for the given date range.
+
+        Every file of the latest snapshot for the relevant datasets is downloaded to disk
+        (full snapshots, delta files, metadata files and the metadata catalog), then the
+        requested data is loaded and filtered from them. The files on disk are unmodified;
+        the conversion to `dataframe_format` (e.g. "qdf") is applied lazily on read.
 
         Parameters
         ----------
@@ -1566,82 +2022,125 @@ class DataQueryFileAPIClient:
             is None, in which case all metrics are returned.
         start_date : Optional[str]
             The start date for the returned data in the ISO format "YYYY-MM-DD".
-            If None, data is returned from the earliest available date.
+            If None, data is returned from the earliest available date. A range given
+            the wrong way round is swapped, with a warning, rather than returning
+            nothing.
         end_date : Optional[str]
             The end date for the returned data in the ISO format "YYYY-MM-DD".
-            If None, data is returned up to the latest available date.
+            If None, data is returned up to the latest available date. Equal bounds
+            return that single date.
         dataframe_format : str
-            The format of the returned DataFrame. Options are "qdf" for QuantamentalDataFrame
-            or "tickers" for a standard DataFrame with tickers as columns. Default is "qdf".
+            The format of the returned DataFrame, default is "qdf". Options are:
+                - "qdf": QuantamentalDataFrame with columns (real_date, cid, xcat, metric1, ..., metricN)
+                - "tickers": QuantamentalDataFrame with columns (real_date, ticker, metric1, ..., metricN)
+                - "wide": QuantamentalDataFrame with columns (real_date, ticker1, ticker2, ..., tickerN)
+                    for a single metric. Cannot be combined with `include_source_file`.
         dataframe_type : str
             The type of DataFrame to return. Options are "pandas" for a pandas DataFrame,
             "polars" for a polars DataFrame, or "polars-lazy" for a polars LazyFrame.
             Default is "pandas".
         categorical_dataframe : bool
             If True and `dataframe_type` is "pandas", the returned DataFrame will use
-            categorical dtypes for object columns. Default is True.
+            categorical dtypes for object columns. Ignored for `dataframe_format="wide"`.
+            Default is True.
         include_delta_files : bool
-            If True, delta files will be included in the download. Default is False.
+            Whether delta files are folded in when the data is read. Default is True.
+            This controls reading only - delta files are always downloaded, as the
+            local snapshot would otherwise be incomplete for any later load.
+        delta_treatment : str
+            How rows restated by a delta file are resolved, per (ticker, real_date):
+            "latest" (the default) keeps the row with the newest `last_updated`,
+            "earliest" the oldest, and "all" keeps every version. "all" requires
+            `dropna=False`, and cannot be used with `dataframe_format="wide"`.
         show_progress : bool
             If True, displays a progress bar during downloads. Default is True.
-        out_dir : Optional[str]
-            The output directory for downloaded files. The default directory being used
-            by the DataQueryFileAPI instance is used if None.
         overwrite : bool
             If True, overwrites files if they already exist. Default is False.
-        qdf : bool
-            If True, each downloaded dataframe will be saved as a QuantamentalDataFrame,
-            otherwise files are saved as-is in the ticker-based Parquet format.
+        keep_n_days_old_files : int
+            How many published snapshots to keep besides the latest, after the download.
+            At 0 (the default), only the latest day's files are kept: its full snapshots,
+            deltas and metadata. Counted in published snapshots, not calendar days, so
+            weekends do not consume the allowance. If None or negative, no files are
+            deleted.
+            See :func:`DataQueryFileAPIClient.cleanup_old_files` for more details.
+        include_source_file : bool
+            If True, the returned DataFrame will include a column indicating the source
+            file from which each row was loaded. As this loads a large amount of string
+            data, the `"source_file"` column is categorical by default. If False
+            (default), no source file information is included.
+
             Default is False.
-        keep_raw_data : bool
-            If True, keeps the raw data files after conversion. Default is False.
-        as_csv : bool
-            If True, saves the downloaded datasets as CSV files. Default is False, with
-            Parquet as the default format.
+        dropna : bool
+            If True (the default), no null reaches the output: a row is kept only where
+            every requested metric is populated. That drops expiry rows - JPMaQS withdraws
+            a (ticker, real_date) observation by publishing one whose metrics are all null,
+            which under `delta_treatment="latest"` is the row that survives - and equally
+            any other row null in a requested metric. Scoped to `metrics`, so a row null
+            only in a metric you did not ask for is kept. Applied after delta resolution,
+            so an expiry still supersedes the row it withdraws before being dropped itself.
+            Pass False to keep every null, and see the `last_updated` each expiry landed at.
+        datasets : Optional[List[str]]
+            Restrict the download and the load to these JPMaQS datasets, e.g.
+            `["JPMAQS_MACROECONOMIC_TRENDS"]`. The datasets holding the requested
+            indicators are derived from the catalog, and this narrows that set rather than
+            replacing it; naming only datasets that hold none of them raises. If None
+            (default), every dataset holding a requested indicator is used.
+        categorical_source_file_column : bool
+            If True (default), the `"source_file"` column added by `include_source_file`
+            uses a categorical dtype, which is much cheaper than storing the file name as a
+            string on every row. Ignored unless `include_source_file=True`.
+        suppress_warnings : bool
+            If True, silences warnings from this function. Default is False.
 
         Returns
         -------
         Union[pd.DataFrame, pl.DataFrame, pl.LazyFrame]
             A DataFrame containing the requested data.
         """
-        if include_delta_files:
-            raise NotImplementedError(
-                "Downloading delta files is not implemented in this method."
+        out_dir = self._get_save_dir()
+        with _suppressed_warnings(suppress_warnings):
+            datasets_to_download = self.get_datasets_for_indicators(
+                tickers=tickers, cids=cids, xcats=xcats
+            )
+            if datasets is not None:
+                # narrow rather than replace: downloading a dataset that holds none of
+                # the requested indicators would only fetch files the load then ignores
+                narrowed = [d for d in datasets_to_download if d in set(datasets)]
+                if not narrowed:
+                    raise ValueError(
+                        f"`datasets={sorted(set(datasets))}` holds none of the requested "
+                        f"indicators, which live in {sorted(datasets_to_download)}."
+                    )
+                datasets_to_download = narrowed
+            self.download_latest_files(
+                overwrite=overwrite,
+                show_progress=show_progress,
+                keep_n_days_old_files=keep_n_days_old_files,
+                file_group_ids=datasets_to_download,
+            )
+            catalog_path = Path(self.download_catalog_file())
+            return lazy_load_from_parquets(
+                files_dir=out_dir,
+                tickers=tickers,
+                cids=cids,
+                xcats=xcats,
+                metrics=metrics,
+                start_date=start_date,
+                end_date=end_date,
+                dataframe_format=dataframe_format,
+                dataframe_type=dataframe_type,
+                categorical_dataframe=categorical_dataframe,
+                datasets=datasets_to_download,
+                include_delta_files=include_delta_files,
+                catalog_path=catalog_path,
+                include_source_file=include_source_file,
+                delta_treatment=delta_treatment,
+                dropna=dropna,
+                categorical_source_file_column=categorical_source_file_column,
             )
 
-        out_dir = self._get_save_dir(out_dir)
-        datasets_to_download = self.get_datasets_for_indicators(
-            tickers=tickers, cids=cids, xcats=xcats
-        )
-        self.download_full_snapshot(
-            out_dir=out_dir,
-            since_datetime=pd.Timestamp.utcnow().strftime("%Y%m%d"),
-            file_group_ids=datasets_to_download,
-            overwrite=overwrite,
-            qdf=qdf,
-            as_csv=as_csv,
-            keep_raw_data=keep_raw_data,
-            show_progress=show_progress,
-            include_full_snapshots=True,
-            include_delta=include_delta_files,
-            include_metadata=False,
-        )
-        return lazy_load_from_parquets(
-            files_dir=out_dir,
-            tickers=tickers,
-            cids=cids,
-            xcats=xcats,
-            metrics=metrics,
-            start_date=start_date,
-            end_date=end_date,
-            dataframe_format=dataframe_format,
-            dataframe_type=dataframe_type,
-            categorical_dataframe=categorical_dataframe,
-            datasets=datasets_to_download,
-        )
 
-
-def _pd_to_datetime_compat(ts: str, utc: bool):
+def _pd_to_datetime_compat(ts: str, utc: bool) -> pd.Timestamp:
     formats = [
         "%Y%m%d",
         "%Y%m%dT%H%M%S",
@@ -1662,11 +2161,27 @@ def _pd_to_datetime_compat(ts: str, utc: bool):
     )
 
 
+@overload
 def pd_to_datetime_compat(
-    ts: Union[str, pd.Series],
+    ts: Union[str, pd.Timestamp],
     format: str = "mixed",
     utc: bool = True,
-):
+) -> pd.Timestamp: ...
+
+
+@overload
+def pd_to_datetime_compat(
+    ts: pd.Series,
+    format: str = "mixed",
+    utc: bool = True,
+) -> pd.Series: ...
+
+
+def pd_to_datetime_compat(
+    ts: Union[str, pd.Timestamp, datetime.date, pd.Series],
+    format: str = "mixed",
+    utc: bool = True,
+) -> Union[pd.Timestamp, pd.Series]:
     if PD_2_0_OR_LATER:
         return pd.to_datetime(ts, format=format, utc=utc)
     if isinstance(ts, pd.Series):
@@ -1765,6 +2280,35 @@ def large_delta_file_datetimes(as_str: bool = True) -> List[str]:
     return [d.strftime("%Y%m%dT%H%M%S") for d in dt_list]
 
 
+def _ordered_date_range(
+    start_date: Optional[Union[str, pd.Timestamp]],
+    end_date: Optional[Union[str, pd.Timestamp]],
+) -> Tuple[Optional[pd.Timestamp], Optional[pd.Timestamp]]:
+    """
+    Warn and swap a reversed range, so `start_date` is always the earlier bound.
+
+    Matches `_filter_available_files_by_datetime`, which does the same for file
+    datetimes; without it a reversed range quietly returned no rows at all.
+    """
+    if start_date is None or end_date is None:
+        return start_date, end_date
+    start_ts = pd_to_datetime_compat(start_date)
+    end_ts = pd_to_datetime_compat(end_date)
+    if start_ts > end_ts:
+        logger.warning(
+            f"`start_date` ({start_ts.date()}) is after `end_date` "
+            f"({end_ts.date()}). Swapping values."
+        )
+        return end_ts, start_ts
+    return start_date, end_date
+
+
+@cache_decorator(ttl=60)
+def _read_catalog(catalog_path: Union[str, Path]) -> pd.DataFrame:
+    """Read the JPMaQS metadata catalog. Cached: callers must not mutate the result."""
+    return pd.read_parquet(Path(catalog_path).resolve())
+
+
 def _delete_corrupt_files(
     files: List[Path],
     extensions: List[str] = ["parquet", "json"],
@@ -1795,8 +2339,8 @@ def _delete_corrupt_files(
             raise
         except Exception:
             logger.warning(f"Deleting corrupt file: {file_path}")
-            file_path.unlink()
-            removed_files.append(file_path)
+            if _delete_jpmaqs_file(file_path):
+                removed_files.append(file_path)
 
     return sorted(map(str, removed_files))
 
@@ -1819,7 +2363,7 @@ class SegmentedFileDownloader:
         api_delay: float = DQ_FILE_API_DELAY_PARAM,
         api_delay_margin: float = DQ_FILE_API_DELAY_MARGIN,
         headers_timeout: int = DQ_FILE_API_HEADERS_TIMEOUT,
-        max_concurrent_downloads: int = None,
+        max_concurrent_downloads: Optional[int] = None,
         max_file_retries: int = 3,
         verify_ssl: bool = True,
         start_download: bool = False,
@@ -2037,141 +2581,6 @@ class SegmentedFileDownloader:
             self.log("Cleaned up temporary files.")
 
 
-def _atomic_sink_csv(lf: pl.LazyFrame, final_out: Path, sidecar: Path) -> None:
-    """Atomic sink for CSV files - ensures complete writes/cleans up on failure."""
-    try:
-        sidecar.unlink()
-    except FileNotFoundError:
-        pass
-
-    try:
-        lf.sink_csv(str(sidecar))
-        os.replace(sidecar, final_out)
-    except BaseException:
-        try:
-            sidecar.unlink()
-        except FileNotFoundError:
-            pass
-        raise
-
-
-def _atomic_sink_parquet(
-    lf: pl.LazyFrame, final_out: Path, sidecar: Path, *, compression: str
-) -> None:
-    """Atomic sink for Parquet files - ensures complete writes/cleans up on failure."""
-    try:
-        sidecar.unlink()
-    except FileNotFoundError:
-        pass
-
-    try:
-        lf.sink_parquet(str(sidecar), compression=compression)
-        os.replace(sidecar, final_out)
-    except BaseException:
-        try:
-            sidecar.unlink()
-        except FileNotFoundError:
-            pass
-        raise
-
-
-def _convert_ticker_based_parquet_file_to_qdf_pl(
-    filename: str,
-    compression: str = "zstd",
-    as_csv: bool = False,
-    qdf: bool = False,
-    keep_raw_data: bool = False,
-) -> None:
-    src = Path(filename)
-    if not src.is_file():
-        raise FileNotFoundError(f"No such file: {filename}")
-
-    base = src.with_suffix("")
-    dirpath = src.parent
-
-    # passthrough to CSV from sink_csv
-    if as_csv and not qdf:
-        final_out = base.with_suffix(".csv")
-        sidecar = dirpath / f".{final_out.name}.inprogress"
-        _atomic_sink_csv(pl.scan_parquet(str(src)), final_out, sidecar)
-        if not keep_raw_data:
-            src.unlink(missing_ok=True)
-        return
-
-    if not qdf:
-        return
-
-    lf = pl.scan_parquet(str(src))
-    parts = pl.col("ticker").str.splitn("_", 2)
-    lf = lf.with_columns(
-        cid=parts.struct.field("field_0"),
-        xcat=parts.struct.field("field_1"),
-    )
-
-    wanted = ["real_date", "value", "grading", "eop_lag", "mop_lag", "last_updated"]
-    present = [c for c in wanted if c in lf.collect_schema().names()]
-    lf = lf.select(present + ["cid", "xcat"])
-
-    if as_csv:
-        final_out = (
-            base.with_suffix(".csv")
-            if not keep_raw_data
-            else dirpath / f"{base.name}_qdf.csv"
-        )
-        sidecar = dirpath / f".{final_out.name}.inprogress"
-        _atomic_sink_csv(lf, final_out, sidecar)
-        if not keep_raw_data:
-            src.unlink(missing_ok=True)
-    else:
-        if keep_raw_data:
-            final_out = dirpath / f"{base.name}_qdf.parquet"
-        else:
-            final_out = src
-        sidecar = dirpath / f".{final_out.name}.inprogress"
-        _atomic_sink_parquet(lf, final_out, sidecar, compression=compression)
-        if not keep_raw_data and final_out is not src:
-            src.unlink(missing_ok=True)
-
-
-def convert_ticker_based_parquet_file_to_qdf_pl(
-    filename: str,
-    compression: str = "zstd",
-    as_csv: bool = False,
-    qdf: bool = True,
-    keep_raw_data: bool = False,
-) -> None:
-    try:
-        _convert_ticker_based_parquet_file_to_qdf_pl(
-            filename=filename,
-            compression=compression,
-            as_csv=as_csv,
-            qdf=qdf,
-            keep_raw_data=keep_raw_data,
-        )
-    except Exception as e:
-        logger.error(f"Error converting file {filename}: {e}")
-        try:
-            p = Path(filename)
-            for cand in [
-                f".{p.with_suffix('.csv').name}.inprogress",
-                f".{p.name}.inprogress",
-                f".{p.with_suffix('').name}_qdf.csv.inprogress",
-                f".{p.with_suffix('').name}_qdf.parquet.inprogress",
-            ]:
-                try:
-                    (p.parent / cand).unlink()
-                except FileNotFoundError:
-                    pass
-        except Exception:
-            pass
-
-        if not Path(filename).is_file():
-            raise FileNotFoundError(
-                f"Conversion failed and file not found: {filename}"
-            ) from e
-        raise
-
-
 def _check_lazy_load_inputs(
     files_dir: Union[str, Path],
     file_format: str,
@@ -2185,6 +2594,8 @@ def _check_lazy_load_inputs(
     dataframe_type: str,
     categorical_dataframe: bool,
     datasets: Optional[List[str]] = None,
+    delta_treatment: str = "latest",
+    dropna: bool = True,
 ):
     files_dir = Path(files_dir)
     if not files_dir.is_dir():
@@ -2217,6 +2628,15 @@ def _check_lazy_load_inputs(
             "Both `cids` and `xcats` must be provided together, or neither."
         )
 
+    if not tickers and not cids and not xcats:
+        # an empty selection is a request for every ticker on disk, which is far too
+        # much to load by accident. Loading everything has to be asked for explicitly
+        raise ValueError(
+            "At least one of `tickers`, `cids`, or `xcats` must be set. To load "
+            "every ticker, pass them explicitly: "
+            "`tickers=client.list_all_tickers()`."
+        )
+
     for param, name in [
         (start_date, "start_date"),
         (end_date, "end_date"),
@@ -2227,12 +2647,75 @@ def _check_lazy_load_inputs(
     if dataframe_format not in ["qdf", "wide", "tickers"]:
         raise ValueError("`dataframe_format` must be one of 'qdf', 'wide', 'tickers'.")
 
+    if dataframe_format == "wide" and metrics is not None and len(metrics) != 1:
+        raise ValueError(
+            "`dataframe_format='wide'` only supports a single metric (typically 'value')."
+            f" Please provide a single metric in the `metrics` parameter; got {metrics}."
+        )
+
     if dataframe_type not in ["pandas", "polars", "polars-lazy"]:
         raise ValueError(
             "`dataframe_type` must be one of 'pandas', 'polars', 'polars-lazy'."
         )
     if not isinstance(categorical_dataframe, bool):
         raise ValueError("`categorical_dataframe` must be a boolean.")
+
+    if delta_treatment not in DELTA_TREATMENTS:
+        raise ValueError(_delta_treatment_error())
+    if not isinstance(dropna, bool):
+        raise ValueError("`dropna` must be a boolean.")
+    # checked before the `dropna` pairing below, so that `wide` + "all" reports the
+    # incompatibility that cannot be worked around first
+    if dataframe_format == "wide" and delta_treatment == "all":
+        raise ValueError(
+            "`dataframe_format='wide'` cannot be combined with "
+            "`delta_treatment='all'`: a wide frame holds one cell per "
+            "(ticker, real_date), which cannot hold several restatements of it. Use "
+            "'latest' or 'earliest', or a long format ('qdf' or 'tickers')."
+        )
+    if delta_treatment == "all" and dropna:
+        raise ValueError(
+            "`dropna=True` cannot be combined with `delta_treatment='all'`: dropping "
+            "the expiry rows would leave the very rows they expire, so an expired "
+            "observation would reappear with its stale value. Pass `dropna=False` to "
+            "keep the full restatement history."
+        )
+
+
+def _split_jpmaqs_filename(filename: str) -> Tuple[str, str]:
+    """Split "JPMAQS_X_20250501.parquet" into ("JPMAQS_X", "20250501")."""
+    try:
+        file_group_id, datetime_with_ext = filename.rsplit("_", 1)
+    except ValueError:
+        raise ValueError(f"Invalid filename format: {filename}")
+    return file_group_id, datetime_with_ext.split(".")[0]
+
+
+def _is_jpmaqs_file(path: Union[str, Path]) -> bool:
+    """A downloaded file is a JPMaQS file iff it is named JPMAQS_....{parquet,csv,json}."""
+    p = Path(path)
+    return p.name.startswith("JPMAQS_") and p.suffix.lower() in (
+        ".parquet",
+        ".csv",
+        ".json",
+    )
+
+
+def _delete_jpmaqs_file(path: Union[str, Path]) -> bool:
+    """
+    Central deletion for downloaded files. Deletes `path` only if it is a JPMaQS file
+    (see `_is_jpmaqs_file`); otherwise it warns and leaves the file untouched. Returns
+    True if the file was deleted.
+    """
+    path = Path(path)
+    if not _is_jpmaqs_file(path):
+        logger.warning(f"Refusing to delete non-JPMaQS file: {path}")
+        return False
+    try:
+        path.unlink()  # `missing_ok=True` is python 3.8+
+    except FileNotFoundError:
+        pass
+    return True
 
 
 def _list_downloaded_files(files_dir: Path, file_format: str = "parquet") -> List[Path]:
@@ -2241,7 +2724,12 @@ def _list_downloaded_files(files_dir: Path, file_format: str = "parquet") -> Lis
     if file_format not in ["parquet", "csv", "json"]:
         raise ValueError("`file_format` must be one of 'parquet', 'csv', or 'json'.")
     files = sorted(files_dir.glob(f"**/*.{file_format}"))
-    return files
+    for f in files:
+        if not _is_jpmaqs_file(f):
+            logger.warning(
+                f"File is not a JPMaQS file and is not meant to be here: {f}"
+            )
+    return [f for f in files if _is_jpmaqs_file(f)]
 
 
 def _downloaded_files_df(
@@ -2250,55 +2738,70 @@ def _downloaded_files_df(
     include_metadata_files: bool = False,
 ) -> pd.DataFrame:
     if not Path(files_dir).is_dir():
-        return pd.DataFrame(columns=["path", "filename", "filetype", "dataset"])
+        return pd.DataFrame(columns=["path", "file-name", "file-type", "dataset"])
     files_list = _list_downloaded_files(files_dir, file_format)
     df = pd.DataFrame({"path": files_list})
     if df.empty:
         return df
     df["path"] = df["path"].apply(lambda x: Path(x).resolve())
-    df["filename"] = df["path"].apply(lambda x: Path(x).name)
+    df["file-name"] = df["path"].apply(lambda x: Path(x).name)
     if not include_metadata_files:
-        df = df[~df["filename"].str.contains("_METADATA")].copy()
-    df["filetype"] = df["path"].apply(lambda x: Path(x).suffix.split(".")[-1])
+        df = df[~df["file-name"].str.contains("_METADATA")].copy()
+    df["file-type"] = df["path"].apply(lambda x: Path(x).suffix.split(".")[-1])
 
-    df["dataset"] = df["filename"].apply(
+    df["dataset"] = df["file-name"].apply(
         lambda x: str(x).split(".")[0].rsplit("_", 1)[0]
     )
-    df["file-datetime"] = df["filename"].apply(
+
+    df["file-datetime"] = df["file-name"].apply(
         lambda x: str(x).split(".")[0].rsplit("_", 1)[-1]
     )
-    df["file-timestamp"] = df["file-datetime"].apply(lambda x: pd_to_datetime_compat(x))
+
+    def _dt_or_none(x):
+        try:
+            return pd_to_datetime_compat(x)
+        except Exception:
+            return None
+
+    df["file-timestamp"] = df["file-datetime"].apply(lambda x: _dt_or_none(x))
+    df = df[~df["file-timestamp"].isnull()]
     df = df.reset_index(drop=True)
     return df
 
 
 def _filter_to_latest_files(
     files_df: pd.DataFrame,
-    include_delta_files: bool = False,
+    include_delta_files: bool = True,
 ) -> pd.DataFrame:
-    if include_delta_files:
-        raise NotImplementedError(
-            "Filtering to latest files including delta files is not implemented."
-        )
-
     if files_df.empty:
         return files_df
 
     if not include_delta_files:
-        files_df = files_df[~files_df["filename"].str.contains("_DELTA")].copy()
+        files_df = files_df[~files_df["file-name"].str.contains("_DELTA")].copy()
 
-    # Filter to rows where file-timestamp == per-dataset max
-    latest_mask = files_df["file-timestamp"].eq(
-        files_df.groupby("dataset")["file-timestamp"].transform("max")
+    # the snapshot date comes from the date-only filenames; delta/metadata files carry a
+    # "T" timestamp and cannot define it
+    snapshot_datetimes = files_df[~files_df["file-datetime"].str.contains("T")][
+        "file-datetime"
+    ]
+    if snapshot_datetimes.empty:
+        raise ValueError(
+            "No full-snapshot files found in the output directory (only timestamped "
+            "delta/metadata files), so the latest snapshot date cannot be determined. "
+            "Download a full snapshot first."
+        )
+    latest_timestamp = pd_to_datetime_compat(snapshot_datetimes.max())
+    latest_files: pd.DataFrame = files_df[
+        files_df["file-timestamp"] >= latest_timestamp
+    ].copy()
+
+    latest_files["e-dataset"] = latest_files["dataset"].apply(
+        lambda x: str(x).replace("_DELTA", "")
     )
 
-    latest_files = (
-        files_df.loc[latest_mask]
-        .sort_values(["dataset", "file-timestamp", "filename"])
-        .reset_index(drop=True)
-    )
-
-    return latest_files
+    return latest_files.sort_values(
+        ["dataset", "file-timestamp", "file-name"]
+    ).reset_index(drop=True)
 
 
 def lazy_load_from_parquets(
@@ -2314,31 +2817,99 @@ def lazy_load_from_parquets(
     dataframe_type: str = "pandas",
     categorical_dataframe: bool = True,
     datasets: Optional[List[str]] = None,
-    include_delta_files: bool = False,
-    include_metadata_files: bool = False,
-) -> pd.DataFrame:
+    include_delta_files: bool = True,
+    delta_treatment: str = "latest",
+    catalog_path: Optional[Union[str, Path]] = None,
+    include_source_file: bool = False,
+    categorical_source_file_column: bool = True,
+    dropna: bool = True,
+) -> Union[pd.DataFrame, pl.DataFrame, pl.LazyFrame]:
+    """
+    Loads previously downloaded JPMaQS files into a single DataFrame.
+
+    Scans the files of the latest snapshot found under `files_dir`, applies the ticker,
+    date and metric filters while scanning, and only then materialises the result. The
+    files on disk are never modified. Delta files are folded into the snapshot unless
+    `include_delta_files=False`. Metadata files are never read as data: the catalog is
+    passed separately as `catalog_path`, and the notification JSONs are served by
+    :func:`DataQueryFileAPIClient.get_missing_data_notifications` and
+    :func:`DataQueryFileAPIClient.get_revisions_notifications`.
+
+    At least one of `tickers`, `cids` or `xcats` is required. To load every ticker,
+    ask for them explicitly with
+    :func:`DataQueryFileAPIClient.list_all_tickers`, rather than leaving the
+    selection empty.
+
+    `catalog_path` is required, as the catalog resolves which dataset holds which ticker.
+    Obtain one from :func:`DataQueryFileAPIClient.download_catalog_file`.
+
+    `delta_treatment` resolves rows a delta file restated, per (ticker, real_date):
+    "latest" (default) keeps the newest `last_updated`; "earliest" the first print, which
+    skips expiry rows, a withdrawal not being a print; "all" keeps every version.
+
+    `dropna=True` (default) means no null reaches the output: a row survives only where
+    every requested metric is populated. That covers expiry rows - an observation is
+    withdrawn by publishing one whose metrics are all null - and any other row null in a
+    requested metric. It is applied after delta resolution, so an expiry still supersedes
+    the row it withdraws. "all" requires `dropna=False`, as dropping the nulls while keeping
+    the rows they expire would resurrect stale values, and cannot be combined with
+    `dataframe_format="wide"`, which has only one cell per (ticker, real_date).
+
+    `dataframe_format` chooses the shape:
+
+    - "qdf" (default): columns (real_date, cid, xcat, <metrics>)
+    - "tickers": columns (real_date, ticker, <metrics>)
+    - "wide": one column per ticker, for a single metric, so `metrics` must name exactly
+      one. `real_date` is the index for "pandas" but a column for the polars types, and
+      the format cannot be combined with `include_source_file`.
+
+    `dataframe_type` chooses the library: "pandas" (default), "polars", or "polars-lazy",
+    which returns the LazyFrame uncollected. `file_format="csv"` raises
+    `NotImplementedError`.
+
+    Returns
+    -------
+    Union[pd.DataFrame, pl.DataFrame, pl.LazyFrame]
+        The filtered data, in the requested format and type.
+    """
     files_dir = Path(files_dir)
     if (not metrics) or (metrics == "all") or ("all" in metrics):
-        metrics = JPMAQS_METRICS
+        metrics = list(JPMAQS_METRICS)
+    if catalog_path is None:
+        raise ValueError(
+            "`catalog_path` is required. Use "
+            "`DataQueryFileAPIClient.download_catalog_file()` to obtain one."
+        )
+    for flag, flag_name in [
+        (include_source_file, "include_source_file"),
+        (categorical_source_file_column, "categorical_source_file_column"),
+    ]:
+        if not isinstance(flag, bool):
+            raise ValueError(f"`{flag_name}` must be a boolean.")
 
     _check_lazy_load_inputs(
-        files_dir,
-        file_format,
-        tickers,
-        cids,
-        xcats,
-        metrics,
-        start_date,
-        end_date,
-        dataframe_format,
-        dataframe_type,
-        categorical_dataframe,
+        files_dir=files_dir,
+        file_format=file_format,
+        tickers=tickers,
+        cids=cids,
+        xcats=xcats,
+        metrics=metrics,
+        start_date=start_date,
+        end_date=end_date,
+        dataframe_format=dataframe_format,
+        dataframe_type=dataframe_type,
+        categorical_dataframe=categorical_dataframe,
+        delta_treatment=delta_treatment,
+        dropna=dropna,
     )
+    start_date, end_date = _ordered_date_range(start_date, end_date)
 
     available_files_df: pd.DataFrame = _downloaded_files_df(
         files_dir=files_dir,
         file_format=file_format,
-        include_metadata_files=include_metadata_files,
+        # metadata files are not quantamental data; the notification JSONs are served
+        # by `get_missing_data_notifications` and `get_revisions_notifications`
+        include_metadata_files=False,
     )
     available_files_df: pd.DataFrame = _filter_to_latest_files(
         files_df=available_files_df,
@@ -2346,34 +2917,86 @@ def lazy_load_from_parquets(
     )
     if datasets:
         available_files_df = available_files_df.loc[
-            available_files_df["dataset"].isin(datasets)
+            available_files_df["e-dataset"].isin(datasets)
         ]
 
-    tickers = tickers or []
+    # copy: `+=` and `.remove()` below must not mutate the caller's lists
+    tickers = list(tickers or [])
     if cids:
         tickers += [f"{c}_{x}" for c in cids for x in xcats]
+    if "source_file" in metrics:
+        warnings.warn(
+            'Please use `include_source_file=True` instead of including "source_file" in metrics.'
+        )
+        include_source_file = True
+        # fall back to the default metrics if "source_file" was the only one requested
+        metrics = [m for m in metrics if m != "source_file"] or list(JPMAQS_METRICS)
 
+    if dataframe_format == "wide" and include_source_file:
+        raise ValueError(
+            "`dataframe_format='wide'` cannot be combined with `include_source_file`, "
+            "as a wide frame holds a single metric per column."
+        )
+
+    catalog_df = _read_catalog(catalog_path)
+    valid_tickers = sorted(
+        catalog_df[catalog_df["Ticker"].str.lower().isin([t.lower() for t in tickers])][
+            "Ticker"
+        ].tolist()
+    )
+    matched = {t.lower() for t in valid_tickers}
+    unknown_tickers = sorted({t for t in tickers if t.lower() not in matched})
+    if unknown_tickers:
+        warnings.warn(
+            f"The following tickers are not in the JPMaQS catalog and will be "
+            f"ignored: {unknown_tickers}",
+            stacklevel=2,
+        )
+    if not valid_tickers:
+        raise ValueError(
+            f"None of the requested tickers are in the JPMaQS catalog: "
+            f"{sorted(tickers)}"
+        )
+
+    paths = sorted(available_files_df["path"])
     lf: pl.LazyFrame = _lazy_load_filtered_parquets(
-        paths=sorted(available_files_df["path"]),
-        tickers=tickers,
+        paths=paths,
+        tickers=valid_tickers,
         start_date=start_date,
         end_date=end_date,
         return_qdf=(dataframe_format == "qdf"),
+        catalog_path=catalog_path,
+        include_source_file=include_source_file,
+        categorical_source_file_column=categorical_source_file_column,
+        delta_treatment=delta_treatment,
+        dropna=dropna,
+        metrics=metrics,
     )
-    if metrics and set(metrics) != set(JPMAQS_METRICS):
-        cols_to_keep = ["real_date", "cid", "xcat", "ticker"] + metrics
-        if PYTHON_3_8_OR_LATER:
-            lf = lf.select(
-                [pl.col(c) for c in cols_to_keep if c in lf.collect_schema().names()]
-            )
-        else:
-            lf = lf.select([pl.col(c) for c in cols_to_keep if c in lf.schema.keys()])
-    if dataframe_type == "polars-lazy":
-        return lf
+    if include_source_file:
+        metrics = metrics + ["source_file"]
+    if set(metrics) != set(JPMAQS_METRICS):
+        cols_to_keep = {"real_date", "cid", "xcat", "ticker", *metrics}
+        # select in the frame's own column order, so the output order does not
+        # depend on whether this projection runs
+        names = (
+            lf.collect_schema().names()
+            if PYTHON_3_8_OR_LATER
+            else list(lf.schema.keys())
+        )
+        lf = lf.select([pl.col(c) for c in names if c in cols_to_keep])
 
     cat_cols = ["cid", "xcat", "ticker"]
-    if dataframe_type == "polars":
-        if categorical_dataframe:
+    if dataframe_type in ["polars", "polars-lazy"]:
+        if dataframe_format == "wide":
+            lf = lf.pivot(
+                "ticker",
+                on_columns=valid_tickers,
+                index="real_date",
+                values=metrics[0],
+                aggregate_function=None,
+                separator=";",
+            ).sort("real_date")
+        if categorical_dataframe and dataframe_format != "wide":
             cols = None
             if PYTHON_3_8_OR_LATER:
                 cols = [c for c in cat_cols if c in lf.collect_schema().names()]
@@ -2381,10 +3004,20 @@ def lazy_load_from_parquets(
                 cols = [c for c in cat_cols if c in lf.schema.keys()]
             if cols:
                 lf = lf.with_columns([pl.col(c).cast(pl.Categorical) for c in cols])
-        return lf.collect()
+        if dataframe_type == "polars-lazy":
+            return lf
+        return _collect_naming_paths(lf, paths)
     if dataframe_type == "pandas":
-        df = lf.collect().to_pandas()
-        if categorical_dataframe:
+        df = _collect_naming_paths(lf, paths).to_pandas()
+        if dataframe_format == "wide":
+            # reindex so the column set matches the polars path: one column per
+            # requested ticker, even where the data holds no rows for it
+            wide = df.pivot(
+                index="real_date", columns="ticker", values=metrics[0]
+            ).reindex(columns=valid_tickers)
+            # gated, so `dropna=False` keeps the all-null dates the polars path keeps
+            return wide.dropna(how="all") if dropna else wide
+        if categorical_dataframe and dataframe_format != "wide":
             cols = [c for c in cat_cols if c in df.columns]
             if cols:
                 df[cols] = df[cols].astype("category")
@@ -2393,67 +3026,15 @@ def lazy_load_from_parquets(
     raise ValueError("Unknown dataframe type")
 
 
-class JPMaQSParquetSchemaKind(Enum):
-    TICKER = "ticker"
-    QDF = "qdf"
-
-
-def _identify_schema_type(lf: pl.LazyFrame) -> JPMaQSParquetSchemaKind:
-    if PYTHON_3_8_OR_LATER:
-        cols = set(lf.collect_schema().keys())
-    else:
-        cols = set(lf.schema.keys())
-    if "ticker" in cols:
-        return JPMaQSParquetSchemaKind.TICKER
-    if {"cid", "xcat"}.issubset(cols):
-        return JPMaQSParquetSchemaKind.QDF
-    raise ValueError(
-        "Unknown schema: need either 'ticker' or both 'cid' and 'xcat'. "
-        f"Found columns: {sorted(cols)}"
-    )
-
-
-def _expr_split_ticker(ticker_expr: pl.Expr) -> Tuple[pl.Expr, pl.Expr]:
-    """
-    Robust split of 'CID_XCAT...' into (cid, xcat) WITHOUT using splitn().
-    Works across Polars versions (avoids struct vs list return type issues).
-    """
-    splitx = ticker_expr.str.splitn("_", 2)
-    cid = splitx.struct.field("field_0")
-    xcat = splitx.struct.field("field_1")
-    return cid, xcat
-
-
-def _ensure_columns(lf: pl.LazyFrame, cols: Sequence[str]) -> pl.LazyFrame:
-    """
-    Ensure all `cols` exist before .select(...).
-    This runs schema-only (lf.collect_schema()), not a materialization.
-    """
-    if PYTHON_3_8_OR_LATER:
-        have = set(lf.collect_schema().keys())
-    else:
-        have = set(lf.schema.keys())
-    missing = [c for c in cols if c not in have]
-    return lf.with_columns(**{c: pl.lit(None) for c in missing}) if missing else lf
-
-
 def _filter_lazy_frame_by_tickers(
     lf: pl.LazyFrame,
-    kind: JPMaQSParquetSchemaKind,
     tickers: Sequence[str],
     start_date: Optional[Union[str, pd.Timestamp]],
     end_date: Optional[Union[str, pd.Timestamp]],
 ) -> pl.LazyFrame:
     tickers_list = [t for t in tickers if t]
-    if kind is JPMaQSParquetSchemaKind.TICKER:
-        return lf.filter(pl.col("ticker").is_in(tickers_list))
-    lf = (
-        lf.with_columns(
-            _ticker=pl.concat_str([pl.col("cid"), pl.lit("_"), pl.col("xcat")])
-        )
-        .filter(pl.col("_ticker").is_in(tickers_list))
-        .drop("_ticker")
-    )
+    if tickers_list:
+        lf = lf.filter(pl.col("ticker").is_in(tickers_list))
     if start_date:
         start_date = pd_to_datetime_compat(start_date).strftime("%Y-%m-%d")
         lf = lf.filter(pl.col("real_date") >= pl.lit(start_date).str.to_date())
@@ -2463,27 +3044,140 @@ def _filter_lazy_frame_by_tickers(
     return lf
 
 
+# `pl.String` does not exist on the polars available under Python 3.7
+PL_STRING_DTYPE = pl.String if PYTHON_3_8_OR_LATER else pl.Utf8
+
+
+def get_jpmaqs_parquet_schema() -> Dict[str, Any]:
+    """
+    The columns and dtypes a scanned JPMaQS parquet is normalised to.
+    Metrics follow `JPMAQS_METRICS` order, as ordered by `_to_output_schema`.
+    """
+    return {
+        "real_date": pl.Date,
+        "ticker": PL_STRING_DTYPE,
+        "value": pl.Float64,
+        "grading": pl.Float64,
+        "eop_lag": pl.Float64,
+        "mop_lag": pl.Float64,
+        "last_updated": pl.Datetime,
+    }
+
+
+DELTA_TREATMENTS = ("latest", "earliest", "all")
+
+
+# an expiry row nulls every one of these; `last_updated` records when it was withdrawn
+JPMAQS_VALUE_METRICS = [c for c in JPMAQS_METRICS if c != "last_updated"]
+
+
 def _to_output_schema(
-    lf: pl.LazyFrame, src_kind: JPMaQSParquetSchemaKind, want_qdf: bool
+    lf: pl.LazyFrame,
+    want_qdf: bool,
+    include_source_file: bool = False,
 ) -> pl.LazyFrame:
-    """Normalize columns to qdf or ticker-based shape."""
-    cols = "real_date.ticker.value.eop_lag.mop_lag.grading.last_updated"
-    ticker_cols = cols.split(".")
-    qdf_cols = cols.replace("ticker", "cid.xcat").split(".")
+    parquet_schema = get_jpmaqs_parquet_schema()
+    metrics = {
+        col: dtype
+        for col, dtype in parquet_schema.items()
+        if col not in ("real_date", "ticker")
+    }
+    key_cols = (
+        {"cid": PL_STRING_DTYPE, "xcat": PL_STRING_DTYPE}
+        if want_qdf
+        else {"ticker": parquet_schema["ticker"]}
+    )
+    expc_schema = {"real_date": parquet_schema["real_date"], **key_cols, **metrics}
+    if include_source_file:
+        expc_schema["source_file"] = pl.Categorical
 
     if want_qdf:
-        if src_kind is JPMaQSParquetSchemaKind.TICKER:
-            cid_expr, xcat_expr = _expr_split_ticker(pl.col("ticker"))
-            lf = lf.with_columns(cid=cid_expr, xcat=xcat_expr)
-        lf = _ensure_columns(lf, qdf_cols)
-        return lf.select(qdf_cols)
-
-    if src_kind is JPMaQSParquetSchemaKind.QDF:
+        cid_xcat = pl.col("ticker").str.splitn("_", 2)
         lf = lf.with_columns(
-            ticker=pl.concat_str([pl.col("cid"), pl.lit("_"), pl.col("xcat")])
+            cid=cid_xcat.struct.field("field_0"),
+            xcat=cid_xcat.struct.field("field_1"),
         )
-    lf = _ensure_columns(lf, ticker_cols)
-    return lf.select(ticker_cols)
+
+    keep_cols = list(expc_schema)
+    curr_cols = lf.collect_schema().keys() if PYTHON_3_8_OR_LATER else lf.schema.keys()
+    missing_cols = [c for c in keep_cols if c not in curr_cols]
+    if missing_cols:
+        raise ValueError(
+            f"Missing expected columns in LazyFrame: {missing_cols}. "
+            f"Current columns: {sorted(curr_cols)}"
+        )
+    return lf.select(keep_cols)
+
+
+def _scan_check_and_cast_single_parquet(
+    path: str,
+    include_source_file: bool = False,
+    categorical_source_file_column: bool = True,
+) -> pl.LazyFrame:
+    """Scan one parquet and normalise it to `get_jpmaqs_parquet_schema()`."""
+    lf = pl.scan_parquet(path)
+    schema = dict(lf.collect_schema()) if PYTHON_3_8_OR_LATER else dict(lf.schema)
+    if schema.get("grading", None) == pl.String:
+        lf = lf.with_columns(pl.col("grading").cast(pl.Float64))
+    if include_source_file:
+        if "source_file" in schema:
+            raise ValueError(
+                f"The 'source_file' column already exists in `{path}`. JPMaQS files "
+                "never carry this column, so it was added locally; re-download the file "
+                "or load it with `include_source_file=False`."
+            )
+        pth_str = Path(path).name.rsplit(".", 1)[0]
+        assert pth_str, f"Invalid path: {path}"
+        lf = lf.with_columns(
+            pl.lit(pth_str)
+            .alias("source_file")
+            .cast(pl.Categorical if categorical_source_file_column else pl.String)
+        )
+
+    if ("cid" in schema) != ("xcat" in schema):
+        raise ValueError(
+            "Parquet file must have both 'cid' and 'xcat' columns or neither."
+        )
+
+    # this conversion is later undone in _to_output_schema() if want_qdf is True
+    # however, the cost of this conversion is small compared to the cost of maintaing
+    # a dual read schema and offers fewer code paths and less complexity.
+    # this is also why reading QDF saved by older version of the package is supported
+    # for now, but the QDF write path has been removed.
+    if "cid" in schema:
+        err_str = (
+            f"A modified schema was detected for file `{path}`. "
+            "Please update the version of the Macrosynergy Package used. "
+            "Modifying the schema of downloaded files will not be supported in future versions of the Macrosynergy Package."
+        )
+        warnings.warn(err_str)
+        if "ticker" not in schema:
+            lf = lf.with_columns(
+                ticker=pl.concat_str([pl.col("cid"), pl.lit("_"), pl.col("xcat")])
+            )
+        lf = lf.drop(["cid", "xcat"])
+
+    # if now missing the ticker or real_date columns, raise an error
+    schema = dict(lf.collect_schema()) if PYTHON_3_8_OR_LATER else dict(lf.schema)
+    must_have_cols = ["real_date", "ticker"]
+    for col in must_have_cols:
+        if col not in schema:
+            raise ValueError(
+                f"Parquet file {path} is missing required column: '{col}'."
+            )
+
+    for col, expected_type in get_jpmaqs_parquet_schema().items():
+        if col in schema:
+            if schema[col] == expected_type:
+                continue
+            if schema[col] == pl.String and expected_type == pl.Datetime:
+                # cast() from String is deprecated and removed in polars 2.0
+                lf = lf.with_columns(pl.col(col).str.to_datetime())
+            else:
+                lf = lf.with_columns(pl.col(col).cast(expected_type))
+        else:
+            lf = lf.with_columns(pl.lit(None).cast(expected_type).alias(col))
+    return lf
 
 
 def _scan_and_prepare_single_parquet(
@@ -2492,17 +3186,24 @@ def _scan_and_prepare_single_parquet(
     start_date: Optional[Union[str, pd.Timestamp]],
     end_date: Optional[Union[str, pd.Timestamp]],
     return_qdf: bool,
+    include_source_file: bool = False,
+    categorical_source_file_column: bool = True,
 ) -> pl.LazyFrame:
-    lf = pl.scan_parquet(path)
-    kind = _identify_schema_type(lf)
+    lf = _scan_check_and_cast_single_parquet(
+        path=path,
+        include_source_file=include_source_file,
+        categorical_source_file_column=categorical_source_file_column,
+    )
+
     lf = _filter_lazy_frame_by_tickers(
         lf=lf,
-        kind=kind,
         tickers=tickers,
         start_date=start_date,
         end_date=end_date,
     )
-    lf = _to_output_schema(lf, kind, return_qdf)
+    lf = _to_output_schema(
+        lf=lf, want_qdf=return_qdf, include_source_file=include_source_file
+    )
     return lf
 
 
@@ -2511,57 +3212,266 @@ def _lazy_load_filtered_parquets(
     tickers: List[str],
     start_date: Optional[Union[str, pd.Timestamp]],
     end_date: Optional[Union[str, pd.Timestamp]],
+    catalog_path: Union[str, Path],
     return_qdf: bool = True,
+    delta_treatment: str = "latest",
+    include_source_file: bool = False,
+    categorical_source_file_column: bool = True,
+    dropna: bool = True,
+    metrics: Optional[List[str]] = None,
 ) -> pl.LazyFrame:
     if not paths:
         raise ValueError("No paths provided")
 
-    tickers_list: List[str] = list(dict.fromkeys(tickers))
+    ticker_lazyframes_df = build_filtered_lazy_frames_df(
+        paths=paths,
+        tickers=tickers,
+        start_date=start_date,
+        end_date=end_date,
+        catalog_path=catalog_path,
+        return_qdf=return_qdf,
+        include_source_file=include_source_file,
+        categorical_source_file_column=categorical_source_file_column,
+    )
+    if ticker_lazyframes_df.empty or ticker_lazyframes_df["lazyframe"].isna().any():
+        raise ValueError(
+            "No data could be loaded for the requested tickers from the files on disk."
+        )
 
-    lazy_parts: List[pl.LazyFrame] = [
-        _scan_and_prepare_single_parquet(
-            path=p,
-            tickers=tickers_list,
-            start_date=start_date,
-            end_date=end_date,
+    for _, row in ticker_lazyframes_df.iterrows():
+        lf = row["lazyframe"]
+        # dedup restated rows for both output shapes; `return_qdf` selects the key columns
+        lf = _apply_delta_treatment(
+            lf=lf,
+            delta_treatment=delta_treatment,
             return_qdf=return_qdf,
         )
-        for p in paths
-    ]
+        ticker_lazyframes_df.loc[_, "lazyframe"] = lf
+    out_lf: pl.LazyFrame = pl.concat(
+        [
+            row["lazyframe"]
+            for _, row in ticker_lazyframes_df.iterrows()
+            if row["lazyframe"] is not None
+        ],
+        how="vertical",
+    )
+    sort_cols = (["cid", "xcat"] if return_qdf else ["ticker"]) + ["real_date"]
+    # `last_updated` breaks ties, so `delta_treatment="all"` returns each row's versions
+    # oldest first instead of in whatever order the files happened to concatenate. The
+    # other treatments leave one row per key, where it never gets consulted
+    out_lf = out_lf.sort(sort_cols + ["last_updated"])
+    if dropna:
+        # `dropna` governs only what reaches the output: keep the rows whose requested
+        # metrics are all populated. Expiring a row is `delta_treatment`'s job and has
+        # already happened above, so an expiry has superseded the row it withdraws
+        # before being dropped here for being null. Named from the metrics rather than
+        # by subtracting the key columns: in qdf shape "ticker" has given way to
+        # cid/xcat, so subtraction would leave it behind
+        cols = [
+            c for c in (metrics or JPMAQS_VALUE_METRICS) if c in JPMAQS_VALUE_METRICS
+        ]
+        if cols:
+            out_lf = out_lf.filter(pl.all_horizontal(pl.col(cols).is_not_null()))
 
-    out = pl.concat(lazy_parts, how="vertical")
-    return out
+    return out_lf
+
+
+def _collect_naming_paths(
+    lf: pl.LazyFrame, paths: Sequence[Union[str, Path]]
+) -> pl.DataFrame:
+    """Collect `lf`, and on failure name the files it was reading (at most 20)."""
+    MAX_PATHS_IN_ERROR: int = 20
+    try:
+        return lf.collect()
+    except Exception as e:
+        shown = [str(p) for p in list(paths)[:MAX_PATHS_IN_ERROR]]
+        if len(paths) > MAX_PATHS_IN_ERROR:
+            shown.append(f"... and {len(paths) - MAX_PATHS_IN_ERROR} more")
+        raise ValueError(f"Failed to load data from {shown}: {e}") from e
+
+
+def _delta_treatment_error() -> str:
+    """One message for both entry points, so the same input reads the same way."""
+    return (
+        "`delta_treatment` must be one of "
+        f"{', '.join(repr(t) for t in DELTA_TREATMENTS)}."
+    )
+
+
+def _apply_delta_treatment(
+    lf: pl.LazyFrame,
+    delta_treatment: str = "latest",
+    return_qdf: bool = True,
+) -> pl.LazyFrame:
+    """
+    Resolve rows restated by delta files: keep the "latest" or "earliest" row per
+    (key, real_date) by `last_updated`, or "all" of them.
+    """
+    if delta_treatment not in DELTA_TREATMENTS:
+        raise ValueError(_delta_treatment_error())
+    key_cols = ["cid", "xcat"] if return_qdf else ["ticker"]
+    full_key = key_cols + ["real_date"]
+
+    if delta_treatment != "all":
+        if delta_treatment == "latest":
+            lf = lf.sort(
+                full_key + ["last_updated"], descending=[False] * len(full_key) + [True]
+            ).unique(subset=full_key, keep="first")
+        elif delta_treatment == "earliest":
+            # "earliest" answers what the first print said, and an expiry is never that:
+            # it records a withdrawal, not a print. Dropping expiries before the dedup
+            # keeps the first real print however the expiry happens to sort. Only the
+            # metrics present are tested, as callers may pass a narrower frame
+            names = (
+                lf.collect_schema().names()
+                if PYTHON_3_8_OR_LATER
+                else list(lf.schema.keys())
+            )
+            metric_cols = [c for c in JPMAQS_VALUE_METRICS if c in names]
+            if metric_cols:
+                lf = lf.filter(pl.any_horizontal(pl.col(metric_cols).is_not_null()))
+            lf = lf.sort(
+                full_key + ["last_updated"],
+                descending=[False] * len(full_key) + [False],
+            ).unique(subset=full_key, keep="first")
+    return lf
+
+
+def build_filtered_lazy_frames_df(
+    paths: List[str],
+    tickers: List[str],
+    start_date: Optional[Union[str, pd.Timestamp]],
+    end_date: Optional[Union[str, pd.Timestamp]],
+    catalog_path: Union[str, Path],
+    return_qdf: bool,
+    include_source_file: bool = False,
+    categorical_source_file_column: bool = True,
+) -> pd.DataFrame:
+    """
+    Map each dataset to its parquet files and its requested tickers.
+
+    Returns
+    -------
+    pd.DataFrame
+        One row per dataset, with columns "e-dataset", "ticker", "path" and a
+        "lazyframe" holding that dataset's files scanned and filtered.
+    """
+    tickers_list: List[str] = list(dict.fromkeys(tickers))
+    catalog_df = _read_catalog(catalog_path).copy()  # copy: "Dataset" is added below
+    catalog_df["Dataset"] = (
+        catalog_df["Theme"].map(JPMAQS_DATASET_THEME_MAPPING).fillna("Unknown")
+    )
+
+    dataset_tickers_dict = catalog_df[
+        catalog_df["Ticker"].str.lower().isin(map(str.lower, tickers_list))
+    ][["Ticker", "Dataset"]]
+
+    tickers_in_ds = (
+        dataset_tickers_dict.rename(
+            columns={"Ticker": "ticker", "Dataset": "e-dataset"}
+        )
+        .groupby("e-dataset")["ticker"]
+        .agg(sorted)
+        .reset_index()
+    )
+    files_for_ds = (
+        pd.DataFrame(
+            [
+                [
+                    Path(p),
+                    Path(p).name.split(".")[0].rsplit("_", 1)[0].replace("_DELTA", ""),
+                ]
+                for p in paths
+            ],
+            columns=["path", "e-dataset"],
+        )
+        .groupby("e-dataset")["path"]
+        .agg(sorted)
+        .reset_index()
+    )
+    ticker_ds_file_mapping = tickers_in_ds.merge(
+        files_for_ds, on="e-dataset", how="outer", indicator=True
+    )
+
+    # A row with no `path` means requested tickers whose dataset was never downloaded;
+    # a row with no `ticker` means files on disk for a dataset nobody asked for. Neither
+    # is loadable, so name the datasets instead of iterating a NaN. "Unknown" is the
+    # legitimate no-dataset bucket and is skipped below.
+    no_files = sorted(
+        set(
+            ticker_ds_file_mapping.loc[
+                ticker_ds_file_mapping["path"].isna(), "e-dataset"
+            ]
+        )
+        - {"Unknown"}
+    )
+    not_requested = sorted(
+        set(
+            ticker_ds_file_mapping.loc[
+                ticker_ds_file_mapping["ticker"].isna(), "e-dataset"
+            ]
+        )
+    )
+    if no_files or not_requested:
+        raise ValueError(
+            "Could not match the requested tickers to the files on disk. "
+            f"Datasets with requested tickers but no downloaded file: {no_files}. "
+            f"Datasets with downloaded files but no requested tickers: {not_requested}. "
+            "Download the missing datasets, or pass `datasets=` to restrict the load."
+        )
+    ticker_ds_file_mapping = ticker_ds_file_mapping.drop(columns="_merge")
+
+    # this df is just a store for the lazyframes which maps each dataset to
+    # the associated parquet files, and ticker to be loaded from it
+    # these are NOT concatted here - which avoids delta-dedup/filtering on the full lazyframe
+    ticker_ds_file_mapping["lazyframe"] = None
+    for _, row in ticker_ds_file_mapping.iterrows():
+        curr_dataset = row["e-dataset"]
+        curr_tickers = row["ticker"]
+        curr_paths = row["path"]
+        if curr_dataset == "Unknown":
+            logger.warning(
+                f"Dataset for tickers {curr_tickers} is unknown. Skipping these tickers."
+            )
+            continue
+        lazy_frame: pl.LazyFrame = pl.concat(
+            [
+                _scan_and_prepare_single_parquet(
+                    path=p,
+                    tickers=curr_tickers,
+                    start_date=start_date,
+                    end_date=end_date,
+                    return_qdf=return_qdf,
+                    include_source_file=include_source_file,
+                    categorical_source_file_column=categorical_source_file_column,
+                )
+                for p in curr_paths
+            ],
+            how="vertical",
+        )
+        ticker_ds_file_mapping.loc[_, "lazyframe"] = lazy_frame
+
+    # drop where lazyframe is None (i.e., unknown datasets)
+    ticker_ds_file_mapping = ticker_ds_file_mapping.dropna(subset=["lazyframe"])
+    return ticker_ds_file_mapping
 
 
 if __name__ == "__main__":
-    print("Current time UTC:", pd.Timestamp.utcnow().isoformat())
-
+    now_datetime = datetime.datetime.now(datetime.timezone.utc)
+    print("Current time UTC:", now_datetime.isoformat())
+    path = Path("~/jpmaqs-data").expanduser()
     start = time.time()
-    since_datetime = pd.Timestamp.now() - pd.offsets.BDay(5)
     print(
-        f"Downloading full-snapshots, delta-files, and metadata files published since {since_datetime}"
+        "Downloading full-snapshots, delta-files, "
+        f"and metadata files published as of {now_datetime.isoformat()}"
     )
-    since_datetime = since_datetime.strftime("%Y%m%d")
-    with DataQueryFileAPIClient(out_dir="./data/jpmaqs-data/") as dq:
-        dq.download_catalog_file()
-        dq.download_full_snapshot(since_datetime=since_datetime)
+
+    with DataQueryFileAPIClient() as dq:
+        dq.download_files(since_datetime=now_datetime - datetime.timedelta(days=3))
+        catalog_df = dq.load_catalog()
+        random_tickers = catalog_df["Ticker"].sample(n=20, random_state=42).tolist()
+
+        df = dq.download(tickers=random_tickers, keep_n_days_old_files=3)
+        # print(df.head())
     end = time.time()
-
-    print(f"Download completed in {end - start:.2f} seconds")
-
-    cids = ["AUD", "BRL", "CAD", "CHF", "CNY", "CZK", "EUR", "GBP", "USD"]
-    xcats = ["RIR_NSA", "FXXR_NSA", "FXXR_VT10", "DU05YXR_NSA", "DU05YXR_VT10"]
-    tickers = [f"{c}_{x}" for c in cids for x in xcats]
-
-    with DataQueryFileAPIClient(out_dir="./data/jpmaqs-data/") as dq:
-        df = dq.download(tickers=tickers)
-        print(df.head())
-
-    with DataQueryFileAPIClient(out_dir="./data/jpmaqs-data/") as dq:
-        pl_df: pl.DataFrame = dq.download(
-            cids=cids,
-            xcats=xcats,
-            dataframe_format="tickers",
-            dataframe_type="polars",
-        )
-        print(pl_df.head())
+    print(f"Download completed in {end - start:.2f} seconds.")
