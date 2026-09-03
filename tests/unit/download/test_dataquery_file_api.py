@@ -39,16 +39,14 @@ def suppress_logging(func):
 
 def _make_client(out_dir="."):
     """Build a client without touching the network (oauth + URL probe stubbed)."""
-    with (
-        patch("macrosynergy.download.dataquery_file_api.DataQueryFileAPIOauth"),
-        patch(
+    with patch("macrosynergy.download.dataquery_file_api.DataQueryFileAPIOauth"):
+        with patch(
             "macrosynergy.download.dataquery_file_api._resolve_base_url",
             return_value="http://x",
-        ),
-    ):
-        return DataQueryFileAPIClient(
-            client_id="id", client_secret="secret", out_dir=out_dir
-        )
+        ):
+            return DataQueryFileAPIClient(
+                client_id="id", client_secret="secret", out_dir=out_dir
+            )
 
 
 class TestStandaloneFunctions(unittest.TestCase):
@@ -1823,18 +1821,19 @@ class TestDownloadMultipleFilesReturn(unittest.TestCase):
     @suppress_logging
     @patch("macrosynergy.download.dataquery_file_api.time.sleep")
     def test_all_success_returns_sorted_completed(self, _sleep):
-        with (
-            patch.object(
-                self.client,
-                "download_file",
-                side_effect=lambda filename, **kw: filename,
-            ),
-            patch.object(self.client, "delete_corrupt_files", return_value=[]),
+        with patch.object(
+            self.client,
+            "download_file",
+            side_effect=lambda filename, **kw: filename,
         ):
-            res = self.client.download_multiple_files(
-                filenames=["JPMAQS_B_20260728.parquet", "JPMAQS_A_20260728.parquet"],
-                show_progress=False,
-            )
+            with patch.object(self.client, "delete_corrupt_files", return_value=[]):
+                res = self.client.download_multiple_files(
+                    filenames=[
+                        "JPMAQS_B_20260728.parquet",
+                        "JPMAQS_A_20260728.parquet",
+                    ],
+                    show_progress=False,
+                )
         self.assertEqual(
             res, ["JPMAQS_A_20260728.parquet", "JPMAQS_B_20260728.parquet"]
         )
@@ -1850,15 +1849,16 @@ class TestDownloadMultipleFilesReturn(unittest.TestCase):
                 raise Exception("transient")
             return filename
 
-        with (
-            patch.object(self.client, "download_file", side_effect=flaky),
-            patch.object(self.client, "delete_corrupt_files", return_value=[]),
-        ):
-            res = self.client.download_multiple_files(
-                filenames=["JPMAQS_A_20260728.parquet", "JPMAQS_B_20260728.parquet"],
-                max_retries=2,
-                show_progress=False,
-            )
+        with patch.object(self.client, "download_file", side_effect=flaky):
+            with patch.object(self.client, "delete_corrupt_files", return_value=[]):
+                res = self.client.download_multiple_files(
+                    filenames=[
+                        "JPMAQS_A_20260728.parquet",
+                        "JPMAQS_B_20260728.parquet",
+                    ],
+                    max_retries=2,
+                    show_progress=False,
+                )
         self.assertEqual(
             res, ["JPMAQS_A_20260728.parquet", "JPMAQS_B_20260728.parquet"]
         )
@@ -1872,19 +1872,20 @@ class TestDownloadMultipleFilesReturn(unittest.TestCase):
             passes["n"] += 1
             return ["JPMAQS_B_20260728.parquet"] if passes["n"] == 1 else []
 
-        with (
-            patch.object(
-                self.client,
-                "download_file",
-                side_effect=lambda filename, **kw: filename,
-            ),
-            patch.object(self.client, "delete_corrupt_files", side_effect=corrupt),
+        with patch.object(
+            self.client,
+            "download_file",
+            side_effect=lambda filename, **kw: filename,
         ):
-            res = self.client.download_multiple_files(
-                filenames=["JPMAQS_A_20260728.parquet", "JPMAQS_B_20260728.parquet"],
-                max_retries=1,
-                show_progress=False,
-            )
+            with patch.object(self.client, "delete_corrupt_files", side_effect=corrupt):
+                res = self.client.download_multiple_files(
+                    filenames=[
+                        "JPMAQS_A_20260728.parquet",
+                        "JPMAQS_B_20260728.parquet",
+                    ],
+                    max_retries=1,
+                    show_progress=False,
+                )
         self.assertEqual(
             res, ["JPMAQS_A_20260728.parquet", "JPMAQS_B_20260728.parquet"]
         )
@@ -1892,18 +1893,16 @@ class TestDownloadMultipleFilesReturn(unittest.TestCase):
     @suppress_logging
     @patch("macrosynergy.download.dataquery_file_api.time.sleep")
     def test_persistent_failure_raises(self, _sleep):
-        with (
-            patch.object(self.client, "download_file", side_effect=Exception("boom")),
-            patch.object(self.client, "delete_corrupt_files", return_value=[]),
-        ):
-            for max_retries in (0, -1):
-                with self.subTest(max_retries=max_retries):
-                    with self.assertRaises(DownloadError):
-                        self.client.download_multiple_files(
-                            filenames=["JPMAQS_A_20260728.parquet"],
-                            max_retries=max_retries,
-                            show_progress=False,
-                        )
+        with patch.object(self.client, "download_file", side_effect=Exception("boom")):
+            with patch.object(self.client, "delete_corrupt_files", return_value=[]):
+                for max_retries in (0, -1):
+                    with self.subTest(max_retries=max_retries):
+                        with self.assertRaises(DownloadError):
+                            self.client.download_multiple_files(
+                                filenames=["JPMAQS_A_20260728.parquet"],
+                                max_retries=max_retries,
+                                show_progress=False,
+                            )
 
     @suppress_logging
     @patch("macrosynergy.download.dataquery_file_api.time.sleep")
@@ -1916,16 +1915,14 @@ class TestDownloadMultipleFilesReturn(unittest.TestCase):
                 raise Exception("transient")
             return filename
 
-        with (
-            patch.object(self.client, "download_file", side_effect=flaky),
-            patch.object(self.client, "delete_corrupt_files", return_value=[]),
-        ):
-            self.client.download_multiple_files(
-                filenames=["JPMAQS_A_20260728.parquet"],
-                overwrite=True,
-                max_retries=1,
-                show_progress=False,
-            )
+        with patch.object(self.client, "download_file", side_effect=flaky):
+            with patch.object(self.client, "delete_corrupt_files", return_value=[]):
+                self.client.download_multiple_files(
+                    filenames=["JPMAQS_A_20260728.parquet"],
+                    overwrite=True,
+                    max_retries=1,
+                    show_progress=False,
+                )
         self.assertEqual(seen, [True, True])
 
 
@@ -2176,23 +2173,21 @@ class TestDownloadLatestSnapshotPrune(unittest.TestCase):
         return sorted(p.name for p in self.save_dir.rglob("*.parquet"))
 
     def run_snapshot(self, dates, keep_n_days_old_files=0):
-        with (
-            patch.object(
-                self.client,
-                "filter_available_files_by_datetime",
-                return_value=self.available(dates),
-            ),
-            # the files are already written to disk by the test; downloading is a no-op
-            patch.object(
+        # the files are already written to disk by the test; downloading is a no-op
+        with patch.object(
+            self.client,
+            "filter_available_files_by_datetime",
+            return_value=self.available(dates),
+        ):
+            with patch.object(
                 self.client,
                 "download_multiple_files",
                 side_effect=lambda filenames, **kw: filenames,
-            ) as mock_download,
-        ):
-            result = self.client.download_latest_files(
-                keep_n_days_old_files=keep_n_days_old_files, show_progress=False
-            )
-        return result, mock_download
+            ) as mock_download:
+                result = self.client.download_latest_files(
+                    keep_n_days_old_files=keep_n_days_old_files, show_progress=False
+                )
+                return result, mock_download
 
     @suppress_logging
     def test_old_snapshot_is_pruned_and_the_latest_survives(self):
@@ -2218,22 +2213,20 @@ class TestDownloadLatestSnapshotPrune(unittest.TestCase):
     @suppress_logging
     def test_nothing_is_pruned_when_the_download_fails(self):
         self.put_on_disk("20260727")  # only the old snapshot is present
-        with (
-            patch.object(
-                self.client,
-                "filter_available_files_by_datetime",
-                return_value=self.available(["20260727", "20260728"]),
-            ),
-            patch.object(
+        with patch.object(
+            self.client,
+            "filter_available_files_by_datetime",
+            return_value=self.available(["20260727", "20260728"]),
+        ):
+            with patch.object(
                 self.client,
                 "download_multiple_files",
                 side_effect=DownloadError("boom"),
-            ),
-        ):
-            with self.assertRaises(DownloadError):
-                self.client.download_latest_files(
-                    keep_n_days_old_files=0, show_progress=False
-                )
+            ):
+                with self.assertRaises(DownloadError):
+                    self.client.download_latest_files(
+                        keep_n_days_old_files=0, show_progress=False
+                    )
         # the replacement never arrived, so the old snapshot must still be there
         self.assertEqual(self.on_disk(), sorted(self.snapshot_names("20260727")))
 
@@ -2293,21 +2286,19 @@ class TestSnapshotRetentionWindow(unittest.TestCase):
         )
 
     def run_snapshot(self, upstream, keep):
-        with (
-            patch.object(
-                self.client,
-                "filter_available_files_by_datetime",
-                return_value=self.available(upstream),
-            ),
-            patch.object(
+        with patch.object(
+            self.client,
+            "filter_available_files_by_datetime",
+            return_value=self.available(upstream),
+        ):
+            with patch.object(
                 self.client,
                 "download_multiple_files",
                 side_effect=lambda filenames, **kw: filenames,
-            ),
-        ):
-            return self.client.download_latest_files(
-                keep_n_days_old_files=keep, show_progress=False
-            )
+            ):
+                return self.client.download_latest_files(
+                    keep_n_days_old_files=keep, show_progress=False
+                )
 
     @suppress_logging
     def test_weekend_snapshot_becomes_the_latest(self):
@@ -2363,43 +2354,39 @@ class TestDownloadFilesReturn(unittest.TestCase):
         avail = pd.DataFrame(
             {"file-name": ["JPMAQS_A_20260201.parquet"], "file-datetime": ["20260201"]}
         )
-        with (
-            patch.object(
-                self.client, "filter_available_files_by_datetime", return_value=avail
-            ),
-            patch.object(
+        with patch.object(
+            self.client, "filter_available_files_by_datetime", return_value=avail
+        ):
+            with patch.object(
                 self.client,
                 "list_downloaded_files",
                 return_value=pd.DataFrame(columns=["file-name"]),
-            ),
-            patch.object(
-                self.client,
-                "download_multiple_files",
-                return_value=["JPMAQS_A_20260201.parquet"],
-            ),
-        ):
-            result = self.client.download_files(
-                since_datetime="20260201", show_progress=False
-            )
+            ):
+                with patch.object(
+                    self.client,
+                    "download_multiple_files",
+                    return_value=["JPMAQS_A_20260201.parquet"],
+                ):
+                    result = self.client.download_files(
+                        since_datetime="20260201", show_progress=False
+                    )
         self.assertEqual(result, ["JPMAQS_A_20260201.parquet"])
 
     @suppress_logging
     def test_returns_empty_when_no_new_files(self):
-        with (
-            patch.object(
-                self.client,
-                "filter_available_files_by_datetime",
-                return_value=pd.DataFrame(columns=["file-name"]),
-            ),
-            patch.object(
+        with patch.object(
+            self.client,
+            "filter_available_files_by_datetime",
+            return_value=pd.DataFrame(columns=["file-name"]),
+        ):
+            with patch.object(
                 self.client,
                 "list_downloaded_files",
                 return_value=pd.DataFrame(columns=["file-name"]),
-            ),
-        ):
-            result = self.client.download_files(
-                since_datetime="20260201", show_progress=False
-            )
+            ):
+                result = self.client.download_files(
+                    since_datetime="20260201", show_progress=False
+                )
         self.assertEqual(result, [])
 
 
@@ -2453,24 +2440,22 @@ class TestDownloadForwardsLoadOptions(unittest.TestCase):
         self.datasets = ["JPMAQS_MACROECONOMIC_TRENDS"]
 
     def _download(self, **kwargs):
-        with (
-            patch.object(
-                self.client, "get_datasets_for_indicators", return_value=self.datasets
-            ),
-            patch.object(
-                self.client, "download_latest_files", return_value=[]
-            ) as mock_snapshot,
-            patch.object(
-                self.client,
-                "download_catalog_file",
-                return_value=str(Path(self.temp_dir.name) / "catalog.parquet"),
-            ),
-            patch(
-                "macrosynergy.download.dataquery_file_api.lazy_load_from_parquets",
-                return_value="LOADED",
-            ) as mock_load,
+        with patch.object(
+            self.client, "get_datasets_for_indicators", return_value=self.datasets
         ):
-            result = self.client.download(tickers=["USD_INFL"], **kwargs)
+            with patch.object(
+                self.client, "download_latest_files", return_value=[]
+            ) as mock_snapshot:
+                with patch.object(
+                    self.client,
+                    "download_catalog_file",
+                    return_value=str(Path(self.temp_dir.name) / "catalog.parquet"),
+                ):
+                    with patch(
+                        "macrosynergy.download.dataquery_file_api.lazy_load_from_parquets",
+                        return_value="LOADED",
+                    ) as mock_load:
+                        result = self.client.download(tickers=["USD_INFL"], **kwargs)
         return result, mock_load.call_args.kwargs, mock_snapshot.call_args.kwargs
 
     def test_include_source_file_is_forwarded(self):
