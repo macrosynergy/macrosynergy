@@ -157,7 +157,7 @@ class ScoreVisualisers:
             )
             if source_name == "Composite":
                 warnings.warn(
-                    f"'{source_name}' found in df — using pre-computed composite instead of "
+                    f"'{source_name}' found in df - using pre-computed composite instead of "
                     "recalculating it."
                 )
             composite_df = df[df["xcat"] == source_name].copy()

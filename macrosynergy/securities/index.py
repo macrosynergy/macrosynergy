@@ -281,7 +281,7 @@ def compute_daily_weights(
                 )
             else:
                 logger.info(
-                    "Blacklist cid '%s' not found in constituent universe — skipped.",
+                    "Blacklist cid '%s' not found in constituent universe - skipped.",
                     cid,
                 )
         bl_effective = _build_reconstitution_membership(

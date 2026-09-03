@@ -966,7 +966,7 @@ class TestFunctions(unittest.TestCase):
 
         # Test Case 1
 
-        # for every unique cid, xcat pair add a column "vx" which is just an integer 0→n ,
+        # for every unique cid, xcat pair add a column "vx" which is just an integer 0->n ,
         # where n is the number of unique dates for that cid, xcat pair
         df["vx"] = (
             df.groupby(["cid", "xcat"])["real_date"].rank(method="dense").astype(int)

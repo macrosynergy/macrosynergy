@@ -269,7 +269,7 @@ class TestFallbackBehaviour:
             [["AUD", "AUD"], pd.date_range("2020-01-01", periods=2, freq="D")],
             names=["cid", "real_date"],
         )
-        # Both rows have NaNs in different cols — no complete rows
+        # Both rows have NaNs in different cols - no complete rows
         df = pd.DataFrame(
             {"f0": [np.nan, 1.0], "f1": [1.0, np.nan]},
             index=idx,
