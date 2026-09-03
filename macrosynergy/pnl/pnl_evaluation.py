@@ -22,23 +22,22 @@ def evaluate_pnl(
     portfolio_name: str = "GLB",
 ) -> pd.DataFrame:
     """
-    Compute summary performance statistics for the proxy PnL.
-
-    The PnL series is converted to a percentage return on AUM and annualized
-    statistics are computed assuming 252 trading days per year. The method
-    requires that `proxy_pnl_calc` has already been run; `pnl_excl_costs` and
-    `txn_costs_df` are required only when the corresponding flags are set.
+    Compute summary performance statistics for a proxy PnL. The PnL series is converted
+    to a percentage return on AUM and annualized statistics are computed assuming
+    252 trading days per year.
 
     Parameters
     ----------
+    df_pnl : pd.DataFrame
+        PnL net of costs data
     aum : Number
         Assets under management used to scale the PnL into percentage returns.
-    df_pnle : bool
-        If True, include the PnL excluding transaction costs (`self.pnl_excl_costs`)
-        as an additional column in the output.
-    include_tcosts : bool
-        If True, include total transaction costs as a row in the output. Requires
-        `self.txn_costs_df` to be available.
+    df_pnle : pd.DataFrame
+        PnL excluding costs data. If supplied, include the PnL excluding transaction
+        costs as an additional column in the output.
+    df_tcosts : pd.DataFrame
+        Transaction costs data. If supplied, include total transaction costs as a
+        row in the output.
     label_dict : dict
         Mapping from raw column names (xcat values) to display labels used in the
         output columns.
@@ -52,6 +51,8 @@ def evaluate_pnl(
         QuantamentalDataFrame of benchmark series. If provided, the correlation
         between each PnL column and each benchmark ticker (cid_xcat) is added as
         a row in the output.
+    portfolio_name : str
+        Name of the portfolio
 
     Returns
     -------
@@ -67,7 +68,7 @@ def evaluate_pnl(
     for arg, value, types in [
         ("aum", aum, Number),
         ("df_pnl", df_pnl, pd.DataFrame),
-        ("df_pnle", df_pnl, (pd.DataFrame, NoneType)),
+        ("df_pnle", df_pnle, (pd.DataFrame, NoneType)),
         ("df_tcosts", df_tcosts, (pd.DataFrame, NoneType)),
         ("label_dict", label_dict, (dict, NoneType)),
         ("start", start, (str, NoneType)),
