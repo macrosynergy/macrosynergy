@@ -26,7 +26,6 @@ import polars as pl
 
 from macrosynergy.compat import PYTHON_3_8_OR_LATER
 from macrosynergy.download.dataquery_file_api import (
-    EXPECTED_JPMAQS_PARQUET_SCHEMA,
     _apply_delta_treatment,
     _check_lazy_load_inputs,
     _collect_naming_paths,
@@ -43,6 +42,7 @@ from macrosynergy.download.dataquery_file_api import (
     _split_jpmaqs_filename,
     _to_output_schema,
     build_filtered_lazy_frames_df,
+    get_jpmaqs_parquet_schema,
     lazy_load_from_parquets,
 )
 from macrosynergy.management.constants import JPMAQS_METRICS
@@ -222,7 +222,7 @@ class TestToOutputSchema(unittest.TestCase):
 
     def test_ticker_shape_is_passed_through(self):
         df = _to_output_schema(ticker_lazyframe(), want_qdf=False).collect()
-        self.assertEqual(df.columns, list(EXPECTED_JPMAQS_PARQUET_SCHEMA))
+        self.assertEqual(df.columns, list(get_jpmaqs_parquet_schema()))
         self.assertEqual(df["ticker"][0], "USD_INFL")
 
     def test_qdf_shape_splits_the_ticker_in_place(self):
@@ -618,7 +618,7 @@ class TestScanCheckAndCastSingleParquet(TempDirCase):
         schema = dict(
             _scan_check_and_cast_single_parquet(self.ticker_file()).collect_schema()
         )
-        for column, dtype in EXPECTED_JPMAQS_PARQUET_SCHEMA.items():
+        for column, dtype in get_jpmaqs_parquet_schema().items():
             with self.subTest(column=column):
                 self.assertEqual(schema[column], dtype)
 
@@ -649,9 +649,7 @@ class TestScanCheckAndCastSingleParquet(TempDirCase):
         for column in ("grading", "eop_lag", "mop_lag", "last_updated"):
             with self.subTest(column=column):
                 self.assertTrue(df[column].is_null().all())
-                self.assertEqual(
-                    df.schema[column], EXPECTED_JPMAQS_PARQUET_SCHEMA[column]
-                )
+                self.assertEqual(df.schema[column], get_jpmaqs_parquet_schema()[column])
 
     def test_legacy_qdf_schema_is_converted_and_warns(self):
         path = write_parquet(
@@ -898,16 +896,9 @@ class TestBuildFilteredLazyFramesDf(LazyLoadFixture):
 class TestLazyLoadQdf(LazyLoadFixture):
     """The default output: a QuantamentalDataFrame."""
 
-    QDF_COLUMNS = [
-        "real_date",
-        "cid",
-        "xcat",
-        "value",
-        "eop_lag",
-        "mop_lag",
-        "grading",
-        "last_updated",
-    ]
+    # derived, not spelled out: the contract is real_date, the keys, then the metrics in
+    # `JPMAQS_METRICS` order, so reordering that constant should not need a test edit
+    QDF_COLUMNS = ["real_date", "cid", "xcat", *JPMAQS_METRICS]
 
     def test_columns_and_values(self):
         df = self.load_snapshot_only(tickers=["USD_INFL"])
@@ -965,7 +956,7 @@ class TestLazyLoadOutputFormats(LazyLoadFixture):
 
     def test_tickers_format(self):
         df = self.load_snapshot_only(tickers=["USD_INFL"], dataframe_format="tickers")
-        self.assertEqual(list(df.columns), list(EXPECTED_JPMAQS_PARQUET_SCHEMA))
+        self.assertEqual(list(df.columns), list(get_jpmaqs_parquet_schema()))
         self.assertEqual(df.iloc[0]["ticker"], "USD_INFL")
 
     def test_polars_and_polars_lazy_types(self):

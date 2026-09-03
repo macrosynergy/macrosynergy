@@ -72,12 +72,12 @@ The resulting dataframe is returned to the user in the chosen dataframe format
 
 .. code-block:: python
 
-       real_date  cid     xcat  value  eop_lag  mop_lag  grading        last_updated
-    0 2000-01-03  AUD  RIR_NSA  4.078      0.0     55.0     1.25 2024-07-25 07:27:22
-    1 2000-01-04  AUD  RIR_NSA  3.778      0.0     56.0     1.25 2024-07-25 07:27:22
-    2 2000-01-05  AUD  RIR_NSA  3.747      0.0     56.0     1.25 2024-07-25 07:27:22
-    3 2000-01-06  AUD  RIR_NSA  3.710      0.0     56.0     1.25 2024-07-25 07:27:22
-    4 2000-01-07  AUD  RIR_NSA  3.697      0.0     57.0     1.25 2024-07-25 07:27:22
+       real_date  cid     xcat  value  grading  eop_lag  mop_lag        last_updated
+    0 2000-01-03  AUD  RIR_NSA  4.078     1.25      0.0     55.0 2024-07-25 07:27:22
+    1 2000-01-04  AUD  RIR_NSA  3.778     1.25      0.0     56.0 2024-07-25 07:27:22
+    2 2000-01-05  AUD  RIR_NSA  3.747     1.25      0.0     56.0 2024-07-25 07:27:22
+    3 2000-01-06  AUD  RIR_NSA  3.710     1.25      0.0     56.0 2024-07-25 07:27:22
+    4 2000-01-07  AUD  RIR_NSA  3.697     1.25      0.0     57.0 2024-07-25 07:27:22
 
 
 **Example 3a: Every version of a row, with `delta_treatment="all"`.**
@@ -101,13 +101,13 @@ published one. `delta_treatment="all"` keeps every version instead, so the same
 
 .. code-block:: text
 
-       real_date  cid      xcat  value  eop_lag  mop_lag  grading        last_updated
-    0 2024-01-02  AUD  EQXR_NSA  0.400      0.0      1.0      1.0 2024-01-02 06:00:00
-    1 2024-01-02  AUD  EQXR_NSA  0.412      0.0      1.0      1.0 2024-01-04 06:00:00
-    2 2024-01-03  AUD  EQXR_NSA -0.118      0.0      2.0      1.0 2024-01-03 06:00:00
+       real_date  cid      xcat  value  grading  eop_lag  mop_lag        last_updated
+    0 2024-01-02  AUD  EQXR_NSA  0.400      1.0      0.0      1.0 2024-01-02 06:00:00
+    1 2024-01-02  AUD  EQXR_NSA  0.412      1.0      0.0      1.0 2024-01-04 06:00:00
+    2 2024-01-03  AUD  EQXR_NSA -0.118      1.0      0.0      2.0 2024-01-03 06:00:00
     3 2024-01-03  AUD  EQXR_NSA    NaN      NaN      NaN      NaN 2024-01-05 06:00:00
-    4 2024-01-02  CAD  EQXR_NSA  0.221      0.0      1.0      1.0 2024-01-02 06:00:00
-    5 2024-01-03  CAD  EQXR_NSA  0.305      0.0      2.0      1.0 2024-01-03 06:00:00
+    4 2024-01-02  CAD  EQXR_NSA  0.221      1.0      0.0      1.0 2024-01-02 06:00:00
+    5 2024-01-03  CAD  EQXR_NSA  0.305      1.0      0.0      2.0 2024-01-03 06:00:00
 
 Reading that output:
 
@@ -3038,23 +3038,28 @@ def _filter_lazy_frame_by_tickers(
     return lf
 
 
-def get_jpmaqs_parquet_schema():
-    r = {
+# `pl.String` does not exist on the polars available under Python 3.7
+PL_STRING_DTYPE = pl.String if PYTHON_3_8_OR_LATER else pl.Utf8
+
+
+def get_jpmaqs_parquet_schema() -> Dict[str, Any]:
+    """
+    The columns and dtypes a scanned JPMaQS parquet is normalised to.
+    Metrics follow `JPMAQS_METRICS` order, as ordered by `_to_output_schema`.
+    """
+    return {
         "real_date": pl.Date,
+        "ticker": PL_STRING_DTYPE,
         "value": pl.Float64,
+        "grading": pl.Float64,
         "eop_lag": pl.Float64,
         "mop_lag": pl.Float64,
-        "grading": pl.Float64,
         "last_updated": pl.Datetime,
     }
-    if PYTHON_3_8_OR_LATER:
-        r["ticker"] = pl.String
-    else:
-        r["ticker"] = pl.Utf8
 
-    return r
 
 DELTA_TREATMENTS = ("latest", "earliest", "all")
+
 
 # an expiry row nulls every one of these; `last_updated` records when it was withdrawn
 JPMAQS_VALUE_METRICS = [c for c in JPMAQS_METRICS if c != "last_updated"]
@@ -3065,24 +3070,29 @@ def _to_output_schema(
     want_qdf: bool,
     include_source_file: bool = False,
 ) -> pl.LazyFrame:
-    expc_schema = get_jpmaqs_parquet_schema()
+    parquet_schema = get_jpmaqs_parquet_schema()
+    metrics = {
+        col: dtype
+        for col, dtype in parquet_schema.items()
+        if col not in ("real_date", "ticker")
+    }
+    key_cols = (
+        {"cid": PL_STRING_DTYPE, "xcat": PL_STRING_DTYPE}
+        if want_qdf
+        else {"ticker": parquet_schema["ticker"]}
+    )
+    expc_schema = {"real_date": parquet_schema["real_date"], **key_cols, **metrics}
     if include_source_file:
         expc_schema["source_file"] = pl.Categorical
 
     if want_qdf:
-        # substitute cid/xcat *at* ticker's position, so qdf output keeps the
-        # conventional real_date, cid, xcat, <metrics> ordering
-        items = list(expc_schema.items())
-        idx = [k for k, _ in items].index("ticker")
-        items[idx : idx + 1] = [("cid", pl.String), ("xcat", pl.String)]
-        expc_schema = dict(items)
-        ticker_col_split = pl.col("ticker").str.splitn("_", 2)
+        cid_xcat = pl.col("ticker").str.splitn("_", 2)
         lf = lf.with_columns(
-            cid=ticker_col_split.struct.field("field_0"),
-            xcat=ticker_col_split.struct.field("field_1"),
+            cid=cid_xcat.struct.field("field_0"),
+            xcat=cid_xcat.struct.field("field_1"),
         )
 
-    keep_cols = list(expc_schema.keys())
+    keep_cols = list(expc_schema)
     curr_cols = lf.collect_schema().keys() if PYTHON_3_8_OR_LATER else lf.schema.keys()
     missing_cols = [c for c in keep_cols if c not in curr_cols]
     if missing_cols:
@@ -3090,8 +3100,7 @@ def _to_output_schema(
             f"Missing expected columns in LazyFrame: {missing_cols}. "
             f"Current columns: {sorted(curr_cols)}"
         )
-    lf = lf.select([pl.col(c) for c in keep_cols])
-    return lf
+    return lf.select(keep_cols)
 
 
 def _scan_check_and_cast_single_parquet(
@@ -3099,7 +3108,7 @@ def _scan_check_and_cast_single_parquet(
     include_source_file: bool = False,
     categorical_source_file_column: bool = True,
 ) -> pl.LazyFrame:
-    """Scan one parquet and normalise it to `EXPECTED_JPMAQS_PARQUET_SCHEMA`."""
+    """Scan one parquet and normalise it to `get_jpmaqs_parquet_schema()`."""
     lf = pl.scan_parquet(path)
     schema = dict(lf.collect_schema()) if PYTHON_3_8_OR_LATER else dict(lf.schema)
     if schema.get("grading", None) == pl.String:
