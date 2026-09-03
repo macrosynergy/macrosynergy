@@ -2019,20 +2019,18 @@ class TestDownloadLatestSnapshot(unittest.TestCase):
                 "list_downloaded_files",
                 return_value=downloaded if downloaded is not None else empty,
             ):
-                with (
-                    patch.object(
-                        self.client,
-                        "download_multiple_files",
-                        side_effect=lambda filenames, **kw: filenames,
-                    ) as mdl,
-                    patch.object(self.client, "cleanup_old_files") as mclean,
-                ):
-                    res = self.client.download_latest_files(
-                        overwrite=overwrite,
-                        file_group_ids=file_group_ids,
-                        show_progress=False,
-                    )
-                    return res, mdl, mclean
+                with patch.object(
+                    self.client,
+                    "download_multiple_files",
+                    side_effect=lambda filenames, **kw: filenames,
+                ) as mdl:
+                    with patch.object(self.client, "cleanup_old_files") as mclean:
+                        res = self.client.download_latest_files(
+                            overwrite=overwrite,
+                            file_group_ids=file_group_ids,
+                            show_progress=False,
+                        )
+                        return res, mdl, mclean
 
     def test_downloads_latest_complete_and_cleans_anchored_to_it(self):
         avail = self._available(
