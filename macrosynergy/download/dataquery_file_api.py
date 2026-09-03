@@ -3038,15 +3038,21 @@ def _filter_lazy_frame_by_tickers(
     return lf
 
 
-EXPECTED_JPMAQS_PARQUET_SCHEMA = {
-    "real_date": pl.Date,
-    "ticker": pl.String,
-    "value": pl.Float64,
-    "eop_lag": pl.Float64,
-    "mop_lag": pl.Float64,
-    "grading": pl.Float64,
-    "last_updated": pl.Datetime,
-}
+def get_jpmaqs_parquet_schema():
+    r = {
+        "real_date": pl.Date,
+        "value": pl.Float64,
+        "eop_lag": pl.Float64,
+        "mop_lag": pl.Float64,
+        "grading": pl.Float64,
+        "last_updated": pl.Datetime,
+    }
+    if PYTHON_3_8_OR_LATER:
+        r["ticker"] = pl.String
+    else:
+        r["ticker"] = pl.Utf8
+
+    return r
 
 DELTA_TREATMENTS = ("latest", "earliest", "all")
 
@@ -3059,7 +3065,7 @@ def _to_output_schema(
     want_qdf: bool,
     include_source_file: bool = False,
 ) -> pl.LazyFrame:
-    expc_schema = EXPECTED_JPMAQS_PARQUET_SCHEMA.copy()
+    expc_schema = get_jpmaqs_parquet_schema()
     if include_source_file:
         expc_schema["source_file"] = pl.Categorical
 
@@ -3145,7 +3151,7 @@ def _scan_check_and_cast_single_parquet(
                 f"Parquet file {path} is missing required column: '{col}'."
             )
 
-    for col, expected_type in EXPECTED_JPMAQS_PARQUET_SCHEMA.items():
+    for col, expected_type in get_jpmaqs_parquet_schema().items():
         if col in schema:
             if schema[col] == expected_type:
                 continue
