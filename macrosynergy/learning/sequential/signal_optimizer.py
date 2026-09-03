@@ -224,6 +224,7 @@ class SignalOptimizer(BasePanelLearner):
         n_jobs_outer=-1,
         n_jobs_inner=1,
         store_correlations=False,
+        selection_freq=None,
     ):
         """
         Determine forecasts and store relevant quantities over time.
@@ -319,6 +320,13 @@ class SignalOptimizer(BasePanelLearner):
         store_correlations : bool
             Whether to store the correlations between input pipeline features and input
             predictor features. Default is False.
+        selection_freq : int, optional
+            Number of retraining dates between model selections. If None, a
+            full cross-validated hyperparameter search is performed at every retraining
+            date. When set to an integer, selection is performed on
+            the first retraining date and every `selection_freq` dates thereafter. On
+            the dates in between, the most recently selected model and hyperparameters
+            are refit on the current training window without re-running the search.
         """
         # Additional checks
         if not isinstance(store_correlations, bool):
@@ -367,6 +375,7 @@ class SignalOptimizer(BasePanelLearner):
             n_iter=n_iter,
             n_jobs_outer=n_jobs_outer,
             n_jobs_inner=n_jobs_inner,
+            selection_freq=selection_freq,
         )
 
         self._check_duplicate_results(name)
