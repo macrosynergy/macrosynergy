@@ -10,6 +10,7 @@ import functools
 import logging
 import tempfile
 from macrosynergy.compat import PD_2_0_OR_LATER
+from macrosynergy.download import dataquery_file_api as dq_file_api
 from macrosynergy.download.dataquery_file_api import (
     validate_dq_timestamp,
     get_client_id_secret,
@@ -685,9 +686,82 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
         self.assertEqual(datasets, [expected_dataset])
         self.assertIn("Some unknown theme", str(mock_logger.warning.call_args))
 
+    def test_abbreviate_names_how_many_were_left_out(self):
+        from macrosynergy.download.dataquery_file_api import _abbreviate_tickers_list
+
+        self.assertEqual(_abbreviate_tickers_list(["A", "B"]), "['A', 'B']")
+        ten = [f"T{i}" for i in range(10)]
+        self.assertEqual(
+            _abbreviate_tickers_list(ten), str(ten)
+        )  # exactly at the limit, untouched
+        self.assertIn(
+            "(+15 more)", _abbreviate_tickers_list([f"T{i}" for i in range(25)])
+        )
+
     @patch("macrosynergy.download.dataquery_file_api.lazy_load_from_parquets")
     @patch.object(DataQueryFileAPIClient, "download_catalog_file")
-    @patch.object(DataQueryFileAPIClient, "download_latest_snapshot")
+    @patch.object(DataQueryFileAPIClient, "download_latest_files")
+    @patch.object(DataQueryFileAPIClient, "get_datasets_for_indicators")
+    @patch("macrosynergy.download.dataquery_file_api.DataQueryFileAPIOauth")
+    def test_suppress_warnings_covers_both_channels_and_never_leaks(
+        self, mock_oauth, mock_get_datasets, mock_files, mock_catalog, mock_load
+    ):
+        client = DataQueryFileAPIClient(
+            client_id="id", client_secret="secret", out_dir=self.test_dir
+        )
+        mock_catalog.return_value = "catalog.parquet"
+        # one warning on each channel: `logger` and `warnings`
+        mock_get_datasets.side_effect = lambda **kw: (
+            dq_file_api.logger.warning("a logger warning"),
+            ["JPMAQS_A"],
+        )[1]
+
+        def loader(**kwargs):
+            warnings.warn("a warnings.warn warning")
+            return "df"
+
+        records = []
+
+        class Collect(logging.Handler):
+            def emit(self, record):
+                records.append(record.getMessage())
+
+        handler = Collect()
+        dq_file_api.logger.addHandler(handler)
+        self.addCleanup(dq_file_api.logger.removeHandler, handler)
+        dq_file_api.logger.setLevel(logging.WARNING)
+
+        for suppress, raises, expected in [
+            (False, False, 1),  # both channels emit
+            (True, False, 0),  # both silenced
+            (True, True, 0),  # both silenced, and restored despite the exception
+        ]:
+            with self.subTest(suppress=suppress, raises=raises):
+                records.clear()
+                filters_before = len(warnings.filters)
+                mock_load.side_effect = (
+                    (lambda **kw: (_ for _ in ()).throw(ValueError("boom")))
+                    if raises
+                    else loader
+                )
+                with warnings.catch_warnings(record=True) as caught:
+                    warnings.simplefilter("always")
+                    try:
+                        client.download(
+                            cids=["USD"], xcats=["INFL"], suppress_warnings=suppress
+                        )
+                    except ValueError:
+                        self.assertTrue(raises)
+
+                self.assertEqual(len(records), expected)
+                self.assertEqual(len(caught), expected if not raises else 0)
+                # the leak this replaced left a global "ignore everything" filter behind
+                self.assertEqual(len(warnings.filters), filters_before)
+                self.assertEqual(dq_file_api.logger.level, logging.WARNING)
+
+    @patch("macrosynergy.download.dataquery_file_api.lazy_load_from_parquets")
+    @patch.object(DataQueryFileAPIClient, "download_catalog_file")
+    @patch.object(DataQueryFileAPIClient, "download_latest_files")
     @patch.object(DataQueryFileAPIClient, "get_datasets_for_indicators")
     @patch("macrosynergy.download.dataquery_file_api.DataQueryFileAPIOauth")
     def test_download_datasets_narrows_the_derived_set(
@@ -1897,7 +1971,7 @@ class TestClientDeleteCorruptFiles(unittest.TestCase):
 
 
 class TestDownloadLatestSnapshot(unittest.TestCase):
-    """Orchestration edge cases for `download_latest_snapshot`."""
+    """Orchestration edge cases for `download_latest_files`."""
 
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()
@@ -1934,30 +2008,31 @@ class TestDownloadLatestSnapshot(unittest.TestCase):
 
     def _run(self, available, downloaded, overwrite=False, file_group_ids=None):
         empty = pd.DataFrame(columns=["file-name"])
-        with (
-            patch.object(
-                self.client,
-                "filter_available_files_by_datetime",
-                return_value=available,
-            ),
-            patch.object(
+        # using , to seperate patch.object() does not work in python3.7
+        with patch.object(
+            self.client,
+            "filter_available_files_by_datetime",
+            return_value=available,
+        ):
+            with patch.object(
                 self.client,
                 "list_downloaded_files",
                 return_value=downloaded if downloaded is not None else empty,
-            ),
-            patch.object(
-                self.client,
-                "download_multiple_files",
-                side_effect=lambda filenames, **kw: filenames,
-            ) as mdl,
-            patch.object(self.client, "cleanup_old_files") as mclean,
-        ):
-            res = self.client.download_latest_files(
-                overwrite=overwrite,
-                file_group_ids=file_group_ids,
-                show_progress=False,
-            )
-        return res, mdl, mclean
+            ):
+                with (
+                    patch.object(
+                        self.client,
+                        "download_multiple_files",
+                        side_effect=lambda filenames, **kw: filenames,
+                    ) as mdl,
+                    patch.object(self.client, "cleanup_old_files") as mclean,
+                ):
+                    res = self.client.download_latest_files(
+                        overwrite=overwrite,
+                        file_group_ids=file_group_ids,
+                        show_progress=False,
+                    )
+                    return res, mdl, mclean
 
     def test_downloads_latest_complete_and_cleans_anchored_to_it(self):
         avail = self._available(
@@ -2069,7 +2144,7 @@ class TestDownloadLatestSnapshot(unittest.TestCase):
 
 class TestDownloadLatestSnapshotPrune(unittest.TestCase):
     """
-    `download_latest_snapshot` end to end against a real directory, with only the network
+    `download_latest_files` end to end against a real directory, with only the network
     calls stubbed. The prune, the file listing and the snap-date maths all run for real.
     """
 
@@ -2385,7 +2460,7 @@ class TestDownloadForwardsLoadOptions(unittest.TestCase):
                 self.client, "get_datasets_for_indicators", return_value=self.datasets
             ),
             patch.object(
-                self.client, "download_latest_snapshot", return_value=[]
+                self.client, "download_latest_files", return_value=[]
             ) as mock_snapshot,
             patch.object(
                 self.client,

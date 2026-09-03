@@ -193,6 +193,7 @@ window) if needed, and return the notifications as pandas DataFrames.
 
 import calendar
 import concurrent.futures as cf
+import contextlib
 import datetime
 import json
 import logging
@@ -250,6 +251,31 @@ JPMAQS_DATASET_THEME_MAPPING = {
 JPMAQS_EARLIEST_FILE_DATE = "20220101"
 
 logger = logging.getLogger(__name__)
+
+
+def _abbreviate_tickers_list(items: List[str], limit: int = 10) -> str:
+    """Render a list for a message, naming how many were left out rather than eliding."""
+    if len(items) <= limit:
+        return str(items)
+    return f"{items[:limit]} (+{len(items) - limit} more)"
+
+
+@contextlib.contextmanager
+def _suppressed_warnings(active: bool):
+    """
+    Silence both warning channels for the duration, restoring them even on an exception.
+    """
+    if not active:
+        yield
+        return
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        previous_level = logger.level
+        logger.setLevel(logging.ERROR)
+        try:
+            yield
+        finally:
+            logger.setLevel(previous_level)
 
 
 def utc_now() -> pd.Timestamp:
@@ -1214,12 +1240,11 @@ class DataQueryFileAPIClient:
             if len(missing_tickers) == len(tickers):
                 raise ValueError(
                     "None of the requested tickers are available in the JPMaQS "
-                    f"catalog: {missing_tickers}."
+                    f"catalog: {_abbreviate_tickers_list(missing_tickers)}."
                 )
             logger.warning(
-                "Tickers not available in the JPMaQS catalog: %s. They have no dataset "
-                "and are skipped.",
-                missing_tickers,
+                "Tickers not available in the JPMaQS catalog: %s",
+                _abbreviate_tickers_list(missing_tickers),
             )
 
         unknown_theme_tickers = catalog_df["Dataset"] == "Unknown"
@@ -1967,6 +1992,7 @@ class DataQueryFileAPIClient:
         dropna: bool = True,
         datasets: Optional[List[str]] = None,
         categorical_source_file_column: bool = True,
+        suppress_warnings: bool = False,
     ) -> Union[pd.DataFrame, pl.DataFrame, pl.LazyFrame]:
         """
         Downloads data for the specified `tickers`, `cids`, or `xcats` and returns it as
@@ -2060,6 +2086,8 @@ class DataQueryFileAPIClient:
             If True (default), the `"source_file"` column added by `include_source_file`
             uses a categorical dtype, which is much cheaper than storing the file name as a
             string on every row. Ignored unless `include_source_file=True`.
+        suppress_warnings : bool
+            If True, silences warnings from this function. Default is False.
 
         Returns
         -------
@@ -2067,45 +2095,46 @@ class DataQueryFileAPIClient:
             A DataFrame containing the requested data.
         """
         out_dir = self._get_save_dir()
-        datasets_to_download = self.get_datasets_for_indicators(
-            tickers=tickers, cids=cids, xcats=xcats
-        )
-        if datasets is not None:
-            # narrow rather than replace: downloading a dataset that holds none of the
-            # requested indicators would only fetch files the load then ignores
-            narrowed = [d for d in datasets_to_download if d in set(datasets)]
-            if not narrowed:
-                raise ValueError(
-                    f"`datasets={sorted(set(datasets))}` holds none of the requested "
-                    f"indicators, which live in {sorted(datasets_to_download)}."
-                )
-            datasets_to_download = narrowed
-        self.download_latest_files(
-            overwrite=overwrite,
-            show_progress=show_progress,
-            keep_n_days_old_files=keep_n_days_old_files,
-            file_group_ids=datasets_to_download,
-        )
-        catalog_path = Path(self.download_catalog_file())
-        return lazy_load_from_parquets(
-            files_dir=out_dir,
-            tickers=tickers,
-            cids=cids,
-            xcats=xcats,
-            metrics=metrics,
-            start_date=start_date,
-            end_date=end_date,
-            dataframe_format=dataframe_format,
-            dataframe_type=dataframe_type,
-            categorical_dataframe=categorical_dataframe,
-            datasets=datasets_to_download,
-            include_delta_files=include_delta_files,
-            catalog_path=catalog_path,
-            include_source_file=include_source_file,
-            delta_treatment=delta_treatment,
-            dropna=dropna,
-            categorical_source_file_column=categorical_source_file_column,
-        )
+        with _suppressed_warnings(suppress_warnings):
+            datasets_to_download = self.get_datasets_for_indicators(
+                tickers=tickers, cids=cids, xcats=xcats
+            )
+            if datasets is not None:
+                # narrow rather than replace: downloading a dataset that holds none of
+                # the requested indicators would only fetch files the load then ignores
+                narrowed = [d for d in datasets_to_download if d in set(datasets)]
+                if not narrowed:
+                    raise ValueError(
+                        f"`datasets={sorted(set(datasets))}` holds none of the requested "
+                        f"indicators, which live in {sorted(datasets_to_download)}."
+                    )
+                datasets_to_download = narrowed
+            self.download_latest_files(
+                overwrite=overwrite,
+                show_progress=show_progress,
+                keep_n_days_old_files=keep_n_days_old_files,
+                file_group_ids=datasets_to_download,
+            )
+            catalog_path = Path(self.download_catalog_file())
+            return lazy_load_from_parquets(
+                files_dir=out_dir,
+                tickers=tickers,
+                cids=cids,
+                xcats=xcats,
+                metrics=metrics,
+                start_date=start_date,
+                end_date=end_date,
+                dataframe_format=dataframe_format,
+                dataframe_type=dataframe_type,
+                categorical_dataframe=categorical_dataframe,
+                datasets=datasets_to_download,
+                include_delta_files=include_delta_files,
+                catalog_path=catalog_path,
+                include_source_file=include_source_file,
+                delta_treatment=delta_treatment,
+                dropna=dropna,
+                categorical_source_file_column=categorical_source_file_column,
+            )
 
 
 def _pd_to_datetime_compat(ts: str, utc: bool) -> pd.Timestamp:
