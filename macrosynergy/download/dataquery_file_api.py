@@ -1685,8 +1685,11 @@ class DataQueryFileAPIClient:
         snap_df = files_df[~files_df["file-name"].apply(checkfile)]
         if "snap-date" not in snap_df.columns:
             snap_df = self._add_snap_date_column(snap_df)
-        complete = snap_df.groupby("snap-date")["file-group-id"].agg(expected.issubset)
-        complete_dates = complete.index[complete]
+        complete_dates = [
+            snap_date
+            for snap_date, group_ids in snap_df.groupby("snap-date")["file-group-id"]
+            if expected.issubset(group_ids)
+        ]
         return max(complete_dates) if len(complete_dates) else None
 
     def download_files(
@@ -2708,7 +2711,10 @@ def _delete_jpmaqs_file(path: Union[str, Path]) -> bool:
     if not _is_jpmaqs_file(path):
         logger.warning(f"Refusing to delete non-JPMaQS file: {path}")
         return False
-    path.unlink(missing_ok=True)
+    try:
+        path.unlink()  # `missing_ok=True` is python 3.8+
+    except FileNotFoundError:
+        pass
     return True
 
 

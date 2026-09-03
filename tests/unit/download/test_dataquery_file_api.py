@@ -9,7 +9,6 @@ from unittest.mock import patch, MagicMock
 import functools
 import logging
 import tempfile
-from macrosynergy.compat import PD_2_0_OR_LATER
 from macrosynergy.download import dataquery_file_api as dq_file_api
 from macrosynergy.download.dataquery_file_api import (
     validate_dq_timestamp,
@@ -596,13 +595,9 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
                     show_progress=False,
                 )
             self.assertEqual(spy.call_count, 2)
-            res = None
-            expected = ["f2.parquet"]
-            if PD_2_0_OR_LATER:
-                res = spy.call_args_list[1].kwargs["filenames"]
-            else:
-                res = spy.call_args_list[1][1]["filenames"]
-            self.assertEqual(res, expected)
+            # `call_args.kwargs` is python 3.8+; the `[1]` index works everywhere
+            res = spy.call_args_list[1][1]["filenames"]
+            self.assertEqual(res, ["f2.parquet"])
 
     @patch("macrosynergy.download.dataquery_file_api.cf.as_completed")
     @patch("macrosynergy.download.dataquery_file_api.cf.ThreadPoolExecutor")
@@ -773,8 +768,8 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
 
         client.download(cids=["USD"], xcats=["INFL"], datasets=["JPMAQS_B"])
         # both the download and the load are narrowed to the requested dataset
-        self.assertEqual(mock_snapshot.call_args.kwargs["file_group_ids"], ["JPMAQS_B"])
-        self.assertEqual(mock_load.call_args.kwargs["datasets"], ["JPMAQS_B"])
+        self.assertEqual(mock_snapshot.call_args[1]["file_group_ids"], ["JPMAQS_B"])
+        self.assertEqual(mock_load.call_args[1]["datasets"], ["JPMAQS_B"])
 
         # a dataset holding none of the requested indicators is an error, not an
         # empty download
@@ -2456,7 +2451,7 @@ class TestDownloadForwardsLoadOptions(unittest.TestCase):
                         return_value="LOADED",
                     ) as mock_load:
                         result = self.client.download(tickers=["USD_INFL"], **kwargs)
-        return result, mock_load.call_args.kwargs, mock_snapshot.call_args.kwargs
+        return result, mock_load.call_args[1], mock_snapshot.call_args[1]
 
     def test_include_source_file_is_forwarded(self):
         result, load_kwargs, _ = self._download(include_source_file=True)
