@@ -455,15 +455,23 @@ def _plot_performance_bars(
     # Create figure
     fig, ax = plt.subplots(figsize=size)
 
-    # Create grouped bar plot with items on x-axis and metrics as hue
-    # Use Paired palette to match view_ranges
+    # Reverse each Paired palette pair to put the dark colour first.
+    n_metrics = len(metrics_df.index)
+    paired_palette = sns.color_palette(
+        "Paired", n_colors=2 * int(np.ceil(n_metrics / 2))
+    )
+    palette = [
+        color
+        for i in range(0, len(paired_palette), 2)
+        for color in paired_palette[i : i + 2][::-1]
+    ][:n_metrics]
     sns.barplot(
         data=df_long,
         x='item',
         y='value',
         hue='metric',
         ax=ax,
-        palette='Paired',
+        palette=palette,
     )
 
     # Rotate x-axis labels to prevent overlap
@@ -489,7 +497,6 @@ def _plot_performance_bars(
 
     # Position legend to match view_ranges (below the plot)
     if legend_bbox_to_anchor is None:
-        n_metrics = len(metrics_df.index)
         legend_bbox_to_anchor = (0.5, -0.15 - 0.05 * max(0, (n_metrics - 2)))
 
     ax.legend(loc=legend_loc, bbox_to_anchor=legend_bbox_to_anchor, ncol=3)
