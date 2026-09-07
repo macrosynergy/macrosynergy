@@ -1124,9 +1124,9 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
             # encoder_activation
             if not isinstance(encoder_activation, str):
                 raise TypeError("encoder_activation must be a string.")
-            if encoder_activation not in {"tanh", "relu", "sigmoid"}:
+            if encoder_activation not in {"tanh", "relu", "sigmoid", "gelu", "silu"}:
                 raise ValueError(
-                    "encoder_activation must be one of 'tanh', 'relu', or 'sigmoid'."
+                    "encoder_activation must be one of 'tanh', 'relu', 'sigmoid', 'gelu', or 'silu'."
                 )
         
             # head_activation
@@ -1174,6 +1174,12 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
             # it needs a forward method
             if type(torch_model).forward is nn.Module.forward:
                 raise ValueError("torch_model must have a forward method.")
+            # it needs an encoder module
+            if not hasattr(torch_model, "encoder"):
+                raise ValueError("torch_model must have an 'encoder' moduleattribute.")
+            # it needs a head module
+            if not hasattr(torch_model, "head"):
+                raise ValueError("torch_model must have a 'head' module attribute.")
 
         # loss_func
         if not isinstance(loss_func, nn.Module):
