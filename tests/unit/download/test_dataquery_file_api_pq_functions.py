@@ -24,7 +24,7 @@ from unittest.mock import patch
 import pandas as pd
 import polars as pl
 
-from macrosynergy.compat import PYTHON_3_8_OR_LATER
+from macrosynergy.compat import PYTHON_3_8_OR_LATER, PYTHON_3_8_POLARS_PIVOT
 from macrosynergy.download.dataquery_file_api import (
     _apply_delta_treatment,
     _check_lazy_load_inputs,
@@ -986,12 +986,85 @@ class TestLazyLoadOutputFormats(LazyLoadFixture):
         self.assertEqual(dates, sorted(dates))
 
     def test_wide_columns_are_the_requested_tickers_on_both_backends(self):
-        # USD_XR has no rows in MACRO_DS, so it covers "requested but absent"
         for dataframe_type in ("pandas", "polars"):
             with self.subTest(dataframe_type=dataframe_type):
                 df = self.wide(dataframe_type=dataframe_type)
                 columns = [c for c in df.columns if c != "real_date"]
                 self.assertEqual(sorted(columns), ["EUR_INFL", "USD_INFL"])
+
+    def test_wide_omits_a_ticker_with_no_rows_in_range(self):
+        # rewrite the returns snapshot in place -- same filename, so it stays the
+        # latest -- holding USD_XR on D1 only. Bounding to D2 then leaves USD_XR
+        # requested but absent from the data, and an all-null column is not data.
+        write_rows(self.returns_snapshot, ["USD_XR"], [D1], [5.0])
+        for dataframe_type in ("pandas", "polars", "polars-lazy"):
+            with self.subTest(dataframe_type=dataframe_type):
+                df = self.load_snapshot_only(
+                    tickers=["USD_INFL", "EUR_INFL", "USD_XR"],
+                    datasets=[MACRO_DS, RETURNS_DS],
+                    dataframe_format="wide",
+                    metrics=["value"],
+                    dataframe_type=dataframe_type,
+                    start_date=str(D2),
+                    end_date=str(D2),
+                )
+                if dataframe_type == "polars-lazy":
+                    df = df.collect()
+                columns = [c for c in df.columns if c != "real_date"]
+                self.assertEqual(columns, ["EUR_INFL", "USD_INFL"])
+                self.assertEqual(len(df), 1)
+
+    @unittest.skipIf(PYTHON_3_8_POLARS_PIVOT, "the eager branch is the native one here")
+    def test_both_wide_pivot_branches_agree(self):
+        """
+        `PYTHON_3_8_POLARS_PIVOT` picks the eager pivot, which is only the native branch
+        under Python 3.8. Exercise it wherever the lazy one is available too, so neither
+        branch is left to a single CI job.
+        """
+        write_rows(self.returns_snapshot, ["USD_XR"], [D1], [5.0])
+        load = functools.partial(
+            self.load_snapshot_only,
+            tickers=["USD_INFL", "EUR_INFL", "USD_XR"],
+            datasets=[MACRO_DS, RETURNS_DS],
+            dataframe_format="wide",
+            metrics=["value"],
+            dataframe_type="polars",
+            # bounded to D2, so USD_XR is requested but has no rows: the branches
+            # compute the surviving column set by different means
+            start_date=str(D2),
+            end_date=str(D2),
+        )
+        lazy_branch = load()
+        with patch(
+            "macrosynergy.download.dataquery_file_api.PYTHON_3_8_POLARS_PIVOT", True
+        ):
+            eager_branch = load()
+        self.assertEqual(lazy_branch.columns, eager_branch.columns)
+        self.assertTrue(lazy_branch.equals(eager_branch))
+
+    def test_wide_emits_no_all_null_column_on_any_backend(self):
+        """The column set is the tickers with rows, so nothing comes back empty."""
+        write_rows(self.returns_snapshot, ["USD_XR"], [D1], [5.0])
+        for dataframe_type in ("pandas", "polars"):
+            with self.subTest(dataframe_type=dataframe_type):
+                df = self.load_snapshot_only(
+                    tickers=["USD_INFL", "EUR_INFL", "USD_XR"],
+                    datasets=[MACRO_DS, RETURNS_DS],
+                    dataframe_format="wide",
+                    metrics=["value"],
+                    dataframe_type=dataframe_type,
+                )
+                empty = [
+                    c
+                    for c in df.columns
+                    if c != "real_date"
+                    and (
+                        df[c].null_count() == len(df)
+                        if dataframe_type == "polars"
+                        else df[c].isna().all()
+                    )
+                ]
+                self.assertEqual(empty, [])
 
 
 class TestLazyLoadDeltas(LazyLoadFixture):
