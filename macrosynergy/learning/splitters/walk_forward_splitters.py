@@ -164,6 +164,7 @@ class ExpandingIncrementPanelSplit(WalkForwardPanelSplit):
 
         # First determine the dates for the first training set
         if self.start_date:
+            # TODO: logic for when this isnt in the dataframe. Dcide whether to round up or down
             date_last_train = self.start_date
         else:
             # Number of features with min_periods of non-NaN data

@@ -195,9 +195,11 @@ class TestMLPRegressor(unittest.TestCase):
             model = MLPRegressor(dollar_neutral="not a bool")
 
         """ normalization """
-        # should be a boolean
+        # should be a string
         with self.assertRaises(TypeError):
-            model = MLPRegressor(normalization="not a bool")
+            model = MLPRegressor(normalization=True)
+        with self.assertRaises(TypeError):
+            model = MLPRegressor(normalization=3)
 
         """ torch_model """
         # should be an instance of nn.Module and BaseEstimator, with a valid forward method
@@ -480,7 +482,7 @@ class TestMLPRegressor(unittest.TestCase):
         self.assertEqual(model.encoder_activation, "relu")
         self.assertEqual(model.head_activation, "identity")
         self.assertEqual(model.dropout_p, 0)
-        self.assertEqual(model.normalization, False)
+        self.assertEqual(model.normalization, "none")
         self.assertEqual(model.dollar_neutral, False)
         self.assertEqual(model.long_only, None)
         self.assertEqual(model.torch_model, None)
@@ -611,7 +613,7 @@ class TestMLPRegressor(unittest.TestCase):
 
         self.assertRaises(ValueError, model.fit, X=self.X, y=self.y, sample_weight=np.array([1.0, 2.0, 3.0] * (len(self.X)//3)))
 
-    @parameterized.expand(itertools.product([None, True, False], [True, False], [True, False]))
+    @parameterized.expand(itertools.product([None, True, False], ["batch", "layer", "none"], [True, False]))
     def test_valid_fit(self, long_only, normalization, refit):
         """ 
         Test that valid models run as expected under different hyperparameter settings with
@@ -887,14 +889,14 @@ class TestMLPRegressor(unittest.TestCase):
         """
         Test that the dollar neutral constraint is applied correctly during training.
         """
-        model = MLPRegressor(epochs = 5, patience = 2, dollar_neutral=True, long_only = False).fit(self.X, self.y)
+        model = MLPRegressor(epochs = 5, patience = 2, dollar_neutral=True, long_only = False).fit(self.X.iloc[:, :1], pd.concat((self.X.iloc[:, :1], self.y), axis=1))
         for param in model.models[0].parameters():
             self.assertFalse(torch.isnan(param).any())
             self.assertFalse(torch.isinf(param).any())
 
         # Get forward pass outputs for the training data
         with torch.no_grad():
-            X_tensor = torch.tensor(model.x_scaler.transform(self.X), dtype=torch.float32)
+            X_tensor = torch.tensor(model.x_scaler.transform(self.X.iloc[:, :1]), dtype=torch.float32)
             outputs = model.models[0](X_tensor)
 
         # Check that the sum of the outputs across all samples is approximately zero (dollar neutral constraint)

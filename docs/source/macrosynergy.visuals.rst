@@ -26,3 +26,4 @@ Submodules
    macrosynergy.visuals.table
    macrosynergy.visuals.timelines
    macrosynergy.visuals.view_panel_dates
+   macrosynergy.visuals.weights
