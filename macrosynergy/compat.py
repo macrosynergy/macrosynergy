@@ -28,5 +28,8 @@ PD_2_0_OR_LATER: bool = version.parse(pd.__version__) >= version.parse("2.0.0")
 # https://pandas.pydata.org/pandas-docs/version/2.1/reference/api/pandas.DataFrame.map.html
 PD_NEW_MAP: bool = version.parse(pd.__version__) >= version.parse("2.1.0")
 
+# `select_dtypes` rebuilds via `type(self)(mgr)` before pandas 2.2, breaking subclasses
+PD_SUBCLASS_SAFE_SELECT_DTYPES: bool = hasattr(pd.DataFrame, "_constructor_from_mgr")
+
 # Polars' `LazyFrame.pivot` is not available in the last Python3.8 version (polars==1.8.2)
 PYTHON_3_8_POLARS_PIVOT: bool = not hasattr(pl.LazyFrame, "pivot")

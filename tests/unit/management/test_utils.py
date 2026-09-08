@@ -37,7 +37,11 @@ from macrosynergy.management.utils import (
     rotate_cid_xcat,
 )
 from macrosynergy.management.utils.core import split_ticker as _split_ticker
-from macrosynergy.management.utils.df_utils import _long_to_wide, _wide_to_long
+from macrosynergy.management.utils.df_utils import (
+    _long_to_wide,
+    _wide_to_long,
+    concat_categorical,
+)
 from macrosynergy.management.constants import FREQUENCY_MAP
 from macrosynergy.management.utils.math import expanding_mean_with_nan
 from macrosynergy.compat import PD_NEW_DATE_FREQ
@@ -1981,9 +1985,7 @@ class TestSplitTickerDirect(_ut_st.TestCase):
         self.assertEqual(_split_ticker("AUD_XR_NSA", "xcat"), "XR_NSA")
 
     def test_iterable_returns_list(self):
-        self.assertEqual(
-            _split_ticker(["AUD_XR", "GBP_INFL"], "cid"), ["AUD", "GBP"]
-        )
+        self.assertEqual(_split_ticker(["AUD_XR", "GBP_INFL"], "cid"), ["AUD", "GBP"])
 
     def test_mode_normalised(self):
         self.assertEqual(_split_ticker("AUD_XR", " CID "), "AUD")
@@ -2011,6 +2013,67 @@ class TestSplitTickerDirect(_ut_st.TestCase):
     def test_signature_unchanged(self):
         sig = _inspect_st.signature(_split_ticker)
         self.assertEqual(list(sig.parameters), ["ticker", "mode"])
+
+
+class TestConcatCategorical(unittest.TestCase):
+    """
+    `concat_categorical` must work when its inputs are `QuantamentalDataFrame`s.
+    """
+
+    @staticmethod
+    def _qdf(cids: List[str], xcats: List[str]) -> QuantamentalDataFrame:
+        return QuantamentalDataFrame(make_test_df(cids=cids, xcats=xcats))
+
+    @staticmethod
+    def _mixed_dtype_df() -> pd.DataFrame:
+        return pd.DataFrame(
+            {
+                "cat": pd.Categorical(["x", "y"]),
+                "num": [1.0, 2.0],
+                "date": pd.to_datetime(["2020-01-01", "2020-01-02"]),
+                "obj": ["p", "q"],
+            }
+        )
+
+    def test_select_dtypes_matches_plain_dataframe(self):
+        df = self._mixed_dtype_df()
+        qdf = QuantamentalDataFrame(make_test_df(cids=["AUD"], xcats=["XR"]))
+        for kwargs in [{"include": "category"}, {"exclude": "category"}]:
+            with self.subTest(**kwargs):
+                # a QDF must answer as its plain-DataFrame equivalent does
+                self.assertEqual(
+                    list(qdf.select_dtypes(**kwargs).columns),
+                    list(pd.DataFrame(qdf).select_dtypes(**kwargs).columns),
+                )
+                # and the override must not alter plain-DataFrame semantics
+                self.assertEqual(
+                    list(df.select_dtypes(**kwargs).columns),
+                    list(pd.DataFrame(df).select_dtypes(**kwargs).columns),
+                )
+
+    def test_select_dtypes_returns_plain_dataframe(self):
+        qdf = QuantamentalDataFrame(make_test_df(cids=["AUD"], xcats=["XR"]))
+        result = qdf.select_dtypes(include="category")
+        self.assertIs(type(result), pd.DataFrame)
+        self.assertEqual(list(result.columns), ["cid", "xcat"])
+        self.assertEqual(
+            list(qdf.select_dtypes(exclude="category").columns),
+            ["real_date", "value"],
+        )
+        # `qdf` itself is untouched
+        self.assertIs(type(qdf), QuantamentalDataFrame)
+
+    def test_concat_quantamental_dataframes(self):
+        df1 = self._qdf(cids=["AUD"], xcats=["XR"])
+        df2 = self._qdf(cids=["GBP"], xcats=["CRY"])
+
+        result = concat_categorical(df1, df2)
+
+        self.assertEqual(len(result), len(df1) + len(df2))
+        self.assertEqual(set(result["cid"].unique()), {"AUD", "GBP"})
+        self.assertEqual(set(result["xcat"].unique()), {"XR", "CRY"})
+        for col in ["cid", "xcat"]:
+            self.assertEqual(result[col].dtype.name, "category")
 
 
 if __name__ == "__main__":
