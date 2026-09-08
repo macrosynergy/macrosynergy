@@ -45,9 +45,11 @@ class MultiLayerPerceptron(nn.Module, BaseEstimator):
         demeaned before being passed through the custom normalization layer to ensure that
         both the sum of outputs equals zero and the sum of absolute values equals one.
         Default is False.
-    normalization : bool, optional
-        Whether to add layer normalization after each linear layer in the encoder.
-        Default is False.
+    normalization : str, optional
+        Type of normalization to apply after each linear layer in the encoder.
+        Options include "layer" for layer normalization, "batch" for batch normalization,
+        and "none" for no normalization. Default is "none". Batch normalization requires the 
+        batch size to be greater than 1. 
 
     Notes
     -----
@@ -106,7 +108,7 @@ class MultiLayerPerceptron(nn.Module, BaseEstimator):
         dropout_p = 0,
         long_only = None,
         dollar_neutral = False,
-        normalization = False,
+        normalization = "none",
     ):
         super().__init__()
 
@@ -179,8 +181,11 @@ class MultiLayerPerceptron(nn.Module, BaseEstimator):
         activation_func = self.activation_map[encoder_activation]
         # Build encoder
         encoder_modules = [nn.Linear(n_inputs, n_latent[0], bias = fit_encoder_intercept)]
-        if normalization:
-            encoder_modules.append(nn.LayerNorm(n_latent[0]))
+        if normalization != "none":
+            if normalization == "batch":
+                encoder_modules.append(nn.BatchNorm1d(n_latent[0]))
+            elif normalization == "layer":
+                encoder_modules.append(nn.LayerNorm(n_latent[0]))
         encoder_modules.append(activation_func())
         if dropout_p > 0:
             encoder_modules.append(nn.Dropout(p=dropout_p))
@@ -189,8 +194,11 @@ class MultiLayerPerceptron(nn.Module, BaseEstimator):
                 encoder_modules.append(
                     nn.Linear(n_latent[layer_idx - 1], n_latent[layer_idx], bias = fit_encoder_intercept)
                 )
-                if normalization:
-                    encoder_modules.append(nn.LayerNorm(n_latent[layer_idx]))
+                if normalization != "none":
+                    if normalization == "batch":
+                        encoder_modules.append(nn.BatchNorm1d(n_latent[layer_idx]))
+                    elif normalization == "layer":
+                        encoder_modules.append(nn.LayerNorm(n_latent[layer_idx]))
                 encoder_modules.append(activation_func())
                 if dropout_p > 0:
                     encoder_modules.append(nn.Dropout(p=dropout_p*2))
@@ -290,8 +298,10 @@ class MultiLayerPerceptron(nn.Module, BaseEstimator):
         if long_only is False and not isinstance(dollar_neutral, bool):
             raise TypeError("dollar_neutral must be a boolean when long_only is False.")
         # normalization
-        if not isinstance(normalization, bool):
-            raise TypeError("normalization must be a boolean.")
+        if not isinstance(normalization, str):
+            raise TypeError("normalization must be a string.")
+        if normalization not in {"layer", "batch", "none"}:
+            raise ValueError("normalization must be one of 'layer', 'batch', or 'none'.")
         
 if __name__=="__main__":
     print("========================================")

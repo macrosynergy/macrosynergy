@@ -6,6 +6,7 @@ from macrosynergy.pnl.sharpe_stability_ratio import (
     sharpe_stability_ratio,
     _andrews_ar1_bandwidth,
     _newey_west_lrv,
+    _rolling_sharpe,
 )
 
 
@@ -125,6 +126,39 @@ class TestSharpeStabilityRatio(unittest.TestCase):
         result = sharpe_stability_ratio(returns)
         self.assertGreater(result, 0.0)
         self.assertLess(result, 50.0)
+
+    # --- Rolling Sharpe helper ---
+
+    def test_rolling_sharpe_preserves_index(self):
+        returns = pd.Series(
+            self.stable.values,
+            index=pd.bdate_range("2010-01-04", periods=len(self.stable)),
+        )
+        roll = _rolling_sharpe(returns, window=252, annualization_factor=252)
+        self.assertIsInstance(roll, pd.Series)
+        pd.testing.assert_index_equal(roll.index, returns.index)
+
+    def test_rolling_sharpe_incomplete_windows_are_nan(self):
+        window = 100
+        roll = _rolling_sharpe(
+            self.stable, window=window, annualization_factor=252
+        )
+        self.assertTrue(roll.iloc[: window - 1].isna().all())
+        self.assertFalse(roll.iloc[window - 1 :].isna().any())
+
+    def test_rolling_sharpe_matches_manual_calculation(self):
+        window = 60
+        roll = _rolling_sharpe(self.stable, window=window, annualization_factor=252)
+        tail = self.stable.iloc[-window:]
+        expected = tail.mean() / tail.std() * np.sqrt(252)
+        self.assertAlmostEqual(roll.iloc[-1], expected, places=10)
+
+    def test_rolling_sharpe_min_periods(self):
+        roll = _rolling_sharpe(
+            self.stable, window=252, annualization_factor=252, min_periods=10
+        )
+        self.assertTrue(roll.iloc[:9].isna().all())
+        self.assertFalse(np.isnan(roll.iloc[9]))
 
 
 if __name__ == "__main__":

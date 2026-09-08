@@ -81,10 +81,12 @@ def sharpe_stability_ratio(
         return float("nan")
 
     # Rolling Sharpe series (annualized)
-    ret_s = pd.Series(ret)
-    _min_p = min_periods if min_periods is not None else window
-    roll = ret_s.rolling(window=window, min_periods=_min_p)
-    z_series = (roll.mean() / roll.std()) * np.sqrt(annualization_factor)
+    z_series = _rolling_sharpe(
+        pd.Series(ret),
+        window=window,
+        annualization_factor=annualization_factor,
+        min_periods=min_periods,
+    )
     z = z_series.values.astype(float)
     z = z[np.isfinite(z)]  # drop NaN and ±inf (e.g. from zero-variance windows)
 
@@ -119,6 +121,37 @@ def sharpe_stability_ratio(
         return float(norm.cdf(t_stat))
 
     return t_stat
+
+
+def _rolling_sharpe(
+    returns: pd.Series,
+    window: int,
+    annualization_factor: int,
+    min_periods: Optional[int] = None,
+) -> pd.Series:
+    """
+    Annualized rolling Sharpe ratio, ``mean / std * sqrt(annualization_factor)``.
+
+    Parameters
+    ----------
+    returns : pd.Series
+        Return series at the frequency implied by ``window`` /
+        ``annualization_factor``.
+    window : int
+        Rolling window length in observations.
+    annualization_factor : int
+        Periods per year. Must match the frequency of ``returns``.
+    min_periods : int or None, default None
+        Minimum non-NaN observations per window. Defaults to ``window``.
+
+    Returns
+    -------
+    pd.Series
+        Rolling Sharpe series on the index of ``returns``.
+    """
+    _min_p = min_periods if min_periods is not None else window
+    roll = returns.rolling(window=window, min_periods=_min_p)
+    return (roll.mean() / roll.std()) * np.sqrt(annualization_factor)
 
 
 def _newey_west_lrv(z: np.ndarray, L: int) -> float:

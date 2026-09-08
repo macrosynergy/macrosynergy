@@ -12,6 +12,7 @@ def view_table(
     figsize: Optional[Tuple[float, float]] = (14, 4),
     min_color: float = -1,
     max_color: float = 1,
+    cmap: str = "vlag_r",
     xlabel: Optional[str] = None,
     ylabel: Optional[str] = None,
     xticklabels: Optional[List[str]] = None,
@@ -41,6 +42,10 @@ def view_table(
         Data value mapped to the bottom of the colormap. Default is -1.
     max_color : float
         Data value mapped to the top of the colormap. Default is 1.
+    cmap : str
+        Name of the colormap. Default is 'vlag_r', a diverging map suited to values
+        that straddle zero. A sequential map such as 'Blues' is preferable when the
+        values are one-sided.
     xlabel : str, optional
         Label for the x-axis.
     ylabel : str, optional
@@ -112,7 +117,7 @@ def view_table(
     sns.set(style="ticks")
     sns.heatmap(
         df,
-        cmap="vlag_r",
+        cmap=cmap,
         vmin=min_color,
         vmax=max_color,
         square=False,
