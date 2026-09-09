@@ -147,62 +147,26 @@ class BasePanelLearner(ABC):
         self.drop_nas = drop_nas
 
         # Create long-format dataframe
-        if self.n_targets == 1:
-            df_long = (
-                categories_df(
-                    df=self.df,
-                    xcats=self.xcats,
-                    cids=self.cids,
-                    start=self.start,
-                    end=self.end,
-                    blacklist=self.blacklist,
-                    freq=self.freq,
-                    lag=self.lag,
-                    xcat_aggs=self.xcat_aggs,
-                )
-            )
-        else:
-            features_xcats = self.xcats[:-self.n_targets]
-            targets_xcats = self.xcats[-self.n_targets:]
-            dfs = []
-            for target in targets_xcats:
-                df_long = (
-                    categories_df(
-                        df=self.df,
-                        xcats=features_xcats + [target],
-                        cids=self.cids,
-                        start=self.start,
-                        end=self.end,
-                        blacklist=self.blacklist,
-                        freq=self.freq,
-                        lag=self.lag,
-                        xcat_aggs=self.xcat_aggs,
-                    )
-                )
-                dfs.append(df_long)
-            df_long = pd.concat(dfs, axis=1).sort_index()
-            # Filter out duplicate categories
-            df_features = df_long.iloc[:,:len(features_xcats)]
-            df_targets = df_long[targets_xcats]
-            df_long = pd.concat([df_features, df_targets], axis=1)
+        df_long = self._create_long_format_df(
+            df = self.df,
+            xcats = self.xcats,
+            cids = self.cids,
+            start = self.start,
+            end = self.end,
+            blacklist = self.blacklist,
+            freq = self.freq,
+            lag = self.lag,
+            xcat_aggs = self.xcat_aggs,
+            n_targets = self.n_targets,
+        )
 
         # Handle NaNs
-        # No matter what, drop rows where all independent variables are NaN
-        df_long = df_long.dropna(
-            subset=self.xcats[:-self.n_targets], how="all"
-        ).sort_index()
-
-        # Handle remaining NaNs with specified strategy
-        if drop_nas == "X":
-            subset = self.xcats[:-self.n_targets]
-        elif drop_nas == "y":
-            subset = self.xcats[-self.n_targets:]
-        elif drop_nas == True:
-            subset = df_long.columns
-        else:
-            subset = []
-
-        df_long = df_long.dropna(subset=subset)
+        df_long = self._handle_nans(
+            df_long = df_long,
+            xcats = self.xcats,
+            n_targets = self.n_targets,
+            drop_nas=self.drop_nas
+        )
 
         # Create X and y
         self.X = df_long.iloc[:, :-self.n_targets]
@@ -260,6 +224,7 @@ class BasePanelLearner(ABC):
         store_additional_data=None,
         n_jobs_outer=-1,
         n_jobs_inner=1,
+        skip_validation=False,
     ):
         """
         Run a learning process over a panel.
@@ -310,7 +275,9 @@ class BasePanelLearner(ABC):
         n_jobs_inner : int, optional
             Number of jobs to run in parallel for the inner loop. Default is 1. If no
             hyperparameter tuning is required, this parameter can be disregarded.
-
+        skip_validation : bool, optional
+            Whether to skip the more intensive validation checks for, primarily, the 
+            model and hyperparameter dictionaries. Default is False.
         Returns
         -------
         list
@@ -333,6 +300,7 @@ class BasePanelLearner(ABC):
             store_additional_data=store_additional_data,
             n_jobs_outer=n_jobs_outer,
             n_jobs_inner=n_jobs_inner,
+            skip_validation=skip_validation,
         )
 
         # Determine all outer splits and run the learning process in parallel
@@ -341,22 +309,24 @@ class BasePanelLearner(ABC):
         # Check models can be fitted on first train set
         X_first = self.X.iloc[train_test_splits[0][0]]
         y_first = self.y.iloc[train_test_splits[0][0]]
-        for key, model in models.items():
-            try:
-                models[key].fit(X_first, y_first)
-            except Exception as e:
-                raise RuntimeError(
-                    f"Initial fit check failed for model '{key}' on the first outer "
-                    f"training split. The model could not be trained with X shape"
-                    f"={X_first.shape} and y shape={y_first.shape}. This may indicate "
-                    f"that the estimator is incompatible with the provided features, "
-                    f"target, or preprocessing configuration. "
-                    f"Original error: {e}"
-                ) from e
-            
-            # Reinitialize the model to ensure the actual learning process is not affected by this check
-            params = models[key].get_params(deep=False)
-            models[key] = type(model)(**params)
+
+        if not skip_validation:
+            for key, model in models.items():
+                try:
+                    models[key].fit(X_first, y_first)
+                except Exception as e:
+                    raise RuntimeError(
+                        f"Initial fit check failed for model '{key}' on the first outer "
+                        f"training split. The model could not be trained with X shape"
+                        f"={X_first.shape} and y shape={y_first.shape}. This may indicate "
+                        f"that the estimator is incompatible with the provided features, "
+                        f"target, or preprocessing configuration. "
+                        f"Original error: {e}"
+                    ) from e
+                
+                # Reinitialize the model to ensure the actual learning process is not affected by this check
+                params = models[key].get_params(deep=False)
+                models[key] = type(model)(**params)
 
         if inner_splitters is not None:
             base_splits = self._get_base_splits(inner_splitters)
@@ -972,6 +942,83 @@ class BasePanelLearner(ABC):
 
         return {"model_choice": data}
 
+    def _create_long_format_df(
+        self,
+        df,
+        xcats,
+        cids,
+        start,
+        end,
+        blacklist,
+        freq,
+        lag,
+        xcat_aggs,
+        n_targets,
+    ):
+        if n_targets == 1:
+            df_long = categories_df(
+                df=df,
+                xcats=xcats,
+                cids=cids,
+                start=start,
+                end=end,
+                blacklist=blacklist,
+                freq=freq,
+                lag=lag,
+                xcat_aggs=xcat_aggs,
+            )
+        else:
+            features_xcats = xcats[:-n_targets]
+            targets_xcats = xcats[-n_targets:]
+
+            df_features = categories_df(
+                df=df,
+                xcats=features_xcats + [targets_xcats[0]],
+                cids=cids,
+                start=start,
+                end=end,
+                blacklist=blacklist,
+                freq=freq,
+                lag=lag,
+                xcat_aggs=xcat_aggs,
+            )[features_xcats]
+
+            df_targets = categories_df(
+                df=df,
+                xcats=targets_xcats,
+                cids = cids,
+                start=start,
+                end=end,
+                blacklist=blacklist,
+                freq=freq,
+                lag=0,
+                xcat_aggs=[xcat_aggs[1], xcat_aggs[1]],
+            )[targets_xcats]
+
+            df_long = pd.concat([df_features, df_targets], axis=1).sort_index()
+
+        return df_long
+
+    def _handle_nans(self, df_long, xcats, n_targets, drop_nas):
+        # No matter what, drop rows where all independent variables are NaN
+        df_long = df_long.dropna(
+            subset=xcats[:-n_targets], how="all"
+        )
+
+        # Handle remaining NaNs with specified strategy
+        if drop_nas == "X":
+            subset = xcats[:-n_targets]
+        elif drop_nas == "y":
+            subset = xcats[-n_targets:]
+        elif drop_nas == True:
+            subset = df_long.columns 
+        else:
+            subset = []
+
+        df_long = df_long.dropna(subset=subset)
+
+        return df_long
+    
     def store_split_data(
         self,
         pipeline_name,
@@ -1334,6 +1381,7 @@ class BasePanelLearner(ABC):
         store_additional_data,
         n_jobs_outer,
         n_jobs_inner,
+        skip_validation,
     ):
         """
         Input parameter checks for the run method.
@@ -1374,6 +1422,8 @@ class BasePanelLearner(ABC):
             Number of jobs to run in parallel for the outer loop.
         n_jobs_inner : int
             Number of jobs to run in parallel for the inner loop.
+        skip_validation : bool
+            Whether to skip validation checks. Default is False.
         """
         # name
         if not isinstance(name, str):
@@ -1662,6 +1712,10 @@ class BasePanelLearner(ABC):
                     raise ValueError(
                         "n_jobs_inner must be greater than zero or equal to -1."
                     )
+
+        # skip_validation
+        if not isinstance(skip_validation, bool):
+            raise TypeError("skip_validation must be a boolean.")
 
     def _check_hyperparam_grid(self, search_type, pipe_params):
         if pipe_params != {}:
