@@ -181,7 +181,7 @@ class ProxyPnL(object):
         start: Optional[str] = None,
         end: Optional[str] = None,
         blacklist: Optional[dict] = None,
-        pname: str = "POS",
+        pname: str = None,
     ) -> Union[
         QuantamentalDataFrame,
         Tuple[QuantamentalDataFrame, QuantamentalDataFrame],
@@ -217,6 +217,7 @@ class ProxyPnL(object):
                     "or run `ProxyPnL.contract_signals` first."
                 )
         sname = sname or self.sname
+        pname = pname or self.pname
         start = start or self.start
         end = end or self.end
         blacklist = blacklist or self.blacklist
@@ -444,92 +445,6 @@ class ProxyPnL(object):
         msv.timelines(
             rdf, title=title, title_fontsize=title_fontsize, cumsum=cumsum, **kwargs
         )
-
-
-def compare_proxy_pnls(
-    proxy_pnls: Union[ProxyPnL, List[ProxyPnL]],
-    pnl_names: Optional[List[str]] = None,
-    title: str = "Proxy PnL Comparison",
-    title_fontsize: int = 22,
-    common_portfolio_name: str = "GLB",
-    pnl_incl_costs_name="PNL",
-    include_exclude_cost_labels=["Incl. Costs", "Excl. Costs"],
-    cumsum: bool = True,
-    return_fig: bool = False,
-    **kwargs,
-) -> plt.Figure:
-    if isinstance(proxy_pnls, ProxyPnL):
-        proxy_pnls = [proxy_pnls]
-
-    pnlcount = len(proxy_pnls)
-
-    if pnl_names is None:
-        pnl_names = [f"PnL-{i+1}" for i in range(pnlcount)]
-    elif (len(pnl_names) != pnlcount) or not all(isinstance(x, str) for x in pnl_names):
-        raise ValueError(
-            f"Length of pnl_names ({len(pnl_names)}) does not match number of "
-            f"ProxyPnL objects ({pnlcount})."
-        )
-
-    pnl_dfs = []
-    for i, x in enumerate(proxy_pnls):
-        if x.portfolio_name != common_portfolio_name:
-            pnl_names[i] = None
-            continue
-        pnl_df = reduce_df(
-            pd.concat([x.proxy_pnl, x.pnl_excl_costs], axis=0),
-            cids=[common_portfolio_name],
-        )
-
-        pnl_xcats_found = []
-        for pnlcatname in [pnl_incl_costs_name, pnl_incl_costs_name + "e"]:
-            pnl_xcat = (
-                pnl_df["xcat"][pnl_df["xcat"].str.endswith(pnlcatname)]
-                .unique()
-                .tolist()
-            )
-            if len(pnl_xcat) != 1:
-                raise ValueError(
-                    f"Expected exactly one xcat ending with {pnlcatname}, "
-                    f"found {len(pnl_xcat)}: {pnl_xcat}"
-                )
-            pnl_xcats_found.append(pnl_xcat[0])
-
-        if len(pnl_xcats_found) != 2:
-            raise ValueError(
-                f"Expected exactly two xcats for PnL (including and excluding costs), "
-                f"found {len(pnl_xcats_found)}: {pnl_xcats_found}"
-            )
-        pnlname, pnle_name = sorted(pnl_xcats_found)
-        rename_map = dict(zip([pnlname, pnle_name], include_exclude_cost_labels))
-        pnl_df["xcat"] = pnl_df["xcat"].replace(rename_map)
-        pnl_df["cid"] = pnl_names[i]
-        pnl_dfs.append(pnl_df)
-
-    if not pnl_dfs:
-        raise ValueError(
-            f"No proxy PnL DataFrames found for portfolio name '{common_portfolio_name}'"
-        )
-    elif pnlcount != len(pnl_dfs):
-        warnings.warn(
-            f"Expected {pnlcount} proxy PnL DataFrames for portfolio name "
-            f"'{common_portfolio_name}', but found {len(pnl_dfs)}. "
-            f"Some ProxyPnL objects may have a different portfolio name."
-        )
-
-    fig = msv.timelines(
-        pd.concat(pnl_dfs, axis=0),
-        title=title,
-        cumsum=cumsum,
-        return_fig=True,
-        cid_labels=pnl_names,
-        ax_hline=0.0,
-        title_fontsize=title_fontsize,
-        **kwargs,
-    )
-    if return_fig:
-        return fig
-    plt.show()
 
 
 if __name__ == "__main__":

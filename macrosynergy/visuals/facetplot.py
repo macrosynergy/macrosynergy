@@ -192,6 +192,7 @@ class FacetPlot(Plotter):
         share_x: bool = False,
         y_centre_to_zero: bool = False,
         interpolate: bool = False,
+        linewidth: Optional[float] = None,
         # xcats_mean: bool = False,
         # title arguments
         figsize: Tuple[Number, Number] = (16.0, 9.0),
@@ -636,6 +637,9 @@ class FacetPlot(Plotter):
 
                 if not interpolate:
                     X, Y = self._insert_nans(X, Y)
+
+                if linewidth is not None:
+                    plot_func_args["linewidth"] = linewidth
 
                 if plot_func is None:
                     ax_i.plot(X, Y, **plot_func_args)
