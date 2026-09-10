@@ -82,6 +82,7 @@ class LinePlot(Plotter):
         axis_fontsize: int = 12,
         ax_hline: Optional[Union[Number, List[Number]]] = None,
         ax_vline: Optional[Union[str, List[str]]] = None,
+        linewidth: Optional[float] = None,
         # title args
         title: Optional[str] = None,
         title_fontsize: int = 16,
@@ -253,7 +254,12 @@ class LinePlot(Plotter):
                     _df = _df.sort_values(by="real_date", ascending=True).reset_index(
                         drop=True
                     )
-                    ax.plot(_df["real_date"], _df[metric], label=f"{cid}_{xcat}")
+                    ax.plot(
+                        _df["real_date"],
+                        _df[metric],
+                        label=f"{cid}_{xcat}",
+                        linewidth=linewidth,
+                    )
 
         # if there is a compare_series, plot it on the same axis, using a red dashed line
         if compare_series:
