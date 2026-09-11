@@ -6,6 +6,8 @@ import pandas as pd
 from macrosynergy.management.constants import ANNUALIZATION_FACTORS
 from macrosynergy.management.types import QuantamentalDataFrame
 
+DATA_FREQ: str = "B"
+
 
 def _simulate_volatility(
     n_periods: int,
@@ -229,6 +231,157 @@ def _simulate_signals(
     return signals
 
 
+def _simulate_decaying_signals(
+    n_periods: int,
+    n_fids: int,
+    signal_ic: float,
+    signal_autocorr: float,
+    half_life: float,
+    z: np.ndarray,
+    rng: Optional[np.random.Generator] = None,
+) -> np.ndarray:
+    r"""
+    Simulate persistent signals whose forecasting power decays with a half life.
+
+    Parameters
+    ----------
+    n_periods : int
+        number of periods (rows) to simulate.
+    n_fids : int
+        number of financial contract identifiers (columns) to simulate.
+    signal_ic : float
+        target information coefficient against the *next* period's return, i.e.
+        `corr(signals[t], z[t + 1])`. This is the head of the decay profile rather than
+        the only non-zero point on it. Must not exceed `sqrt(1 - decay ** 2)` in absolute
+        value, with `decay` the per-period decay implied by `half_life`.
+    signal_autocorr : float
+        AR(1) coefficient of the persistent noise component, strictly between -1 and 1.
+    half_life : float
+        half life, in periods, of the signal's forecasting power. Must be strictly
+        positive.
+    z : np.ndarray
+        (n_periods, n_fids) array of unit-variance return innovations, as returned by
+        `_simulate_returns` with `return_z=True`.
+    rng : Optional[np.random.Generator]
+        random number generator. Unlike the other simulation helpers this argument has
+        no fallback, so a generator must be passed.
+
+    Returns
+    -------
+    np.ndarray
+        (n_periods, n_fids) array of unit-variance signals, zero on the last row.
+
+    Notes
+    -----
+    The per-period decay follows from the half life,
+
+    .. math::
+
+        \lambda = 2^{-1/H}
+
+    where :math:`H` is `half_life`. The innovations the signal forecasts are collected
+    into a geometrically weighted forward sum, normalised to unit variance:
+
+    .. math::
+
+        w_{t} = \sum_{k \ge 1} \lambda^{k-1} z_{t+k},
+        \qquad
+        Z^{*}_{t} = w_{t} \Bigg/
+        \sqrt{\frac{1 - \lambda^{2(T-1-t)}}{1 - \lambda^{2}}}
+
+    The denominator is the exact standard deviation of the truncated sum, so
+    :math:`Z^{*}` has unit variance on every row - including the tail, where fewer future
+    innovations remain. The last row has none at all and is therefore zero.
+
+    A unit-variance AR(1) noise component is built as in `_simulate_signals`,
+
+    .. math::
+
+        p_{t} = a p_{t-1} + \sqrt{1 - a^{2}} \, \epsilon_{t},
+        \qquad \epsilon_{t} \sim N(0, I)
+
+    and mixed with the aggregate, shifted back one period so that a signal observed at
+    :math:`t` forecasts from :math:`t + 1` onwards:
+
+    .. math::
+
+        s_{t} = \rho Z^{*}_{t} + \sqrt{1 - \rho^{2}} \, p_{t+1},
+        \qquad \rho = \frac{\mathrm{IC}}{\sqrt{1 - \lambda^{2}}},
+        \qquad s_{T-1} = 0
+
+    where :math:`a` is `signal_autocorr` and :math:`\mathrm{IC}` is `signal_ic`. The
+    result is a geometrically decaying forecast profile whose head is the requested
+    information coefficient,
+
+    .. math::
+
+        \mathrm{corr}(s_{t}, z_{t+k}) = \mathrm{IC} \, \lambda^{k-1}
+
+    and, against the standardized return accumulated over the next :math:`m` periods,
+
+    .. math::
+
+        \mathrm{corr}\left(s_{t},
+        m^{-1/2}\sum_{k=1}^{m} z_{t+k}\right)
+        = \mathrm{IC} \, \frac{1 - \lambda^{m}}{(1 - \lambda)\sqrt{m}}
+
+    which is the formula to invert when calibrating against a horizon other than one
+    period. Requiring :math:`\rho \le 1` bounds the information coefficient above by
+    :math:`\sqrt{1 - \lambda^{2}}`: a high one-period IC cannot persist over a long half
+    life without the predictable component exceeding the variance of the return.
+
+    As :math:`\lambda \to 0` the normalisation tends to one on every row but the last, so
+    :math:`Z^{*}_{t} = z_{t+1}` and the construction reduces exactly to
+    `_simulate_signals`.
+    """
+
+    if half_life <= 0.0:
+        raise ValueError("half_life must be strictly positive")
+
+    a = signal_autocorr
+    decay = 0.5 ** (1.0 / half_life)
+
+    max_ic = np.sqrt(1.0 - decay**2)
+    if abs(signal_ic) > max_ic:
+        raise ValueError(
+            f"signal_ic of {signal_ic} is unattainable with a half_life of {half_life}: "
+            f"the information coefficient is bounded by sqrt(1 - decay**2) = "
+            f"{max_ic:.4f}, as a predictable component any larger would exceed the "
+            "variance of the return it forecasts"
+        )
+
+    ic = signal_ic / max_ic
+
+    # w[t] = sum_{k >= 1} decay**(k - 1) * z[t + k], accumulated backwards
+    weighted = np.zeros((n_periods, n_fids))
+    acc = np.zeros(n_fids)
+    for t in range(n_periods - 2, -1, -1):
+        acc = z[t + 1] + decay * acc
+        weighted[t] = acc
+
+    # exact standard deviation of the sum truncated at the end of the sample, so the
+    # tail rows stay unit variance rather than shrinking towards zero
+    horizon = np.arange(n_periods - 1, -1, -1)
+    scale = np.sqrt((1.0 - decay ** (2 * horizon)) / (1.0 - decay**2))
+    aggregate = np.divide(
+        weighted, scale[:, None], out=np.zeros_like(weighted), where=scale[:, None] > 0.0
+    )
+
+    persistent = np.empty((n_periods, n_fids))
+    s = np.zeros(n_fids)
+    eps = rng.standard_normal((n_periods, n_fids))
+    for t in range(n_periods):
+        s = a * s + np.sqrt(1.0 - a**2) * eps[t]
+        persistent[t] = s  # unit-variance AR(1), independent of z
+
+    # persistent[t + 1] pairs with the aggregate that starts forecasting at t + 1, which
+    # makes this reduce to `_simulate_signals` when there is no decay
+    signals = ic * aggregate + np.sqrt(1.0 - ic**2) * np.roll(persistent, -1, axis=0)
+    signals[-1] = 0.0  # last signal forecasts an unobserved future return
+
+    return signals
+
+
 def _simulate_signals_and_returns(
     n_fids: int,
     n_periods: int,
@@ -239,29 +392,34 @@ def _simulate_signals_and_returns(
     mean_return: float,
     signal_autocorr: float,
     signal_ic: float,
+    half_life: Optional[float] = None,
     end_date: Optional[str] = None,
     signal_names: Optional[List[str]] = None,
     return_names: Optional[List[str]] = None,
-    freq: str = "B",
     seed: Optional[int] = None,
 ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """
     Simulate signals, returns and their volatility path as wide DataFrames.
 
     Chains `_simulate_volatility`, `_simulate_returns` and `_simulate_signals` off a
-    single seeded generator, so that the returns of each period have covariance
-    `D_t C D_t` (with `D_t` the diagonal matrix of that period's volatilities) and each
-    signal predicts the *next* period's return innovation with correlation
-    `signal_ic`.
+    single seeded generator, so that the returns of each day have covariance
+    `D_t C D_t` (with `D_t` the diagonal matrix of that day's volatilities) and
+    each signal predicts the *next* day's return innovation with correlation `signal_ic`.
+
+    If `half_life` is given, `_simulate_decaying_signals` replaces `_simulate_signals`
+    and each signal forecasts *every* subsequent day, with a correlation that decays
+    geometrically at the given half life. `signal_ic` then describes the head of that
+    profile rather than the only day it applies to. Returns and volatilities are
+    unaffected by the choice - the signal construction consumes `z` but never alters it.
 
     Parameters
     ----------
     n_fids : int
         number of financial contract identifiers (columns) to simulate.
     n_periods : int
-        number of periods (rows) to simulate.
+        number of business days (rows) to simulate.
     base_vol : np.ndarray
-        long-run per-period volatilities, broadcast to (n_fids,). Must be strictly
+        long-run daily volatilities, broadcast to (n_fids,). Must be strictly
         positive.
     vol_persistence : float
         AR(1) coefficient of the log-variance process, between 0 and 1.
@@ -271,13 +429,17 @@ def _simulate_signals_and_returns(
         (n_fids, n_fids) correlation matrix of the return innovations. Must be
         symmetric positive definite with unit diagonal.
     mean_return : float
-        per-period mean return, broadcast to (n_fids,).
+        daily mean return, broadcast to (n_fids,).
     signal_autocorr : float
         AR(1) coefficient of the persistent signal component, strictly between -1 and
         1.
     signal_ic : float
-        target information coefficient of the signals against the next period's return
-        innovations.
+        target information coefficient of the signals against the next day's return
+        innovations. When `half_life` is set this is the head of a decaying profile, and
+        it is bounded above by `sqrt(1 - decay ** 2)`.
+    half_life : Optional[float]
+        half life, in business days, of the signal's forecasting power. Default is None,
+        in which case the signal forecasts the next day only and nothing beyond it.
     end_date : Optional[str]
         last date of the simulated index, in ISO format. Default is None, in which case
         today's date is used.
@@ -287,8 +449,6 @@ def _simulate_signals_and_returns(
     return_names : Optional[List[str]]
         column names of the returns and volatility DataFrames. Default is None, in
         which case `CID{i}_XR` is used.
-    freq : str
-        pandas frequency of the simulated index. Default is "B" (business days).
     seed : Optional[int]
         seed of the random number generator. Default is None, i.e. unseeded.
 
@@ -350,17 +510,29 @@ def _simulate_signals_and_returns(
         rng=rng,
     )
 
-    signals = _simulate_signals(
-        n_periods=n_periods,
-        n_fids=n_fids,
-        z=z,
-        signal_ic=signal_ic,
-        signal_autocorr=signal_autocorr,
-        rng=rng,
-    )
+    index = pd.date_range(end=end_date, periods=n_periods, freq=DATA_FREQ)
+
+    if half_life is None:
+        signals = _simulate_signals(
+            n_periods=n_periods,
+            n_fids=n_fids,
+            z=z,
+            signal_ic=signal_ic,
+            signal_autocorr=signal_autocorr,
+            rng=rng,
+        )
+    else:
+        signals = _simulate_decaying_signals(
+            n_periods=n_periods,
+            n_fids=n_fids,
+            z=z,
+            signal_ic=signal_ic,
+            signal_autocorr=signal_autocorr,
+            half_life=half_life,
+            rng=rng,
+        )
 
     # convert to dataframes
-    index = pd.date_range(end=end_date, periods=n_periods, freq=freq)
     if signal_names is None:
         signal_names = [f"CID{i}_SIG" for i in range(n_fids)]
     if return_names is None:
@@ -390,22 +562,34 @@ class SignalsAndReturnsGenerator:
         (n_fids, n_fids) correlation matrix of the return innovations. Default is None,
         in which case a random (but deterministic) correlation matrix is drawn.
     base_vol : np.ndarray
-        long-run per-period volatilities, broadcast to (n_fids,). Default is None,
-        in which case 0.01 per period is used for every contract, i.e. roughly 16%
-        annualized at business-day frequency.
+        long-run daily volatilities, broadcast to (n_fids,). Default is None, in which
+        case 0.01 per day is used for every contract, i.e. roughly 16% annualized.
     signal_ic : float
-        target information coefficient of the signals against the next period's return
-        innovations. Default is 0.05.
+        target information coefficient of the signals against the next day's return
+        innovations. Default is 0.05. When `half_life` is set this is the head of a
+        decaying profile, and it is bounded above by `sqrt(1 - decay ** 2)`.
     signal_autocorr : float
         AR(1) coefficient of the persistent signal component, strictly between -1 and
-        1. Default is 0.9.
+        1. Default is 0.9. This governs how fast the signal *moves*, and so its
+        turnover. When `half_life` is set the forecasting component carries its own
+        persistence, so the observed autocorrelation at lag `k` is
+        `rho ** 2 * decay ** k + (1 - rho ** 2) * signal_autocorr ** k` with
+        `rho = signal_ic / sqrt(1 - decay ** 2)`, and this parameter governs only the
+        `1 - rho ** 2` share of it. A high `signal_ic` over a long half life therefore
+        puts a floor under the signal's persistence that no `signal_autocorr` can
+        undercut.
+    half_life : float
+        half life, in business days, of the signal's forecasting power. Default is None,
+        in which case each signal forecasts the next day only and nothing beyond it.
+        When set, a signal observed on a given day forecasts every subsequent day with a
+        correlation that decays geometrically at this half life.
     vol_persistence : float
         AR(1) coefficient of the log-variance process, between 0 and 1. Default is
         0.94.
     vol_of_vol : float
         standard deviation of the shocks to the log-variance. Default is 0.15.
     mean_return : float
-        per-period mean return, broadcast to (n_fids,). Default is 0.0.
+        daily mean return, broadcast to (n_fids,). Default is 0.0.
     """
 
     def __init__(
@@ -415,6 +599,7 @@ class SignalsAndReturnsGenerator:
         base_vol: np.ndarray = None,
         signal_ic: float = 0.05,
         signal_autocorr: float = 0.9,
+        half_life: Optional[float] = None,
         vol_persistence: float = 0.94,
         vol_of_vol: float = 0.15,
         mean_return: float = 0.0,
@@ -424,6 +609,7 @@ class SignalsAndReturnsGenerator:
         self.base_vol = base_vol
         self.signal_ic = signal_ic
         self.signal_autocorr = signal_autocorr
+        self.half_life = half_life
         self.vol_persistence = vol_persistence
         self.vol_of_vol = vol_of_vol
         self.mean_return = mean_return
@@ -441,7 +627,6 @@ class SignalsAndReturnsGenerator:
         self.signals = None
         self.returns = None
         self.realized_vol = None
-        self.freq = None
 
     def simulate_signals_and_returns(
         self,
@@ -449,11 +634,11 @@ class SignalsAndReturnsGenerator:
         end_date: Optional[str] = None,
         signal_names: Optional[List[str]] = None,
         return_names: Optional[List[str]] = None,
-        freq: str = "B",
         seed: int = 29,
     ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
         """
-        Simulate signals and returns using the parameters held on the instance.
+        Simulate business-daily signals and returns using the parameters held on the
+        instance.
 
         The results are stored on the instance, so that the conversion methods can be
         called afterwards. Calling this method again overwrites the previous
@@ -462,7 +647,7 @@ class SignalsAndReturnsGenerator:
         Parameters
         ----------
         n_periods : int
-            number of periods (rows) to simulate.
+            number of business days (rows) to simulate.
         end_date : Optional[str]
             last date of the simulated index, in ISO format. Default is None, in which
             case today's date is used.
@@ -472,8 +657,6 @@ class SignalsAndReturnsGenerator:
         return_names : Optional[List[str]]
             column names of the returns and volatility DataFrames. Default is None, in
             which case `CID{i}_XR` is used.
-        freq : str
-            pandas frequency of the simulated index. Default is "B" (business days).
         seed : int
             seed of the random number generator. Default is 29.
 
@@ -495,7 +678,7 @@ class SignalsAndReturnsGenerator:
             vol_persistence=self.vol_persistence,
             vol_of_vol=self.vol_of_vol,
             mean_return=self.mean_return,
-            freq=freq,
+            half_life=self.half_life,
             end_date=end_date,
             signal_names=signal_names,
             return_names=return_names,
@@ -505,7 +688,6 @@ class SignalsAndReturnsGenerator:
         self.signals = signals
         self.returns = returns
         self.realized_vol = realized_vol
-        self.freq = freq
 
         return signals, returns, realized_vol
 
@@ -547,9 +729,10 @@ class SignalsAndReturnsGenerator:
         Parameters
         ----------
         freq : str
-            pandas frequency of the rebalance dates delimiting the intervals. Default
-            is "BMS" (business month starts). The trailing partial interval is
-            dropped, as it has no closing rebalance date.
+            pandas frequency of the rebalance dates delimiting the intervals - not the
+            frequency of the simulated data, which is always business-daily. Default is
+            "BMS" (business month starts). The trailing partial interval is dropped, as
+            it has no closing rebalance date.
         long : bool
             if True, return a single long DataFrame holding the upper triangle of each
             covariance matrix. If False, return a dictionary of the full matrices keyed
@@ -573,9 +756,8 @@ class SignalsAndReturnsGenerator:
             \Sigma_{m} = \frac{1}{|m|} \sum_{t \in m} D_{t} C D_{t},
             \qquad D_{t} = \mathrm{diag}(\sigma_{1,t}, \dots, \sigma_{N,t})
 
-        The result is annualized with the factor for the simulation frequency
-        (252 for business days) and expressed in percent squared - returns are scaled
-        by 100, hence variances by 10,000:
+        The result is annualized with the business-daily factor of 252 and expressed
+        in percent squared - returns are scaled by 100, hence variances by 10,000:
 
         .. math::
 
@@ -588,7 +770,7 @@ class SignalsAndReturnsGenerator:
         estimate made on that rebalance date.
         """
         self._require_simulated()
-        annualization = ANNUALIZATION_FACTORS[self.freq]
+        annualization = ANNUALIZATION_FACTORS[DATA_FREQ]
         names = np.asarray(self.realized_vol.columns)
         n = len(names)
         i, j = (
