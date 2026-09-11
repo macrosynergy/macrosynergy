@@ -192,7 +192,7 @@ def cov_estimators_bias_variance(
 
     results = np.vstack(results)
 
-    bias = 1 - np.nanmean(results, axis=0)
+    bias = np.abs(1 - np.nanmean(results, axis=0))
     std = np.nanstd(results, axis=0)
 
     return bias, std

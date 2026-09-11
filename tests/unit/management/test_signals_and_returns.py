@@ -1,5 +1,4 @@
 import unittest
-from typing import List
 
 import numpy as np
 import pandas as pd
@@ -7,6 +6,7 @@ import pandas as pd
 from macrosynergy.management.constants import ANNUALIZATION_FACTORS
 from macrosynergy.management.simulate.signals_and_returns import (
     SignalsAndReturnsGenerator,
+    _simulate_decaying_signals,
     _simulate_returns,
     _simulate_signals,
     _simulate_signals_and_returns,
@@ -78,6 +78,56 @@ def _lead_correlation(signals: np.ndarray, z: np.ndarray) -> np.ndarray:
     return np.array(
         [np.corrcoef(signals[:-1, k], z[1:, k])[0, 1] for k in range(signals.shape[1])]
     )
+
+
+def _column_correlation(a: np.ndarray, b: np.ndarray) -> np.ndarray:
+    """
+    Correlation of each column of `a` with the matching column of `b`.
+    """
+    return np.array(
+        [np.corrcoef(a[:, k], b[:, k])[0, 1] for k in range(a.shape[1])]
+    )
+
+
+def _lead_correlation_at(signals: np.ndarray, z: np.ndarray, lead: int) -> np.ndarray:
+    """
+    Correlation of each signal with the innovation `lead` periods ahead.
+    """
+    return np.array(
+        [
+            np.corrcoef(signals[:-lead, k], z[lead:, k])[0, 1]
+            for k in range(signals.shape[1])
+        ]
+    )
+
+
+def _forward_correlation(
+    signals: np.ndarray, z: np.ndarray, horizon: int
+) -> np.ndarray:
+    """
+    Correlation of each signal with the standardized innovation accumulated over the
+    next `horizon` periods.
+    """
+    cumulative = np.vstack([np.zeros(z.shape[1]), np.cumsum(z, axis=0)])
+    forward = (cumulative[1 + horizon :] - cumulative[1:-horizon]) / np.sqrt(horizon)
+    return _column_correlation(signals[: len(forward)], forward)
+
+
+def _lagged_sharpe(signals: np.ndarray, z: np.ndarray, lag: int) -> float:
+    """
+    Per-period Sharpe of a signal acted on `lag` periods after it is observed.
+    """
+    pnl = (signals[:-lag] * z[lag:]).sum(axis=1)
+    return pnl.mean() / pnl.std()
+
+
+def _step_sharpe(signals: np.ndarray, z: np.ndarray, hold: int) -> float:
+    """
+    Per-period Sharpe when the position is only refreshed every `hold` periods.
+    """
+    positions = signals[::hold].repeat(hold, axis=0)[: len(signals)]
+    pnl = (positions[:-1] * z[1:]).sum(axis=1)
+    return pnl.mean() / pnl.std()
 
 
 class TestSimulateVolatility(unittest.TestCase):
@@ -341,6 +391,309 @@ class TestSimulateSignals(unittest.TestCase):
         np.testing.assert_allclose(_lag1_autocorr(signals[:-1]), 0.0, atol=0.03)
 
 
+class TestSimulateDecayingSignals(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.z = _innovations(N_LONG, CORR_3, seed=7)
+        cls._cache = {}
+
+    def _signals(
+        self,
+        half_life: float,
+        signal_ic: float = 0.05,
+        signal_autocorr: float = 0.9,
+        seed: int = 3,
+    ) -> np.ndarray:
+        key = (half_life, signal_ic, signal_autocorr, seed)
+        if key not in self._cache:
+            self._cache[key] = _simulate_decaying_signals(
+                n_periods=self.z.shape[0],
+                n_fids=self.z.shape[1],
+                signal_ic=signal_ic,
+                signal_autocorr=signal_autocorr,
+                half_life=half_life,
+                z=self.z,
+                rng=np.random.default_rng(seed),
+            )
+        return self._cache[key]
+
+    def _undecayed(self, signal_ic: float = 0.05, seed: int = 3) -> np.ndarray:
+        return _simulate_signals(
+            n_periods=self.z.shape[0],
+            n_fids=self.z.shape[1],
+            signal_ic=signal_ic,
+            signal_autocorr=0.9,
+            z=self.z,
+            rng=np.random.default_rng(seed),
+        )
+
+    def test_shape_and_last_row_is_zero(self):
+        signals = _simulate_decaying_signals(
+            n_periods=100,
+            n_fids=3,
+            signal_ic=0.05,
+            signal_autocorr=0.9,
+            half_life=10.0,
+            z=_innovations(100, CORR_3),
+            rng=np.random.default_rng(3),
+        )
+
+        self.assertEqual(signals.shape, (100, 3))
+        self.assertTrue(np.all(np.isfinite(signals)))
+        np.testing.assert_array_equal(signals[-1], np.zeros(3))
+
+    def test_no_decay_reproduces_simulate_signals_exactly(self):
+        """
+        A half life small enough that the decay underflows to zero leaves the forward sum
+        equal to the next innovation alone, which is the undecayed construction. The two
+        must agree bit for bit, not merely closely.
+        """
+        kwargs = dict(
+            n_periods=self.z.shape[0],
+            n_fids=self.z.shape[1],
+            signal_ic=0.05,
+            signal_autocorr=0.9,
+            z=self.z,
+        )
+        undecayed = _simulate_signals(**kwargs, rng=np.random.default_rng(3))
+        decayed = _simulate_decaying_signals(
+            **kwargs, half_life=1e-4, rng=np.random.default_rng(3)
+        )
+
+        np.testing.assert_array_equal(decayed, undecayed)
+
+    def test_forecast_profile_decays_geometrically(self):
+        """
+        Measured across independent contracts rather than one correlated triple, so the
+        estimate is precise enough to pin the profile down rather than merely bracket it.
+        """
+        n_fids = 40
+        z = _innovations(N_LONG, np.eye(n_fids), seed=7)
+
+        for half_life in (10.0, 60.0):
+            with self.subTest(half_life=half_life):
+                decay = 0.5 ** (1.0 / half_life)
+                signals = _simulate_decaying_signals(
+                    n_periods=N_LONG,
+                    n_fids=n_fids,
+                    signal_ic=0.05,
+                    signal_autocorr=0.9,
+                    half_life=half_life,
+                    z=z,
+                    rng=np.random.default_rng(3),
+                )
+
+                for lead in (1, 2, 3, 5, 10, 20, 40):
+                    np.testing.assert_allclose(
+                        _lead_correlation_at(signals, z, lead).mean(),
+                        0.05 * decay ** (lead - 1),
+                        atol=0.004,
+                    )
+
+    def test_information_coefficient_halves_over_the_half_life(self):
+        half_life = 21.0
+        signals = self._signals(half_life, signal_ic=0.2)
+
+        head = _lead_correlation_at(signals, self.z, 1).mean()
+        halved = _lead_correlation_at(signals, self.z, 1 + int(half_life)).mean()
+
+        self.assertAlmostEqual(halved / head, 0.5, delta=0.05)
+
+    def test_horizon_information_coefficient_matches_closed_form(self):
+        """
+        The correlation against the return accumulated over the next `m` periods is
+        `signal_ic * (1 - decay ** m) / ((1 - decay) * sqrt(m))`. Averaged over seeds,
+        as a single draw of the persistent noise deflects it by a few percent.
+        """
+        half_life, signal_ic = 21.0, 0.1
+        decay = 0.5 ** (1.0 / half_life)
+        signals = [
+            self._signals(half_life, signal_ic=signal_ic, seed=seed)
+            for seed in (3, 4, 5, 6)
+        ]
+
+        for horizon in (1, 5, 21, 63):
+            with self.subTest(horizon=horizon):
+                realized = np.mean(
+                    [_forward_correlation(s, self.z, horizon).mean() for s in signals]
+                )
+                expected = (
+                    signal_ic
+                    * (1.0 - decay**horizon)
+                    / ((1.0 - decay) * np.sqrt(horizon))
+                )
+
+                np.testing.assert_allclose(realized, expected, rtol=0.12)
+
+    def test_unit_variance(self):
+        signals = self._signals(21.0)
+
+        np.testing.assert_allclose(signals.std(axis=0), 1.0, atol=0.06)
+
+    def test_tail_rows_keep_unit_variance(self):
+        """
+        The forward sum runs out of innovations near the end of the sample: one row from
+        the end it spans a single innovation rather than the several periods' worth the
+        steady state carries. The exact truncation scaling is what stops those rows
+        collapsing, and it is checked across independent contracts because the variance
+        of a short window of one persistent series cannot be measured precisely.
+
+        The opening rows are skipped - the AR(1) noise starts at zero and takes a few
+        dozen rows to reach its own steady state, which `_simulate_signals` does too.
+        """
+        n_fids, n_periods = 400, 300
+        signals = _simulate_decaying_signals(
+            n_periods=n_periods,
+            n_fids=n_fids,
+            signal_ic=0.05,
+            signal_autocorr=0.9,
+            half_life=50.0,
+            z=_innovations(n_periods, np.eye(n_fids), seed=11),
+            rng=np.random.default_rng(2),
+        )
+
+        cross_sectional = signals.std(axis=1)
+        body = cross_sectional[100:200].mean()
+        tail = cross_sectional[-51:-1].mean()
+
+        np.testing.assert_allclose(tail, body, rtol=0.06)
+        np.testing.assert_allclose(tail, 1.0, atol=0.06)
+        np.testing.assert_array_equal(signals[-1], np.zeros(n_fids))
+
+    def test_autocorrelation_mixes_both_components(self):
+        """
+        The signal now inherits persistence from the decaying forecast as well as from
+        the noise, so its autocorrelation is a blend of the two rather than the noise
+        alone.
+        """
+        half_life, signal_ic, signal_autocorr = 21.0, 0.2, 0.9
+        decay = 0.5 ** (1.0 / half_life)
+        rho = signal_ic / np.sqrt(1.0 - decay**2)
+        signals = self._signals(
+            half_life, signal_ic=signal_ic, signal_autocorr=signal_autocorr
+        )
+
+        expected = rho**2 * decay + (1.0 - rho**2) * signal_autocorr
+
+        np.testing.assert_allclose(_lag1_autocorr(signals), expected, atol=0.03)
+
+    def test_forecasting_power_degrades_gracefully_with_execution_lag(self):
+        """
+        The property the half life exists to provide: a signal acted on late is still
+        worth something, where the undecayed signal is worth exactly nothing.
+        """
+        decayed = self._signals(21.0, signal_ic=0.2)
+        sharpes = [_lagged_sharpe(decayed, self.z, lag) for lag in (1, 5, 20, 60)]
+
+        self.assertTrue(np.all(np.diff(sharpes) < 0.0), sharpes)
+        self.assertGreater(sharpes[1], 0.5 * sharpes[0])
+        self.assertGreater(_lagged_sharpe(decayed, self.z, 2), 0.0)
+
+        np.testing.assert_allclose(
+            _lagged_sharpe(self._undecayed(signal_ic=0.2), self.z, 2), 0.0, atol=0.02
+        )
+
+    def test_holding_a_stale_signal_still_pays(self):
+        """
+        Rebalancing less often than the data moves. The decayed signal keeps most of its
+        edge across the holding period; the undecayed one has spent it on the first day,
+        which is what made the undecayed process unusable for transaction-cost work.
+        """
+        decayed = _step_sharpe(self._signals(21.0, signal_ic=0.2), self.z, 21)
+        undecayed = _step_sharpe(self._undecayed(signal_ic=0.2), self.z, 21)
+
+        self.assertGreater(decayed, 3.0 * undecayed)
+
+    def test_non_positive_half_life_raises(self):
+        for half_life in (0.0, -5.0):
+            with self.subTest(half_life=half_life):
+                with self.assertRaises(ValueError):
+                    _simulate_decaying_signals(
+                        n_periods=100,
+                        n_fids=3,
+                        signal_ic=0.05,
+                        signal_autocorr=0.9,
+                        half_life=half_life,
+                        z=_innovations(100, CORR_3),
+                        rng=np.random.default_rng(1),
+                    )
+
+    def test_information_coefficient_above_the_bound_raises(self):
+        """
+        A long half life caps the attainable information coefficient, since the
+        predictable component cannot exceed the variance of the return it forecasts.
+        """
+        half_life = 60.0
+        bound = np.sqrt(1.0 - (0.5 ** (1.0 / half_life)) ** 2)
+        kwargs = dict(
+            n_periods=100,
+            n_fids=3,
+            signal_autocorr=0.9,
+            half_life=half_life,
+            z=_innovations(100, CORR_3),
+            rng=np.random.default_rng(1),
+        )
+
+        with self.assertRaises(ValueError) as raised:
+            _simulate_decaying_signals(signal_ic=bound * 1.01, **kwargs)
+        self.assertIn(f"{bound:.4f}", str(raised.exception))
+
+        # the bound itself is attainable
+        _simulate_decaying_signals(signal_ic=bound, **kwargs)
+
+    def test_half_life_leaves_returns_and_volatility_untouched(self):
+        """
+        The signal construction consumes `z` but never alters it, so the return and
+        volatility paths - and the ground truth covariance built off them - are the same
+        whether or not the signal decays.
+        """
+        kwargs = dict(
+            n_fids=3,
+            n_periods=2_000,
+            base_vol=BASE_VOL_3,
+            vol_persistence=0.94,
+            vol_of_vol=0.15,
+            corr=CORR_3,
+            mean_return=0.0,
+            signal_autocorr=0.9,
+            signal_ic=0.05,
+            end_date="2020-12-31",
+            seed=29,
+        )
+        flat_signals, flat_returns, flat_vol = _simulate_signals_and_returns(**kwargs)
+        decayed_signals, decayed_returns, decayed_vol = _simulate_signals_and_returns(
+            **kwargs, half_life=21.0
+        )
+
+        pd.testing.assert_frame_equal(flat_returns, decayed_returns)
+        pd.testing.assert_frame_equal(flat_vol, decayed_vol)
+        self.assertFalse(flat_signals.equals(decayed_signals))
+
+    def test_generator_applies_the_half_life(self):
+        generator = SignalsAndReturnsGenerator(
+            n_fids=3, corr=CORR_3, base_vol=BASE_VOL_3, half_life=21.0
+        )
+        signals, _, _ = generator.simulate_signals_and_returns(
+            n_periods=2_000, end_date="2020-12-31"
+        )
+        expected, _, _ = _simulate_signals_and_returns(
+            n_fids=3,
+            n_periods=2_000,
+            corr=CORR_3,
+            base_vol=BASE_VOL_3,
+            signal_ic=0.05,
+            signal_autocorr=0.9,
+            half_life=21.0,
+            vol_persistence=0.94,
+            vol_of_vol=0.15,
+            mean_return=0.0,
+            end_date="2020-12-31",
+            seed=29,
+        )
+
+        pd.testing.assert_frame_equal(signals, expected)
+
+
 class TestSimulateSignalsAndReturns(unittest.TestCase):
     def setUp(self):
         self.kwargs = dict(
@@ -369,7 +722,7 @@ class TestSimulateSignalsAndReturns(unittest.TestCase):
         pd.testing.assert_index_equal(signals.index, returns.index)
         pd.testing.assert_index_equal(signals.index, realized_vol.index)
 
-    def test_index_respects_end_date_and_frequency(self):
+    def test_index_respects_end_date_and_is_business_daily(self):
         signals, _, _ = _simulate_signals_and_returns(**self.kwargs)
 
         self.assertEqual(len(signals.index), 250)
@@ -383,14 +736,12 @@ class TestSimulateSignalsAndReturns(unittest.TestCase):
 
         self.assertLessEqual(signals.index[-1], pd.Timestamp.now().normalize())
 
-    def test_custom_frequency(self):
-        signals, _, realized_vol = _simulate_signals_and_returns(
-            **{**self.kwargs, "freq": "W-FRI"}
-        )
+    def test_every_frame_is_business_daily(self):
+        signals, returns, realized_vol = _simulate_signals_and_returns(**self.kwargs)
 
-        self.assertEqual(signals.index.freqstr, "W-FRI")
-        self.assertEqual(realized_vol.index.freqstr, "W-FRI")
-        self.assertTrue(np.all(signals.index.dayofweek == 4))
+        for frame in (signals, returns, realized_vol):
+            self.assertEqual(frame.index.freqstr, "B")
+            self.assertTrue(np.all(frame.index.dayofweek < 5))
 
     def test_scalar_base_vol_is_broadcast(self):
         _, _, realized_vol = _simulate_signals_and_returns(
@@ -490,7 +841,6 @@ class TestSimulateSignalsAndReturns(unittest.TestCase):
         np.testing.assert_allclose(np.corrcoef(returns.to_numpy().T), CORR_3, atol=0.02)
 
 
-
 class TestGeneratorInit(unittest.TestCase):
     def test_default_corr_is_a_valid_correlation_matrix(self):
         generator = SignalsAndReturnsGenerator(n_fids=4)
@@ -513,6 +863,7 @@ class TestGeneratorInit(unittest.TestCase):
             base_vol=BASE_VOL_3,
             signal_ic=0.2,
             signal_autocorr=0.5,
+            half_life=15.0,
             vol_persistence=0.8,
             vol_of_vol=0.25,
             mean_return=0.001,
@@ -523,6 +874,7 @@ class TestGeneratorInit(unittest.TestCase):
         np.testing.assert_allclose(generator.base_vol, BASE_VOL_3)
         self.assertEqual(generator.signal_ic, 0.2)
         self.assertEqual(generator.signal_autocorr, 0.5)
+        self.assertEqual(generator.half_life, 15.0)
         self.assertEqual(generator.vol_persistence, 0.8)
         self.assertEqual(generator.vol_of_vol, 0.25)
         self.assertEqual(generator.mean_return, 0.001)
@@ -533,7 +885,6 @@ class TestGeneratorInit(unittest.TestCase):
         self.assertIsNone(generator.signals)
         self.assertIsNone(generator.returns)
         self.assertIsNone(generator.realized_vol)
-        self.assertIsNone(generator.freq)
 
 
 class TestGeneratorSimulate(unittest.TestCase):
@@ -550,7 +901,7 @@ class TestGeneratorSimulate(unittest.TestCase):
         self.assertIs(signals, self.generator.signals)
         self.assertIs(returns, self.generator.returns)
         self.assertIs(realized_vol, self.generator.realized_vol)
-        self.assertEqual(self.generator.freq, "B")
+        self.assertEqual(signals.index.freqstr, "B")
 
     def test_resimulation_overwrites_state(self):
         self.generator.simulate_signals_and_returns(
@@ -558,13 +909,12 @@ class TestGeneratorSimulate(unittest.TestCase):
         )
         first = self.generator.signals
         self.generator.simulate_signals_and_returns(
-            n_periods=50, end_date="2019-12-31", freq="W-FRI"
+            n_periods=50, end_date="2019-12-31"
         )
 
         self.assertEqual(self.generator.signals.shape, (50, 3))
         self.assertEqual(self.generator.returns.shape, (50, 3))
         self.assertEqual(self.generator.realized_vol.shape, (50, 3))
-        self.assertEqual(self.generator.freq, "W-FRI")
         self.assertIsNot(self.generator.signals, first)
 
     def test_matches_module_level_function(self):
@@ -676,14 +1026,13 @@ class TestGeneratorRealizedCov(unittest.TestCase):
             freq="BMS",
         )
 
-    def _constant_vol_generator(self, freq: str = "B", n_periods: int = 400):
+    def _constant_vol_generator(self, n_periods: int = 400):
         generator = SignalsAndReturnsGenerator(
             n_fids=3, corr=CORR_3, base_vol=BASE_VOL_3, vol_of_vol=0.0
         )
         generator.simulate_signals_and_returns(
             n_periods=n_periods,
             end_date="2020-12-31",
-            freq=freq,
             return_names=self.return_names,
         )
         return generator
@@ -754,18 +1103,20 @@ class TestGeneratorRealizedCov(unittest.TestCase):
             expected = scale * np.einsum("ti,ij,tj->tij", vol, CORR_3, vol).mean(axis=0)
             np.testing.assert_allclose(cov[start], expected)
 
-    def test_annualization_follows_simulation_frequency(self):
-        generator = self._constant_vol_generator(freq="W-FRI", n_periods=200)
-        cov = generator.realized_cov(long=False)
+    def test_annualization_is_business_daily_whatever_the_interval(self):
+        generator = self._constant_vol_generator()
         expected = (
             10_000
-            * ANNUALIZATION_FACTORS["W-FRI"]
+            * ANNUALIZATION_FACTORS["B"]
             * (CORR_3 * np.outer(BASE_VOL_3, BASE_VOL_3))
         )
 
-        self.assertTrue(len(cov) > 0)
-        for matrix in cov.values():
-            np.testing.assert_allclose(matrix, expected)
+        for interval in ("BMS", "W-FRI"):
+            cov = generator.realized_cov(freq=interval, long=False)
+
+            self.assertTrue(len(cov) > 0)
+            for matrix in cov.values():
+                np.testing.assert_allclose(matrix, expected)
 
     def test_rebalance_frequency_sets_the_number_of_intervals(self):
         monthly = self.generator.realized_cov(freq="BMS")
