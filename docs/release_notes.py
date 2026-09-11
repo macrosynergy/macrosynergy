@@ -55,7 +55,7 @@ def format_chg_log(strx: str) -> str:
     findstr = (
         "**Full Changelog**: https://github.com/macrosynergy/macrosynergy/compare/"
     )
-    comp_str = strx.replace(findstr, "").replace("...", "←")
+    comp_str = strx.replace(findstr, "").replace("...", "<-")
     comp_str = f"**Full Changelog**: [{comp_str}]({strx.split(' ')[-1]})"
     return comp_str
 

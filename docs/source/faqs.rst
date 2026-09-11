@@ -15,7 +15,7 @@ If you find that the package raises an
 proxy settings. In scenarios where an error is raised while running
 ``check_connection()`` (or another download), the error is raised with
 context to the OAuth token request (to
-“https://authe.jpmchase.com/as/token.oauth2”).
+"https://authe.jpmchase.com/as/token.oauth2").
 
 You would most likely need to pass your proxy settings to the
 ``JPMaQSDownload`` object, as shown in the `Connecting via a proxy
@@ -55,7 +55,7 @@ I have a feature request
 
 Please `raise an
 issue <https://github.com/macrosynergy/macrosynergy/issues/new/choose>`__,
-and title it “Feature Request: [your feature request]”.
+and title it "Feature Request: [your feature request]".
 
 Contributing or creating a pull request
 ---------------------------------------

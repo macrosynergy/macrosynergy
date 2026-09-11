@@ -138,7 +138,7 @@ class LinearMultiTargetRegression(BaseEstimator, RegressorMixin):
 
             # Fit OLS jointly and store coefficients
             lr = LinearRegression(fit_intercept=False).fit(X, y)
-            W = lr.coef_.T  # shape (n_features × n_assets)
+            W = lr.coef_.T  # shape (n_features x n_assets)
             self.initial_coefs = {
                 asset: W[:, idx] for idx, asset in enumerate(self.assets)
             }

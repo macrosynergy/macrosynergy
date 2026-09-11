@@ -73,7 +73,7 @@ class TestSharpeStabilityRatio(unittest.TestCase):
         self.assertTrue(np.isnan(result))
 
     def test_constant_returns_returns_nan(self):
-        # Constant returns → rolling std = 0 → rolling SR = NaN/inf
+        # Constant returns -> rolling std = 0 -> rolling SR = NaN/inf
         constant = pd.Series(np.full(600, 0.001))
         result = sharpe_stability_ratio(constant)
         self.assertTrue(np.isnan(result))

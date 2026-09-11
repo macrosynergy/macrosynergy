@@ -8,7 +8,7 @@ high-level methods for:
 * Fetching index / list constituents.
 * Retrieving static / snapshot metadata for a set of instruments.
 * Downloading time-series data with automatic request chunking that respects the
-  official DSWS API limits (≤ 50 instruments, ≤ 50 datatypes, ≤ 100 items per call).
+  official DSWS API limits (<= 50 instruments, <= 50 datatypes, <= 100 items per call).
 * Post-processing the raw DataFrames returned by ``DatastreamPy`` into tidy formats
   suitable for downstream analysis.
 
@@ -16,7 +16,7 @@ API limits (enforced by this module)
 -------------------------------------
 * ``MAX_INSTRUMENTS_PER_REQUEST = 50``
 * ``MAX_DATATYPES_PER_REQUEST  = 50``
-* ``MAX_ITEMS_PER_REQUEST      = 100``   (instruments × datatypes)
+* ``MAX_ITEMS_PER_REQUEST      = 100``   (instruments x datatypes)
 
 Typical usage::
 
@@ -134,7 +134,7 @@ class DatastreamDataManager:
             self._connection = connection
         elif username and password:
             logger.debug(
-                "No DatastreamConnection supplied — creating one from credentials."
+                "No DatastreamConnection supplied - creating one from credentials."
             )
             self._connection = DatastreamConnection(
                 username=username, password=password
@@ -213,7 +213,7 @@ class DatastreamDataManager:
                 f"Datastream returned an error for list '{list_code}': {error_sample}"
             )
 
-        # Parse the specified identifier column — handle three possible shapes:
+        # Parse the specified identifier column - handle three possible shapes:
         #   1. A column with one identifier per row.
         #   2. A single 'Value' column with one identifier per row.
         #   3. A 'Value' cell containing comma-separated identifiers.
@@ -422,7 +422,7 @@ class DatastreamDataManager:
         metadata : pd.DataFrame
             Raw DataFrame as returned by :meth:`get_metadata`.
         static_fields_map : dict, optional
-            Mapping of datatype code → description used for documentation
+            Mapping of datatype code -> description used for documentation
             purposes only.  Defaults to :data:`DEFAULT_STATIC_FIELDS`.
 
         Returns
@@ -476,7 +476,7 @@ class DatastreamDataManager:
         df = df[~df["value"].str.startswith("$$ER:")]
 
         # Drop rows where currency is NaN only when the API actually provided
-        # currency data — otherwise every row would be dropped.
+        # currency data - otherwise every row would be dropped.
         if has_currency:
             df = df.dropna(subset=["currency"])
 
@@ -541,11 +541,11 @@ class DatastreamDataManager:
         # Standardise column names regardless of MultiIndex depth.
         n_cols = len(long.columns)
         if n_cols == 4:
-            # (Dates, Instrument, Field, value) — no Currency level.
+            # (Dates, Instrument, Field, value) - no Currency level.
             long.columns = ["real_date", "ticker", "field", "value"]
             long["currency"] = pd.NA
         elif n_cols == 5:
-            # (Dates, Instrument, Field, Currency, value) — full MultiIndex.
+            # (Dates, Instrument, Field, Currency, value) - full MultiIndex.
             long.columns = ["real_date", "ticker", "field", "currency", "value"]
         else:
             logger.warning(
@@ -709,9 +709,9 @@ class DatastreamDataManager:
 
         Rules (from DSWS documentation):
 
-        * Single ticker, single field  → plain string ``'VOD'``.
-        * Single ticker, multiple fields → angle-bracket wrapped ``'<VOD>'``.
-        * Multiple tickers             → comma-separated ``'VOD,BP,HSBA'``
+        * Single ticker, single field  -> plain string ``'VOD'``.
+        * Single ticker, multiple fields -> angle-bracket wrapped ``'<VOD>'``.
+        * Multiple tickers             -> comma-separated ``'VOD,BP,HSBA'``
           (regardless of field count).
 
         Parameters
@@ -738,9 +738,9 @@ class DatastreamDataManager:
         Parameters
         ----------
         date : None, str, or datetime
-            * ``None``     → ``'0D'`` (today).
-            * ``datetime`` → ``'YYYY-MM-DD'``.
-            * ``str``      → returned unchanged.
+            * ``None``     -> ``'0D'`` (today).
+            * ``datetime`` -> ``'YYYY-MM-DD'``.
+            * ``str``      -> returned unchanged.
 
         Returns
         -------
@@ -758,9 +758,9 @@ class DatastreamDataManager:
         """Compute chunk sizes that maximise request size within DSWS limits.
 
         Limits enforced:
-        * tickers ≤ :data:`MAX_INSTRUMENTS_PER_REQUEST` (50)
-        * fields  ≤ :data:`MAX_DATATYPES_PER_REQUEST`   (50)
-        * tickers × fields ≤ :data:`MAX_ITEMS_PER_REQUEST` (100)
+        * tickers <= :data:`MAX_INSTRUMENTS_PER_REQUEST` (50)
+        * fields  <= :data:`MAX_DATATYPES_PER_REQUEST`   (50)
+        * tickers x fields <= :data:`MAX_ITEMS_PER_REQUEST` (100)
 
         Parameters
         ----------
@@ -772,7 +772,7 @@ class DatastreamDataManager:
         Returns
         -------
         tuple of (int, int)
-            ``(ticker_chunk_size, field_chunk_size)`` — both guaranteed ≥ 1.
+            ``(ticker_chunk_size, field_chunk_size)`` - both guaranteed >= 1.
         """
         max_t = min(n_tickers, MAX_INSTRUMENTS_PER_REQUEST)
         max_f = min(n_fields, MAX_DATATYPES_PER_REQUEST)
@@ -780,7 +780,7 @@ class DatastreamDataManager:
         if max_t * max_f <= MAX_ITEMS_PER_REQUEST:
             return max_t, max_f
 
-        # Product exceeds 100 — shrink the smaller dimension first.
+        # Product exceeds 100 - shrink the smaller dimension first.
         if n_fields <= n_tickers:
             # More tickers than fields: hold fields constant, reduce tickers.
             f_chunk = max_f
@@ -800,7 +800,7 @@ class DatastreamDataManager:
                     return t_chunk, f_chunk
                 t_chunk -= 1
 
-        # Absolute fallback — should never be reached in practice.
+        # Absolute fallback - should never be reached in practice.
         logger.warning(
             "_compute_chunk_sizes fell through to fallback (1, 1) for "
             "n_tickers=%d, n_fields=%d.",
@@ -833,7 +833,7 @@ class DatastreamDataManager:
             len(tickers), len(fields)
         )
         logger.debug(
-            "_build_chunks: %d tickers / %d fields → chunk sizes (%d, %d).",
+            "_build_chunks: %d tickers / %d fields -> chunk sizes (%d, %d).",
             len(tickers),
             len(fields),
             t_size,

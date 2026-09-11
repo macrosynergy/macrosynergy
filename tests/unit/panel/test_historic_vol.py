@@ -94,7 +94,7 @@ class TestEstimationMethods(unittest.TestCase):
         arr = np.array([0, 0, 7, 0, 0])
         w = expo_weights(len(arr), 3)
         result = sq_std(arr, w, True)
-        self.assertEqual(result, 0.0)  # only one non-zero → std = 0
+        self.assertEqual(result, 0.0)  # only one non-zero -> std = 0
 
 
 class TestAll(unittest.TestCase):
@@ -499,8 +499,8 @@ class TestAll(unittest.TestCase):
         # Daily and monthly should produce the same value whenever they
         # look at the same N most-recent observations. The last data
         # date is always a trigger, so both paths emit a value there.
-        # We compare at that single date per cid — late enough that
-        # warm-up effects are gone — and require exact agreement.
+        # We compare at that single date per cid - late enough that
+        # warm-up effects are gone - and require exact agreement.
         dfd = self._dataframe_with_holiday_gaps()
         common = dict(
             xcat="XR",
