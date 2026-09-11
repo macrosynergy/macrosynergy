@@ -22,11 +22,11 @@ class MultiLayerPerceptron(nn.Module, BaseEstimator):
         Number of output variables. Must be at least 1.
     encoder_activation : str, optional
         Activation function for the encoder layers.
-        Default is "tanh". Other options include "relu" and "sigmoid".
+        Default is "tanh". Other options include "relu", "sigmoid", "gelu" and "silu".
     head_activation : str, optional
         Activation function for the head layers.
-        Default is "identity" for no activation. Other options include "tanh", "relu"
-        and "sigmoid".
+        Default is "identity" for no activation. Other options include "tanh", "relu",
+        "softmax" and "sigmoid".
     fit_encoder_intercept : bool, optional
         Whether to fit intercepts in the encoder layers. Default is False.
     fit_head_intercept : bool, optional
@@ -147,6 +147,9 @@ class MultiLayerPerceptron(nn.Module, BaseEstimator):
         self.activation_map = {
             "tanh": lambda: nn.Tanh(),
             "relu": lambda: nn.ReLU(inplace=True),
+            "gelu": lambda: nn.GELU(),
+            "silu": lambda: nn.SiLU(inplace=True),
+            "softmax": lambda: nn.Softmax(),
             "sigmoid": lambda: nn.Sigmoid(),
             "identity": lambda: nn.Identity(),
         }
@@ -267,16 +270,16 @@ class MultiLayerPerceptron(nn.Module, BaseEstimator):
         # encoder_activation
         if not isinstance(encoder_activation, str):
             raise TypeError("encoder_activation must be a string.")
-        if encoder_activation not in {"tanh", "relu", "sigmoid"}:
+        if encoder_activation not in {"tanh", "relu", "sigmoid", "silu", "gelu"}:
             raise ValueError(
-                "encoder_activation must be one of 'tanh', 'relu', or 'sigmoid'."
+                "encoder_activation must be one of 'tanh', 'relu', 'sigmoid', 'silu', or 'gelu'."
             )
         # head_activation
         if not isinstance(head_activation, str):
             raise TypeError("head_activation must be a string.")
-        if head_activation not in {"tanh", "relu", "sigmoid", "identity"}:
+        if head_activation not in {"tanh", "relu", "sigmoid", "identity", "softmax"}:
             raise ValueError(
-                "head_activation must be one of 'tanh', 'relu', 'sigmoid', or 'identity'."
+                "head_activation must be one of 'tanh', 'relu', 'sigmoid', 'softmax', or 'identity'."
             )
         # fit_encoder_intercept
         if not isinstance(fit_encoder_intercept, bool):
@@ -305,24 +308,13 @@ class MultiLayerPerceptron(nn.Module, BaseEstimator):
         
 if __name__=="__main__":
     print("========================================")
-    print("MLP: 5-32-1 structure, tanh activation")
+    print("MLP: 5-[64,32,16]-1 structure, silu activation, softmax output")
     model = MultiLayerPerceptron(
         n_inputs=5,
-        n_latent = 32,
-        n_outputs=1,
-        dropout_p=0.1,
-    )
-    print(model)
-    print("========================================")
-    print("MLP: 10-[64,32,16]-3 structure, relu activation, sigmoid head, encoder intercept, no head intercept")
-    model = MultiLayerPerceptron(
-        n_inputs=10,
         n_latent = [64,32,16],
-        n_outputs=3,
-        encoder_activation="relu",
-        head_activation="sigmoid",
-        fit_encoder_intercept=True,
-        fit_head_intercept=False,
+        n_outputs=1,
+        encoder_activation="silu",
+        head_activation="softmax",
         dropout_p=0.1,
     )
     print(model)

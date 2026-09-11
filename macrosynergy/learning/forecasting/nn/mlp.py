@@ -6,6 +6,7 @@ import torch.nn as nn
 
 from sklearn.base import BaseEstimator, RegressorMixin
 from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import BaseCrossValidator
 
 from typing import Optional
 import inspect
@@ -19,7 +20,8 @@ import numbers
 
 class MLPRegressor(BaseEstimator, RegressorMixin):
     """
-    Scikit-learn compatible multi-layer perceptron, implemented in PyTorch.
+    Multi-layer perceptron/feed-forward neural network, implemented in PyTorch, for use 
+    within the `scikit-learn` API.
 
     Parameters
     ----------
@@ -28,53 +30,48 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         If an integer is provided, the MLP will have a single hidden layer with n_latent
         units. If a list of integers is provided, the MLP will have multiple hidden layers
         with the number of units in each layer specified by the corresponding element in
-        the list. If provided, all (n_latent, fit_encoder_intercept, fit_head_intercept, encoder_activation, head_activation, dropout_p, dollar_neutral, normalization)
+        the list. If provided, all (n_latent, fit_encoder_intercept, fit_head_intercept, encoder_activation, head_activation)
         must be specified and torch_model must be None. Default is 32.
     fit_encoder_intercept : bool, optional
         Whether to include an intercept (bias term) in the encoder layers of the MLP.
-        If provided, all (n_latent, fit_encoder_intercept, fit_head_intercept, encoder_activation, head_activation, dropout_p, dollar_neutral, normalization)
+        If provided, all (n_latent, fit_encoder_intercept, fit_head_intercept, encoder_activation, head_activation)
         must be specified and torch_model must be None. Default is True.
     fit_head_intercept : bool, optional
         Whether to include an intercept (bias term) in the output layer of the MLP.
-        If provided, all (n_latent, fit_encoder_intercept, fit_head_intercept, encoder_activation, head_activation, dropout_p, dollar_neutral, normalization)
-        must be specified and torch_model must be None.Default is True.
+        If provided, all (n_latent, fit_encoder_intercept, fit_head_intercept, encoder_activation, head_activation)
+        must be specified and torch_model must be None. Default is True.
     encoder_activation : str, optional
         Activation function for the encoder (hidden) component of the network.
-        If provided, all (n_latent, fit_encoder_intercept, fit_head_intercept, encoder_activation, head_activation, dropout_p, dollar_neutral, normalization)
+        If provided, all (n_latent, fit_encoder_intercept, fit_head_intercept, encoder_activation, head_activation)
         must be specified and torch_model must be None. Default is "relu".
-        Must be one of "tanh", "relu", or "sigmoid".
+        Must be one of "tanh", "relu", "sigmoid", "gelu" or "silu".
     head_activation : str, optional
         Activation function for the head (output) component of the network.
-        If provided, all (n_latent, fit_encoder_intercept, fit_head_intercept, encoder_activation, head_activation, dropout_p, dollar_neutral, normalization)
+        If provided, all (n_latent, fit_encoder_intercept, fit_head_intercept, encoder_activation, head_activation)
         must be specified and torch_model must be None. Default is "identity". Must be one
-        of "tanh", "relu", "sigmoid", or "identity".
+        of "tanh", "relu", "sigmoid", "softmax" or "identity".
+    signal_modifier : nn.Module, optional
+        Module to modify the output of the neural network in accordance with the intention of the trading strategy and the loss function. 
+        For example, `nn.Softmax(dim = 1)` is appropriate for a long-only strategy with a unit sum requirement
+        and a portfolio-wide loss function. If provided, all (n_latent, fit_encoder_intercept, fit_head_intercept, encoder_activation, head_activation)
+        must be specified and torch_model must be None. Default is None.
+    head_rank : int, optional
+        Rank of the head (output) component of the network. This makes sense only for
+        multi-output neural networks. If provided, all (n_latent, fit_encoder_intercept, fit_head_intercept, encoder_activation, head_activation)
+        must be specified and torch_model must be None. Default is None.
     dropout_p : float, optional
         Dropout probability for the encoder (hidden) component of the network.
-        If provided, all (n_latent, fit_encoder_intercept, fit_head_intercept, encoder_activation, head_activation, dropout_p, dollar_neutral, normalization)
+        If provided, all (n_latent, fit_encoder_intercept, fit_head_intercept, encoder_activation, head_activation)
         must be specified and torch_model must be None. Default is 0.
-    long_only : bool, optional
-        Whether to constrain the model outputs to sum to 1 or for the absolute values
-        to sum to 1. If None, the model outputs are unconstrained. If True, the output 
-        from the `head_activation` layer is passed through a softmax function. If False,
-        the output from the `head_activation` layer is passed through a softmax function
-        with the denominator accepting the absolute values of the outputs. If provided,
-        all (n_latent, fit_encoder_intercept, fit_head_intercept, encoder_activation, head_activation, dropout_p, dollar_neutral, normalization)
-        must be specified and torch_model must be None. Default is None.
-    dollar_neutral : bool, optional
-        Whether to constrain the model outputs to sum to 0. This is only relevant when `long_only` is False.
-        When True and `long_only` is False, the output from the `head_activation` layer is
-        demeaned to sum to 0, before being passed through the adjusted softmax. 
-        If provided, all (n_latent, fit_encoder_intercept, fit_head_intercept, encoder_activation, head_activation, dropout_p, dollar_neutral, normalization)
-        must be specified, `long_only` should be False and torch_model must be None. Default is False.
     normalization: str, optional
         Whether to apply normalization following each linear layer in the encoder (hidden) component of the network.
-        Can be either "layer" for LayerNorm, "batch" for BatchNorm, or "none" for no normalization.
-        If provided, all (n_latent, fit_encoder_intercept, fit_head_intercept, encoder_activation, head_activation, dropout_p, dollar_neutral, normalization)
+        Can be either "layer" for LayerNorm or "batch" for BatchNorm.
+        If provided, all (n_latent, fit_encoder_intercept, fit_head_intercept, encoder_activation, head_activation)
         must be specified and torch_model must be None. Default is None.
     torch_model : Intersection[torch.nn.Module, BaseEstimator], optional
         Custom PyTorch model to use instead of the default MLP. Must be a subclass of both
         torch.nn.Module and sklearn.base.BaseEstimator. If torch_model is provided, all 
-        parameters (n_latent, fit_encoder_intercept, fit_head_intercept, encoder_activation, head_activation, dropout_p, long_only, dollar_neutral, normalization)
+        parameters (n_latent, fit_encoder_intercept, fit_head_intercept, encoder_activation, head_activation, dropout_p, head_rank, signal_modifier, normalization)
         must be None. Default is None.
     loss_func : torch.nn.Module, optional
         Loss function used during training. Must be a subclass of torch.nn.Module.
@@ -110,10 +107,13 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
     epochs : int, optional
         Maximum number of training epochs. Default is 10000.
     patience : int, optional
-        Number of epochs to wait for improvement before early stopping. Default is 1000.
-    train_pct : float, optional
-        Fraction of samples used for training (remainder used for validation). This is
-        needed for the early stopping process. Default is 0.7.
+        Number of epochs to wait for improvement before early stopping. If None, 
+        early stopping is disabled. Default is 1000.
+    train_splitter : float or BaseCrossValidator, optional
+        If a float, it is the fraction of samples used for training (remainder used for
+        validation). If a BaseCrossValidator, it is used to split the data into training
+        and validation sets. This is needed to estimate the number of epochs to terminate
+        training. If patience is None, this parameter is ignored. Default is 0.7.
     x_scaler : Optional[TransformerMixin], optional
         Scaler for the input features. Must be a subclass of sklearn's TransformerMixin.
         This can also be set to None.
@@ -255,9 +255,9 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         fit_head_intercept = True,
         encoder_activation = "relu",
         head_activation = "identity",
+        signal_modifier = None,
+        head_rank = None,
         dropout_p = 0,
-        long_only = None,
-        dollar_neutral = False,
         normalization = "none",
         torch_model = None,
         # Neural network training dynamics
@@ -273,7 +273,7 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         drop_last = False,
         epochs = 10000, # NOTE: when a scheduler is used, the epochs default is way too high unless the patience is high
         patience = 1000,
-        train_pct = 0.7,
+        train_splitter = 0.7,
         x_scaler = StandardScaler(with_mean=False),
         y_scaler = StandardScaler(with_mean=False), 
         refit = False,
@@ -285,36 +285,36 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
     ):
         # Checks 
         self._check_init_params(
-            n_latent,
-            fit_encoder_intercept,
-            fit_head_intercept,
-            encoder_activation,
-            head_activation,
-            dropout_p,
-            long_only,
-            dollar_neutral,
-            normalization,
-            torch_model,
-            loss_func,
-            optimizer,
-            scheduler,
-            batch_size,
-            learning_rate,
-            weight_decay,
-            reg_turnover,
-            use_ts_sampler,
-            aggregate_last,
-            drop_last,
-            epochs,
-            patience,
-            train_pct,
-            x_scaler,
-            y_scaler,
-            refit,
-            verbose,
-            random_state,
-            inverse_transform_preds,
-            min_samples,
+            n_latent = n_latent,
+            fit_encoder_intercept = fit_encoder_intercept,
+            fit_head_intercept = fit_head_intercept,
+            encoder_activation = encoder_activation,
+            head_activation = head_activation,
+            signal_modifier = signal_modifier,
+            head_rank = head_rank,
+            dropout_p = dropout_p,
+            normalization = normalization,
+            torch_model = torch_model,
+            loss_func = loss_func,
+            optimizer = optimizer,
+            scheduler = scheduler,
+            batch_size = batch_size,
+            learning_rate = learning_rate,
+            weight_decay = weight_decay,
+            reg_turnover = reg_turnover,
+            use_ts_sampler = use_ts_sampler,
+            aggregate_last = aggregate_last,
+            drop_last = drop_last,
+            epochs = epochs,
+            patience = patience,
+            train_splitter = train_splitter,
+            x_scaler = x_scaler,
+            y_scaler = y_scaler,
+            refit = refit,
+            verbose = verbose,
+            random_state = random_state,
+            inverse_transform_preds = inverse_transform_preds,
+            min_samples = min_samples,
         )
 
         # Attributes
@@ -323,9 +323,9 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         self.fit_head_intercept = fit_head_intercept
         self.encoder_activation = encoder_activation
         self.head_activation = head_activation
+        self.signal_modifier = signal_modifier
+        self.head_rank = head_rank
         self.dropout_p = dropout_p
-        self.long_only = long_only
-        self.dollar_neutral = dollar_neutral
         self.normalization = normalization
         self.torch_model = torch_model
         self.loss_func = loss_func
@@ -341,7 +341,7 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         self.drop_last = drop_last
         self.epochs = epochs
         self.patience = patience
-        self.train_pct = train_pct
+        self.train_splitter = train_splitter
         self.x_scaler = x_scaler
         self.y_scaler = y_scaler
         self.refit = refit
@@ -365,6 +365,7 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
 
         self.early_stopping_dynamics = {}
         self.early_stopping_inference = {}
+        self.final_model_inference = {}
 
         # Data checks
         # TODO: if torch_model is provided, check it has the right structure 
@@ -378,19 +379,17 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
 
         y = y[self.targets]
 
-        # Check this doesn't interfere with dollar neutrality constraint
-        if self.dollar_neutral and self.n_targets < 3:
-            raise ValueError("Dollar neutrality constraint requires at least 3 assets to be predicted.")
+        if self.patience is not None:
+            # Create training and validation splits
+            X_trains, X_valids, y_trains, y_valids = self.create_train_valid_splits(X, y, self.train_splitter)
 
-        # Create training and validation splits
-        X_train, X_valid, y_train, y_valid = self.create_train_valid_splits(X, y, self.train_pct)
+            # Scale training and validation splits for each fold 
+            X_trains_s, y_trains_s, X_valids_s, y_valids_s = self.scale_data(X_trains, y_trains, self.x_scaler, self.y_scaler, X_valids, y_valids)
 
-        # Scale training and validation splits
-        X_train_s, y_train_s, X_valid_s, y_valid_s = self.scale_data(X_train, y_train, self.x_scaler, self.y_scaler, X_valid, y_valid)
+            # Make tensor datasets for each fold 
+            train_datasets, valid_datasets = self.make_tensor_datasets(X_trains_s, y_trains_s, X_valids_s, y_valids_s, sample_weight)
 
-        # Make tensor datasets
-        train_dataset, valid_dataset = self.make_tensor_datasets(X_train_s, y_train_s, X_valid_s, y_valid_s, sample_weight)
-
+        
         # Iterate through random states
         for optim_idx, optimizer in enumerate(self.optimizers):
             for random_state_idx, random_state in enumerate(self.random_states):
@@ -1060,9 +1059,9 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         fit_head_intercept,
         encoder_activation,
         head_activation,
+        signal_modifier,
+        head_rank,
         dropout_p,
-        long_only,
-        dollar_neutral,
         normalization,
         torch_model,
         loss_func,
@@ -1077,7 +1076,7 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         drop_last,
         epochs,
         patience,
-        train_pct,
+        train_splitter,
         x_scaler,
         y_scaler,
         refit,
@@ -1088,14 +1087,14 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
     ):
         # First check either torch_model is set or (n_latent, fit_encoder_intercept, fit_head_intercept, encoder_activation, head_activation) are set.
         if torch_model is None:
-            if n_latent is None or fit_encoder_intercept is None or fit_head_intercept is None or encoder_activation is None or head_activation is None or dropout_p is None or dollar_neutral is None or normalization is None:
+            if n_latent is None or fit_encoder_intercept is None or fit_head_intercept is None or encoder_activation is None or head_activation is None:
                 raise ValueError(
-                    "When torch_model is not provided, (n_latent, fit_encoder_intercept, fit_head_intercept, encoder_activation, head_activation, dropout_p, dollar_neutral, normalization) must all be specified."
+                    "When torch_model is not provided, (n_latent, fit_encoder_intercept, fit_head_intercept, encoder_activation, head_activation) must all be specified."
                 )
         else:
-            if n_latent is not None or fit_encoder_intercept is not None or fit_head_intercept is not None or encoder_activation is not None or head_activation is not None or dropout_p is not None or long_only is not None or dollar_neutral is not None or normalization is not None:
+            if n_latent is not None or fit_encoder_intercept is not None or fit_head_intercept is not None or encoder_activation is not None or head_activation is not None or signal_modifier is not None or dropout_p is not None or normalization is not None or head_rank is not None:
                 raise ValueError(
-                    "When torch_model is provided, (n_latent, fit_encoder_intercept, fit_head_intercept, encoder_activation, head_activation, dropout_p, long_only, dollar_neutral, normalization) should be set to None."
+                    "When torch_model is provided, (n_latent, fit_encoder_intercept, fit_head_intercept, encoder_activation, head_activation, signal_modifier, dropout_p, normalization, head_rank) should be set to None."
                 )
             
         if torch_model is None:
@@ -1136,30 +1135,54 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
                 raise ValueError(
                     "head_activation must be one of 'tanh', 'relu', 'sigmoid', or 'identity'."
                 )
-        
+
+            # signal_modifier 
+            if signal_modifier is not None:
+                if not isinstance(signal_modifier, nn.Module):
+                    raise TypeError("signal_modifier must be an instance of torch.nn.Module or None.")
+                # this will be the final layer in a neural net so associated checks that it can be used are needed
+                if not hasattr(signal_modifier, "forward"):
+                    raise ValueError("signal_modifier must have a forward method.")
+                if not hasattr(signal_modifier, "backward"):
+                    raise ValueError("signal_modifier must have a backward method.")
+                if not callable(signal_modifier.forward):
+                    raise ValueError("signal_modifier.forward must be callable.")
+                if not callable(signal_modifier.backward):
+                    raise ValueError("signal_modifier.backward must be callable.")
+
+            # head_rank
+            if head_rank is not None:
+                if not isinstance(head_rank, int):
+                    raise TypeError("head_rank must be an integer.")
+                if head_rank <= 0:
+                    raise ValueError("head_rank must be a positive integer.")
+
             # dropout_p
-            if not isinstance(dropout_p, numbers.Real):
-                raise TypeError("dropout_p must be a real number.")
-            if not (0 <= dropout_p < 0.5):
-                raise ValueError("dropout_p must be between 0 and 0.5.")
-            
-            # long_only
-            if long_only is not None:
-                if not isinstance(long_only, bool):
-                    raise TypeError("long_only must be a boolean or None.")
-                
-            # dollar_neutral
-            if not isinstance(dollar_neutral, bool):
-                raise TypeError("dollar_neutral must be a boolean.")
-            if dollar_neutral:
-                if long_only is None or long_only:
-                    raise ValueError("dollar_neutral can only be True if long_only is False.")
+            if dropout_p is not None:
+                if not isinstance(dropout_p, (numbers.Real, list)):
+                    raise TypeError("dropout_p must be a real number or a list.")
+                if isinstance(dropout_p, numbers.Real):
+                    if not (0 <= dropout_p < 1):
+                        raise ValueError("dropout_p must be between 0 and 1.")
+                else:
+                    if len(dropout_p) == 0:
+                        raise ValueError("dropout_p list must not be empty.")
+                    if type(n_latent) is not list:
+                        raise TypeError("n_latent must be a list when dropout_p is a list.")
+                    if len(dropout_p) != len(n_latent):
+                        raise ValueError("dropout_p list must have the same length as n_latent list.")
+                    for p in dropout_p:
+                        if not isinstance(p, numbers.Real):
+                            raise TypeError("Each element in dropout_p list must be a real number.")
+                        if not (0 <= p < 1):
+                            raise ValueError("Each element in dropout_p list must be between 0 (inclusive) and 1 (exclusive).")
+        
             # normalization
-            if normalization != "none":
+            if normalization is not None:
                 if not isinstance(normalization, str):
                     raise TypeError("normalization must be a string.")
-                if normalization not in {"batch", "layer", "none"}:
-                    raise ValueError("normalization must be one of 'batch', 'layer', or 'none'.")
+                if normalization not in {"batch", "layer"}:
+                    raise ValueError("normalization must be one of 'batch' or 'layer'.")
         
         # torch_model
         if torch_model is not None:
@@ -1256,17 +1279,19 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
             raise ValueError("epochs must be at least 1.")
         
         # patience
-        if not isinstance(patience, numbers.Integral):
-            raise TypeError("patience must be an integer.")
-        if patience < 1:
-            raise ValueError("patience must be at least 1.")
+        if patience is not None:
+            if not isinstance(patience, numbers.Integral):
+                raise TypeError("patience must be an integer.")
+            if patience < 1:
+                raise ValueError("patience must be at least 1.")
         
-        # train_pct
-        if not isinstance(train_pct, numbers.Real):
-            raise TypeError("train_pct must be a real number.")
-        if not (0 < train_pct < 1):
-            raise ValueError("train_pct must be between 0 and 1.")
-        
+        # train_splitter
+        if not isinstance(train_splitter, (numbers.Real, BaseCrossValidator)):
+            raise TypeError("train_splitter must be either a real number or an instance of BaseCrossValidator from scikit-learn.")
+        if isinstance(train_splitter, numbers.Real):
+            if not (0 < train_splitter < 1):
+                raise ValueError("train_splitter must be between 0 and 1.")
+
         # x_scaler
         if x_scaler is not None:
             if not isinstance(x_scaler, StandardScaler):
