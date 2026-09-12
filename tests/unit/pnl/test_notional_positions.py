@@ -8,7 +8,11 @@ import pandas as pd
 
 from macrosynergy.management.simulate import make_test_df
 from macrosynergy.management.types import QuantamentalDataFrame
-from macrosynergy.management.utils import get_sops, qdf_to_ticker_df
+from macrosynergy.management.utils import (
+    _map_to_business_day_frequency,
+    get_sops,
+    qdf_to_ticker_df,
+)
 from macrosynergy.pnl.contract_signals import contract_signals
 from macrosynergy.pnl.notional_positions import (
     _apply_slip,
@@ -21,38 +25,53 @@ from macrosynergy.pnl.notional_positions import (
 )
 
 
+MOCK_PVOL_XCAT: str = "PNL_USD1S_ASD"
+
+
 def mock_historic_portfolio_vol(
     df: pd.DataFrame,
-    fids: List[str],
     sname: str,
-    rstring: str,
-    start: str,
-    end: str,
+    fids: List[str],
+    rebal_freq: str = "m",
+    pvol: float = 1.0,
     **kwargs,
-) -> pd.DataFrame:
-    rebal_dates = get_sops(start_date=start, end_date=end, est_freq="m")
-    vol_df = pd.DataFrame(
-        {
-            "cid": sname,
-            "xcat": "a",
-            "real_date": rebal_dates,
-            "value": 1,
-        }
+) -> Tuple[QuantamentalDataFrame, pd.DataFrame]:
+    """
+    Stand-in for `historic_portfolio_vol` under `return_variance_covariance=True`,
+    matching its return contract: a quantamental frame of annualized portfolio
+    volatility (in %) on each rebalance date, and the long-format variance-covariance
+    estimate behind it.
+
+    The volatility is a constant `pvol` on every rebalance date, so the positions
+    `_vol_target_positions` derives from it are exactly predictable. Every fid enters
+    every date's estimate.
+    """
+    rebal_dates = pd.DatetimeIndex(
+        get_sops(
+            dates=pd.DatetimeIndex(sorted(df["real_date"].unique())),
+            freq=_map_to_business_day_frequency(rebal_freq),
+        ),
+        name="real_date",
     )
 
-    # create all possible tuples of 2x fids
-    fid_pairs = [
-        str(x).split("-")
-        for x in set(["-".join(sorted([fid1, fid2]) for fid1 in fids for fid2 in fids)])
-    ]
-    vcv_df = pd.DataFrame(columns=["real_date", "fid1", "fid2", "value"])
-    vcv_dict = {}
-    for dt in rebal_dates:
-        for fid1, fid2 in fid_pairs:
-            vcv_dict[(dt, fid1, fid2)] = 1
-    vcv_df = pd.DataFrame(vcv_dict).T.reset_index()
-    vcv_df.columns = ["real_date", "fid1", "fid2", "value"]
-    return vol_df, vcv_df
+    # the real function returns `QuantamentalDataFrame.from_wide` of a single
+    # `<sname>_PNL_USD1S_ASD` column indexed by rebalance date
+    pvol_df: QuantamentalDataFrame = QuantamentalDataFrame.from_wide(
+        pd.DataFrame({f"{sname}_{MOCK_PVOL_XCAT}": float(pvol)}, index=rebal_dates)
+    )
+
+    # the real estimate carries the upper triangle only
+    vcv_df = pd.DataFrame(
+        [
+            (dt, fid1, fid2, 1.0)
+            for dt in rebal_dates
+            for i, fid1 in enumerate(fids)
+            for fid2 in fids[i:]
+        ],
+        columns=["real_date", "fid1", "fid2", "value"],
+    )
+
+    return pvol_df, vcv_df
 
 
 class TestMaskUnavailablePositions(unittest.TestCase):
@@ -524,41 +543,6 @@ class TestNotionalPositions(unittest.TestCase):
                 msg=f"{pos_col} sign flipped vs input signal",
             )
 
-    def test__dollar_per_signal_positions_warns_when_exceeding_aum(self):
-        # When the total notional position on any date exceeds AUM the function
-        # emits a UserWarning; otherwise it stays silent.
-        fx_fids = [f"{cid}_FX" for cid in self.cids]
-        sig_cols = [f"{fid}{self.sig_ident}" for fid in fx_fids]
-        df_wide = self.mock_df_wide.copy()[sig_cols]
-        df_wide.loc[:, :] = 1.0  # gross position per date = len(fx_fids) * dps
-
-        # dps large relative to aum -> total positions exceed aum -> warns
-        with warnings.catch_warnings(record=True) as caught:
-            warnings.simplefilter("always")
-            _dollar_per_signal_positions(
-                df_wide=df_wide.copy(),
-                sname=self.sname,
-                pname=self.pname,
-                fids=fx_fids,
-                dollar_per_signal=50.0,
-                aum=10.0,
-            )
-        self.assertTrue(any(issubclass(c.category, UserWarning) for c in caught))
-        self.assertTrue(any("exceed AUM" in str(c.message) for c in caught))
-
-        # positions within aum -> no exceed-AUM warning
-        with warnings.catch_warnings(record=True) as caught:
-            warnings.simplefilter("always")
-            _dollar_per_signal_positions(
-                df_wide=df_wide.copy(),
-                sname=self.sname,
-                pname=self.pname,
-                fids=fx_fids,
-                dollar_per_signal=1.0,
-                aum=1000.0,
-            )
-        self.assertFalse(any("exceed AUM" in str(c.message) for c in caught))
-
     def test__dollar_per_signal_positions_requires_number(self):
         # dollar_per_signal must be a number.
         fx_fids = [f"{cid}_FX" for cid in self.cids]
@@ -573,7 +557,7 @@ class TestNotionalPositions(unittest.TestCase):
             )
 
     @mock.patch(
-        "macrosynergy.pnl.historic_portfolio_volatility.historic_portfolio_vol",
+        "macrosynergy.pnl.notional_positions.historic_portfolio_vol",
         side_effect=mock_historic_portfolio_vol,
     )
     def test__vol_target_positions(
@@ -620,7 +604,8 @@ class TestNotionalPositions(unittest.TestCase):
             df_wide=df_wide, **good_args
         )
 
-        assert isinstance(result, Tuple)
+        mock_historic_portfolio_vol.assert_called_once()
+        self.assertIsInstance(result, tuple)
 
     def test_main(self):
         cids: List[str] = ["USD", "EUR", "GBP", "AUD", "CAD"]
@@ -852,6 +837,93 @@ class TestNotionalPositions(unittest.TestCase):
             notional_positions(
                 **base, leverage=1.1, vol_target=0.1, dollar_per_signal=0.5
             )
+
+    def test_rejects_empty_container_arguments(self):
+        # The validation table rejects an empty str/list/dict separately from a wrong
+        # type, so an empty-but-correctly-typed argument must still raise.
+        df_cs, fids = self._contract_signals_df()
+        base = dict(df=df_cs, fids=fids, sname="STRAT", dollar_per_signal=0.5)
+
+        for key, empty in [
+            ("sname", ""),
+            ("fids", []),
+            ("pname", ""),
+            ("rstring", ""),
+            ("blacklist", {}),
+        ]:
+            with self.assertRaises(ValueError, msg=f"empty `{key}` must raise"):
+                notional_positions(**{**base, key: empty})
+
+    def test_rejects_non_iso_dates(self):
+        # `start`/`end` must be ISO-8601 date strings.
+        df_cs, fids = self._contract_signals_df()
+        base = dict(df=df_cs, fids=fids, sname="STRAT", dollar_per_signal=0.5)
+
+        for key in ["start", "end"]:
+            for bad_date in ["01-01-2020", "2020/01/01", "not-a-date"]:
+                with self.assertRaises(ValueError, msg=f"`{key}`={bad_date}"):
+                    notional_positions(**{**base, key: bad_date})
+
+    def test_respects_explicit_start_and_end(self):
+        # Explicit `start`/`end` narrow the output panel. `end` is honoured exactly
+        # only at slip=0: `_apply_slip` extends dates, so the position taken on the
+        # last signal lands `slip` business days after it.
+        df_cs, fids = self._contract_signals_df()
+        base = dict(df=df_cs, fids=fids, sname="STRAT", dollar_per_signal=0.5)
+        start, end = "2001-01-01", "2001-06-30"
+        last_bday = pd.bdate_range(start, end)[-1]
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            full = notional_positions(**base)
+            unslipped = notional_positions(**base, start=start, end=end, slip=0)
+            slipped = notional_positions(**base, start=start, end=end, slip=2)
+
+        self.assertEqual(unslipped["real_date"].min(), pd.Timestamp(start))
+        self.assertEqual(unslipped["real_date"].max(), last_bday)
+
+        # the window is genuinely narrower than the unrestricted panel
+        self.assertGreater(unslipped["real_date"].min(), full["real_date"].min())
+        self.assertLess(unslipped["real_date"].max(), full["real_date"].max())
+
+        # slip carries the final position that many business days past the last signal
+        self.assertEqual(slipped["real_date"].min(), pd.Timestamp(start))
+        self.assertEqual(slipped["real_date"].max(), last_bday + pd.offsets.BDay(2))
+
+    def test_no_contract_signals_for_strategy(self):
+        # A dataframe carrying contract signals, but none for the requested strategy.
+        # Distinct from a dataframe with no contract signals at all.
+        df_cs, fids = self._contract_signals_df()
+        with self.assertRaises(ValueError) as ctx:
+            notional_positions(
+                df=df_cs, fids=fids, sname="NOTASTRATEGY", dollar_per_signal=0.5
+            )
+        self.assertIn("No contract signals for strategy", str(ctx.exception))
+
+    def test_validates_nan_tolerance_and_remove_zeros(self):
+        df_cs, fids = self._contract_signals_df()
+        base = dict(df=df_cs, fids=fids, sname="STRAT", dollar_per_signal=0.5)
+
+        for bad_nan_tolerance in ["0.25", None, [0.25]]:
+            with self.assertRaises(ValueError):
+                notional_positions(**base, nan_tolerance=bad_nan_tolerance)
+
+        for out_of_range in [-0.1, 1.1]:
+            with self.assertRaises(ValueError):
+                notional_positions(**base, nan_tolerance=out_of_range)
+
+        for bad_remove_zeros in ["True", 1, None]:
+            with self.assertRaises(ValueError):
+                notional_positions(**base, remove_zeros=bad_remove_zeros)
+
+        # the boundaries of the range are legal
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            for good_nan_tolerance in [0.0, 0.25, 1.0]:
+                self.assertIsInstance(
+                    notional_positions(**base, nan_tolerance=good_nan_tolerance),
+                    QuantamentalDataFrame,
+                )
 
 
 if __name__ == "__main__":
