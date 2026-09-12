@@ -19,49 +19,6 @@ from macrosynergy.management.utils import (
 from macrosynergy.management.types import QuantamentalDataFrame
 
 
-def cost_dicts_to_dataframe(data):
-    xcat_map = {
-        ("size", "median"): "SIZE_MEDIAN",
-        ("size", "pct90"): "SIZE_90PCTL",
-        ("bid_offer", "median"): "BIDOFFER_MEDIAN",
-        ("bid_offer", "pct90"): "BIDOFFER_90PCTL",
-        ("rollcost", "median"): "ROLLCOST_MEDIAN",
-        ("rollcost", "pct90"): "ROLLCOST_90PCTL",
-    }
-
-    rows = []
-
-    for item in data:
-        fid = item["fid"]
-        cid = fid[:3]
-
-        dates = pd.date_range(
-            start=item["start"],
-            end=item["end"],
-            freq="D",
-        )
-
-        for (category, statistic), suffix in xcat_map.items():
-            value = item[category][statistic]
-            xcat = f"{fid.split('_')[-1]}{suffix}"
-
-            rows.extend(
-                {
-                    "real_date": date,
-                    "cid": cid,
-                    "xcat": xcat,
-                    "value": value,
-                }
-                for date in dates
-            )
-
-    out_df = pd.DataFrame(
-        rows,
-        columns=["real_date", "cid", "xcat", "value"],
-    )
-
-    return out_df
-
 def get_fids(df: QuantamentalDataFrame) -> list:
     def repl(x: str, yL: List[str]) -> str:
         for y in yL:
@@ -640,6 +597,7 @@ class TransactionCostsDictAdapter:
         title: str = "Implied roll costs by size",
         xlabel: str = "Fid",
         ylabel: str = "Roll size (USD millions)",
+        fids: Optional[List[str]] = None,
         fid_names: Optional[Dict[str, str]] = None,
         figsize: Tuple[float, float] = (10, 5),
         show_as_bps: bool = False,
@@ -647,7 +605,7 @@ class TransactionCostsDictAdapter:
     ) -> None:
         _costs_heatmap(
             cost_calculator=self.rollcost,
-            fids=self.fids,
+            fids=self.fids if fids is None else fids,
             trade_sizes=trade_sizes,
             fid_names=fid_names,
             title=title,
