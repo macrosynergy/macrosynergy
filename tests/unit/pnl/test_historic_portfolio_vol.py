@@ -1,5 +1,6 @@
 """Test historical volatility estimates with simulate returns from random normal distribution"""
 
+import logging
 import unittest
 import pandas as pd
 import numpy as np
@@ -23,6 +24,8 @@ from macrosynergy.pnl.historic_portfolio_volatility import (
     _check_input_arguments,
     _get_first_usable_date,
     _bdays_per_period,
+    _nan_frac_since_first_obs,
+    _blend_frequency_vcvs,
     RETURN_SERIES_XCAT,
 )
 from macrosynergy.management.utils import qdf_to_ticker_df, get_sops
@@ -599,11 +602,18 @@ class TestCalculatePortfolioVolatility(unittest.TestCase):
         signals = self.signals[["GBP_FX"]]
         pvol = self._vol(pivot_returns=returns, pivot_signals=signals)
 
+        observed = pvol["PORTFOLIO"].dropna()
+        self.assertGreater(len(observed), 0)
+
         expected = {}
         lback_periods = self.good_args["lback_periods"][0]
         est_freq = self.good_args["est_freqs"][0]
-        for date in pvol.index:
-            window = returns.loc[date - pd.offsets.BDay(lback_periods) : date]
+        for date in observed.index:
+            window = returns.loc[
+                (returns.index >= date - pd.offsets.BDay(lback_periods))
+                & (returns.index < date)
+            ]
+            self.assertEqual(len(window), lback_periods)
             cov = estimate_variance_covariance(
                 piv_ret=_downsample_returns(window, freq=est_freq),
                 remove_zeros=False,
@@ -614,9 +624,6 @@ class TestCalculatePortfolioVolatility(unittest.TestCase):
             )
             assert cov.shape == (1, 1)
             expected[date] = np.sqrt(ANNUALIZATION_FACTORS["D"] * cov.iloc[0, 0])
-
-        observed = pvol["PORTFOLIO"].dropna()
-        self.assertGreater(len(observed), 0)
         np.testing.assert_allclose(
             observed.to_numpy(),
             np.array([expected[d] for d in observed.index]),
@@ -790,10 +797,34 @@ class TestCalculatePortfolioVolatility(unittest.TestCase):
     def test_lookback_too_short_for_fid_count_raises(self):
         with self.assertRaisesRegex(
             ValueError,
-            expected_regex="4 data points are required to compute a covariance "
-                           "matrix for 3 fids, but only found 2",
+            expected_regex=r"`lback_periods` of 2 at est_freq 'W' cannot support "
+                           r"3 contracts",
         ):
             self._vol(est_freqs=["W"], lback_periods=[2], half_life=[2])
+
+    def test_lookback_is_checked_before_any_estimation(self):
+        """
+        The contract count grows as contracts accumulate history, so a lookback that is
+        adequate at the first estimation dates can become impossible later
+        """
+        returns = self.returns.copy()
+        # only AUD is available early on, where a 2-period lookback would be fine
+        returns.loc[returns.index < self.idx[200], "CAD_FX"] = np.nan
+        returns.loc[returns.index < self.idx[300], "GBP_FX"] = np.nan
+
+        with mock.patch(
+            "macrosynergy.pnl.historic_portfolio_volatility"
+            "._calculate_multi_frequency_vcv_for_period"
+        ) as mock_vcv:
+            with self.assertRaises(ValueError):
+                self._vol(
+                    pivot_returns=returns,
+                    est_freqs=["W"],
+                    lback_periods=[2],
+                    half_life=[2],
+                )
+
+        mock_vcv.assert_not_called()
 
     def test_recovers_known_annualised_vol(self):
         base_vol = np.array([0.01, 0.02, 0.05])
@@ -896,27 +927,53 @@ class TestHistVolFunc(unittest.TestCase):
             with self.assertRaises(NotImplementedError):
                 _hist_vol(**{**self.good_args, "lback_meth": lbmeth})
 
-    def test_nan_warning(self):
-        def _mock_calc_vol(**kwargs):
-            return [
-                pd.DataFrame(
-                    index=self._dft.index,
-                    data=np.nan,
-                    columns=[self.portfolio_return_name],
-                ),
-                None,
-            ]
-
+    def _run_with_nan_dates(self, dates, nan_dates, **kwargs):
+        """
+        Run `_hist_vol` against a volatility series that has no estimate on `nan_dates`.
+        """
+        pvol = pd.DataFrame(1.0, index=dates, columns=[self.portfolio_return_name])
+        pvol.loc[nan_dates] = np.nan
         with mock.patch(
-            "macrosynergy.pnl.historic_portfolio_volatility._calculate_portfolio_volatility",
-            side_effect=_mock_calc_vol,
-        ) as mock_calc_vol:
-            with mock.patch(
-                "logging.Logger.warning",
-                side_effect=mock.MagicMock(),
-            ) as mock_warning:
-                _hist_vol(**self.good_args)
-                self.assertTrue(mock_warning.called)
+            "macrosynergy.pnl.historic_portfolio_volatility"
+            "._calculate_portfolio_volatility",
+            side_effect=lambda **_: [pvol.copy(), None],
+        ):
+            return _hist_vol(**{**self.good_args, **kwargs})
+
+    def test_dates_without_an_estimate_are_dropped(self):
+        """
+        A rebalance date the covariance history could not estimate arrives as NaN and
+        must not reach the caller, while the dates that were estimated pass through.
+        """
+        dates = self._dft.index
+
+        res = self._run_with_nan_dates(dates, dates[:5])
+        self.assertEqual(res[0].index.tolist(), dates[5:].tolist())
+        self.assertFalse(res[0][self.portfolio_return_name].isna().any())
+
+        # nothing estimated anywhere leaves an empty frame, not a column of NaNs
+        res = self._run_with_nan_dates(dates, dates)
+        self.assertTrue(res[0].empty)
+
+    def test_missing_estimates_are_reported_at_info(self):
+        """
+        Every warm-up date produces a NaN, so dropping them is routine rather than
+        exceptional: it is reported, but must not raise a warning on an ordinary run.
+        """
+        module = "macrosynergy.pnl.historic_portfolio_volatility"
+        dates = self._dft.index
+
+        with self.assertLogs(module, level="INFO") as captured:
+            self._run_with_nan_dates(dates, dates[:5])
+
+        self.assertTrue(
+            any("dropping all NaNs" in msg for msg in captured.output),
+            "dropped rebalance dates were not reported at all",
+        )
+        self.assertEqual(
+            [r.getMessage() for r in captured.records if r.levelno >= logging.WARNING],
+            [],
+        )
 
 
 class TestHistVolEntrypoint(unittest.TestCase):
@@ -1138,6 +1195,209 @@ class TestCovMatrixHistory(unittest.TestCase):
             0.25 * daily[defined] + 0.75 * weekly[defined],
             rtol=1e-12,
         )
+
+
+class TestNanTolerance(unittest.TestCase):
+    TOL = 0.25
+
+    def setUp(self):
+        self.idx = pd.bdate_range("2020-01-01", periods=200)
+        self.fids = ["AUD_FX", "CAD_FX", "GBP_FX"]
+        rng = np.random.default_rng(17)
+        self.returns = pd.DataFrame(
+            rng.normal(0, 1, (len(self.idx), 3)), index=self.idx, columns=self.fids
+        )
+
+    def _kept(self, returns: pd.DataFrame) -> List[str]:
+        """The contracts that survive the tolerance filter, as the estimator sees it."""
+        frac = _nan_frac_since_first_obs(returns)
+        return returns.columns[frac <= self.TOL].tolist()
+
+    def test_leading_gap_does_not_count_against_a_late_starter(self):
+        """
+        A contract that simply starts late has no missing observations of its own. If
+        the fraction were taken across the whole window it would breach the tolerance
+        and the contract would never be traded, however much history it accumulates.
+        """
+        returns = self.returns.copy()
+        returns.loc[returns.index[:120], "CAD_FX"] = np.nan
+
+        # the whole-window measure would reject it outright
+        self.assertGreater(returns["CAD_FX"].isna().mean(), self.TOL)
+
+        self.assertEqual(_nan_frac_since_first_obs(returns)["CAD_FX"], 0.0)
+        self.assertIn("CAD_FX", self._kept(returns))
+
+    def test_scattered_gaps_do_count_against_a_contract(self):
+        """Holes after a contract has started are real missing data."""
+        returns = self.returns.copy()
+        returns.iloc[::3, returns.columns.get_loc("CAD_FX")] = np.nan
+
+        frac = _nan_frac_since_first_obs(returns)["CAD_FX"]
+        self.assertAlmostEqual(frac, 1 / 3, places=2)
+        self.assertNotIn("CAD_FX", self._kept(returns))
+
+    def test_every_contract_breaching_leaves_no_estimate_for_the_date(self):
+        """
+        If the tolerance empties the window there is nothing to estimate, and the date
+        yields no covariance matrix at all rather than a partial one.
+        """
+        returns = self.returns.copy()
+        returns.iloc[::3] = np.nan  # every contract over the tolerance
+
+        vcv = _calculate_multi_frequency_vcv_for_period(
+            pivot_returns=returns,
+            rebal_date=self.idx[-1],
+            est_freqs=["B"],
+            est_weights=[1.0],
+            weights_func=flat_weights_arr,
+            lback_periods=[150],
+            half_life=[10],
+            nan_tolerance=self.TOL,
+            remove_zeros=False,
+            lback_min_obs=[1],
+        )
+
+        self.assertTrue(vcv.empty)
+
+    def test_breaching_contract_is_absent_from_the_estimated_matrix(self):
+        """
+        a contract over the tolerance does not appear on either axis of
+        the covariance matrix for that date.
+        """
+        returns = self.returns.copy()
+        returns.iloc[::3, returns.columns.get_loc("CAD_FX")] = np.nan
+
+        vcv = _calculate_multi_frequency_vcv_for_period(
+            pivot_returns=returns,
+            rebal_date=self.idx[-1],
+            est_freqs=["B"],
+            est_weights=[1.0],
+            weights_func=flat_weights_arr,
+            lback_periods=[150],
+            half_life=[10],
+            nan_tolerance=self.TOL,
+            remove_zeros=False,
+            lback_min_obs=[1],
+        )
+
+        self.assertNotIn("CAD_FX", vcv.columns)
+        self.assertNotIn("CAD_FX", vcv.index)
+        self.assertEqual(vcv.columns.tolist(), ["AUD_FX", "GBP_FX"])
+
+    def test_late_starter_reaches_the_estimated_matrix(self):
+        returns = self.returns.copy()
+        returns.loc[returns.index[:120], "CAD_FX"] = np.nan
+
+        vcv = _calculate_multi_frequency_vcv_for_period(
+            pivot_returns=returns,
+            rebal_date=self.idx[-1],
+            est_freqs=["B"],
+            est_weights=[1.0],
+            weights_func=flat_weights_arr,
+            lback_periods=[150],
+            half_life=[10],
+            nan_tolerance=self.TOL,
+            remove_zeros=False,
+            lback_min_obs=[1],
+        )
+
+        self.assertIn("CAD_FX", vcv.columns)
+        self.assertFalse(np.isnan(vcv.loc["CAD_FX", "CAD_FX"]))
+
+
+class TestFrequencyBlend(unittest.TestCase):
+    FIDS = ["AUD_FX", "CAD_FX", "GBP_FX"]
+
+    @staticmethod
+    def _matrix(values, fids):
+        return pd.DataFrame(np.array(values, dtype=float), index=fids, columns=fids)
+
+    def _blend(self, dict_vcv, est_weights=(0.25, 0.75)):
+        return _blend_frequency_vcvs(
+            dict_vcv=dict_vcv,
+            est_freqs=list(dict_vcv),
+            est_weights=list(est_weights),
+            column_order=pd.Index(self.FIDS),
+        )
+
+    def test_blend_is_the_annualized_weighted_mean(self):
+        """With every entry estimated everywhere, no renormalization is in play."""
+        fids = self.FIDS[:2]
+        daily = self._matrix([[1.0, 0.5], [0.5, 2.0]], fids)
+        monthly = self._matrix([[3.0, 1.0], [1.0, 4.0]], fids)
+
+        out = self._blend({"D": daily, "M": monthly})
+
+        expected = (
+            0.25 * ANNUALIZATION_FACTORS["D"] * daily
+            + 0.75 * ANNUALIZATION_FACTORS["M"] * monthly
+        )
+        np.testing.assert_allclose(out.to_numpy(), expected.to_numpy(), rtol=1e-12)
+
+    def test_entry_missing_at_one_frequency_uses_the_survivor_alone(self):
+        """
+        The surviving weight is renormalized to 1 for that entry, so the result is the
+        other frequency's annualized estimate rather than a fraction of it.
+        """
+        fids = self.FIDS[:2]
+        daily = self._matrix([[1.0, np.nan], [np.nan, 2.0]], fids)
+        monthly = self._matrix([[3.0, 1.0], [1.0, 4.0]], fids)
+
+        out = self._blend({"D": daily, "M": monthly})
+
+        # off-diagonal: monthly only, renormalized - not 0.75 * the monthly value
+        np.testing.assert_allclose(
+            out.loc["AUD_FX", "CAD_FX"], ANNUALIZATION_FACTORS["M"] * 1.0, rtol=1e-12
+        )
+        # diagonal: both available, so the plain weighted mean
+        np.testing.assert_allclose(
+            out.loc["AUD_FX", "AUD_FX"],
+            0.25 * ANNUALIZATION_FACTORS["D"] * 1.0
+            + 0.75 * ANNUALIZATION_FACTORS["M"] * 3.0,
+            rtol=1e-12,
+        )
+
+    def test_contract_dropped_at_one_frequency_survives_via_another(self):
+        kept = self.FIDS[:2]
+        daily = self._matrix([[1.0, 0.5], [0.5, 2.0]], kept)  # GBP_FX absent
+        monthly = self._matrix(
+            [[3.0, 1.0, 0.2], [1.0, 4.0, 0.3], [0.2, 0.3, 5.0]], self.FIDS
+        )
+
+        out = self._blend({"D": daily, "M": monthly})
+
+        self.assertEqual(out.columns.tolist(), self.FIDS)
+        self.assertFalse(np.isnan(out.loc["GBP_FX", "GBP_FX"]))
+        np.testing.assert_allclose(
+            out.loc["GBP_FX", "GBP_FX"], ANNUALIZATION_FACTORS["M"] * 5.0, rtol=1e-12
+        )
+
+    def test_entry_estimated_at_no_frequency_stays_nan(self):
+        """Renormalization must not invent an estimate where there is none."""
+        fids = self.FIDS[:2]
+        daily = self._matrix([[1.0, np.nan], [np.nan, 2.0]], fids)
+        monthly = self._matrix([[3.0, np.nan], [np.nan, 4.0]], fids)
+
+        out = self._blend({"D": daily, "M": monthly})
+
+        self.assertTrue(np.isnan(out.loc["AUD_FX", "CAD_FX"]))
+        self.assertFalse(np.isnan(out.loc["AUD_FX", "AUD_FX"]))
+
+    def test_axes_follow_the_requested_column_order(self):
+        """Signals are paired with the covariance axes positionally downstream."""
+        reversed_fids = self.FIDS[::-1]
+        monthly = self._matrix(np.eye(3) + 0.1, reversed_fids)
+
+        out = _blend_frequency_vcvs(
+            dict_vcv={"M": monthly},
+            est_freqs=["M"],
+            est_weights=[1.0],
+            column_order=pd.Index(self.FIDS),
+        )
+
+        self.assertEqual(out.columns.tolist(), self.FIDS)
+        self.assertEqual(out.index.tolist(), self.FIDS)
 
 
 if __name__ == "__main__":
