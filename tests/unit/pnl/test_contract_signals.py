@@ -1,7 +1,7 @@
 import unittest
 import numpy as np
 import pandas as pd
-from typing import List, Dict, Tuple, Union, Any
+from typing import List, Optional, Tuple, Any
 from numbers import Number
 
 from macrosynergy.management.simulate import make_test_df
@@ -14,16 +14,7 @@ from macrosynergy.pnl.contract_signals import (
     _check_scaling_args,
 )
 from macrosynergy.management.types import QuantamentalDataFrame
-from macrosynergy.management.utils import (
-    is_valid_iso_date,
-    standardise_dataframe,
-    ticker_df_to_qdf,
-    qdf_to_ticker_df,
-    reduce_df,
-    update_df,
-    get_cid,
-    get_xcat,
-)
+from macrosynergy.management.utils import qdf_to_ticker_df, get_cid, get_xcat
 
 
 class TestContractSignals(unittest.TestCase):
@@ -1019,6 +1010,158 @@ class TestRelativeValueBasket(unittest.TestCase):
                 places=10,
                 msg=f"{cid} should equal position-level RV {right_val}",
             )
+
+
+class TestDefaultDateDerivation(unittest.TestCase):
+    """
+    When `start`/`end` are not given they are derived from the categories the
+    calculation actually consumes, so the emitted panel never spans dates on
+    which a required input is absent
+    """
+
+    def setUp(self):
+        self.cids: List[str] = ["USD", "EUR", "GBP"]
+        self.sig: str = "SIG"
+        self.ctypes: List[str] = ["FX"]
+
+    def _mk(
+        self, xcat: str, start: str, end: str, cids: Optional[List[str]] = None
+    ) -> pd.DataFrame:
+        return make_test_df(
+            cids=cids if cids is not None else self.cids,
+            xcats=[xcat],
+            start=start,
+            end=end,
+        )
+
+    @staticmethod
+    def _span(df: pd.DataFrame, xcat: Optional[str] = None) -> Tuple[Any, Any]:
+        sub = df if xcat is None else df.loc[df["xcat"] == xcat]
+        return sub["real_date"].min(), sub["real_date"].max()
+
+    def _run(self, df: pd.DataFrame, **kwargs) -> pd.DataFrame:
+        return contract_signals(
+            df=df, sig=self.sig, cids=self.cids, ctypes=self.ctypes, **kwargs
+        )
+
+    def test_default_start_end_bounded_by_sig(self):
+        # A category the calculation does not consume must not widen the panel: `XR`
+        # spans two decades either side of `SIG` and is ignored entirely.
+        df = pd.concat(
+            [
+                self._mk(self.sig, "2000-01-03", "2010-12-31"),
+                self._mk("XR", "1990-01-01", "2020-12-31"),
+            ]
+        )
+        out = self._run(df)
+
+        self.assertEqual(self._span(out), self._span(df, self.sig))
+        self.assertGreater(out["real_date"].min(), df["real_date"].min())
+        self.assertLess(out["real_date"].max(), df["real_date"].max())
+
+    def test_default_start_end_intersects_string_cscales(self):
+        # A category-valued `cscales` entry is consumed, so it bounds the panel: the
+        # window is the overlap of `SIG` and `VOL`, here `VOL` on both ends.
+        df = pd.concat(
+            [
+                self._mk(self.sig, "2000-01-03", "2010-12-31"),
+                self._mk("VOL", "2003-01-01", "2007-12-31"),
+            ]
+        )
+        out = self._run(df, cscales=["VOL"])
+
+        self.assertEqual(self._span(out), self._span(df, "VOL"))
+
+    def test_default_start_end_accounts_for_hedge_basket(self):
+        # The hedge ratio is as much a required input as a variable scale
+        df = pd.concat(
+            [
+                self._mk(self.sig, "2000-01-03", "2010-12-31"),
+                self._mk("HR", "2005-01-03", "2006-12-31"),
+            ]
+        )
+        out = self._run(
+            df,
+            basket_contracts=["USD_EQ"],
+            basket_weights=[1.0],
+            hedge_xcat="HR",
+        )
+
+        self.assertEqual(self._span(out), self._span(df, "HR"))
+
+    def test_default_start_end_accounts_for_string_basket_weights(self):
+        df = pd.concat(
+            [
+                self._mk(self.sig, "2000-01-03", "2010-12-31"),
+                self._mk("HR", "2000-01-03", "2010-12-31"),
+                self._mk("BWGT", "2004-01-01", "2008-12-31"),
+            ]
+        )
+        out = self._run(
+            df,
+            basket_contracts=["USD_EQ"],
+            basket_weights=["BWGT"],
+            hedge_xcat="HR",
+        )
+
+        self.assertEqual(self._span(out), self._span(df, "BWGT"))
+
+    def test_hedge_categories_ignored_without_basket_contracts(self):
+        # `hedge_xcat` alone does no hedging, so it must not narrow the panel either.
+        df = pd.concat(
+            [
+                self._mk(self.sig, "2000-01-03", "2010-12-31"),
+                self._mk("HR", "2005-01-03", "2006-12-31"),
+            ]
+        )
+        out = self._run(df, hedge_xcat="HR")
+
+        self.assertEqual(self._span(out), self._span(df, self.sig))
+
+    def test_only_one_bound_derived(self):
+        # `start` given, `end` derived - the derivation still runs, for `end` alone.
+        df = pd.concat(
+            [
+                self._mk(self.sig, "2000-01-03", "2010-12-31"),
+                self._mk("VOL", "2003-01-01", "2007-12-31"),
+            ]
+        )
+        start = "2005-06-01"
+        out = self._run(df, cscales=["VOL"], start=start)
+
+        self.assertEqual(out["real_date"].min(), pd.Timestamp(start))
+        self.assertEqual(out["real_date"].max(), self._span(df, "VOL")[1])
+
+    def test_missing_sig_raises_informative_error(self):
+        # Nothing to derive dates from
+        df = self._mk("XR", "2000-01-03", "2010-12-31")
+
+        with self.assertRaises(ValueError) as ctx:
+            self._run(df)
+
+        msg = str(ctx.exception)
+        self.assertIn("missing the `sig`", msg)
+        self.assertIn(f"USD_{self.sig}", msg)
+        self.assertNotIn("NaT", msg)
+        self.assertNotIn("ISO", msg)
+
+    def test_disjoint_required_categories_raise(self):
+        # `SIG` and `VOL` never coexist, so the derived window is empty
+        df = pd.concat(
+            [
+                self._mk(self.sig, "2000-01-03", "2003-12-31"),
+                self._mk("VOL", "2008-01-01", "2010-12-31"),
+            ]
+        )
+
+        with self.assertRaises(ValueError) as ctx:
+            self._run(df, cscales=["VOL"])
+
+        msg = str(ctx.exception)
+        self.assertIn("no overlapping dates", msg)
+        self.assertIn(self.sig, msg)
+        self.assertIn("VOL", msg)
+        self.assertNotIn("missing the `sig`", msg)
 
 
 if __name__ == "__main__":

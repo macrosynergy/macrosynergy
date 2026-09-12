@@ -399,9 +399,15 @@ def contract_signals(
         signals are added. If the targets are relative values the hedge ratio must be
         the beta of the relative return with respect to the hedge basket return.
     start : str
-        earliest date in ISO format. Default is None and earliest date in df is used.
+        earliest date in ISO format. Default is None, in which case the start date is
+        derived as the latest first date across the categories the calculation requires:
+        `sig`, any category-valued entries in `cscales`, and, when a hedge basket is
+        used, `hedge_xcat` together with any category-valued entries in `basket_weights`.
+        Together with `end` this gives the window over which every required category
+        exists.
     end : str
-        latest date in ISO format. Default is None and latest date in df is used.
+        latest date in ISO format. Default is None, in which case the end date is derived
+        as the earliest last date across the same categories described under `start`.
     blacklist : dict
         cross-sections with date ranges that should be excluded from the calculation of
         contract signals.
@@ -445,19 +451,49 @@ def contract_signals(
     df: pd.DataFrame = QuantamentalDataFrame(df)
     _initialized_as_categorical: bool = df.InitializedAsCategorical
 
+    ## The base signal tickers the calculation needs
+    expected_base_signals: Set[str] = set([f"{cx}_{sig}" for cx in cids])
+
     ## Check the dates
     if start is None or end is None:
-        scale_cats = [x for x in cscales if isinstance(x, str)] if cscales else []
-        cats = [sig, *scale_cats]
+        scale_cats: List[str] = (
+            [x for x in cscales if isinstance(x, str)] if cscales else []
+        )
+        hedge_cats: List[str] = []
+        if basket_contracts is not None:
+            if basket_weights:
+                hedge_cats += [x for x in basket_weights if isinstance(x, str)]
+            if hedge_xcat is not None:
+                hedge_cats.append(hedge_xcat)
+
+        cats: List[str] = list(dict.fromkeys([sig, *scale_cats, *hedge_cats]))
 
         grouped_dates = (
             df.loc[df["xcat"].isin(cats)]
             .groupby("xcat", observed=True)["real_date"]
         )
+
+        if grouped_dates.ngroups == 0:
+            raise ValueError(
+                "Some `cids` are missing the `sig` in the provided dataframe."
+                f"\nMissing: {expected_base_signals}"
+            )
+
+        # latest first date and earliest last date
+        derived_start: pd.Timestamp = grouped_dates.min().max()
+        derived_end: pd.Timestamp = grouped_dates.max().min()
+        if derived_start > derived_end:
+            raise ValueError(
+                "The categories required to calculate the contract signals "
+                f"({', '.join(cats)}) have no overlapping dates, so no date range can "
+                f"be derived. The latest start is {derived_start:%Y-%m-%d} and the "
+                f"earliest end is {derived_end:%Y-%m-%d}."
+            )
+
         if start is None:
-            start: str = grouped_dates.min().max().strftime("%Y-%m-%d")
+            start: str = derived_start.strftime("%Y-%m-%d")
         if end is None:
-            end: str = grouped_dates.max().min().strftime("%Y-%m-%d")
+            end: str = derived_end.strftime("%Y-%m-%d")
 
     for dx, nx in [(start, "start"), (end, "end")]:
         if not is_valid_iso_date(dx):
@@ -467,7 +503,6 @@ def contract_signals(
     df: pd.DataFrame = reduce_df(df=df, start=start, end=end, blacklist=blacklist)
 
     ## Check that all cid_ctype are in the dataframe
-    expected_base_signals: Set[str] = set([f"{cx}_{sig}" for cx in cids])
     found_base_signals: Set[str] = set(QuantamentalDataFrame(df).list_tickers())
     if not (expected_base_signals).issubset(found_base_signals):
         raise ValueError(
