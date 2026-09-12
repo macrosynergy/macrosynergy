@@ -2,24 +2,22 @@
 Implementation of the ProxyPnL class.
 """
 
-import pandas as pd
 from numbers import Number
-from typing import List, Union, Tuple, Optional, Dict
+from typing import Dict, List, Optional, Tuple, Union
 
-from macrosynergy.management.utils import reduce_df, is_valid_iso_date
-from macrosynergy.management.types import QuantamentalDataFrame, NoneType
+import pandas as pd
+
 import macrosynergy.visuals as msv
-from macrosynergy.pnl.notional_positions import notional_positions
+from macrosynergy.management.types import NoneType, QuantamentalDataFrame
+from macrosynergy.management.utils import is_valid_iso_date, reduce_df
 from macrosynergy.pnl.contract_signals import contract_signals
-from macrosynergy.pnl.proxy_pnl_calc import proxy_pnl_calc
+from macrosynergy.pnl.notional_positions import notional_positions
 from macrosynergy.pnl.pnl_evaluation import evaluate_pnl
-
+from macrosynergy.pnl.proxy_pnl_calc import proxy_pnl_calc
 from macrosynergy.pnl.transaction_costs import (
     TransactionCosts,
     TransactionCostsDictAdapter,
 )
-import matplotlib.pyplot as plt
-import warnings
 
 
 class ProxyPnL(object):
@@ -386,10 +384,10 @@ class ProxyPnL(object):
             ("aum", aum, Number),
             ("include_pnle", include_pnle, bool),
             ("include_tcosts", include_tcosts, bool),
-            ("label_dict", label_dict, (dict, NoneType)),
-            ("start", start, (str, NoneType)),
-            ("end", end, (str, NoneType)),
-            ("benchmark_data", benchmark_data, (pd.DataFrame, NoneType)),
+            ("label_dict", label_dict, (dict, type(None))),
+            ("start", start, (str, type(None))),
+            ("end", end, (str, type(None))),
+            ("benchmark_data", benchmark_data, (pd.DataFrame, type(None))),
         ]:
             if not isinstance(value, types):
                 raise TypeError(f"Argument {arg} must be one of: {types}")

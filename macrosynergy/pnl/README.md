@@ -28,7 +28,7 @@ In particular, the class allows proceeding in three separate steps, implemented 
 
 - The method `proxy_pnl` multiplies positions with proxy returns and estimates transaction costs. Bid-offer cost is charged on the absolute day-over-day change in each position; since positions are flat between rebalances, this is non-zero only on actual trades, with the opening trade booked from a zero-position anchor. Roll cost is charged on a schedule set by `roll_freq` (`"D"`, `"W"`, `"M"` or `"Q"`) and only on the held portion of a position that carries across the roll without changing sign - `min(|position before|, |position after|)` for same-sign positions, and zero on opens, closes, or sign flips. Per-contract costs are suppressed before that contract's first available return. The method returns the PnL including costs, the PnL excluding costs, and per-contract transaction costs.
 
-- Results can be summarized with `evaluate_pnl` (annualized return, Sharpe/Sortino, Sharpe stability, drawdowns, top-5% monthly PnL share, optional benchmark correlations and costs), and multiple `ProxyPnL` runs compared on one chart with `compare_proxy_pnls`.
+- Results can be summarized with `evaluate_pnl` (annualized return, Sharpe/Sortino, Sharpe stability, drawdowns, top-5% monthly PnL share, optional benchmark correlations and costs). Multiple runs can be compared on one chart with `compare_proxy_pnls`, in `macrosynergy.visuals`; it takes the PnL frames directly - matching lists of PnLs including costs, PnLs excluding costs, and portfolio names - rather than `ProxyPnL` objects, so a comparison can be drawn from any source of PnL frames.
 
 ### Terminology
 
