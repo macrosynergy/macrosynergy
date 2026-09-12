@@ -3,6 +3,7 @@ Module for calculating notional positions based on contract signals, assets-unde
 management, and other relevant parameters.
 """
 
+import logging
 import numpy as np
 import pandas as pd
 from numbers import Number
@@ -22,12 +23,9 @@ from macrosynergy.management.utils import (
 from macrosynergy.management.types import NoneType, QuantamentalDataFrame
 from macrosynergy.pnl.historic_portfolio_volatility import historic_portfolio_vol
 
+logger = logging.getLogger(__name__)
 
-def _apply_slip(
-    df: pd.DataFrame,
-    slip: int,
-    fids: List[str],
-) -> pd.DataFrame:
+def _apply_slip(df: pd.DataFrame, slip: int, fids: List[str]) -> pd.DataFrame:
     """
     Applies a slip using the function `apply_slip()` to a dataframe with contract
     signals and returns.
@@ -40,8 +38,6 @@ def _apply_slip(
         the number of days to wait before applying the signal.
     fids : List[str]
         list of contract identifiers to apply the slip to.
-    metrics : List[str]
-        list of metrics to apply the slip to.
     """
 
     assert isinstance(df, QuantamentalDataFrame)
@@ -79,12 +75,12 @@ def _check_df_for_contract_signals(
 
     Parameters
     ----------
-    df : pd.DataFrame
+    df_wide : pd.DataFrame
         Wide dataframe with contract signals and returns.
     sname : str
         the name of the strategy.
     fids : List[str]
-        list of contract identifiers to apply the slip to.
+        list of contract identifiers whose signals must be present.
     """
 
     assert isinstance(sname, str)
@@ -132,12 +128,53 @@ def _mask_unavailable_positions(
         .pivot(index="real_date", columns="fid", values="available")
     )
     available.columns = [f"{fid}{sig_ident}" for fid in available.columns]
-    available = (
-        available.reindex(index=df_signals.index, columns=df_signals.columns)
-        .fillna(False)
-        .astype(bool)
-    )
+    available = available.reindex(
+        index=df_signals.index, columns=df_signals.columns
+    ).notna()
     return df_signals.where(available)
+
+
+def _resample_signals_to_rebal_dates(
+    df_wide: pd.DataFrame,
+    fids: List[str],
+    sig_ident: str,
+    rebal_freq: str,
+) -> pd.DataFrame:
+    """
+    Reduce contract signals to the values in force on each rebalance date.
+
+    A signal is read only on a rebalance date and then held for the rest of the
+    holding period, so values falling between rebalance dates are discarded and the
+    rebalance date's value is carried forward. The forward fill is bounded to a single
+    rebalance window, so a contract missing its signal on a rebalance date does not
+    silently inherit the previous period's position..
+
+    Parameters
+    ----------
+    df_wide : pd.DataFrame
+        Wide dataframe with contract signals, indexed by real_date.
+    fids : List[str]
+        list of contract identifiers whose signals are to be resampled.
+    sig_ident : str
+        the contract signal identifier, of the form "_CSIG_<sname>".
+    rebal_freq : str
+        the rebalancing frequency.
+    """
+
+    contracts: List[str] = [f"{contx}{sig_ident}" for contx in fids]
+
+    rebal_dates = get_sops(
+        dates=df_wide.index, freq=_map_to_business_day_frequency(rebal_freq)
+    )
+    is_rb_date = pd.Series(df_wide.index.isin(rebal_dates), index=df_wide.index)
+    df_sigs: pd.DataFrame = (
+        df_wide.loc[:, contracts]
+        .where(is_rb_date, axis=0)
+        .groupby(is_rb_date.cumsum())
+        .ffill()
+    )
+    traded: pd.DataFrame = df_sigs.ffill().notna() & df_sigs.bfill().notna()
+    return df_sigs.mask(traded & df_sigs.isna(), 0.0)
 
 
 def _vol_target_positions(
@@ -202,8 +239,6 @@ def _vol_target_positions(
     )
     # TODO how to deal with unbalanced panel
 
-    # drop rows with all na
-    # TODO add log statement of how many N/A values are dropped
     out_df = out_df.reindex(df_wide.index)
     rebal_dates = sorted(histpvol.index.tolist())
 
@@ -213,15 +248,23 @@ def _vol_target_positions(
     mask = out_df.index >= rebal_dates[-1]
     out_df.loc[mask, :] = out_df.loc[mask, :].ffill()
 
-    # get na values per column
-    na_per_col = out_df.isna().sum()
-    na_per_col = na_per_col[na_per_col > 0]
     out_df = out_df.rename(
         columns={
             col: col.replace(sig_ident, f"_{sname}_{pname}")
             for col in out_df.columns.tolist()
         },
-    ).dropna(how="all")
+    )
+
+    # Dates with no position in any contract carry no information and are dropped.
+    empty_dates = out_df.index[out_df.isna().all(axis=1)]
+    if len(empty_dates) > 0:
+        na_per_col = out_df.isna().sum()
+        logger.info(
+            f"Dropping {len(empty_dates)} of {len(out_df.index)} dates with no "
+            f"position in any contract. "
+            f"NaN positions per contract: {na_per_col[na_per_col > 0].to_dict()}",
+        )
+    out_df = out_df.dropna(how="all")
 
     return (
         out_df,
@@ -244,19 +287,9 @@ def _leverage_positions(
 
     sig_ident: str = f"_CSIG_{sname}"
 
-    _contracts: List[str] = [f"{contx}{sig_ident}" for contx in fids]
-
-    rebal_freq = _map_to_business_day_frequency(rebal_freq)
-    rebal_dates = get_sops(dates=df_wide.index, freq=rebal_freq)
-    is_rb_date = pd.Series(df_wide.index.isin(rebal_dates), index=df_wide.index)
-    df_sigs: pd.DataFrame = (
-        df_wide.loc[:, _contracts]
-        .where(is_rb_date, axis=0)
-        .groupby(is_rb_date.cumsum()) # bound the ffill to one rebalance window,
-        .ffill()
+    df_sigs: pd.DataFrame = _resample_signals_to_rebal_dates(
+        df_wide=df_wide, fids=fids, sig_ident=sig_ident, rebal_freq=rebal_freq
     )
-    _traded: pd.DataFrame = df_sigs.ffill().notna() & df_sigs.bfill().notna()
-    df_sigs = df_sigs.mask(_traded & df_sigs.isna(), 0.0)
 
     rowsums: pd.Series = df_sigs.abs().sum(axis=1)
     # if any of the rowsums are zero, set to NaN to avoid div by zero
@@ -291,19 +324,9 @@ def _dollar_per_signal_positions(
     _check_df_for_contract_signals(df_wide=df_wide, sname=sname, fids=fids)
     sig_ident: str = f"_CSIG_{sname}"
 
-    _contracts: List[str] = [f"{contx}{sig_ident}" for contx in fids]
-
-    rebal_freq = _map_to_business_day_frequency(rebal_freq)
-    rebal_dates = get_sops(dates=df_wide.index, freq=rebal_freq)
-    is_rb_date = pd.Series(df_wide.index.isin(rebal_dates), index=df_wide.index)
-    df_sigs: pd.DataFrame = (
-        df_wide.loc[:, _contracts]
-        .where(is_rb_date, axis=0)
-        .groupby(is_rb_date.cumsum()) # bound the ffill to one rebalance window,
-        .ffill()
+    df_sigs: pd.DataFrame = _resample_signals_to_rebal_dates(
+        df_wide=df_wide, fids=fids, sig_ident=sig_ident, rebal_freq=rebal_freq
     )
-    _traded: pd.DataFrame = df_sigs.ffill().notna() & df_sigs.bfill().notna()
-    df_sigs = df_sigs.mask(_traded & df_sigs.isna(), 0.0)
 
     df_pos: pd.DataFrame = pd.DataFrame(index=df_wide.index)
     for contx in fids:
@@ -311,16 +334,6 @@ def _dollar_per_signal_positions(
         cont_name: str = contx + sig_ident
         # position = signal * dollar_per_signal
         df_pos[pos_col] = df_sigs[cont_name] * dollar_per_signal
-
-    positions_exceed_aum = df_pos.sum(axis=1) > aum
-    if positions_exceed_aum.any():
-        exceed_dates = df_pos.index[positions_exceed_aum].strftime("%Y-%m-%d").tolist()
-        warning_msg = (
-            f"Warning: On the following dates, the total notional positions exceed AUM:\n"
-            f"{', '.join(exceed_dates)}\n"
-            f"Consider adjusting `dollar_per_signal` or `aum` to avoid exceeding AUM."
-        )
-        warnings.warn(warning_msg, UserWarning)
 
     return df_pos
 
@@ -394,6 +407,17 @@ def notional_positions(
         returns. The estimation is managed by the function
         :func:`macrosynergy.pnl.historic_portfolio_vol`. Default is None, i.e. the
         volatility-targeting is not applied.
+    nan_tolerance : float
+        the maximum ratio of NaN values to the total number of values in a lookback
+        window, as a proportion between 0 and 1. A contract whose lookback window
+        exceeds this ratio is excluded from that window's variance-covariance estimate,
+        and so takes no position for the corresponding rebalance period. Default is
+        0.25. This only affects the volatility-targeting method, and is passed through
+        to the function :func:`macrosynergy.pnl.historic_portfolio_vol`.
+    remove_zeros : bool
+        if True (default) any returns that are exact zeros will not be included in the
+        lookback window. This only affects the volatility-targeting method, and is
+        passed through to the function :func:`macrosynergy.pnl.historic_portfolio_vol`.
     rebal_freq : str
         the rebalancing frequency. Default is 'm' for monthly. Alternatives are 'w' for
         business weekly, 'd' for daily, and 'q' for quarterly. Contract signals are taken
@@ -477,12 +501,17 @@ def notional_positions(
         (end, "end", (str, NoneType)),
         (blacklist, "blacklist", (dict, NoneType)),
         (pname, "pname", str),
+        (nan_tolerance, "nan_tolerance", float),
+        (remove_zeros, "remove_zeros", bool),
     ]:
         if not isinstance(varx, typex):
             raise ValueError(f"`{namex}` must be {typex}.")
 
         if isinstance(varx, (str, list, dict)) and len(varx) == 0:
             raise ValueError(f"`{namex}` must not be an empty {str(typex)}.")
+
+    if not 0 <= nan_tolerance <= 1:
+        raise ValueError("`nan_tolerance` must be between 0 and 1.")
 
     ## Convert df to QDF
     df: QuantamentalDataFrame = QuantamentalDataFrame(df)
