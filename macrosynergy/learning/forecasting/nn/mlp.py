@@ -540,6 +540,7 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
                     self.validated_models = []
                     self.mean_epochs_es = 0
                     for idx, (train_dataset, valid_dataset) in enumerate(zip(train_datasets, valid_datasets)):
+                        torch.manual_seed(random_state)
                         train_loader, train_loader_eval, valid_loader = self.make_dataloaders_(
                             train_dataset = train_dataset,
                             batch_size = self.batch_size,
