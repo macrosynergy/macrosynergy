@@ -299,12 +299,13 @@ class MultiLayerPerceptron(nn.Module, BaseEstimator):
             if not isinstance(signal_modifier, nn.Module):
                 raise TypeError("signal_modifier must be a PyTorch nn.Module.")
         # head_rank
-        if not isinstance(head_rank, numbers.Integral):
-            raise TypeError("head_rank must be an integer.")
-        if head_rank < 1:
-            raise ValueError("head_rank must be at least 1.")
-        if head_rank >= n_outputs:
-            raise ValueError("head_rank must be less than n_outputs.")
+        if head_rank is not None:
+            if not isinstance(head_rank, numbers.Integral):
+                raise TypeError("head_rank must be an integer.")
+            if head_rank < 1:
+                raise ValueError("head_rank must be at least 1.")
+            if head_rank >= n_outputs:
+                raise ValueError("head_rank must be less than n_outputs.")
         # dropout_p
         if not isinstance(dropout_p, (numbers.Real, list)):
             raise TypeError("dropout_p must be a real number or a list.")
