@@ -258,7 +258,7 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         signal_modifier = None,
         head_rank = None,
         dropout_p = 0,
-        normalization = "none",
+        normalization = None,
         torch_model = None,
         # Neural network training dynamics
         loss_func = torch.nn.MSELoss(),
@@ -353,9 +353,9 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         self.optimizers = [self.optimizer] if not isinstance(self.optimizer, list) else self.optimizer
         self.random_states = [self.random_state] if not isinstance(self.random_state, list) else self.random_state
 
-    def fit(self, X, y, sample_weight=None):
+    def fit(self, X, y):
         # Fit checks 
-        self._check_fit_params(X, y, sample_weight)
+        self._check_fit_params(X, y)
 
         # Copy data and initialize empty list of models to be trained, with diagnostic
         # dictionaries
@@ -370,7 +370,7 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         # Data checks
         # TODO: if torch_model is provided, check it has the right structure 
         # to be trained by this class by passing a batch through it
-        sample_weight_strategy = self._check_fit_params(X, y, sample_weight)
+        self._check_fit_params(X, y)
 
         # Filter assets with insufficient samples to have a head in the network
         target_counts = y.count()
@@ -379,17 +379,37 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
 
         y = y[self.targets]
 
-        if self.patience is not None:
-            # Create training and validation splits
-            X_trains, X_valids, y_trains, y_valids = self.create_train_valid_splits(X, y, self.train_splitter)
+        if self.patience is None:
+            # Then we are training a single model on the entire dataset, with no early stopping,
+            # but with possible different trainings for random seeds and optimizers.
+            X_s, y_s = self.scale_data_(
+                X_trains = [X],
+                y_trains = [y],
+                x_scaler = self.x_scaler,
+                y_scaler = self.y_scaler,
+            )
+            train_datasets, _ = self.make_tensor_datasets_(
+                X_trains_s = [X_s],
+                y_trains_s = [y_s]
+            )
+        else:
+            # Then we are training multiple models on different train/validation splits.
+            # If refit = False, the average model is used as the "final model".
+            # If refit = True, the number of stopping epochs is averaged across folds
+            # and a final model is trained on the entire dataset for that number of epochs.
+            X_trains, X_valids, y_trains, y_valids = self.create_train_valid_splits_(X, y, self.train_splitter)
 
             # Scale training and validation splits for each fold 
-            X_trains_s, y_trains_s, X_valids_s, y_valids_s = self.scale_data(X_trains, y_trains, self.x_scaler, self.y_scaler, X_valids, y_valids)
+            X_trains_s, y_trains_s, X_valids_s, y_valids_s = self.scale_data_(X_trains, y_trains, self.x_scaler, self.y_scaler, X_valids, y_valids)
 
             # Make tensor datasets for each fold 
-            train_datasets, valid_datasets = self.make_tensor_datasets(X_trains_s, y_trains_s, X_valids_s, y_valids_s, sample_weight)
+            train_datasets, valid_datasets = self.make_tensor_datasets_(
+                X_trains_s = X_trains_s,
+                y_train_s = y_trains_s,
+                X_valids_s = X_valids_s,
+                y_valids_s = y_valids_s
+            )
 
-        
         # Iterate through random states
         for optim_idx, optimizer in enumerate(self.optimizers):
             for random_state_idx, random_state in enumerate(self.random_states):
@@ -407,12 +427,36 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
                     "improvement_path_diff": [],
         
                     # Best model information
-                    "selected_epoch": None,
-                    "termination_epoch": None,
-                    "bestmodel_train_loss": None,
-                    "bestmodel_valid_loss": None,
-                    "bestmodel_generalization_gap": None,
+                    "selected_epoch": [],
+                    "termination_epoch": [],
+                    "bestmodel_train_loss": [],
+                    "bestmodel_valid_loss": [],
+                    "bestmodel_generalization_gap": [],
+                }
 
+                self.early_stopping_inference[(optim_idx, random_state_idx)] = {
+                    # Best model gradient information
+                    "gradient_mean_per_layer": [],
+                    "gradient_std_per_layer": [],
+                    "gradient_max_per_layer": [],
+                    "gradient_min_per_layer": [],
+                    "gradient_norm_per_layer": [],
+                    "global_gradient_norm": [],
+
+                    # Best model NaN and inf checks
+                    "train_loss_isnan": [],
+                    "train_loss_isinf": [],
+                    "nan_gradients_per_layer": [],
+                    "inf_gradients_per_layer": [],
+                    "nan_gradients_global": [],
+                    "inf_gradients_global": [],
+
+                    # Loss and target sensitivities
+                    "training_loss_sensitivity": [],
+                    "training_target_sensitivities": [],
+                }
+
+                self.final_model_inference[(optim_idx, random_state_idx)] = {
                     # Best model gradient information
                     "gradient_mean_per_layer": {},
                     "gradient_std_per_layer": {},
@@ -428,15 +472,11 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
                     "inf_gradients_per_layer": {},
                     "nan_gradients_global": None,
                     "inf_gradients_global": None,
-                }
 
-                self.early_stopping_inference[(optim_idx, random_state_idx)] = {
+                    # Loss and target sensitivities
                     "training_loss_sensitivity": [],
-                    "training_target_sensitivities": {},
+                    "training_target_sensitivities": [],
                 }
-
-                # Make torch dataloaders
-                train_loader, train_loader_eval, valid_loader = self.make_dataloaders(train_dataset, self.batch_size, self.use_ts_sampler, self.aggregate_last, self.drop_last, valid_dataset)
 
                 # Initialize model
                 model = self.initialize_model(
@@ -448,97 +488,175 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
                     head_activation = self.head_activation,
                     fit_encoder_intercept = self.fit_encoder_intercept,
                     fit_head_intercept = self.fit_head_intercept,
+                    signal_modifier = self.signal_modifier,
+                    head_rank = self.head_rank,
                     dropout_p = self.dropout_p,
-                    long_only = self.long_only,
-                    dollar_neutral = self.dollar_neutral,
                     normalization = self.normalization, 
-                )            
+                )
 
                 # Set up optimizer 
                 optim = self.make_optimizer(model, optimizer, self.learning_rate, self.weight_decay)
 
-                # Set up scheduler
-                if self.scheduler is not None:
-                    scheduler = self.make_scheduler(optim, self.scheduler, self.epochs, len(train_loader))
-                else:
-                    scheduler = None
-        
-                # Train model
-                model_es, epochs_es, early_stopping_trace = self.train_model(
-                    model = model,
-                    epochs = self.epochs,
-                    train_loader = train_loader,
-                    train_loader_eval = train_loader_eval,
-                    valid_loader = valid_loader, 
-                    optimizer = optim, 
-                    scheduler = scheduler,
-                    loss_func = self.loss_func,
-                    sample_weight = sample_weight,
-                    sample_weight_strategy = sample_weight_strategy,
-                    reg_turnover = self.reg_turnover, 
-                    patience = self.patience, 
-                    verbose = self.verbose,
-                )
-                self.early_stopping_dynamics[(optim_idx, random_state_idx)].update(early_stopping_trace)
-
-                # Store model diagnostics on gradients and NaN/inf checks
-                model_es_diagnostics = self._get_model_diagnostics(model_es, torch.Tensor(X_train_s), torch.Tensor(y_train_s))
-                self.early_stopping_dynamics[(optim_idx, random_state_idx)].update(model_es_diagnostics)
-
-                # Infer properties of the trained model
-                model_es_inference = self._inspect_model(model_es, torch.Tensor(X_train_s), torch.Tensor(y_train_s))
-                self.early_stopping_inference[(optim_idx, random_state_idx)].update(model_es_inference)
-
-                if self.refit:
-                    # Create training set dataloader over the full dataset
-                    X_s, y_s, _, _ = self.scale_data(X, y, self.x_scaler, self.y_scaler)
-                    full_train_dataset, _ = self.make_tensor_datasets(X_train_s = X_s, y_train_s = y_s, sample_weight = sample_weight)
-                    full_train_loader, _, _ = self.make_dataloaders(full_train_dataset, self.batch_size, self.use_ts_sampler, self.aggregate_last, self.drop_last)
-
-                    # Reset seed
-                    torch.manual_seed(random_state)
-
-                    # Reinitialize model
-                    final_model = self.initialize_model(
-                        torch_model = self.torch_model,
-                        n_inputs = X.shape[1],
-                        n_latent = self.n_latent,
-                        n_outputs = y.shape[1],
-                        encoder_activation = self.encoder_activation,
-                        head_activation = self.head_activation,
-                        fit_encoder_intercept = self.fit_encoder_intercept,
-                        fit_head_intercept = self.fit_head_intercept,
-                        dropout_p = self.dropout_p,
-                        long_only = self.long_only,
-                        dollar_neutral = self.dollar_neutral,
-                        normalization = self.normalization, 
+                if self.patience is None:
+                    # Make torch dataloaders
+                    train_loader, _, _ = self.make_dataloaders_(
+                        train_dataset = train_datasets[0],
+                        batch_size = self.batch_size,
+                        use_ts_sampler = self.use_ts_sampler,
+                        aggregate_last = self.aggregate_last,
+                        drop_last = self.drop_last,
+                        valid_dataset = None
                     )
-                    optim = self.make_optimizer(final_model, optimizer, self.learning_rate, self.weight_decay)
                     if self.scheduler is not None:
-                        scheduler = self.make_scheduler(optim, self.scheduler, self.epochs, len(full_train_loader))
+                        scheduler = self.make_scheduler(optim, self.scheduler, self.epochs, len(train_loader))
                     else:
                         scheduler = None
-                        
+
                     # Train model
-                    model_full, _, _ = self.train_model(
-                        model = final_model,
-                        epochs = epochs_es,
-                        train_loader = full_train_loader,
+                    model, _, _ = self.train_model(
+                        model = model,
+                        epochs = self.epochs,
+                        train_loader = train_loader,
                         train_loader_eval = None,
                         valid_loader = None, 
                         optimizer = optim, 
                         scheduler = scheduler,
                         loss_func = self.loss_func,
-                        sample_weight = sample_weight,
-                        sample_weight_strategy = sample_weight_strategy,
                         reg_turnover = self.reg_turnover, 
-                        patience = None, 
-                        verbose = self.verbose
+                        patience = self.patience, 
+                        verbose = self.verbose,
                     )
-                    self.models.append(model_full)
 
+                    # Store model diagnostics on gradients and NaN/inf checks
+                    model_diagnostics = self._get_model_diagnostics(model, torch.Tensor(X_s), torch.Tensor(y_s))
+                    self.final_model_inference[(optim_idx, random_state_idx)].update(model_diagnostics)
+
+                    # Infer properties of the trained model
+                    model_inference = self._inspect_model(model, torch.Tensor(X_s), torch.Tensor(y_s))
+                    self.final_model_inference[(optim_idx, random_state_idx)].update(model_inference)
+                    
+                    self.models.append(model)
                 else:
-                    self.models.append(model_es)
+                    self.validated_models = []
+                    for idx, (train_dataset, valid_dataset) in enumerate(zip(train_datasets, valid_datasets)):
+                        train_loader, train_loader_eval, valid_loader = self.make_dataloaders_(
+                            train_dataset = train_dataset,
+                            batch_size = self.batch_size,
+                            use_ts_sampler = self.use_ts_sampler,
+                            aggregate_last = self.aggregate_last,
+                            drop_last = self.drop_last,
+                            valid_dataset = valid_dataset
+                        )
+                        if self.scheduler is not None:
+                            scheduler = self.make_scheduler(optim, self.scheduler, self.epochs, len(train_loader))
+                        else:
+                            scheduler = None
+
+                        # Train model
+                        model_es, epochs_es, early_stopping_trace = self.train_model(
+                            model = model,
+                            epochs = self.epochs,
+                            train_loader = train_loader,
+                            train_loader_eval = train_loader_eval,
+                            valid_loader = valid_loader,
+                            optimizer = optim,
+                            scheduler = scheduler,
+                            loss_func = self.loss_func,
+                            reg_turnover = self.reg_turnover,
+                            patience = self.patience,
+                            verbose = self.verbose,
+                        )
+
+                        # Store early stopping information
+                        for key, value in early_stopping_trace.items():
+                            self.early_stopping_trace[(optim_idx, random_state_idx)][key].append(value)
+
+                        # Store model diagnostics on gradients and NaN/inf checks
+                        model_diagnostics = self._get_model_diagnostics(model_es, torch.Tensor(X_trains_s[idx]), torch.Tensor(y_trains_s[idx]))
+                        for key, value in model_diagnostics.items():
+                            self.early_stopping_inference[(optim_idx, random_state_idx)][key].append(value)
+
+                        # Infer properties of the trained model
+                        model_inference = self._inspect_model(model_es, torch.Tensor(X_trains_s[idx]), torch.Tensor(y_trains_s[idx]))
+                        for key, value in model_inference.items():
+                            self.early_stopping_inference[(optim_idx, random_state_idx)][key].append(value)
+
+                        self.validated_models.append(model_es)
+
+                    if self.refit:
+                        # Create training set dataloader over the full dataset
+                        X_s, y_s, _, _ = self.scale_data_(
+                            X_trains = [X],
+                            y_trains = [y],
+                            x_scaler = self.x_scaler,
+                            y_scaler = self.y_scaler,
+                        )
+                        train_datasets, _ = self.make_tensor_datasets_(
+                            X_trains_s = [X_s],
+                            y_trains_s = [y_s]
+                        )
+                        train_loader, _, _ = self.make_dataloaders_(
+                            train_dataset = train_datasets[0],
+                            batch_size = self.batch_size,
+                            use_ts_sampler = self.use_ts_sampler,
+                            aggregate_last = self.aggregate_last,
+                            drop_last = self.drop_last,
+                            valid_dataset = None
+                        )
+
+                        # Reset seed
+                        torch.manual_seed(random_state)
+
+                        # Reinitialize model
+                        final_model = self.initialize_model(
+                            torch_model = self.torch_model,
+                            n_inputs = X.shape[1],
+                            n_latent = self.n_latent,
+                            n_outputs = y.shape[1],
+                            encoder_activation = self.encoder_activation,
+                            head_activation = self.head_activation,
+                            fit_encoder_intercept = self.fit_encoder_intercept,
+                            fit_head_intercept = self.fit_head_intercept,
+                            signal_modifier = self.signal_modifier,
+                            head_rank = self.head_rank,
+                            dropout_p = self.dropout_p,
+                            normalization = self.normalization, 
+                        )
+
+                        optim = self.make_optimizer(final_model, optimizer, self.learning_rate, self.weight_decay)
+                        
+                        # Identify number of epochs to train for 
+                        # This is the average number of epochs trained for across the early stopping folds
+                        final_epochs = int(np.mean(self.early_stopping_trace[(optim_idx, random_state_idx)]['selected_epoch']))
+                        if self.scheduler is not None:
+                            scheduler = self.make_scheduler(optim, self.scheduler, final_epochs, len(train_loader))
+                        else:
+                            scheduler = None
+
+                        # Train model
+                        model_full, _, _ = self.train_model(
+                            model = final_model,
+                            epochs = final_epochs,
+                            train_loader = train_loader,
+                            train_loader_eval = None,
+                            valid_loader = None, 
+                            optimizer = optim, 
+                            scheduler = scheduler,
+                            loss_func = self.loss_func,
+                            reg_turnover = self.reg_turnover, 
+                            patience = self.patience, 
+                            verbose = self.verbose,
+                        )
+
+                        # Infer properties of the trained model
+                        model_inference = self._inspect_model(model_full, torch.Tensor(X_s), torch.Tensor(y_s))
+                        for key, value in model_inference.items():
+                            self.final_model_inference[(optim_idx, random_state_idx)][key].append(value)
+
+                        self.models.append(model_full)
+
+                    else:
+                        self.models.append(self.validated_models)
 
         return self
     
@@ -577,9 +695,9 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         head_activation,
         fit_encoder_intercept,
         fit_head_intercept,
+        signal_modifier,
+        head_rank,
         dropout_p,
-        long_only,
-        dollar_neutral,
         normalization,
     ):            
         if torch_model is not None:
@@ -595,85 +713,131 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
                 head_activation=head_activation,
                 fit_encoder_intercept=fit_encoder_intercept,
                 fit_head_intercept=fit_head_intercept,
+                signal_modifier = signal_modifier,
+                head_rank=head_rank,
                 dropout_p=dropout_p,
-                long_only=long_only,
-                dollar_neutral=dollar_neutral,
                 normalization=normalization,
             )
 
         return model
     
-    def create_train_valid_splits(self, X, y, train_pct):
-        dates = sorted(X.index.get_level_values(1).unique())
-        cut = int(train_pct * len(dates))
-        train_dates, valid_dates = dates[:cut], dates[cut:] # TODO: upfront check this doesn't create empty splits
+    def create_train_valid_splits_(self, X, y, splitter):
+        """
+        Create train/validation splits based on the provided splitter object.
+        Output lists of X_trains, X_valids, y_trains, y_valids for each split.
+        """
+        X_trains, X_valids, y_trains, y_valids = [], [], [], []
+        if isinstance(splitter, BaseCrossValidator):
+            for train_idx, valid_idx in splitter.split(X, y):
+                X_trains.append(X.iloc[train_idx])
+                X_valids.append(X.iloc[valid_idx])
+                y_trains.append(y.iloc[train_idx])
+                y_valids.append(y.iloc[valid_idx])
+        else:
+            # it is a train_pct 
+            dates = sorted(X.index.get_level_values(1).unique())
+            cut = int(splitter * len(dates))
+            train_dates, valid_dates = dates[:cut], dates[cut:] # TODO: upfront check this doesn't create empty splits
 
-        X_train = X[X.index.get_level_values(1).isin(train_dates)]
-        y_train = y[y.index.get_level_values(1).isin(train_dates)]
-        X_valid = X[X.index.get_level_values(1).isin(valid_dates)]
-        y_valid = y[y.index.get_level_values(1).isin(valid_dates)]
+            X_train = X[X.index.get_level_values(1).isin(train_dates)]
+            y_train = y[y.index.get_level_values(1).isin(train_dates)]
+            X_valid = X[X.index.get_level_values(1).isin(valid_dates)]
+            y_valid = y[y.index.get_level_values(1).isin(valid_dates)]
 
-        return X_train, X_valid, y_train, y_valid
+            X_trains.append(X_train)
+            X_valids.append(X_valid)
+            y_trains.append(y_train)
+            y_valids.append(y_valid)
+
+        return X_trains, X_valids, y_trains, y_valids
     
-    def scale_data(
+    def scale_data_(
         self,
-        X_train,
-        y_train,
+        X_trains,
+        y_trains,
         x_scaler,
         y_scaler,
-        X_valid = None,
-        y_valid = None,
+        X_valids=None,
+        y_valids=None,
     ):
-        X_valid_s = None
-        y_valid_s = None
-        # Scale independent variables
-        if x_scaler:
-            x_scaler.fit(X_train)
-            X_train_s = x_scaler.transform(X_train)
-            if X_valid is not None:
-                X_valid_s = x_scaler.transform(X_valid)
-        else:
-            X_train_s = X_train.values
-            if X_valid is not None:
-                X_valid_s = X_valid.values
+        """
+        Input list of X_trains, y_trains, x_scalers, y_scalers and optional X_valids, y_valids.
+        Output lists of scaled X_trains, y_trains, X_valids, y_valids.
+        """
+        X_trains_s, y_trains_s, X_valids_s, y_valids_s = [], [], [], []
+        for i in range(len(X_trains)):
+            X_train = X_trains[i]
+            y_train = y_trains[i]
+            X_valid = X_valids[i] if X_valids is not None else None
+            y_valid = y_valids[i] if y_valids is not None else None
 
+            if x_scaler is not None:
+                x_scaler_i = clone(x_scaler)
+                x_scaler_i.fit(X_train)
+                X_train_s = x_scaler_i.transform(X_train)
+                if X_valid is not None:
+                    X_valid_s = x_scaler_i.transform(X_valid)
+                else:
+                    X_valid_s = None
+            else:
+                X_train_s = X_train.values
+                if X_valid is not None:
+                    X_valid_s = X_valid.values
+                else:
+                    X_valid_s = None
 
-        # Scale dependent variables
-        # TODO: ensure ys are 2d for this to work
-        if y_scaler:
-            y_scaler.fit(y_train)
-            y_train_s = y_scaler.transform(y_train)
-            if y_valid is not None:
-                y_valid_s = y_scaler.transform(y_valid)
-        else:
-            y_train_s = y_train.values
-            if y_valid is not None:
-                y_valid_s = y_valid.values
+            # Scale dependent variables
+            if y_scaler is not None:
+                y_scaler_i = clone(y_scaler)
+                y_scaler_i.fit(y_train)
+                y_train_s = y_scaler_i.transform(y_train)
+                if y_valid is not None:
+                    y_valid_s = y_scaler_i.transform(y_valid)
+                else:
+                    y_valid_s = None
+            else:
+                y_train_s = y_train.values
+                if y_valid is not None:
+                    y_valid_s = y_valid.values
+                else:
+                    y_valid_s = None
 
-        return X_train_s, y_train_s, X_valid_s, y_valid_s
+            X_trains_s.append(X_train_s)
+            y_trains_s.append(y_train_s)
+            X_valids_s.append(X_valid_s)
+            y_valids_s.append(y_valid_s)
+
+        return X_trains_s, y_trains_s, X_valids_s, y_valids_s
     
-    def make_tensor_datasets(
+    def make_tensor_datasets_(
         self,
-        X_train_s,
-        y_train_s,
-        X_valid_s = None,
-        y_valid_s = None,
-        sample_weight = None,
+        X_trains_s,
+        y_trains_s,
+        X_valids_s = None,
+        y_valids_s = None,
     ):
-        # TODO: check that both X_valid_s and y_valid_s have to be None
-        if sample_weight is not None: 
-            train_dataset = torch.utils.data.TensorDataset(torch.Tensor(X_train_s), torch.Tensor(y_train_s), torch.Tensor(sample_weight))
-        else:
-            train_dataset = torch.utils.data.TensorDataset(torch.Tensor(X_train_s), torch.Tensor(y_train_s))
+        train_datasets = []
+        valid_datasets = []
 
-        if X_valid_s is not None:
-            valid_dataset = torch.utils.data.TensorDataset(torch.Tensor(X_valid_s), torch.Tensor(y_valid_s))
-        else:
-            valid_dataset = None
+        for i in range(len(X_trains_s)):
+            train_dataset = torch.utils.data.TensorDataset(
+                torch.Tensor(X_trains_s[i]),
+                torch.Tensor(y_trains_s[i]),
+            )
+            if X_valids_s is not None:
+                valid_dataset = torch.utils.data.TensorDataset(
+                    torch.Tensor(X_valids_s[i]),
+                    torch.Tensor(y_valids_s[i]),
+                )
+            else:
+                valid_dataset = None
 
-        return train_dataset, valid_dataset
+            train_datasets.append(train_dataset)
+            valid_datasets.append(valid_dataset)
 
-    def make_dataloaders(
+        return train_datasets, valid_datasets
+
+    def make_dataloaders_(
         self,
         train_dataset,
         batch_size,
@@ -786,8 +950,6 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         optimizer,
         scheduler,
         loss_func,
-        sample_weight,
-        sample_weight_strategy,
         reg_turnover,
         patience,
         verbose,

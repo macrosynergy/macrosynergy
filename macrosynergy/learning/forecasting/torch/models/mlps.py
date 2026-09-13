@@ -31,24 +31,19 @@ class MultiLayerPerceptron(nn.Module, BaseEstimator):
         Whether to fit intercepts in the encoder layers. Default is False.
     fit_head_intercept : bool, optional
         Whether to fit intercepts in the output head. Default is True.
+    signal_modifier : nn.Module, optional
+        Differentiable layer to convert the outputs of the head into a signal in accordance
+        with an intended trading strategy. Default is None.
+    head_rank : int, optional
+        Number of neurons to project encoder outputs to before passing through the output
+        layer. Default is None for no projection.
     dropout_p: float, optional
         Dropout probability for regularization. Default is 0 (no dropout).
         Must be between 0 and 0.5. 
-    long_only : bool, optional
-        Whether to enforce a long-only or long-short constraint on the outputs. Default is
-        None for no constraint. If True, outputs from the `head_activation` layer will be
-        passed through a softmax function to ensure they are non-negative and sum to 1. 
-        If False, outputs from the `head_activation` layer will be passed through a custom
-        layer that ensures the absolute values of the outputs sum to 1.
-    dollar_neutral : bool, optional
-        If `long_only` is False, outputs from the `head_activation` layer will be
-        demeaned before being passed through the custom normalization layer to ensure that
-        both the sum of outputs equals zero and the sum of absolute values equals one.
-        Default is False.
     normalization : str, optional
         Type of normalization to apply after each linear layer in the encoder.
-        Options include "layer" for layer normalization, "batch" for batch normalization,
-        and "none" for no normalization. Default is "none". Batch normalization requires the 
+        Options are "layer" for layer normalization and  "batch" for batch normalization.
+        Default is None. Batch normalization requires the 
         batch size to be greater than 1. 
 
     Notes
@@ -105,26 +100,26 @@ class MultiLayerPerceptron(nn.Module, BaseEstimator):
         head_activation = "identity",
         fit_encoder_intercept = False,
         fit_head_intercept = True,
+        signal_modifier = None,
+        head_rank = None,
         dropout_p = 0,
-        long_only = None,
-        dollar_neutral = False,
         normalization = "none",
     ):
         super().__init__()
 
         # Checks
         self._check_init_params(
-            n_inputs,
-            n_latent,
-            n_outputs,
-            encoder_activation,
-            head_activation,
-            fit_encoder_intercept,
-            fit_head_intercept,
-            dropout_p,
-            long_only,
-            dollar_neutral,
-            normalization,
+            n_inputs=n_inputs,
+            n_latent=n_latent,
+            n_outputs=n_outputs,
+            encoder_activation=encoder_activation,
+            head_activation=head_activation,
+            fit_encoder_intercept=fit_encoder_intercept,
+            fit_head_intercept=fit_head_intercept,
+            signal_modifier=signal_modifier,
+            head_rank=head_rank,
+            dropout_p=dropout_p,
+            normalization=normalization,
         )
 
         # Attributes
@@ -139,9 +134,9 @@ class MultiLayerPerceptron(nn.Module, BaseEstimator):
         self.head_activation = head_activation
         self.fit_encoder_intercept = fit_encoder_intercept
         self.fit_head_intercept = fit_head_intercept
+        self.signal_modifier = signal_modifier
+        self.head_rank = head_rank
         self.dropout_p = dropout_p
-        self.long_only = long_only
-        self.dollar_neutral = dollar_neutral
         self.normalization = normalization
 
         self.activation_map = {
@@ -158,7 +153,7 @@ class MultiLayerPerceptron(nn.Module, BaseEstimator):
         self.encoder = self._build_encoder(self.n_inputs, self.n_latent, self.encoder_activation, self.fit_encoder_intercept, self.dropout_p, self.normalization)
 
         # Projection head
-        self.head = self._build_head(self.n_latent[-1], self.n_outputs, self.head_activation, self.fit_head_intercept, self.long_only, self.dollar_neutral)
+        self.head = self._build_head(self.n_latent[-1], self.n_outputs, self.head_activation, self.fit_head_intercept, self.signal_modifier, self.head_rank)
 
     def forward(self, x):
         """
@@ -184,49 +179,61 @@ class MultiLayerPerceptron(nn.Module, BaseEstimator):
         activation_func = self.activation_map[encoder_activation]
         # Build encoder
         encoder_modules = [nn.Linear(n_inputs, n_latent[0], bias = fit_encoder_intercept)]
-        if normalization != "none":
+        if normalization is not None:
             if normalization == "batch":
                 encoder_modules.append(nn.BatchNorm1d(n_latent[0]))
             elif normalization == "layer":
                 encoder_modules.append(nn.LayerNorm(n_latent[0]))
         encoder_modules.append(activation_func())
-        if dropout_p > 0:
+        if isinstance(dropout_p, numbers.Real):
             encoder_modules.append(nn.Dropout(p=dropout_p))
+        else:
+            encoder_modules.append(nn.Dropout(p=dropout_p[0]))
         if len(n_latent) > 1:
             for layer_idx in range(1, len(n_latent)):
                 encoder_modules.append(
                     nn.Linear(n_latent[layer_idx - 1], n_latent[layer_idx], bias = fit_encoder_intercept)
                 )
-                if normalization != "none":
+                if normalization is not None:
                     if normalization == "batch":
                         encoder_modules.append(nn.BatchNorm1d(n_latent[layer_idx]))
                     elif normalization == "layer":
                         encoder_modules.append(nn.LayerNorm(n_latent[layer_idx]))
                 encoder_modules.append(activation_func())
-                if dropout_p > 0:
-                    encoder_modules.append(nn.Dropout(p=dropout_p*2))
+                if isinstance(dropout_p, numbers.Real):
+                    encoder_modules.append(nn.Dropout(p=dropout_p* 2))
+                else:
+                    encoder_modules.append(nn.Dropout(p=dropout_p[layer_idx]))
         
         return nn.Sequential(*encoder_modules)
     
-    def _build_head(self, n_latent, n_outputs, head_activation, fit_head_intercept, long_only, dollar_neutral):
-        if long_only is None:
-            head = nn.Sequential(
-                nn.Linear(n_latent, n_outputs, bias = fit_head_intercept),
-                self.activation_map[head_activation]()
-            )
-        elif long_only is True:
-            head = nn.Sequential(
-                nn.Linear(n_latent, n_outputs, bias = fit_head_intercept),
-                self.activation_map[head_activation](),
-                nn.Softmax(dim = -1)
-            )
+    def _build_head(self, n_latent, n_outputs, head_activation, fit_head_intercept, signal_modifier, head_rank):
+        if signal_modifier is not None:
+            if head_rank is not None:
+                head = nn.Sequential(
+                    nn.Linear(n_latent, head_rank, bias = fit_head_intercept),
+                    nn.Linear(head_rank, n_outputs, bias = fit_head_intercept),
+                    self.activation_map[head_activation](),
+                    signal_modifier
+                )
+            else:
+                head = nn.Sequential(
+                    nn.Linear(n_latent, n_outputs, bias = fit_head_intercept),
+                    self.activation_map[head_activation](),
+                    signal_modifier
+                )
         else:
-            # long_only is False
-            head = nn.Sequential(
-                nn.Linear(n_latent, n_outputs, bias = fit_head_intercept),
-                self.activation_map[head_activation](),
-                LongShortModule(dollar_neutral)
-            )
+            if head_rank is not None:
+                head = nn.Sequential(
+                    nn.Linear(n_latent, head_rank, bias = fit_head_intercept),
+                    nn.Linear(head_rank, n_outputs, bias = fit_head_intercept),
+                    self.activation_map[head_activation]()
+                )
+            else:
+                head = nn.Sequential(
+                    nn.Linear(n_latent, n_outputs, bias = fit_head_intercept),
+                    self.activation_map[head_activation]()
+                )
             
         return head
 
@@ -239,9 +246,9 @@ class MultiLayerPerceptron(nn.Module, BaseEstimator):
         head_activation,
         fit_encoder_intercept,
         fit_head_intercept,
+        signal_modifier,
+        head_rank,
         dropout_p,
-        long_only,
-        dollar_neutral,
         normalization,
     ):
         # n_inputs
@@ -287,24 +294,42 @@ class MultiLayerPerceptron(nn.Module, BaseEstimator):
         # fit_head_intercept
         if not isinstance(fit_head_intercept, bool):
             raise TypeError("fit_head_intercept must be a boolean.")
-        
+        # signal_modifier
+        if signal_modifier is not None:
+            if not isinstance(signal_modifier, nn.Module):
+                raise TypeError("signal_modifier must be a PyTorch nn.Module.")
+        # head_rank
+        if not isinstance(head_rank, numbers.Integral):
+            raise TypeError("head_rank must be an integer.")
+        if head_rank < 1:
+            raise ValueError("head_rank must be at least 1.")
+        if head_rank >= n_outputs:
+            raise ValueError("head_rank must be less than n_outputs.")
         # dropout_p
-        if not isinstance(dropout_p, numbers.Real):
-            raise TypeError("dropout_p must be a real number.")
-        if not (0 <= dropout_p < 0.5):
-            raise ValueError("dropout_p must be between 0 and 0.5.")
-        
-        # long_only
-        if long_only is not None and not isinstance(long_only, bool):
-            raise TypeError("long_only must be a boolean or None.")
-        # dollar_neutral
-        if long_only is False and not isinstance(dollar_neutral, bool):
-            raise TypeError("dollar_neutral must be a boolean when long_only is False.")
+        if not isinstance(dropout_p, (numbers.Real, list)):
+            raise TypeError("dropout_p must be a real number or a list.")
+        if isinstance(dropout_p, numbers.Real):
+            if not (0 <= dropout_p < 1):
+                raise ValueError("dropout_p must be between 0 and 1.")
+        else:
+            if len(dropout_p) == 0:
+                raise ValueError("dropout_p list cannot be empty.")
+            if type(n_latent) is not list:
+                raise ValueError("dropout_p can only be a list if n_latent is a list.")
+            if len(dropout_p) != len(n_latent):
+                raise ValueError("dropout_p list must have the same length as n_latent list.")
+            for p in dropout_p:
+                if not isinstance(p, numbers.Real):
+                    raise TypeError("All elements of dropout_p list must be real numbers.")
+                if not (0 <= p < 1):
+                    raise ValueError("All elements of dropout_p list must be between 0 and 1.")
+                
         # normalization
-        if not isinstance(normalization, str):
-            raise TypeError("normalization must be a string.")
-        if normalization not in {"layer", "batch", "none"}:
-            raise ValueError("normalization must be one of 'layer', 'batch', or 'none'.")
+        if normalization is not None:
+            if not isinstance(normalization, str):
+                raise TypeError("normalization must be a string.")
+            if normalization not in {"layer", "batch"}:
+                raise ValueError("normalization must be one of 'layer' or 'batch'")
         
 if __name__=="__main__":
     print("========================================")
