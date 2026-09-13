@@ -4,7 +4,7 @@ import pandas as pd
 import torch
 import torch.nn as nn
 
-from sklearn.base import BaseEstimator, RegressorMixin
+from sklearn.base import BaseEstimator, RegressorMixin, clone
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import BaseCrossValidator
 
@@ -382,7 +382,7 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         if self.patience is None:
             # Then we are training a single model on the entire dataset, with no early stopping,
             # but with possible different trainings for random seeds and optimizers.
-            X_s, y_s = self.scale_data_(
+            X_s, y_s, _, _ = self.scale_data_(
                 X_trains = [X],
                 y_trains = [y],
                 x_scaler = self.x_scaler,
@@ -405,7 +405,7 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
             # Make tensor datasets for each fold 
             train_datasets, valid_datasets = self.make_tensor_datasets_(
                 X_trains_s = X_trains_s,
-                y_train_s = y_trains_s,
+                y_trains_s = y_trains_s,
                 X_valids_s = X_valids_s,
                 y_valids_s = y_valids_s
             )
@@ -538,6 +538,7 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
                     self.models.append(model)
                 else:
                     self.validated_models = []
+                    self.validated_epochs_es = []
                     for idx, (train_dataset, valid_dataset) in enumerate(zip(train_datasets, valid_datasets)):
                         train_loader, train_loader_eval, valid_loader = self.make_dataloaders_(
                             train_dataset = train_dataset,
@@ -569,7 +570,7 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
 
                         # Store early stopping information
                         for key, value in early_stopping_trace.items():
-                            self.early_stopping_trace[(optim_idx, random_state_idx)][key].append(value)
+                            self.early_stopping_dynamics[(optim_idx, random_state_idx)][key].append(value)
 
                         # Store model diagnostics on gradients and NaN/inf checks
                         model_diagnostics = self._get_model_diagnostics(model_es, torch.Tensor(X_trains_s[idx]), torch.Tensor(y_trains_s[idx]))
@@ -991,32 +992,16 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         
         for epoch in range(epochs):
             model.train()
-            if sample_weight:
-                for X_i, y_i, sw_i in train_loader:
-                    model = self._fit_one_batch(
-                        model = model,
-                        X_i = X_i,
-                        y_i = y_i,
-                        optimizer = optimizer,
-                        scheduler = scheduler,
-                        loss_func = loss_func,
-                        sample_weight = sw_i,
-                        sample_weight_strategy = sample_weight_strategy,
-                        reg_turnover = reg_turnover
-                    )
-            else:
-                for X_i, y_i in train_loader:
-                    model = self._fit_one_batch(
-                        model = model,
-                        X_i = X_i,
-                        y_i = y_i,
-                        optimizer = optimizer,
-                        scheduler = scheduler,
-                        loss_func = loss_func,
-                        sample_weight = None,
-                        sample_weight_strategy = sample_weight_strategy,
-                        reg_turnover = reg_turnover
-                    )  
+            for X_i, y_i in train_loader:
+                model = self._fit_one_batch(
+                    model = model,
+                    X_i = X_i,
+                    y_i = y_i,
+                    optimizer = optimizer,
+                    scheduler = scheduler,
+                    loss_func = loss_func,
+                    reg_turnover = reg_turnover
+                )  
             
             if patience is not None:
                 train_loss = self._eval_loss(model, train_loader_eval, loss_func)
@@ -1054,8 +1039,6 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
             pass
 
         early_stopping_trace["selected_epoch"] = best_epoch
-        early_stopping_trace["train_loss_isinf"] = np.isinf(early_stopping_trace["train_loss_path"]).any()
-        early_stopping_trace["train_loss_isnan"] = np.isnan(early_stopping_trace["train_loss_path"]).any()
 
         return model, best_epoch, early_stopping_trace
 
@@ -1067,19 +1050,12 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         optimizer,
         scheduler,
         loss_func,
-        sample_weight,
-        sample_weight_strategy,
         reg_turnover
     ):
         optimizer.zero_grad()
         preds = model(X_i)
-        if not sample_weight:
-            loss = loss_func(preds, y_i)
-        elif sample_weight_strategy == "native":
-            loss = loss_func(preds, y_i, sample_weight)
-        elif sample_weight_strategy == "reduction_none":
-            loss = loss_func(preds, y_i) * sample_weight
-            loss = loss.mean()
+        
+        loss = loss_func(preds, y_i)
 
         if reg_turnover > 0:
             pweight_changes = preds[1:] - preds[:-1]
@@ -1321,12 +1297,8 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
                 # this will be the final layer in a neural net so associated checks that it can be used are needed
                 if not hasattr(signal_modifier, "forward"):
                     raise ValueError("signal_modifier must have a forward method.")
-                if not hasattr(signal_modifier, "backward"):
-                    raise ValueError("signal_modifier must have a backward method.")
                 if not callable(signal_modifier.forward):
                     raise ValueError("signal_modifier.forward must be callable.")
-                if not callable(signal_modifier.backward):
-                    raise ValueError("signal_modifier.backward must be callable.")
 
             # head_rank
             if head_rank is not None:
@@ -1513,7 +1485,7 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         if min_samples < 1:
             raise ValueError("min_samples must be at least 1.")
         
-    def _check_fit_params(self, X, y, sample_weight):
+    def _check_fit_params(self, X, y):
         # X 
         if not isinstance(X, pd.DataFrame):
             raise TypeError("X must be a pandas DataFrame.")
@@ -1541,44 +1513,11 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
             raise TypeError("The inner index of y must be datetime.date.")
         if not X.index.equals(y.index):
             raise ValueError("X and y must have the same multi-index.")
-        
-        # sample_weight 
-        if sample_weight is not None:
-            if not isinstance(sample_weight, np.ndarray):
-                raise TypeError("sample_weight must be a numpy array or None.")
-            if not all(isinstance(x, numbers.Real) for x in sample_weight):
-                raise TypeError("All elements in sample_weight must be real numbers.")
-            if not all(x >= 0 for x in sample_weight):
-                raise ValueError("All elements in sample_weight must be non-negative.")
-            if sample_weight.ndim != 1:
-                raise ValueError("sample_weight must be a 1D array.")
-            if len(sample_weight) != len(X):
-                raise ValueError("Length of sample_weight must match number of samples in X.")
-            
-            # Check compatibility with loss function
-            sig_forward = inspect.signature(self.loss_func.forward)
-            sig_constructor = inspect.signature(self.loss_func.__init__)
-            if "sample_weight" not in sig_forward.parameters:
-                if "reduction" not in sig_constructor.parameters:
-                    raise ValueError(
-                        "Sample weights are not supported by the specified loss function. The loss function must either accept a `sample_weight` tensor in its forward method or have a `reduction` parameter in its constructor."
-                    )
-                else:
-                    reduction = sig_constructor.parameters["reduction"]
-                    if reduction.default == "none":
-                        return "reduction_none"
-                    else:
-                        raise ValueError(
-                            "When the loss function does not accept a `sample_weight` tensor in its forward method but has a `reduction` parameter in its constructor, the `reduction` must be set to 'none' to support sample weights."
-                        )
-            else:
-                return "native" 
-        else:
-            return None
 
 if __name__ == "__main__":
     from macrosynergy.learning import (
         SignalOptimizer,
+        NegSharpeRatio,
     )
     from macrosynergy.management.simulate import make_qdf
     import pandas as pd
@@ -1648,33 +1587,32 @@ if __name__ == "__main__":
     #         return out
 
     mlp = MLPRegressor(
-        n_latent = 2, 
-        fit_encoder_intercept = False,
+        n_latent = [64,32], 
+        fit_encoder_intercept = True,
         fit_head_intercept = True,
         encoder_activation = "tanh",
         head_activation="identity",
         dropout_p = 0.1,
-        long_only = None,
-        dollar_neutral = False,
-        normalization = "none",
+        signal_modifier=nn.Softmax(dim=1),
+        normalization = "layer",
         #torch_model = BasicMLP(n_inputs=X.shape[1], n_latent=16, n_outputs=y.shape[1]),
-        loss_func=torch.nn.MSELoss(),
-        optimizer = ["AdamW","SGD+mom"],
+        loss_func=NegSharpeRatio(),
+        optimizer = ["AdamW","Adam"],
         scheduler = None, 
         batch_size = 16,
         learning_rate = 3e-4, 
         weight_decay = 1e-4,
-        reg_turnover = 0,
+        reg_turnover = 1e-4,
         use_ts_sampler = True,
         aggregate_last=True,
         drop_last=False,
-        epochs = 10000,
+        epochs = 100,
         patience = 10, 
-        refit=True,
-        train_pct = 0.7,
-        x_scaler = StandardScaler(with_mean=False),
-        y_scaler = StandardScaler(with_mean=False),
-        verbose = False, 
+        #refit=False,
+        ##train_pct = 0.7,
+        #x_scaler = StandardScaler(with_mean=False),
+        #y_scaler = StandardScaler(with_mean=False),
+        #verbose = False, 
         random_state = [42,43],
         inverse_transform_preds = False,
         min_samples = 36,
