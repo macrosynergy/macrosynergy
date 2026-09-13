@@ -672,13 +672,29 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
             # Convert to tensor and pass through each network
             X_s_torch = torch.Tensor(X_s)
             for model in self.models:
-                model.eval()
-                preds = model(X_s_torch).numpy()
+                if isinstance(model, list):
+                    # If model is a list of validated models, average predictions across them
+                    preds_list = []
+                    for m in model:
+                        m.eval()
+                        preds = m(X_s_torch).numpy()
 
-                # Inverse scale predictions
-                if self.inverse_transform_preds:
-                    preds = self.y_scaler.inverse_transform(preds)
-                model_preds.append(preds)
+                        # Inverse scale predictions
+                        if self.inverse_transform_preds:
+                            preds = self.y_scaler.inverse_transform(preds)
+                        preds_list.append(preds)
+
+                    # Average predictions across validated models
+                    avg_preds = np.mean(np.stack(preds_list, axis=0), axis=0)
+                    model_preds.append(avg_preds)
+                else:
+                    model.eval()
+                    preds = model(X_s_torch).numpy()
+
+                    # Inverse scale predictions
+                    if self.inverse_transform_preds:
+                        preds = self.y_scaler.inverse_transform(preds)
+                    model_preds.append(preds)
 
         # Concatenate predictions and average across models
         final_preds = np.mean(np.stack(model_preds, axis=0), axis = 0)
