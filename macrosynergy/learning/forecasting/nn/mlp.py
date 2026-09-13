@@ -409,7 +409,7 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
                 X_valids_s = X_valids_s,
                 y_valids_s = y_valids_s
             )
-
+            
         # Iterate through random states
         for optim_idx, optimizer in enumerate(self.optimizers):
             for random_state_idx, random_state in enumerate(self.random_states):
@@ -538,7 +538,7 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
                     self.models.append(model)
                 else:
                     self.validated_models = []
-                    self.validated_epochs_es = []
+                    self.mean_epochs_es = 0
                     for idx, (train_dataset, valid_dataset) in enumerate(zip(train_datasets, valid_datasets)):
                         train_loader, train_loader_eval, valid_loader = self.make_dataloaders_(
                             train_dataset = train_dataset,
@@ -583,7 +583,9 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
                             self.early_stopping_inference[(optim_idx, random_state_idx)][key].append(value)
 
                         self.validated_models.append(model_es)
-
+                        self.mean_epochs_es += epochs_es
+                    self.mean_epochs_es /= len(self.validated_models)
+                    self.mean_epochs_es = int(self.mean_epochs_es)
                     if self.refit:
                         # Create training set dataloader over the full dataset
                         X_s, y_s, _, _ = self.scale_data_(
@@ -626,18 +628,15 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
 
                         optim = self.make_optimizer(final_model, optimizer, self.learning_rate, self.weight_decay)
                         
-                        # Identify number of epochs to train for 
-                        # This is the average number of epochs trained for across the early stopping folds
-                        final_epochs = int(np.mean(self.early_stopping_trace[(optim_idx, random_state_idx)]['selected_epoch']))
                         if self.scheduler is not None:
-                            scheduler = self.make_scheduler(optim, self.scheduler, final_epochs, len(train_loader))
+                            scheduler = self.make_scheduler(optim, self.scheduler, int(self.mean_epochs_es), len(train_loader))
                         else:
                             scheduler = None
 
                         # Train model
                         model_full, _, _ = self.train_model(
                             model = final_model,
-                            epochs = final_epochs,
+                            epochs = int(self.mean_epochs_es),
                             train_loader = train_loader,
                             train_loader_eval = None,
                             valid_loader = None, 
@@ -1518,6 +1517,7 @@ if __name__ == "__main__":
     from macrosynergy.learning import (
         SignalOptimizer,
         NegSharpeRatio,
+        RollingKFoldPanelSplit,
     )
     from macrosynergy.management.simulate import make_qdf
     import pandas as pd
@@ -1597,7 +1597,7 @@ if __name__ == "__main__":
         normalization = "layer",
         #torch_model = BasicMLP(n_inputs=X.shape[1], n_latent=16, n_outputs=y.shape[1]),
         loss_func=NegSharpeRatio(),
-        optimizer = ["AdamW","Adam"],
+        optimizer = "AdamW",
         scheduler = None, 
         batch_size = 16,
         learning_rate = 3e-4, 
@@ -1608,17 +1608,20 @@ if __name__ == "__main__":
         drop_last=False,
         epochs = 100,
         patience = 10, 
+        refit = False,
+        train_splitter=RollingKFoldPanelSplit(n_splits=5),
         #refit=False,
         ##train_pct = 0.7,
         #x_scaler = StandardScaler(with_mean=False),
         #y_scaler = StandardScaler(with_mean=False),
         #verbose = False, 
-        random_state = [42,43],
+        random_state = 42,
         inverse_transform_preds = False,
         min_samples = 36,
     ).fit(X,y)
     print(mlp.early_stopping_dynamics[(0,0)])
     print(mlp.early_stopping_inference[(0,0)])
+    mlp.predict(X)
 
     # so.calculate_predictions(
     #     name = "MLP",
