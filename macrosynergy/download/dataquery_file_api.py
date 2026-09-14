@@ -1979,6 +1979,66 @@ class DataQueryFileAPIClient:
         )
         return downloaded_files
 
+    def load_revisions_matrix(
+        self,
+        ticker: str,
+        metric: str = "value",
+        collapse_to_eod_values: bool = True,
+        end_of_day_time: str = "23:59:59",
+        end_of_day_tz: str = "UTC",
+    ) -> pd.DataFrame:
+        if ticker.lower() not in map(str.lower, self.list_all_tickers()):
+            raise ValueError(f"Ticker '{ticker}' is not available.")
+        # all_upstream_files = self.list_available_files()
+        # downloaded_files = self.list_downloaded_files()
+        jobs = [self.list_available_files, self.list_downloaded_files]
+        with cf.ThreadPoolExecutor() as executor:
+            futures = [executor.submit(job) for job in jobs]
+            results = [f.result() for f in futures]
+            all_upstream_files: pd.DataFrame = results[0]
+            downloaded_files: pd.DataFrame = results[1]
+        # check that all delta files are downloaded
+        rel_dataset = self.get_datasets_for_indicators([ticker])[0]
+        upstream_delta_files = all_upstream_files[
+            all_upstream_files["file-name"].str.contains("_DELTA")
+            & all_upstream_files["file-group-id"].str.contains(rel_dataset)
+        ]["file-name"]
+        downloaded_delta_files = downloaded_files[
+            downloaded_files["file-name"].str.contains("_DELTA")
+            & downloaded_files["dataset"].str.contains(rel_dataset)
+        ]["file-name"]
+        if set(upstream_delta_files) != set(downloaded_delta_files):
+            missing_files = set(upstream_delta_files) - set(downloaded_delta_files)
+            logger.warning(
+                f"Missing {len(missing_files)} delta files for ticker '{ticker}'. "
+                "Downloading missing files now."
+            )
+            self.download_files(
+                include_full_snapshots=False,
+                include_delta=True,
+                include_metadata=False,
+            )
+            downloaded_files = self.list_downloaded_files()
+            downloaded_delta_files = downloaded_files[
+                downloaded_files["file-name"].str.contains("_DELTA")
+                & downloaded_files["dataset"].str.contains(rel_dataset)
+            ]["file-name"]
+
+        df = self.load_dataframe(
+            tickers=[ticker],
+            metrics=[metric, "last_updated"],
+            dataframe_format="tickers",
+            dataframe_type="pandas",
+            files_list=sorted(set(downloaded_delta_files)),
+        )
+        return transform_delta_qdf_to_revisions_matrix(
+            df=df,
+            metric=metric,
+            collapse_to_eod_values=collapse_to_eod_values,
+            end_of_day_time=end_of_day_time,
+            end_of_day_tz=end_of_day_tz,
+        )
+
     def load_dataframe(
         self,
         tickers: Optional[List[str]] = None,
@@ -2386,6 +2446,69 @@ def _delete_corrupt_files(
                 removed_files.append(file_path)
 
     return sorted(map(str, removed_files))
+
+
+def transform_delta_qdf_to_revisions_matrix(
+    df: pd.DataFrame,
+    metric: str = "value",
+    collapse_to_eod_values: bool = True,
+    end_of_day_time: str = "23:59:59",
+    end_of_day_tz: str = "UTC",
+) -> pd.DataFrame:
+    cols_to_keep = ["real_date", "last_updated", metric]
+    if all(c in df.columns for c in ["cid", "xcat"]):
+        warnings.warn("Creating 'ticker' column from 'cid' and 'xcat'")
+        df["ticker"] = df["cid"] + "_" + df["xcat"]
+        df = df.drop(columns=["cid", "xcat"])
+    missing = [c for c in cols_to_keep + ["ticker"] if c not in df.columns]
+    if missing:
+        raise ValueError(f"Columns not found in DataFrame: {missing}")
+    if df["ticker"].nunique(dropna=False) > 1:
+        raise ValueError(
+            "The DataFrame contains multiple tickers. Please filter to a single ticker."
+        )
+
+    out = df[cols_to_keep].copy()
+
+    if collapse_to_eod_values:
+        ts = out["last_updated"]
+        ts = (
+            ts.dt.tz_localize(end_of_day_tz)
+            if ts.dt.tz is None
+            else ts.dt.tz_convert(end_of_day_tz)
+        )
+        # `end_of_day_time` is the release cut-off: anything later is the next day's release
+        _t = pd.Timestamp(end_of_day_time).time()
+        eod_offset = pd.Timedelta(
+            hours=_t.hour,
+            minutes=_t.minute,
+            seconds=_t.second,
+            microseconds=_t.microsecond,
+        )
+        rolls_over = ts > (ts.dt.normalize() + eod_offset)
+        out["effective_last_updated"] = (
+            ts.dt.normalize() + rolls_over * pd.Timedelta(days=1)
+        ).dt.date
+    else:
+        out["effective_last_updated"] = out["last_updated"]
+
+    # latest record per (real_date, effective_last_updated); stable sort keeps input order on exact ties
+    sort_cols = ["real_date", "effective_last_updated", "last_updated"]
+    drop_dup_cols = ["real_date", "effective_last_updated"]
+    new_last_updated_col = (
+        "jpmaqs_release_date" if collapse_to_eod_values else "jpmaqs_release_datetime"
+    )
+    out = (
+        out.sort_values(by=sort_cols, kind="stable")
+        .drop_duplicates(subset=drop_dup_cols, keep="last")
+        .reset_index(drop=True)
+        .rename(columns={"effective_last_updated": new_last_updated_col})
+    )
+
+    out = out.pivot(
+        columns=new_last_updated_col, index="real_date", values=metric
+    ).ffill(axis=1)
+    return out
 
 
 class SegmentedFileDownloader:
@@ -3526,11 +3649,16 @@ if __name__ == "__main__":
     )
 
     with DataQueryFileAPIClient() as dq:
-        dq.download_files(since_datetime=now_datetime - datetime.timedelta(days=3))
+        dq.download_files(
+            since_datetime=now_datetime - datetime.timedelta(days=3),
+            include_full_snapshots=False,
+        )
         catalog_df = dq.load_catalog()
         random_tickers = catalog_df["Ticker"].sample(n=20, random_state=42).tolist()
 
-        df = dq.download(tickers=random_tickers, keep_n_days_old_files=3)
+        df = dq.load_revisions_matrix(ticker=random_tickers[0])
+        df
+        # df = dq.download(tickers=random_tickers, keep_n_days_old_files=None)
         # print(df.head())
     end = time.time()
     print(f"Download completed in {end - start:.2f} seconds.")
