@@ -5,6 +5,13 @@ import numpy as np
 import pandas as pd
 
 from macrosynergy.management.simulate import SignalsAndReturnsGenerator
+from macrosynergy.management.types.qdf.methods import update_df
+from macrosynergy.pnl import (
+    contract_signals,
+    notional_positions,
+    proxy_pnl_calc,
+    evaluate_pnl,
+)
 from macrosynergy.pnl.historic_portfolio_volatility import (
     _check_est_args,
     _cov_matrix_history,
@@ -218,7 +225,7 @@ def _resolve_config(config: Dict[str, Any]) -> Dict[str, Any]:
     )
 
 
-def cov_estimators_bias_variance(
+def scaling_factor_bias_variance(
     configs: List[Dict[str, Any]],
     corr: np.ndarray,
     base_vol: np.ndarray,
@@ -343,6 +350,62 @@ def cov_estimators_bias_variance(
     return bias, std
 
 
+def cov_estimators_cost_accuracy(
+    df_csig: pd.DataFrame,
+    df_rets: pd.DataFrame,
+    configs,
+    aum: float,
+    vol_target: float,
+    tcost_obj = None,
+    rebal_freq: str = "M",
+    rstring: str = "XR",
+    slip: int = 0,
+    sname: str = "STRAT",
+    fids: List[str] = None,
+) -> Tuple[np.ndarray, np.ndarray]:
+
+    cs_and_rets = pd.concat([df_csig, df_rets], ignore_index=True)
+
+    costs, pnl_vols = [], []
+    for i, config in enumerate(configs):
+        n_est = len(config["est_freqs"])
+
+        npos = notional_positions(
+            df=cs_and_rets,
+            sname=sname,
+            fids=fids,
+            aum=aum,
+            slip=slip,
+            vol_target=vol_target,
+            rebal_freq=rebal_freq,
+            rstring=rstring,
+            lback_meth=config["lback_meth"],
+            est_freqs=config["est_freqs"],
+            lback_periods=config["lback_periods"],
+            est_weights=config.get("est_weights", [1] * n_est),
+            half_life=config.get("half_life", [1] * n_est),
+        )
+
+        pnl, pnle, cost = proxy_pnl_calc(
+            df=pd.concat((df_rets, npos), ignore_index=True),
+            spos=f"{sname}_POS",
+            rstring=rstring,
+            transaction_costs_object=tcost_obj,
+            return_pnl_excl_costs=True,
+            return_costs=True,
+        )
+
+        ev = evaluate_pnl(df_pnl=pnl, df_pnle=pnle, df_tcosts=cost, aum=aum)
+
+        cost = ev.loc["Transaction Cost"].iat[0]
+        vol = ev.loc["St. Dev. %"].iat[0]
+
+        costs.append(cost)
+        pnl_vols.append(vol)
+
+    return np.array(costs), np.array(pnl_vols)
+
+
 if __name__ == "__main__":
     cov_est_configs = [
         {"est_freqs": ["D"], "lback_meth": "ma", "lback_periods": [10]},
@@ -365,7 +428,7 @@ if __name__ == "__main__":
         ]
     )
 
-    bias, std = cov_estimators_bias_variance(
+    bias, std = scaling_factor_bias_variance(
         corr=corr,
         base_vol=np.array([0.010, 0.015, 0.008, 0.012, 0.009]),
         vol_persistence=0.94,

@@ -810,3 +810,51 @@ def vol_target_scaling_factor_plot(
     fig.tight_layout()
 
     return fig, ax
+
+
+def scaling_factor_error_impact_plot(
+    bias: np.ndarray,
+    var: np.ndarray,
+    costs: np.ndarray,
+    pnl_vols: np.ndarray,
+    title: str = "Impact of scaling factor estimator bias and variance on cost and PnL vol",
+    title_fontsize: int = 15,
+    subtitles: List[str] = None,
+    xlabel: str = "Bias of the scaling factor",
+    ylabel: str = "Standard deviation of the scaling factor",
+    figsize: Tuple[float, float] = (16, 5),
+    point_size: int = 170,
+):
+    fig, axes = plt.subplots(1, 2, figsize=figsize)
+
+    if subtitles is None:
+        subtitles = ["Transaction costs (USDmn)", "Realized PnL volatility"]
+
+    metrics = [(costs, subtitles[0]), (pnl_vols, subtitles[1])]
+
+    for i, (ax, (values, colorbar_label)) in enumerate(zip(axes, metrics)):
+        points = ax.scatter(
+            bias,
+            var,
+            c=values,
+            cmap="rocket_r",
+            s=point_size,
+            edgecolor="white",
+            linewidth=0.8,
+        )
+
+        fig.colorbar(
+            points,
+            ax=ax,
+            label=colorbar_label,
+        )
+
+        ax.set_xlabel(xlabel)
+        ax.set_ylabel(ylabel if i == 0 else "")
+        ax.set_title(colorbar_label)
+        ax.grid(alpha=0.25)
+
+    fig.suptitle(title, fontsize=title_fontsize)
+
+    fig.tight_layout()
+    plt.show()
