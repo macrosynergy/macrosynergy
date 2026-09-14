@@ -55,6 +55,7 @@ def _weighted_covariance(
     lback_periods: int,
     half_life: int,
     min_obs: int = 1,
+    dof_correct: bool = False,
 ) -> float:
     """
     Estimate covariance between two series after applying weights.
@@ -90,7 +91,13 @@ def _weighted_covariance(
     x_mean, y_mean = (w * x).sum(), (w * y).sum()
     array_of_products = (x - x_mean) * (y - y_mean)
 
-    return w.T.dot(array_of_products)
+    cov = w.T.dot(array_of_products)
+
+    if not dof_correct:
+        return cov
+
+    dof_factor = 1.0 - (w**2).sum()
+    return cov / dof_factor if dof_factor > 0 else np.nan
 
 
 def estimate_variance_covariance(
@@ -100,6 +107,7 @@ def estimate_variance_covariance(
     lback_periods: int,
     half_life: int,
     lback_min_obs: int = 1,
+    dof_correct: bool = False,
 ) -> pd.DataFrame:
     """
     Estimation of the variance-covariance matrix needs to have the following
@@ -128,6 +136,7 @@ def estimate_variance_covariance(
                 lback_periods=lback_periods,
                 half_life=half_life,
                 min_obs=lback_min_obs,
+                dof_correct=dof_correct,
             )
             cov_mat[i_a, i_b] = cov_mat[i_b, i_a] = est_vol
 
@@ -230,6 +239,7 @@ def _calculate_multi_frequency_vcv_for_period(
     nan_tolerance: float,
     remove_zeros: bool,
     lback_min_obs: List[int],
+    dof_correct: bool = False,
 ) -> pd.DataFrame:
     """
     Blended annualized covariance matrix for a single estimation date.
@@ -276,6 +286,7 @@ def _calculate_multi_frequency_vcv_for_period(
             weights_func=weights_func,
             half_life=hl,
             lback_min_obs=min_obs,
+            dof_correct=dof_correct,
         )
 
     return _blend_frequency_vcvs(
@@ -396,6 +407,7 @@ def _cov_matrix_history(
     remove_zeros: bool,
     weights_func: Callable[[int, int], np.ndarray],
     lback_min_obs: List[int],
+    dof_correct: bool = False,
 ) -> np.ndarray:
     """
     Covariance matrices for every estimation date, as one
@@ -452,6 +464,7 @@ def _cov_matrix_history(
             nan_tolerance=nan_tolerance,
             remove_zeros=remove_zeros,
             lback_min_obs=lback_min_obs,
+            dof_correct=dof_correct,
         )
 
         if vcv_df.empty:
@@ -480,6 +493,7 @@ def _calculate_portfolio_volatility(
     lback_min_obs: List[int],
     portfolio_return_name: str,
     cov_freq: str,
+    dof_correct: bool = False,
 ) -> Tuple[pd.DataFrame, pd.DataFrame]:
     # signals are paired with the covariance axes positionally, so they must have
     # the same order
@@ -514,6 +528,7 @@ def _calculate_portfolio_volatility(
         remove_zeros=remove_zeros,
         weights_func=weights_func,
         lback_min_obs=lback_min_obs,
+        dof_correct=dof_correct,
     )
 
     # determine the signals on rebalancing dates
@@ -572,6 +587,7 @@ def _hist_vol(
     remove_zeros: bool,
     return_variance_covariance: bool,
     cov_freq: Optional[str] = None,
+    dof_correct: bool = False,
 ) -> List[pd.DataFrame]:
     """
     Calculates historic volatility for a given strategy. It assumes that the dataframe
@@ -662,6 +678,7 @@ def _hist_vol(
         est_freqs=est_freqs,
         est_weights=est_weights,
         cov_freq=cov_freq or rebal_freq, # default to cov matrix re-estimated every rebal date
+        dof_correct=dof_correct,
     )
 
     # assert portfolio_return_name the only column
@@ -843,6 +860,7 @@ def historic_portfolio_vol(
     nan_tolerance: float = 0.25,
     remove_zeros: bool = True,
     return_variance_covariance: bool = True,
+    dof_correct: bool = False,
 ) -> Union[QuantamentalDataFrame, Tuple[QuantamentalDataFrame, pd.DataFrame]]:
     """
     Historical portfolio volatility.  Estimates annualized standard deviations of a
@@ -920,6 +938,9 @@ def historic_portfolio_vol(
     return_variance_covariance : bool
         if True (default) return the variance-covariance estimates alongside the
         volatility series.
+    dof_correct : bool
+        whether the covariance estimator corrects for the degree of freedom spent on its
+        weighted mean. Default is False
 
     Returns
     -------
@@ -1047,6 +1068,7 @@ def historic_portfolio_vol(
         nan_tolerance=nan_tolerance,
         remove_zeros=remove_zeros,
         return_variance_covariance=return_variance_covariance,
+        dof_correct=dof_correct,
     )
 
     assert len(result) == 1 + int(return_variance_covariance)

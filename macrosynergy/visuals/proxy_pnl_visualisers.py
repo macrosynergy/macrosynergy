@@ -259,12 +259,16 @@ def notional_positions_scatterplot(
         )
         axes = np.atleast_2d(axes)
 
-        piv_sig = sig_df.pivot(index="real_date", columns=["cid", "xcat"], values="value")
+        piv_sig = sig_df.pivot(
+            index="real_date", columns=["cid", "xcat"], values="value"
+        )
         x_vals = piv_sig.abs().sum(axis=1)  # signals
 
         for i in range(len(pos_dfs)):
-            piv_pos = pos_dfs[i].pivot(index="real_date", columns=["cid", "xcat"], values="value")
-            y_vals = piv_pos.abs().sum(axis=1) # positions
+            piv_pos = pos_dfs[i].pivot(
+                index="real_date", columns=["cid", "xcat"], values="value"
+            )
+            y_vals = piv_pos.abs().sum(axis=1)  # positions
 
             ax = axes[i // n_cols, i % n_cols]
             sns.scatterplot(
@@ -290,99 +294,6 @@ def notional_positions_scatterplot(
 
     return fig, axes
 
-
-# def proxy_pnl_plot(
-#     pnl_df: pd.DataFrame,
-#     portfolio_names: Optional[List[str]] = None,
-#     portfolio_labels: Optional[List[str]] = None,
-#     background_vals: Optional[pd.Series] = None,
-#     aum: Optional[Number] = None,
-#     y_label: str = "",
-#     x_label: str = "",
-#     title: str = "",
-#     legend_title: str = "Portfolio",
-#     title_fontsize: int = 20,
-#     legend_fontsize: int = 10,
-#     label_fontsize: int = 12,
-#     tick_fontsize: int = 12,
-#     cumsum: bool = True,
-#     line_width: int = 1,
-#     figsize: Tuple[float, float] = (12, 7),
-# ) -> Tuple[plt.Figure, Any]:
-#     # checks
-#     for arg, type, val in [
-#         ("pnl_df", pd.DataFrame, pnl_df),
-#     ]:
-#         if not isinstance(val, type):
-#             raise TypeError()
-#
-#     # reduce pnl_df to cids/xcats of interest
-#     pnl_df = reduce_df(pnl_df, cids=portfolio_names)
-#     if pnl_df.empty:
-#         raise ValueError()
-#
-#     # aggregate and put on desired scale
-#     pnl_df["value"] = pnl_df.groupby("cid")["value"].cumsum() if cumsum else pnl_df
-#     if aum is not None:
-#         pnl_df["value"] = 100 * pnl_df["value"] / aum
-#
-#     sns.set_theme(
-#         style="whitegrid",
-#         palette="colorblind",
-#         rc={"figure.figsize": figsize}
-#     )
-#
-#     # lineplot
-#     fig, ax = plt.subplots()
-#     sns.lineplot(
-#         data=pnl_df,
-#         x="real_date",
-#         y="value",
-#         hue="cid",
-#         estimator=None,
-#         lw=line_width,
-#         ax=ax,
-#     )
-#     plt.title(title, fontsize=title_fontsize)
-#     plt.legend(
-#         labels=portfolio_labels,
-#         title=legend_title,
-#         title_fontsize=legend_fontsize,
-#         fontsize=legend_fontsize,
-#     )
-#     plt.xlabel(x_label, fontsize=label_fontsize)
-#     plt.ylabel(y_label, fontsize=label_fontsize)
-#     ax.tick_params(axis="both", labelsize=tick_fontsize)
-#     plt.axhline(y=0, color="black", linestyle="--", lw=1)
-#
-#     # optionally shade the background
-#     if background_vals is not None:
-#         cmap = plt.get_cmap("viridis")
-#         norm = mpl.colors.Normalize(vmin=background_vals.min(), vmax=background_vals.max())
-#
-#         # Shade each interval between dates
-#         for i in range(background_vals.shape[0] - 1):
-#             start = background_vals.index[i]
-#             end = background_vals.index[i + 1]
-#             value = background_vals[i]
-#
-#             ax.axvspan(
-#                 start,
-#                 end,
-#                 color=cmap(norm(value)),
-#                 alpha=0.2,
-#                 zorder=0
-#             )
-#
-#         sm = mpl.cm.ScalarMappable(norm=norm, cmap=cmap)
-#         sm.set_array([])
-#
-#         cbar = fig.colorbar(sm, ax=ax)
-#         cbar.set_label("Signal strength")
-#
-#     plt.show()
-#
-#     return fig, ax
 
 def compare_proxy_pnls(
     pnl_dfs: List[pd.DataFrame],
@@ -511,35 +422,186 @@ def implied_leverage_plot(
     labels: Union[str, List[str]],
     aum: Number,
     figsize: Tuple[float, float] = (13, 6),
-    alpha: float = 0.8,
+    alpha: float = 0.9,
+    linewidth: float = 2.0,
     title: str = "Implied leverage",
     title_fontsize: int = 14,
     xlabel: str = "",
     ylabel: str = "Leverage",
-    label_fontsize: int = 10,
+    label_fontsize: int = 11,
     baseline: bool = False,
+    drop_leading_zeros: bool = True,
 ):
     if isinstance(npos_dfs, pd.DataFrame):
         npos_dfs = [npos_dfs]
+
     if isinstance(labels, str):
         labels = [labels]
 
-    _, ax = plt.subplots(figsize=figsize)
+    fig, ax = plt.subplots(figsize=figsize)
 
     for label, npos_df in zip(labels, npos_dfs):
-        total_pos = npos_df["value"].abs().groupby(npos_df["real_date"]).sum()
+        total_pos = (
+            npos_df["value"].abs().groupby(npos_df["real_date"]).sum().sort_index()
+        )
 
         implied_leverage = total_pos / aum
 
-        sns.lineplot(implied_leverage, ax=ax, alpha=alpha, label=label)
+        if drop_leading_zeros:
+            non_zero = implied_leverage.ne(0)
 
-    ax.set_title(title, fontsize=title_fontsize)
+            if non_zero.any():
+                implied_leverage = implied_leverage.loc[non_zero.idxmax() :]
+
+        ax.plot(
+            implied_leverage.index,
+            implied_leverage.values,
+            label=label,
+            alpha=alpha,
+            linewidth=linewidth,
+        )
+
+    if baseline:
+        ax.axhline(
+            y=1,
+            linestyle="--",
+            linewidth=1.25,
+            color="0.4",
+            alpha=0.8,
+            label="1x leverage",
+        )
+
+    ax.set_title(
+        title,
+        fontsize=title_fontsize,
+        pad=12,
+    )
     ax.set_xlabel(xlabel, fontsize=label_fontsize)
     ax.set_ylabel(ylabel, fontsize=label_fontsize)
 
-    if baseline:
-        ax.axhline(y=1, color="red", linestyle="--", linewidth=1.5)
+    # Cleaner chart appearance
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
 
+    ax.grid(
+        axis="y",
+        linestyle="--",
+        linewidth=0.7,
+        alpha=0.3,
+    )
+    ax.grid(axis="x", visible=False)
+
+    ax.tick_params(
+        axis="both",
+        labelsize=label_fontsize - 1,
+        length=0,
+    )
+
+    ax.legend(
+        frameon=False,
+        fontsize=label_fontsize,
+        loc="best",
+    )
+
+    fig.tight_layout()
+
+    return fig, ax
+
+
+def realized_vol_plot(
+    pnl_dfs: Union[pd.DataFrame, List[pd.DataFrame]],
+    labels: Union[str, List[str]],
+    portfolio_names: Union[str, List[str]],
+    aum: Number,
+    lback: int = 252,
+    annualization_factor: int = 252,
+    vol_target: Optional[float] = None,
+    figsize: Tuple[float, float] = (13, 5),
+    alpha: float = 0.9,
+    linewidth: float = 1.5,
+    title: str = "Rolling realized volatility of strategy PnL",
+    title_fontsize: int = 14,
+    xlabel: str = "",
+    ylabel: str = "Annualized volatility, % of AUM",
+    label_fontsize: int = 11,
+    show_mean: bool = True,
+):
+    if isinstance(pnl_dfs, pd.DataFrame):
+        pnl_dfs = [pnl_dfs]
+
+    if isinstance(labels, str):
+        labels = [labels]
+
+    if isinstance(portfolio_names, str):
+        portfolio_names = [portfolio_names]
+
+    fig, ax = plt.subplots(figsize=figsize)
+
+    for label, pnl_df in zip(labels, pnl_dfs):
+        pnl_df = reduce_df(pnl_df, cids=portfolio_names)
+        pnl = pnl_df.set_index("real_date")["value"].sort_index()
+
+        realized_vol = (100 * pnl / aum).rolling(lback).std() * np.sqrt(
+            annualization_factor
+        )
+
+        if show_mean:
+            plot_label = f"{label} (mean {realized_vol.mean():.1f}%)"
+        else:
+            plot_label = label
+
+        ax.plot(
+            realized_vol.index,
+            realized_vol.values,
+            label=plot_label,
+            linewidth=linewidth,
+            alpha=alpha,
+        )
+
+    if vol_target is not None:
+        ax.axhline(
+            vol_target,
+            linestyle="--",
+            linewidth=1.25,
+            color="0.3",
+            alpha=0.9,
+            label=f"{vol_target}% target",
+        )
+
+    ax.set_title(
+        title,
+        fontsize=title_fontsize,
+        pad=12,
+    )
+    ax.set_xlabel(xlabel, fontsize=label_fontsize)
+    ax.set_ylabel(ylabel, fontsize=label_fontsize)
+
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+
+    ax.grid(
+        axis="y",
+        linestyle="--",
+        linewidth=0.7,
+        alpha=0.3,
+    )
+    ax.grid(axis="x", visible=False)
+
+    ax.tick_params(
+        axis="both",
+        labelsize=label_fontsize - 1,
+        length=0,
+    )
+
+    ax.legend(
+        frameon=False,
+        fontsize=label_fontsize,
+        title=None,
+    )
+
+    fig.tight_layout()
+
+    return fig, ax
 
 
 def _prepare_pnl_df(
@@ -650,13 +712,9 @@ def proxy_pnl_plot(
     """
     Plot cumulative proxy PnL, optionally as two panels side by side.
     """
-    frames = [
-        _prepare_pnl_df(pnl_df, portfolio_names, aum, cumsum)
-    ]
+    frames = [_prepare_pnl_df(pnl_df, portfolio_names, aum, cumsum)]
     if pnle_df is not None:
-        frames.append(
-            _prepare_pnl_df(pnle_df, portfolio_names, aum, cumsum)
-        )
+        frames.append(_prepare_pnl_df(pnle_df, portfolio_names, aum, cumsum))
 
     n_panels = len(frames)
 
@@ -749,10 +807,13 @@ def vol_target_scaling_factor_plot(
     vol_df: pd.DataFrame,
     vol_target: int,
     vol_xcat: str,
+    linewidth: float = 1,
     x_label: str = "",
     y_label_pvol: str = "Annualized volatility (%)",
     y_label_scale: str = "Scale factor",
-    figsize: Tuple[float, float] = (13, 6)
+    title: str = "",
+    title_fontsize: int = 15,
+    figsize: Tuple[float, float] = (13, 6),
 ):
     df = reduce_df(vol_df, xcats=[vol_xcat]).sort_values(by="real_date")
 
@@ -767,7 +828,7 @@ def vol_target_scaling_factor_plot(
         x=x_vals,
         y=y_vals_pvol,
         ax=ax[0],
-        linewidth=1,
+        linewidth=linewidth,
         alpha=0.8,
         label=r"$\sqrt{s_{t}^{\top} \Sigma s_{t}}$",
     )
@@ -789,7 +850,7 @@ def vol_target_scaling_factor_plot(
         x=x_vals,
         y=y_vals_scale,
         ax=ax[1],
-        linewidth=0.6,
+        linewidth=linewidth,
         alpha=0.8,
         label=rf"$\frac{{{vol_target}}}{{\sqrt{{s_{{t}}^{{\top}} \Sigma s_{{t}}}}}}$",
     )
@@ -806,7 +867,284 @@ def vol_target_scaling_factor_plot(
     ax[1].plot([], [], " ", label=f"Median: {median_scale:.1f}")
     ax[1].legend()
 
+    fig.suptitle(title, fontsize=title_fontsize)
+
     fig.autofmt_xdate()
+    fig.tight_layout()
+
+    return fig, ax
+
+
+def scaling_factor_error_impact_plot(
+    bias: np.ndarray,
+    var: np.ndarray,
+    costs: np.ndarray,
+    pnl_vols: np.ndarray,
+    title: str = "Impact of scaling factor estimator bias and variance on cost and PnL vol",
+    title_fontsize: int = 15,
+    subtitles: List[str] = None,
+    xlabel: str = "Bias of the scaling factor",
+    ylabel: str = "Standard deviation of the scaling factor",
+    figsize: Tuple[float, float] = (16, 5),
+    point_size: int = 170,
+):
+    fig, axes = plt.subplots(1, 2, figsize=figsize)
+
+    if subtitles is None:
+        subtitles = ["Transaction costs (USDmn)", "Realized PnL volatility"]
+
+    metrics = [(costs, subtitles[0]), (pnl_vols, subtitles[1])]
+
+    for i, (ax, (values, colorbar_label)) in enumerate(zip(axes, metrics)):
+        points = ax.scatter(
+            bias,
+            var,
+            c=values,
+            cmap="rocket_r",
+            s=point_size,
+            edgecolor="white",
+            linewidth=0.8,
+        )
+
+        fig.colorbar(
+            points,
+            ax=ax,
+            label=colorbar_label,
+        )
+
+        ax.set_xlabel(xlabel)
+        ax.set_ylabel(ylabel if i == 0 else "")
+        ax.set_title(colorbar_label)
+        ax.grid(alpha=0.25)
+
+    fig.suptitle(title, fontsize=title_fontsize)
+
+    fig.tight_layout()
+    plt.show()
+
+
+def plot_metrics_before_and_after_costs(
+    metric_df: pd.DataFrame,
+    metrics: List[str],
+    rules: List[str],
+    signal_labels: List[str],
+    title: str = "",
+    title_fontsize: int = 15,
+    figsize: Tuple[float, float] = (15, 5.5),
+):
+    dfp = metric_df.pivot_table(
+        index=["metric", "rule_label", "signal_label"],
+        columns="costs",
+        values="value",
+    )
+
+    fig, axes = plt.subplots(
+        1,
+        len(metrics),
+        figsize=figsize,
+        squeeze=False,
+    )
+    axes = axes.ravel()
+
+    xpos = np.arange(len(rules))
+    width = 0.8 / len(signal_labels)
+    colors = sns.color_palette("colorblind", len(signal_labels))
+
+    for ax, metric in zip(axes, metrics):
+        for j, signal_label in enumerate(signal_labels):
+            offset = (j - (len(signal_labels) - 1) / 2) * width
+
+            keys = [(metric, rule, signal_label) for rule in rules]
+
+            gross = [dfp.loc[key, "Gross"] for key in keys]
+            net = [dfp.loc[key, "Net"] for key in keys]
+
+            ax.bar(
+                xpos + offset,
+                gross,
+                width,
+                facecolor="none",
+                edgecolor=colors[j],
+                linewidth=1.2,
+                linestyle="--",
+            )
+
+            ax.bar(
+                xpos + offset,
+                net,
+                width,
+                color=colors[j],
+                label=signal_label if metric == metrics[0] else None,
+            )
+
+        ax.set_title(metric, fontsize=12)
+
+        ax.set_xticks(xpos)
+        ax.set_xticklabels(
+            rules,
+            fontsize=9,
+        )
+
+        ax.axhline(
+            0,
+            color="black",
+            linewidth=0.8,
+        )
+
+        ax.grid(axis="y", linestyle="--", linewidth=0.7, alpha=0.3)
+        ax.grid(axis="x", visible=False)
+
+        ax.spines["top"].set_visible(False)
+        ax.spines["right"].set_visible(False)
+
+    handles, labels = axes[0].get_legend_handles_labels()
+
+    handles += [
+        plt.Rectangle(
+            (0, 0),
+            1,
+            1,
+            facecolor="grey",
+        ),
+        plt.Rectangle(
+            (0, 0),
+            1,
+            1,
+            facecolor="none",
+            edgecolor="grey",
+            linestyle="--",
+        ),
+    ]
+    labels += [
+        "Net of costs",
+        "Gross",
+    ]
+
+    fig.legend(
+        handles,
+        labels,
+        loc="lower center",
+        ncol=len(signal_labels) + 2,
+        frameon=False,
+        bbox_to_anchor=(0.5, -0.03),
+    )
+
+    if title:
+        fig.suptitle(title, fontsize=title_fontsize)
+
+    fig.tight_layout()
+
+    return fig, axes
+
+
+def plot_costs_by_type(
+    cost_dfs: List[pd.DataFrame],
+    labels: List[str],
+    rollcost_suffix: str = "TCOST_ROLLCOST",
+    bidoffer_suffix: str = "TCOST_BIDOFFER",
+    title: str = "",
+    title_fontsize: int = 16,
+    figsize: Tuple[float, float] = (11, 5.5),
+    label_rotation: int = 90,
+    sort_by_label: bool = False,
+):
+    if sort_by_label:
+        sorted_idx = np.argsort(labels)
+        labels = [labels[i] for i in sorted_idx]
+        cost_dfs = [cost_dfs[i] for i in sorted_idx]
+
+    # prepare data
+    rows = []
+    for label, cost_df in zip(labels, cost_dfs):
+        bidoffer_cost = cost_df.loc[
+            cost_df["xcat"].str.endswith(bidoffer_suffix), "value"
+        ].sum()
+
+        roll_cost = cost_df.loc[
+            cost_df["xcat"].str.endswith(rollcost_suffix), "value"
+        ].sum()
+
+        rows.append(
+            {
+                "label": label,
+                "Bid-offer": bidoffer_cost,
+                "Roll": roll_cost,
+            }
+        )
+
+    data = pd.DataFrame(rows).set_index("label")
+
+    # plot data
+    fig, ax = plt.subplots(figsize=figsize)
+    data.plot(
+        kind="bar",
+        stacked=True,
+        ax=ax,
+        width=0.65,
+        color=["#4C78A8", "#F2A541"],
+        edgecolor="white",
+        linewidth=0.7,
+    )
+
+    ax.set_title(title, fontsize=title_fontsize, pad=18)
+
+    # format axes
+    ax.set_xlabel("")
+    ax.set_ylabel("Cumulative cost (USD mn)", fontsize=11)
+
+    ax.tick_params(
+        axis="x",
+        labelsize=9,
+        rotation=0,
+        length=0,
+        pad=8,
+        labelrotation=label_rotation,
+    )
+    ax.tick_params(axis="y", labelsize=9)
+
+    # format grid
+    ax.set_axisbelow(True)
+    ax.grid(
+        axis="y",
+        linestyle="--",
+        linewidth=0.7,
+        alpha=0.25,
+    )
+    ax.grid(axis="x", visible=False)
+
+    # remove spines
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.spines["left"].set_alpha(0.7)
+    ax.spines["bottom"].set_alpha(0.7)
+
+    # format legend
+    ax.legend(
+        title=None,
+        frameon=False,
+        ncol=2,
+        loc="upper center",
+        bbox_to_anchor=(0.5, 1.03),
+    )
+
+    # add total above each stacked bar
+    totals = data.sum(axis=1)
+
+    for i, total in enumerate(totals):
+        ax.annotate(
+            f"{total:,.1f}",
+            xy=(i, total),
+            xytext=(0, 5),
+            textcoords="offset points",
+            ha="center",
+            va="bottom",
+            fontsize=9,
+            fontweight="semibold",
+        )
+
+    # Leave a little room for labels
+    ax.margins(y=0.12)
+
     fig.tight_layout()
 
     return fig, ax

@@ -193,6 +193,7 @@ def _vol_target_positions(
     lback_meth: str,
     rstring: str,
     pname: str,
+    dof_correct: bool = False,
 ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """
     Uses historic portfolio volatility to calculate notional positions based on contract
@@ -220,6 +221,7 @@ def _vol_target_positions(
         rebal_freq=rebal_freq,
         remove_zeros=remove_zeros,
         return_variance_covariance=True,
+        dof_correct=dof_correct,
     )
     # histpvol: only on rebalance dates...
     histpvol["scale"] = ((vol_target / histpvol["value"]) * aum).replace(np.inf, np.nan)
@@ -362,6 +364,7 @@ def notional_positions(
     pname: str = "POS",
     return_pvol: bool = False,
     return_vcv: bool = False,
+    dof_correct: bool = False,
 ) -> Union[
     QuantamentalDataFrame,
     Tuple[QuantamentalDataFrame, QuantamentalDataFrame],
@@ -469,6 +472,9 @@ def notional_positions(
         the name of the position. Default is 'POS'.
     return_pvol : bool
         whether to return the historic portfolio volatility. Default is False.
+    dof_correct : bool
+        whether the covariance estimator corrects for the degree of freedom spent on its
+        weighted mean. Default is False
     return_vcv : bool
         whether to return the variance-covariance matrix. Default is False.
 
@@ -601,6 +607,7 @@ def notional_positions(
             pname=pname,
             nan_tolerance=nan_tolerance,
             remove_zeros=remove_zeros,
+            dof_correct=dof_correct,
         )
 
     return_pvol = return_pvol and (locals().get("pvol") is not None)
