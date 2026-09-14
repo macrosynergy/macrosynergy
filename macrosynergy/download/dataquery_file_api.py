@@ -1979,6 +1979,48 @@ class DataQueryFileAPIClient:
         )
         return downloaded_files
 
+    def load_dataframe(
+        self,
+        tickers: Optional[List[str]] = None,
+        cids: Optional[List[str]] = None,
+        xcats: Optional[List[str]] = None,
+        metrics: Optional[List[str]] = None,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        dataframe_format: str = "qdf",
+        dataframe_type: str = "pandas",
+        categorical_dataframe: bool = True,
+        include_delta_files: bool = True,
+        delta_treatment: str = "latest",
+        include_source_file: bool = False,
+        dropna: bool = True,
+        datasets: Optional[List[str]] = None,
+        categorical_source_file_column: bool = True,
+        files_list: Optional[List[str]] = None,
+    ) -> Union[pd.DataFrame, pl.DataFrame, pl.LazyFrame]:
+        out_dir = self._get_save_dir()
+        catalog_path = Path(self.download_catalog_file())
+        return lazy_load_from_parquets(
+            files_dir=out_dir,
+            tickers=tickers,
+            cids=cids,
+            xcats=xcats,
+            metrics=metrics,
+            start_date=start_date,
+            end_date=end_date,
+            dataframe_format=dataframe_format,
+            dataframe_type=dataframe_type,
+            categorical_dataframe=categorical_dataframe,
+            datasets=datasets,
+            include_delta_files=include_delta_files,
+            catalog_path=catalog_path,
+            include_source_file=include_source_file,
+            delta_treatment=delta_treatment,
+            dropna=dropna,
+            categorical_source_file_column=categorical_source_file_column,
+            files_list=files_list,
+        )
+
     def download(
         self,
         tickers: Optional[List[str]] = None,
@@ -1999,7 +2041,7 @@ class DataQueryFileAPIClient:
         dropna: bool = True,
         datasets: Optional[List[str]] = None,
         categorical_source_file_column: bool = True,
-        suppress_warnings: bool = False,
+        suppress_warning: bool = False,
     ) -> Union[pd.DataFrame, pl.DataFrame, pl.LazyFrame]:
         """
         Downloads data for the specified `tickers`, `cids`, or `xcats` and returns it as
@@ -2093,7 +2135,7 @@ class DataQueryFileAPIClient:
             If True (default), the `"source_file"` column added by `include_source_file`
             uses a categorical dtype, which is much cheaper than storing the file name as a
             string on every row. Ignored unless `include_source_file=True`.
-        suppress_warnings : bool
+        suppress_warning : bool
             If True, silences warnings from this function. Default is False.
 
         Returns
@@ -2101,8 +2143,7 @@ class DataQueryFileAPIClient:
         Union[pd.DataFrame, pl.DataFrame, pl.LazyFrame]
             A DataFrame containing the requested data.
         """
-        out_dir = self._get_save_dir()
-        with _suppressed_warnings(suppress_warnings):
+        with _suppressed_warnings(suppress_warning):
             datasets_to_download = self.get_datasets_for_indicators(
                 tickers=tickers, cids=cids, xcats=xcats
             )
@@ -2122,9 +2163,7 @@ class DataQueryFileAPIClient:
                 keep_n_days_old_files=keep_n_days_old_files,
                 file_group_ids=datasets_to_download,
             )
-            catalog_path = Path(self.download_catalog_file())
-            return lazy_load_from_parquets(
-                files_dir=out_dir,
+            return self.load_dataframe(
                 tickers=tickers,
                 cids=cids,
                 xcats=xcats,
@@ -2134,12 +2173,12 @@ class DataQueryFileAPIClient:
                 dataframe_format=dataframe_format,
                 dataframe_type=dataframe_type,
                 categorical_dataframe=categorical_dataframe,
-                datasets=datasets_to_download,
                 include_delta_files=include_delta_files,
-                catalog_path=catalog_path,
-                include_source_file=include_source_file,
                 delta_treatment=delta_treatment,
+                keep_n_days_old_files=keep_n_days_old_files,
+                include_source_file=include_source_file,
                 dropna=dropna,
+                datasets=datasets,
                 categorical_source_file_column=categorical_source_file_column,
             )
 
@@ -2827,6 +2866,7 @@ def lazy_load_from_parquets(
     include_source_file: bool = False,
     categorical_source_file_column: bool = True,
     dropna: bool = True,
+    files_list: Optional[List[str]] = None,
 ) -> Union[pd.DataFrame, pl.DataFrame, pl.LazyFrame]:
     """
     Loads previously downloaded JPMaQS files into a single DataFrame.
@@ -2915,10 +2955,18 @@ def lazy_load_from_parquets(
         # by `get_missing_data_notifications` and `get_revisions_notifications`
         include_metadata_files=False,
     )
-    available_files_df: pd.DataFrame = _filter_to_latest_files(
-        files_df=available_files_df,
-        include_delta_files=include_delta_files,
-    )
+    if files_list is not None:
+        _clean_str = lambda x: str(x).replace("\\", "/").split("/")[-1].split(".")[0]  # noqa
+        available_files_df = available_files_df.loc[
+            available_files_df["path"]
+            .apply(_clean_str)
+            .isin(map(_clean_str, files_list))
+        ]
+    else:
+        available_files_df: pd.DataFrame = _filter_to_latest_files(
+            files_df=available_files_df,
+            include_delta_files=include_delta_files,
+        )
     if datasets:
         available_files_df = available_files_df.loc[
             available_files_df["e-dataset"].isin(datasets)
