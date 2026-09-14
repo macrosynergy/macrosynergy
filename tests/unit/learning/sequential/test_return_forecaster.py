@@ -277,11 +277,18 @@ class TestReturnForecaster(unittest.TestCase):
                 end=1,
                 real_date = self.evaluation_date,
             )
-        with self.assertRaises(TypeError):
+        with self.assertRaises(ValueError):
             rf = ReturnForecaster(
                 df=self.df,
                 xcats=self.xcats,
                 blacklist=list(),
+                real_date=self.evaluation_date,
+            )
+        with self.assertRaises(TypeError):
+            rf = ReturnForecaster(
+                df=self.df,
+                xcats=self.xcats,
+                blacklist=tuple(),
                 real_date = self.evaluation_date,
             )
         with self.assertRaises(TypeError):
