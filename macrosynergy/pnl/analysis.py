@@ -1,10 +1,17 @@
 import logging
-from typing import Any, Dict, List, Optional, Tuple
+from collections.abc import Mapping
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import pandas as pd
 
 from macrosynergy.management.simulate import SignalsAndReturnsGenerator
+from macrosynergy.pnl import (
+    notional_positions,
+    proxy_pnl_calc,
+    evaluate_pnl,
+)
+from macrosynergy.pnl.transaction_costs import TransactionCostsDictAdapter
 from macrosynergy.pnl.historic_portfolio_volatility import (
     _check_est_args,
     _cov_matrix_history,
@@ -14,7 +21,18 @@ from macrosynergy.pnl.historic_portfolio_volatility import (
 
 logger = logging.getLogger(__name__)
 
-CONFIG_KEYS = {"est_freqs", "est_weights", "lback_meth", "lback_periods", "half_life"}
+CONFIG_KEYS = {
+    "est_freqs",
+    "est_weights",
+    "lback_meth",
+    "lback_periods",
+    "half_life",
+    "dof_correct",
+}
+
+# the cid `proxy_pnl_calc` aggregates the per-contract PnL and costs under
+PORTFOLIO_NAME = "GLB"
+DEFAULT_END_DATE = "2025-01-15"
 
 
 def _long_cov_to_dict(
@@ -67,31 +85,57 @@ def _long_cov_to_dict(
     return out
 
 
-def _min_var_weights(cov: np.ndarray) -> np.ndarray:
-    r"""
-    Minimum-variance weights, :math:`w \propto \Sigma^{-1} \mathbf{1}`, summing to 1.
+def _weights_by_date(
+    weights: Union[np.ndarray, Dict[pd.Timestamp, np.ndarray]],
+    true_dates: List[pd.Timestamp],
+    n_fids: int,
+) -> Dict[pd.Timestamp, np.ndarray]:
+    """
+    Resolve `weights` into one vector per date, checked against the fid axis.
 
     Parameters
     ----------
-    cov : np.ndarray
-        (n_fids, n_fids) covariance matrix. Normally positive definite; a rank-deficient
-        or near-singular one is handled by the fallback described below.
+    weights : Union[np.ndarray, Dict[pd.Timestamp, np.ndarray]]
+        one (n_fids,) vector held fixed across dates, or one per date. A mapping must
+        cover every date in `true_dates`; a date it is missing is an error rather than a
+        silently skipped row, since a weight is not something this module can invent.
+    true_dates : List[pd.Timestamp]
+        the dates to resolve weights for, i.e. those of the covariance being forecast.
+    n_fids : int
+        length every weight vector must have, taken from the covariance matrices.
     """
-    ones = np.ones(cov.shape[0])
-    try:
-        w = np.linalg.solve(cov, ones)
-        if not np.all(np.isfinite(w)):
-            raise np.linalg.LinAlgError
-    except np.linalg.LinAlgError:
-        ridge = 1e-6 * np.trace(cov) / cov.shape[0]
-        w = np.linalg.solve(cov + ridge * np.eye(cov.shape[0]), ones)
-    return w / w.sum()
+    if isinstance(weights, Mapping):
+        missing = [date for date in true_dates if date not in weights]
+        if missing:
+            raise ValueError(
+                f"`weights` is missing {len(missing)} of the {len(true_dates)} "
+                f"dates in `cov_true`, the first being {missing[0].date()}."
+            )
+
+        resolved = {}
+        for date in true_dates:
+            w = np.asarray(weights[date], dtype=float)
+            if w.shape != (n_fids,):
+                raise ValueError(
+                    f"weights for {date.date()} have shape {tuple(w.shape)}, but "
+                    f"`cov_true` is over {n_fids} fids."
+                )
+            resolved[date] = w
+        return resolved
+
+    w = np.asarray(weights, dtype=float)
+    if w.shape != (n_fids,):
+        raise ValueError(
+            f"`weights` has shape {tuple(w.shape)}, but `cov_true` is over "
+            f"{n_fids} fids."
+        )
+    return {date: w for date in true_dates}
 
 
 def realized_to_forecast_vol_ratios(
     cov_true: Dict[pd.Timestamp, np.ndarray],
     cov_ests: List[Dict[pd.Timestamp, np.ndarray]],
-    weights: Optional[np.ndarray] = None,
+    weights: Union[np.ndarray, Dict[pd.Timestamp, np.ndarray]],
 ) -> np.ndarray:
     """
     sqrt(w' cov_true w / w' cov_est w) per true date (rows) and estimator (columns).
@@ -105,18 +149,15 @@ def realized_to_forecast_vol_ratios(
         one such mapping per estimator under comparison, on the same fid axis order as
         `cov_true`. An estimator need not cover every true date; a date it is missing,
         or one whose matrix holds NaN, is left NaN in that estimator's column.
-    weights : Optional[np.ndarray]
-        portfolio weights, held fixed across dates and estimators. Default is None, in
-        which case minimum-variance weights are derived from the *true* covariance of
-        each date.
+    weights : Union[np.ndarray, Dict[pd.Timestamp, np.ndarray]]
+        portfolio weights the ratio is evaluated at: one (n_fids,) vector held fixed
+        across dates, or one per date, on the same fid axis order as `cov_true`.
 
     Returns
     -------
     np.ndarray
         (n_true_dates, n_estimators) array of ratios, rows in sorted date order.
     """
-    # a long frame has `.keys()` too - it would run on the column names and fail much
-    # later, inside a quadratic form, with a shape mismatch that names nothing
     if isinstance(cov_true, pd.DataFrame) or any(
         isinstance(cov_est, pd.DataFrame) for cov_est in cov_ests
     ):
@@ -126,10 +167,10 @@ def realized_to_forecast_vol_ratios(
         )
 
     true_dates = sorted(cov_true.keys())
-    weights_by_date = {
-        date: weights if weights is not None else _min_var_weights(cov_true[date])
-        for date in true_dates
-    }
+    n_fids = next(iter(cov_true.values())).shape[0]
+    weights_by_date = _weights_by_date(
+        weights=weights, true_dates=true_dates, n_fids=n_fids
+    )
 
     # row i is true_dates[i] in every column, so entries stay comparable
     # across estimators with different date coverage
@@ -143,8 +184,6 @@ def realized_to_forecast_vol_ratios(
 
             w = weights_by_date[date]
 
-            # A degenerate estimate (e.g. monthly sampling, many assets) can give
-            # a non-positive quadratic form; guard it so the entry stays NaN
             forecast_var = w @ est @ w
             if not np.isfinite(forecast_var) or forecast_var <= 0:
                 continue
@@ -152,6 +191,16 @@ def realized_to_forecast_vol_ratios(
             ratios[i, j] = np.sqrt(w @ truth @ w / forecast_var)
 
     return ratios
+
+
+def _iteration_seeds(seed: int, n_iter: int) -> List[int]:
+    """
+    One seed per iteration, distinct and independent, deterministic in `seed`.
+    """
+    return [
+        int(child.generate_state(1, dtype=np.uint64)[0])
+        for child in np.random.SeedSequence(seed).spawn(n_iter)
+    ]
 
 
 def _resolve_config(config: Dict[str, Any]) -> Dict[str, Any]:
@@ -195,9 +244,6 @@ def _resolve_config(config: Dict[str, Any]) -> Dict[str, Any]:
             "weight is still outstanding, which is not an estimator anyone asked for."
         )
 
-    # `flat_weights_arr` ignores `half_life`, but `_weighted_covariance` asserts it is
-    # positive, so "ma" needs a placeholder. It cannot be `lback_periods`, which is -1
-    # when all available history is wanted.
     half_life = config.get("half_life", [1])
 
     est_freqs, est_weights, lback_periods, half_life, lback_min_obs = _check_est_args(
@@ -215,10 +261,11 @@ def _resolve_config(config: Dict[str, Any]) -> Dict[str, Any]:
         half_life=half_life,
         lback_min_obs=lback_min_obs,
         weights_func=flat_weights_arr if lback_meth == "ma" else expo_weights_arr,
+        dof_correct=bool(config.get("dof_correct", False)),
     )
 
 
-def cov_estimators_bias_variance(
+def _bias_and_dispersion(
     configs: List[Dict[str, Any]],
     corr: np.ndarray,
     base_vol: np.ndarray,
@@ -229,14 +276,113 @@ def cov_estimators_bias_variance(
     n_iter: int = 20,
     seed: int = 42,
     common_sample: bool = True,
+    signal_half_life: Optional[float] = 21,
+    signal_ic: float = 0.05,
+    signal_autocorr: float = 0.9,
+    weights: Optional[Union[np.ndarray, Dict[pd.Timestamp, np.ndarray]]] = None,
+    end_date: str = DEFAULT_END_DATE,
 ) -> Tuple[np.ndarray, np.ndarray]:
+    resolved_configs = [_resolve_config(config) for config in configs]
+
+    data_generator = SignalsAndReturnsGenerator(
+        n_fids=len(fid_names),
+        corr=corr,
+        base_vol=base_vol,
+        vol_persistence=vol_persistence,
+        vol_of_vol=vol_of_vol,
+        signal_ic=signal_ic,
+        signal_autocorr=signal_autocorr,
+        half_life=signal_half_life,
+    )
+
+    results = []
+    for iter_seed in _iteration_seeds(seed=seed, n_iter=n_iter):
+        data_generator.simulate_signals_and_returns(
+            n_periods=n_periods,
+            signal_names=[f"{fid}SIG" for fid in fid_names],
+            return_names=[f"{fid}XR" for fid in fid_names],
+            seed=iter_seed,
+            end_date=end_date,
+        )
+
+        cov_true = data_generator.realized_cov(long=False)
+
+        estimation_dates = pd.Series(list(cov_true.keys()))
+        cov_ests = []
+        for index, resolved in enumerate(resolved_configs):
+            cov_est = _cov_matrix_history(
+                pivot_returns=100 * data_generator.returns,
+                estimation_dates=estimation_dates,
+                nan_tolerance=0.0,
+                remove_zeros=False,
+                **resolved,
+            )
+
+            cov_est = {date: cov for date, cov in zip(estimation_dates, cov_est)}
+
+            cov_ests.append(cov_est)
+
+        scoring_weights = (
+            {
+                date: data_generator.signals.loc[date].to_numpy(dtype=float)
+                for date in cov_true
+            }
+            if weights is None
+            else weights
+        )
+
+        ratios = realized_to_forecast_vol_ratios(
+            cov_true=cov_true,
+            cov_ests=cov_ests,
+            weights=scoring_weights,
+        )
+
+        results.append(ratios)
+
+    results = np.vstack(results)
+
+    if common_sample:
+        common = np.isfinite(results).all(axis=1)
+        if not common.any():
+            raise ValueError(
+                "no date carries an estimate from every config, so they cannot be "
+                "scored on a common sample."
+            )
+
+        results = results[common]
+
+    bias = 1 - np.nanmean(results, axis=0)
+    std = np.nanstd(results, axis=0, ddof=1)
+
+    return bias, std
+
+
+def scaling_factor_bias_variance(
+    configs: List[Dict[str, Any]],
+    corr: np.ndarray,
+    base_vol: np.ndarray,
+    vol_persistence: float,
+    vol_of_vol: float,
+    fid_names: List[str],
+    n_periods: int,
+    n_iter: int = 20,
+    seed: int = 42,
+    common_sample: bool = True,
+    signal_half_life: float = 21,
+    signal_ic: float = 0.05,
+    signal_autocorr: float = 0.9,
+    weights: Optional[Union[np.ndarray, Dict[pd.Timestamp, np.ndarray]]] = None,
+    report_floor: bool = True,
+    end_date: str = DEFAULT_END_DATE,
+) -> Tuple[np.ndarray, ...]:
     """
-    Bias and dispersion of each covariance estimator's portfolio volatility forecast.
+    Volatility-target miss of each covariance estimator, against its own noise floor.
 
     Simulates `n_iter` panels from a known data generating process, runs every config in
     `configs` over each, and scores its forecast against the DGP's own covariance for the
-    interval that follows. The score is `sqrt(w' cov_true w / w' cov_est w)`, realized vol
-    over the target a portfolio scaled under that forecast would have been aiming at.
+    interval that follows. The score is `sqrt(w' cov_true w / w' cov_est w)`, the realized
+    volatility over the target a portfolio scaled under that forecast would have been
+    aiming at.
 
     Parameters
     ----------
@@ -263,119 +409,336 @@ def cov_estimators_bias_variance(
         independent panels to simulate. Default is 20.
     seed : int
         seed of the generator that draws each iteration's seed. Default is 42.
+    signal_half_life : Optional[float]
+        half life, in business days, of the simulated signal's forecasting powerl
+    signal_ic : float
+        information coefficient of the simulated signals. Default is 0.05. Bounded above
+        by `sqrt(1 - decay ** 2)` for the decay implied by `signal_half_life`.
+    signal_autocorr : float
+        AR(1) coefficient of the persistent signal component. Default is 0.9. It sets how
+        fast the weights move, and so the turnover a cost study sees.
     common_sample : bool
         whether to score every config on the dates where all of them have an estimate.
         Default is True. Configs warm up at different rates, so otherwise each is
         averaged over its own set of dates and the comparison between them is made on
         unequal samples. The cost is that the slowest-warming config sets the start
         date for all of them.
+    weights : Optional[Union[np.ndarray, Dict[pd.Timestamp, np.ndarray]]]
+        portfolio weights to score the estimators at, as
+        `realized_to_forecast_vol_ratios` takes them.
+    end_date : str
+        last date of the simulated panel
+    report_floor : bool
+        whether to measure each config's noise floor by rerunning the DGP with
+        `vol_of_vol=0`. Default is True.
 
-    Returns
-    -------
-    Tuple[np.ndarray, np.ndarray]
-        `bias` and `std`, one entry per config in the order given. `bias` is signed:
-        negative means the estimator under-forecast risk, so realized volatility
-        overshot the target and the positions it sized were too large. `std` is the
-        dispersion of the ratio across dates and iterations pooled.
+    Notes
+    -----
+    Positions scale with `1 / sqrt(variance)`, which is convex, so a noisy
+    but perfectly centred estimate still oversizes on average - averaging a convex
+    function of a noisy input exceeds the function of the average (Jensen's inequality).
+    The size of that effect depends only on how noisy the estimator is, so it falls
+    monotonically with the lookback. A short lookback therefore scores worse than
+    a long one even on a DGP where volatility is constant and there is nothing to forecast.
+
+    `report_floor` measures that floor rather than assuming it away: the same configs are
+    run again over the same DGP with `vol_of_vol=0`, where every estimator is correctly
+    specified, so whatever they score is noise. `excess_bias` is the reading net of it,
+    and is the column to rank on.
     """
-    resolved_configs = [_resolve_config(config) for config in configs]
+    shared = dict(
+        configs=configs,
+        corr=corr,
+        base_vol=base_vol,
+        vol_persistence=vol_persistence,
+        fid_names=fid_names,
+        n_periods=n_periods,
+        n_iter=n_iter,
+        seed=seed,
+        common_sample=common_sample,
+        signal_half_life=signal_half_life,
+        signal_ic=signal_ic,
+        signal_autocorr=signal_autocorr,
+        weights=weights,
+        end_date=end_date,
+    )
 
-    rng = np.random.default_rng(seed=seed)
+    bias, std = _bias_and_dispersion(vol_of_vol=vol_of_vol, **shared)
+
+    if report_floor:
+        noise_floor, _ = _bias_and_dispersion(vol_of_vol=0.0, **shared)
+    else:
+        noise_floor = np.full(len(configs), np.nan)
+
+    if report_floor:
+        return bias, std, noise_floor, bias - noise_floor
+
+    return bias, std
+
+
+def _config_to_positions_kwargs(config: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Validate one estimator config and expand it into `notional_positions` arguments.
+    """
+    resolved = _resolve_config(config)
+    return dict(
+        lback_meth=str(config["lback_meth"]).lower(),
+        est_freqs=resolved["est_freqs"],
+        est_weights=resolved["est_weights"],
+        lback_periods=resolved["lback_periods"],
+        half_life=resolved["half_life"],
+        dof_correct=resolved["dof_correct"],
+    )
+
+
+
+def cov_estimators_cost_accuracy(
+    configs: List[Dict[str, Any]],
+    corr: np.ndarray,
+    base_vol: np.ndarray,
+    vol_persistence: float,
+    vol_of_vol: float,
+    fid_names: List[str],
+    n_periods: int,
+    tcost_obj: TransactionCostsDictAdapter,
+    aum: float = 100,
+    vol_target: float = 10,
+    n_iter: int = 5,
+    seed: int = 42,
+    signal_half_life: float = 21,
+    signal_ic: float = 0.05,
+    signal_autocorr: float = 0.9,
+    rebal_freq: str = "M",
+    rstring: str = "XR",
+    slip: int = 0,
+    sname: str = "STRAT",
+    end_date: str = DEFAULT_END_DATE,
+) -> Tuple[np.ndarray, np.ndarray]:
+    """
+    Transaction cost of running each covariance estimator, measured through a real PnL.
+
+    Each config is put through `notional_positions` at the shared vol target and then
+    `proxy_pnl_calc`, so the cost reflects the turnover the estimator's scaling actually
+    generates.
+
+    Parameters
+    ----------
+    configs : List[Dict[str, Any]]
+        one estimator per entry, in the form `scaling_factor_bias_variance` takes.
+    corr : np.ndarray
+        (n_fids, n_fids) correlation matrix of the simulated return innovations.
+    base_vol : np.ndarray
+        long-run daily volatilities of the simulated contracts, as fractions.
+    vol_persistence : float
+        AR(1) coefficient of the simulated log-variance process.
+    vol_of_vol : float
+        standard deviation of the shocks to the simulated log-variance.
+    fid_names : List[str]
+        contract identifiers to simulate, as "<cid>_<ctype>".
+    n_periods : int
+        business days to simulate per iteration
+    tcost_obj : TransactionCostsDictAdapter
+        Transaction cost object
+    aum : float
+        assets under management, in USD millions. Default is 100.
+    vol_target : float
+        target volatility.
+    n_iter : int
+        independent panels to simulate. Default is 5, lower than the analytical harness's
+        because each iteration runs a full PnL per config.
+    seed : int
+        seed of the generator that draws each iteration's seed. Default is 42.
+    signal_half_life : float
+        half life, in business days, of the simulated signal's forecasting power
+    signal_ic : float
+        information coefficient of the simulated signals. Default is 0.05.
+    signal_autocorr : float
+        AR(1) coefficient of the persistent signal component. Default is 0.9
+    rebal_freq : str
+        rebalancing frequency. Default is "M", which puts the rebalance dates on the
+        business month starts the ground-truth covariance is keyed to.
+    rstring : str
+        string identifying the return series. Default is "XR".
+    slip : int
+        days to wait before applying a signal. Default is 0
+    sname : str
+        strategy name. Default is "STRAT".
+    end_date : str
+        last date of the simulated panel, in ISO format.
+    """
+    positions_kwargs = [_config_to_positions_kwargs(config) for config in configs]
+
     data_generator = SignalsAndReturnsGenerator(
         n_fids=len(fid_names),
         corr=corr,
         base_vol=base_vol,
         vol_persistence=vol_persistence,
         vol_of_vol=vol_of_vol,
+        signal_ic=signal_ic,
+        signal_autocorr=signal_autocorr,
+        half_life=signal_half_life,
     )
 
-    results = []
-    for iter_seed in rng.integers(low=0, high=10000, size=n_iter):
+    costs = np.full(shape=(n_iter, len(configs)), fill_value=np.nan)
+    realized_vol = np.full(shape=(n_iter, len(configs)), fill_value=np.nan)
+
+    for i, iter_seed in enumerate(_iteration_seeds(seed=seed, n_iter=n_iter)):
         data_generator.simulate_signals_and_returns(
             n_periods=n_periods,
-            signal_names=[f"{fid}SIG" for fid in fid_names],
-            return_names=[f"{fid}XR" for fid in fid_names],
+            signal_names=[f"{fid}_CSIG_{sname}" for fid in fid_names],
+            return_names=[f"{fid}{rstring}" for fid in fid_names],
             seed=iter_seed,
+            end_date=end_date,
         )
+        df_rets = data_generator.quantamental_returns()
+        df = data_generator.quantamental_returns_and_signals()
 
-        cov_true = data_generator.realized_cov(long=False)
-
-        estimation_dates = pd.Series(list(cov_true.keys()))
-        cov_ests = []
-        for index, resolved in enumerate(resolved_configs):
-            try:
-                cov_est = _cov_matrix_history(
-                    pivot_returns=100 * data_generator.returns,
-                    estimation_dates=estimation_dates,
-                    nan_tolerance=0,
-                    remove_zeros=False,
-                    **resolved,
-                )
-            except ValueError as err:
-                raise ValueError(
-                    f"config at index {index} ({configs[index]}) could not be estimated "
-                    f"on a {n_periods}-period panel: {err}"
-                ) from err
-
-            cov_est = {date: cov for date, cov in zip(estimation_dates, cov_est)}
-
-            cov_ests.append(cov_est)
-
-        ratios = realized_to_forecast_vol_ratios(cov_true=cov_true, cov_ests=cov_ests)
-
-        results.append(ratios)
-
-    results = np.vstack(results)
-
-    if common_sample:
-        common = np.isfinite(results).all(axis=1)
-        if not common.any():
-            raise ValueError(
-                "no date carries an estimate from every config, so they cannot be "
-                "scored on a common sample."
+        for j, kwargs in enumerate(positions_kwargs):
+            npos = notional_positions(
+                df=df,
+                sname=sname,
+                fids=list(fid_names),
+                aum=aum,
+                slip=slip,
+                vol_target=vol_target,
+                rebal_freq=rebal_freq,
+                rstring=rstring,
+                nan_tolerance=0.0,
+                remove_zeros=False,
+                **kwargs,
             )
 
-        results = results[common]
+            pnl_df, costs_df = proxy_pnl_calc(
+                df=pd.concat((df_rets, npos), ignore_index=True),
+                spos=f"{sname}_POS",
+                rstring=rstring,
+                roll_freq=rebal_freq,
+                portfolio_name=PORTFOLIO_NAME,
+                transaction_costs_object=tcost_obj,
+                return_costs=True,
+            )
 
-    bias = 1 - np.nanmean(results, axis=0)
-    std = np.nanstd(results, axis=0)
+            metrics = evaluate_pnl(df_pnl=pnl_df, df_tcosts=costs_df, aum=aum)
 
-    return bias, std
+            costs[i, j] =  metrics.loc["Transaction Cost"].iat[0]
+            realized_vol[i, j] = metrics.loc["St. Dev. %"].iat[0]
+
+    cost_pct = costs.mean(axis=0)
+    vol_pct = realized_vol.mean(axis=0)
+
+    return cost_pct, vol_pct
 
 
 if __name__ == "__main__":
     cov_est_configs = [
-        {"est_freqs": ["D"], "lback_meth": "ma", "lback_periods": [10]},
-        {"est_freqs": ["M"], "lback_meth": "ma", "lback_periods": [10]},
-        {"est_freqs": ["D"], "lback_meth": "ma", "lback_periods": [20]},
-        {"est_freqs": ["M"], "lback_meth": "ma", "lback_periods": [20]},
+        {"est_freqs": ["D"], "lback_meth": "ma", "lback_periods": [15]},
         {"est_freqs": ["D"], "lback_meth": "ma", "lback_periods": [30]},
-        {"est_freqs": ["M"], "lback_meth": "ma", "lback_periods": [30]},
         {"est_freqs": ["D"], "lback_meth": "ma", "lback_periods": [60]},
-        {"est_freqs": ["M"], "lback_meth": "ma", "lback_periods": [60]},
+        {"est_freqs": ["M"], "lback_meth": "ma", "lback_periods": [12]},
+        {"est_freqs": ["M"], "lback_meth": "ma", "lback_periods": [24]},
+        {"est_freqs": ["M"], "lback_meth": "ma", "lback_periods": [36]},
+        {"est_freqs": ["W"], "lback_meth": "ma", "lback_periods": [15]},
+        {"est_freqs": ["W"], "lback_meth": "ma", "lback_periods": [30]},
+        {"est_freqs": ["W"], "lback_meth": "ma", "lback_periods": [60]},
+        {
+            "est_freqs": ["D"],
+            "lback_meth": "xma",
+            "half_life": [12],
+            "lback_periods": [-1],
+        },
+        {
+            "est_freqs": ["D"],
+            "lback_meth": "xma",
+            "half_life": [15],
+            "lback_periods": [-1],
+        },
+        {
+            "est_freqs": ["D"],
+            "lback_meth": "xma",
+            "half_life": [25],
+            "lback_periods": [-1],
+        },
+        {
+            "est_freqs": ["D", "M", "W"],
+            "lback_meth": "ma",
+            "lback_periods": [15, 12, 15],
+            "est_weights": [1, 1, 1],
+        },
+        {
+            "est_freqs": ["D", "M", "W"],
+            "lback_meth": "ma",
+            "lback_periods": [30, 24, 30],
+            "est_weights": [1, 1, 1],
+        },
+        {
+            "est_freqs": ["D", "M", "W"],
+            "lback_meth": "ma",
+            "lback_periods": [60, 24, 24],
+            "est_weights": [1, 1, 1],
+        },
+        {
+            "est_freqs": ["D", "M", "W"],
+            "lback_meth": "xma",
+            "half_life": [15, 12, 15],
+            "est_weights": [1, 1, 1],
+            "lback_periods": [-1, -1, -1],
+        },
+        {
+            "est_freqs": ["D", "M", "W"],
+            "lback_meth": "xma",
+            "half_life": [30, 24, 30],
+            "est_weights": [1, 1, 1],
+            "lback_periods": [-1, -1, -1],
+        },
+        {
+            "est_freqs": ["D", "M", "W"],
+            "lback_meth": "xma",
+            "half_life": [60, 24, 24],
+            "est_weights": [1, 1, 1],
+            "lback_periods": [-1, -1, -1],
+        },
     ]
 
-    corr = np.array(
-        [
-            [1.0, 0.5, 0.3, 0.4, 0.2],
-            [0.5, 1.0, 0.4, 0.3, 0.3],
-            [0.3, 0.4, 1.0, 0.5, 0.2],
-            [0.4, 0.3, 0.5, 1.0, 0.4],
-            [0.2, 0.3, 0.2, 0.4, 1.0],
-        ]
-    )
+    tcost_dict = {}
 
-    bias, std = cov_estimators_bias_variance(
-        corr=corr,
-        base_vol=np.array([0.010, 0.015, 0.008, 0.012, 0.009]),
+    corr_mat = [
+        [1.00, 0.57, 0.58, 0.50, 0.42, 0.43, 0.50, 0.42, 0.43],
+        [0.57, 1.00, 0.61, 0.42, 0.54, 0.46, 0.42, 0.54, 0.46],
+        [0.58, 0.61, 1.00, 0.43, 0.46, 0.58, 0.43, 0.46, 0.58],
+        [0.50, 0.42, 0.43, 1.00, 0.57, 0.58, 0.50, 0.42, 0.43],
+        [0.42, 0.54, 0.46, 0.57, 1.00, 0.61, 0.42, 0.54, 0.46],
+        [0.43, 0.46, 0.58, 0.58, 0.61, 1.00, 0.43, 0.46, 0.58],
+        [0.50, 0.42, 0.43, 0.50, 0.42, 0.43, 1.00, 0.57, 0.58],
+        [0.42, 0.54, 0.46, 0.42, 0.54, 0.46, 0.57, 1.00, 0.61],
+        [0.43, 0.46, 0.58, 0.43, 0.46, 0.58, 0.58, 0.61, 1.00],
+    ]
+    base_vol = [0.01, 0.015, 0.008, 0.012, 0.009, 0.01, 0.01, 0.01, 0.01]
+
+    fid_names = [f"CID{i}_IRS" for i in range(9)]
+    dgp = dict(
+        corr=np.array(corr_mat),
+        base_vol=np.array(base_vol),
         vol_persistence=0.94,
         vol_of_vol=0.15,
-        n_periods=2520,
-        fid_names=[f"CID{i}_FX" for i in range(5)],
+        n_periods=252 * 10,
+        fid_names=fid_names,
         configs=cov_est_configs,
-        n_iter=5,
         seed=40,
+        signal_half_life=21,
     )
 
-    print(f"Bias: {bias}")
-    print(f"Std: {std}")
+    # the same count in both, or the columns below are averages over different panels
+    # and the gap between them is sampling noise rather than anything about the method
+    n_iter = 3
+
+    # forecast error comes from the analytical harness: exact, and cheap
+    acc_df = scaling_factor_bias_variance(n_iter=n_iter, **dgp)
+
+    # cost needs a traded path - one full proxy PnL per config per iteration
+    cost_df = cov_estimators_cost_accuracy(
+        n_iter=n_iter,
+        aum=100,
+        vol_target=10,
+        tcost_obj=TransactionCostsDictAdapter(tcost_dict),
+        **dgp,
+    )
