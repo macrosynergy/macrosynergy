@@ -1942,33 +1942,26 @@ class DataQueryFileAPIClient:
         download_order = self._sort_file_for_download_order(files_to_download)[
             "file-name"
         ].tolist()
-        if not download_order:
+
+        if download_order:
+            downloaded_files = self.download_multiple_files(
+                filenames=download_order,
+                overwrite=overwrite,
+                chunk_size=chunk_size,
+                timeout=timeout,
+                show_progress=show_progress,
+            )
+
+            logger.info(
+                f"Downloaded {len(downloaded_files)} files for the latest snapshot "
+                f"dated {latest_snapshot_date}."
+            )
+        else:
             logger.info(
                 f"No new files to download for the latest snapshot dated "
                 f"{latest_snapshot_date}."
             )
-            # every required file is already on disk, so the snapshot is complete and
-            # older files can go. `required_files` is non-empty here, checked above.
-            self.cleanup_old_files(
-                keep_n_days_old_files=keep_n_days_old_files,
-                to_datetime=latest_snapshot_date,
-                protect_files=required_files,
-                retain_snap_dates=retain_snap_dates,
-                show_progress=show_progress,
-            )
-            return []
-
-        downloaded_files = self.download_multiple_files(
-            filenames=download_order,
-            overwrite=overwrite,
-            chunk_size=chunk_size,
-            timeout=timeout,
-            show_progress=show_progress,
-        )
-        logger.info(
-            f"Downloaded {len(downloaded_files)} files for the latest snapshot "
-            f"dated {latest_snapshot_date}."
-        )
+            downloaded_files = []
 
         self.cleanup_old_files(
             keep_n_days_old_files=keep_n_days_old_files,
