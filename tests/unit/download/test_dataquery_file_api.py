@@ -741,7 +741,7 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
                     warnings.simplefilter("always")
                     try:
                         client.download(
-                            cids=["USD"], xcats=["INFL"], suppress_warnings=suppress
+                            cids=["USD"], xcats=["INFL"], suppress_warning=suppress
                         )
                     except ValueError:
                         self.assertTrue(raises)
