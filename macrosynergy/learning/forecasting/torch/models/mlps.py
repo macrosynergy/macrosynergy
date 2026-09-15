@@ -103,7 +103,7 @@ class MultiLayerPerceptron(nn.Module, BaseEstimator):
         signal_modifier = None,
         head_rank = None,
         dropout_p = 0,
-        normalization = "none",
+        normalization = None,
     ):
         super().__init__()
 

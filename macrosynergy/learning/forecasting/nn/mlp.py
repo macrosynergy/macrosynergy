@@ -382,7 +382,7 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         if self.patience is None:
             # Then we are training a single model on the entire dataset, with no early stopping,
             # but with possible different trainings for random seeds and optimizers.
-            X_s, y_s, _, _ = self.scale_data_(
+            X_s, y_s, _, _, x_scalers, y_scalers = self.scale_data_(
                 X_trains = [X],
                 y_trains = [y],
                 x_scaler = self.x_scaler,
@@ -400,7 +400,7 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
             X_trains, X_valids, y_trains, y_valids = self.create_train_valid_splits_(X, y, self.train_splitter)
 
             # Scale training and validation splits for each fold 
-            X_trains_s, y_trains_s, X_valids_s, y_valids_s = self.scale_data_(X_trains, y_trains, self.x_scaler, self.y_scaler, X_valids, y_valids)
+            X_trains_s, y_trains_s, X_valids_s, y_valids_s, x_scalers, y_scalers = self.scale_data_(X_trains, y_trains, self.x_scaler, self.y_scaler, X_valids, y_valids)
 
             # Make tensor datasets for each fold 
             train_datasets, valid_datasets = self.make_tensor_datasets_(
@@ -589,7 +589,7 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
                     self.mean_epochs_es = int(self.mean_epochs_es)
                     if self.refit:
                         # Create training set dataloader over the full dataset
-                        X_s, y_s, _, _ = self.scale_data_(
+                        X_s, y_s, _, _, x_scalers, y_scalers = self.scale_data_(
                             X_trains = [X],
                             y_trains = [y],
                             x_scaler = self.x_scaler,
@@ -645,7 +645,7 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
                             scheduler = scheduler,
                             loss_func = self.loss_func,
                             reg_turnover = self.reg_turnover, 
-                            patience = self.patience, 
+                            patience = None, 
                             verbose = self.verbose,
                         )
 
@@ -659,30 +659,39 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
                     else:
                         self.models.append(self.validated_models)
 
+        self.x_scalers = x_scalers
+        self.y_scalers = y_scalers
+
         return self
     
     def predict(self, X):
         # Predict checks
         self._check_predict_params(X)
 
-        # Scale data 
-        X_s = self.x_scaler.transform(X)
+        # Scale data
+        Xs_s = [
+            x_scaler.transform(X) 
+            if x_scaler is not None
+            else X.to_numpy()
+            for x_scaler in self.x_scalers
+        ]
+
         model_preds = []
 
         with torch.no_grad():
-            # Convert to tensor and pass through each network
-            X_s_torch = torch.Tensor(X_s)
             for model in self.models:
                 if isinstance(model, list):
                     # If model is a list of validated models, average predictions across them
+                    # First scale the input data
                     preds_list = []
-                    for m in model:
+                    for idx, m in enumerate(model):
                         m.eval()
+                        X_s_torch = torch.Tensor(Xs_s[idx])
                         preds = m(X_s_torch).numpy()
 
                         # Inverse scale predictions
                         if self.inverse_transform_preds:
-                            preds = self.y_scaler.inverse_transform(preds)
+                            preds = self.y_scalers[idx].inverse_transform(preds)
                         preds_list.append(preds)
 
                     # Average predictions across validated models
@@ -690,11 +699,12 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
                     model_preds.append(avg_preds)
                 else:
                     model.eval()
+                    X_s_torch = torch.Tensor(Xs_s[0])
                     preds = model(X_s_torch).numpy()
 
                     # Inverse scale predictions
                     if self.inverse_transform_preds:
-                        preds = self.y_scaler.inverse_transform(preds)
+                        preds = self.y_scalers[0].inverse_transform(preds)
                     model_preds.append(preds)
 
         # Concatenate predictions and average across models
@@ -781,7 +791,7 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         Input list of X_trains, y_trains, x_scalers, y_scalers and optional X_valids, y_valids.
         Output lists of scaled X_trains, y_trains, X_valids, y_valids.
         """
-        X_trains_s, y_trains_s, X_valids_s, y_valids_s = [], [], [], []
+        X_trains_s, y_trains_s, X_valids_s, y_valids_s, x_scalers, y_scalers = [], [], [], [], [], []
         for i in range(len(X_trains)):
             X_train = X_trains[i]
             y_train = y_trains[i]
@@ -824,7 +834,17 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
             X_valids_s.append(X_valid_s)
             y_valids_s.append(y_valid_s)
 
-        return X_trains_s, y_trains_s, X_valids_s, y_valids_s
+            if x_scaler is not None:
+                x_scalers.append(x_scaler_i)
+            else:
+                x_scalers.append(None)
+
+            if y_scaler is not None:
+                y_scalers.append(y_scaler_i)
+            else:
+                y_scalers.append(None)
+
+        return X_trains_s, y_trains_s, X_valids_s, y_valids_s, x_scalers, y_scalers
     
     def make_tensor_datasets_(
         self,
@@ -1611,6 +1631,8 @@ if __name__ == "__main__":
         patience = 10, 
         refit = False,
         train_splitter=RollingKFoldPanelSplit(n_splits=5),
+        x_scaler = None,
+        y_scaler = None,
         #refit=False,
         ##train_pct = 0.7,
         #x_scaler = StandardScaler(with_mean=False),
@@ -1622,7 +1644,7 @@ if __name__ == "__main__":
     ).fit(X,y)
     print(mlp.early_stopping_dynamics[(0,0)])
     print(mlp.early_stopping_inference[(0,0)])
-    mlp.predict(X)
+    print(mlp.predict(X))
 
     # so.calculate_predictions(
     #     name = "MLP",
