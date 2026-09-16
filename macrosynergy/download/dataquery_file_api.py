@@ -1982,8 +1982,6 @@ class DataQueryFileAPIClient:
     ) -> pd.DataFrame:
         if ticker.lower() not in map(str.lower, self.list_all_tickers()):
             raise ValueError(f"Ticker '{ticker}' is not available.")
-        # all_upstream_files = self.list_available_files()
-        # downloaded_files = self.list_downloaded_files()
         jobs = [self.list_available_files, self.list_downloaded_files]
         with cf.ThreadPoolExecutor() as executor:
             futures = [executor.submit(job) for job in jobs]
@@ -1991,17 +1989,34 @@ class DataQueryFileAPIClient:
             all_upstream_files: pd.DataFrame = results[0]
             downloaded_files: pd.DataFrame = results[1]
         # check that all delta files are downloaded
-        rel_dataset = self.get_datasets_for_indicators([ticker])[0]
+        rel_datasets = self.get_datasets_for_indicators([ticker])
+        if not rel_datasets:
+            raise ValueError(f"No dataset found for ticker '{ticker}'.")
+        rel_dataset = rel_datasets[0]
         upstream_delta_files = all_upstream_files[
-            all_upstream_files["file-name"].str.contains("_DELTA")
-            & all_upstream_files["file-group-id"].str.contains(rel_dataset)
+            all_upstream_files["file-name"].str.contains(
+                rel_dataset + "_DELTA", regex=False
+            )
         ]["file-name"]
+        if not len(upstream_delta_files):
+            raise ValueError(
+                f"No upstream delta files found for dataset '{rel_dataset}' "
+                f"(ticker '{ticker}'). A revisions matrix needs delta files."
+            )
         downloaded_delta_files = downloaded_files[
-            downloaded_files["file-name"].str.contains("_DELTA")
-            & downloaded_files["dataset"].str.contains(rel_dataset)
+            downloaded_files["file-name"].str.contains(
+                rel_dataset + "_DELTA", regex=False
+            )
         ]["file-name"]
-        if set(upstream_delta_files) != set(downloaded_delta_files):
-            missing_files = set(upstream_delta_files) - set(downloaded_delta_files)
+        # only a missing against upstream matters - extra local files are harmless
+        extra_files = set(downloaded_delta_files) - set(upstream_delta_files)
+        if extra_files:
+            logger.warning(
+                f"{len(extra_files)} local delta files for ticker '{ticker}' are no "
+                "longer listed upstream. They are still used to build the matrix."
+            )
+        missing_files = set(upstream_delta_files) - set(downloaded_delta_files)
+        if missing_files:
             logger.warning(
                 f"Missing {len(missing_files)} delta files for ticker '{ticker}'. "
                 "Downloading missing files now."
@@ -2010,18 +2025,31 @@ class DataQueryFileAPIClient:
                 include_full_snapshots=False,
                 include_delta=True,
                 include_metadata=False,
+                since_datetime=JPMAQS_EARLIEST_FILE_DATE,
             )
             downloaded_files = self.list_downloaded_files()
             downloaded_delta_files = downloaded_files[
-                downloaded_files["file-name"].str.contains("_DELTA")
-                & downloaded_files["dataset"].str.contains(rel_dataset)
+                downloaded_files["file-name"].str.contains(
+                    rel_dataset + "_DELTA", regex=False
+                )
             ]["file-name"]
+            missing_files = set(upstream_delta_files) - set(downloaded_delta_files)
+            if missing_files:
+                mfiles = sorted(missing_files)
+                if len(mfiles) > 10:
+                    mfiles = mfiles[:10] + [f"... ({len(mfiles) - 10} more)"]
+                raise ValueError(
+                    f"Failed to download all delta files for ticker '{ticker}'. "
+                    f"Missing files: {mfiles}"
+                )
 
         df = self.load_dataframe(
             tickers=[ticker],
             metrics=[metric, "last_updated"],
             dataframe_format="tickers",
             dataframe_type="pandas",
+            delta_treatment="all",
+            dropna=False,
             files_list=sorted(set(downloaded_delta_files)),
         )
         return transform_delta_qdf_to_revisions_matrix(
