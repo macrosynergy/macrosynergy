@@ -1972,7 +1972,7 @@ class DataQueryFileAPIClient:
         )
         return downloaded_files
 
-    def load_revisions_matrix(
+    def load_versions_matrix(
         self,
         ticker: str,
         metric: str = "value",
@@ -2051,8 +2051,9 @@ class DataQueryFileAPIClient:
             delta_treatment="all",
             dropna=False,
             files_list=sorted(set(downloaded_delta_files)),
+            include_source_file=True,
         )
-        return transform_delta_qdf_to_revisions_matrix(
+        return transform_delta_qdf_to_versions_matrix(
             df=df,
             metric=metric,
             collapse_to_eod_values=collapse_to_eod_values,
@@ -2469,7 +2470,7 @@ def _delete_corrupt_files(
     return sorted(map(str, removed_files))
 
 
-def transform_delta_qdf_to_revisions_matrix(
+def transform_delta_qdf_to_versions_matrix(
     df: pd.DataFrame,
     metric: str = "value",
     collapse_to_eod_values: bool = True,
@@ -2489,7 +2490,7 @@ def transform_delta_qdf_to_revisions_matrix(
             "The DataFrame contains multiple tickers. Please filter to a single ticker."
         )
 
-    out = df[cols_to_keep].copy()
+    out: pd.DataFrame = df.loc[:, cols_to_keep]
 
     if collapse_to_eod_values:
         ts = out["last_updated"]
@@ -2519,7 +2520,7 @@ def transform_delta_qdf_to_revisions_matrix(
     new_last_updated_col = (
         "jpmaqs_release_date" if collapse_to_eod_values else "jpmaqs_release_datetime"
     )
-    out = (
+    out: pd.DataFrame = (
         out.sort_values(by=sort_cols, kind="stable")
         .drop_duplicates(subset=drop_dup_cols, keep="last")
         .reset_index(drop=True)
@@ -3677,7 +3678,7 @@ if __name__ == "__main__":
         catalog_df = dq.load_catalog()
         random_tickers = catalog_df["Ticker"].sample(n=20, random_state=42).tolist()
 
-        df = dq.load_revisions_matrix(ticker=random_tickers[0])
+        df = dq.load_versions_matrix(ticker="ESP_EXPORTS_SA_P1M1ML12_3MMA_ARMAS")
         df
         # df = dq.download(tickers=random_tickers, keep_n_days_old_files=None)
         # print(df.head())
