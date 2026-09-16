@@ -1,321 +1,1174 @@
-# Portfolio weight concentration diagnostics
-import os
-from typing import Union, Dict, List, Tuple
+"""
+Diagnostics for a portfolio of single securities: size, concentration, turnover and
+return attribution, measured for the portfolio as a whole, for user-defined subgroups
+of securities, and - where a benchmark is supplied - for the active position against
+that benchmark.
+"""
 
+import logging
+from typing import Dict, Iterable, List, Optional, Tuple, Union
+
+import numpy as np
 import pandas as pd
 
+from macrosynergy.management.types import QuantamentalDataFrame
+from macrosynergy.management.utils.df_utils import _long_to_wide, _wide_to_long
+
+from macrosynergy.securities.index import _apply_weight_drift, _assign_period_labels
+from macrosynergy.securities.validate import _validate_frequency
+
+logger = logging.getLogger(__name__)
 
 
+#: Statistics reported for a standalone portfolio, i.e. ``active=False``.
+STANDALONE_STATS: List[str] = [
+    "n_holdings",
+    "effective_n",
+    "weight",
+    "gross_weight",
+    "turnover",
+    "weight_autocorr",
+]
 
-# ---------------------------------------------------------------------------
-# Core: turnover and active-weight alignment
-# ---------------------------------------------------------------------------
+#: Statistics reported against a benchmark, i.e. ``active=True``.
+ACTIVE_STATS: List[str] = [
+    "n_active_holdings",
+    "effective_active_n",
+    "active_weight",
+    "active_share",
+    "active_turnover",
+    "active_weight_turnover",
+    "active_weight_autocorr",
+]
+
+# Concentration statistics carry over verbatim from the standalone to the active
+# calculation - only the matrix they are measured on changes - so they are computed
+# once and renamed. "gross_weight" is the exception: halved, it becomes active share.
+_ACTIVE_RENAME: Dict[str, str] = {
+    "n_holdings": "n_active_holdings",
+    "effective_n": "effective_active_n",
+    "weight": "active_weight",
+}
+
+# Gross exposure above which the weights are more likely to be percentage points than
+# fractions. A long/short book can run well above 1, hence the generous threshold.
+_PCT_WEIGHT_THRESHOLD: float = 5.0
+
+# Cross-sectional dispersion, relative to a weight vector's own magnitude, below which
+# the vector counts as flat and carries no correlation.
+_FLAT_VECTOR_TOL: float = 1e-12
 
 
-def weight_turnover(weights_wide: pd.DataFrame) -> pd.Series:
-    # NaN means "not held" -> 0, so entries/exits register as a full move from/to 0.
-    w = weights_wide.fillna(0.0)
-    turnover = 100.0 * 0.5 * w.diff().abs().sum(axis=1)
-    turnover.iloc[0] = np.nan  # no prior date to compare against
-    turnover[turnover == 0] = np.nan  # every security unchanged -> treat as no reading
-    turnover.name = "turnover"
-    return turnover
+def _as_wide(df: pd.DataFrame, name: str, value_col: str = "value") -> pd.DataFrame:
+    """
+    Coerce a panel of security-level data to a wide (dates x cids) float matrix.
+
+    Both the long format produced elsewhere in this module - columns ``"cid"``,
+    ``"real_date"`` and a value column, optionally with ``"xcat"`` - and an
+    already-wide frame indexed by date are accepted.
+
+    Parameters
+    ----------
+    df : pd.DataFrame or QuantamentalDataFrame
+        Long-format panel, or a wide frame with a date index (or a ``"real_date"``
+        column) and one column per security.
+    name : str
+        Name of the calling argument, used in error messages.
+    value_col : str, default "value"
+        Column holding the values when ``df`` is in long format.
+
+    Raises
+    ------
+    TypeError
+        If ``df`` is not a pandas DataFrame.
+    ValueError
+        If ``df`` is empty, is missing required columns, spans more than one
+        ``"xcat"``, holds duplicate (cid, real_date) pairs, or has an index that
+        cannot be read as dates.
+
+    Returns
+    -------
+    pd.DataFrame
+        Float matrix indexed by ``"real_date"`` with one column per ``"cid"``,
+        sorted by date.
+    """
+    if not isinstance(df, pd.DataFrame):
+        raise TypeError(f"`{name}` must be a pandas DataFrame.")
+    if df.empty:
+        raise ValueError(f"`{name}` is empty.")
+
+    if "cid" in df.columns:
+        missing = {"real_date", value_col} - set(df.columns)
+        if missing:
+            raise ValueError(
+                f"Long-format `{name}` is missing columns: {sorted(missing)}."
+            )
+        if "xcat" in df.columns and df["xcat"].nunique() > 1:
+            raise ValueError(
+                f"`{name}` spans more than one xcat "
+                f"({sorted(map(str, df['xcat'].unique()))}); reduce it to a single "
+                "category before passing it in."
+            )
+        # Copied, so that coercing the dtypes below cannot write back into the
+        # caller's frame.
+        long = df[["real_date", "cid", value_col]].copy()
+        long["real_date"] = pd.to_datetime(long["real_date"])
+        # A QuantamentalDataFrame holds `cid` as categorical, which pivots into a
+        # CategoricalIndex of columns; casting keeps the result identical to the one
+        # the wide branch produces, so the same portfolio gives the same matrix
+        # whichever format it arrives in.
+        long["cid"] = long["cid"].astype(str)
+        if long.duplicated(["real_date", "cid"]).any():
+            raise ValueError(
+                f"`{name}` holds duplicate (cid, real_date) pairs; each security must "
+                "have at most one observation per date."
+            )
+        wide = _long_to_wide(long, value_col)
+    else:
+        wide = df.copy()
+        if "real_date" in wide.columns:
+            wide = wide.set_index("real_date")
+        if not isinstance(wide.index, pd.DatetimeIndex):
+            # A numeric index would otherwise be read as epoch nanoseconds, silently
+            # relabelling the panel; it almost always signals a long frame whose
+            # "cid" column is missing or differently named.
+            if pd.api.types.is_numeric_dtype(wide.index):
+                raise ValueError(
+                    f"`{name}` was read as a wide frame but its index is numeric. A "
+                    "wide frame must be indexed by date; a long frame must carry "
+                    "'cid', 'real_date' and 'value' columns."
+                )
+            try:
+                wide.index = pd.to_datetime(wide.index)
+            except (TypeError, ValueError) as exc:
+                raise ValueError(
+                    f"`{name}` was read as a wide frame but its index could not be "
+                    f"interpreted as dates: {exc}"
+                ) from exc
+        wide.columns = wide.columns.astype(str)
+
+    try:
+        wide = wide.astype(float)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"`{name}` holds non-numeric values: {exc}") from exc
+
+    wide = wide.sort_index()
+    wide.index.name = "real_date"
+    wide.columns.name = "cid"
+    return wide
 
 
-def align_active(
-    weights_wide: pd.DataFrame, benchmark_wide: pd.DataFrame
+def _align_active(
+    weights: pd.DataFrame, benchmark: pd.DataFrame
 ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    # Union of columns + fillna(0): a security only one side holds is a full active
-    # position against a 0 weight on the other side, not a dropped/NaN entry.
-    cols = sorted(set(weights_wide.columns) | set(benchmark_wide.columns))
-    idx = weights_wide.index.intersection(benchmark_wide.index)
-    w = weights_wide.reindex(index=idx, columns=cols).fillna(0.0)
-    b = benchmark_wide.reindex(index=idx, columns=cols).fillna(0.0)
+    """
+    Align portfolio and benchmark weights onto a common universe and date index.
+
+    The union of securities is taken and missing entries are filled with zero: a name
+    held on only one side is a full active position against a zero weight on the
+    other, not a missing observation. Dates are intersected, since an active weight is
+    only defined where both sides are observed.
+
+    Parameters
+    ----------
+    weights : pd.DataFrame
+        Wide portfolio weights (dates x cids).
+    benchmark : pd.DataFrame
+        Wide benchmark weights (dates x cids).
+
+    Returns
+    -------
+    weights : pd.DataFrame
+        Portfolio weights on the common universe and dates.
+    benchmark : pd.DataFrame
+        Benchmark weights on the common universe and dates.
+    active : pd.DataFrame
+        Active weights, i.e. ``weights - benchmark``.
+    """
+    cids = weights.columns.union(benchmark.columns)
+    dates = weights.index.intersection(benchmark.index)
+    if len(dates) == 0:
+        raise ValueError(
+            "`weights` and `benchmark` share no dates; an active position cannot be "
+            "formed."
+        )
+    w = weights.reindex(index=dates, columns=cids).fillna(0.0)
+    b = benchmark.reindex(index=dates, columns=cids).fillna(0.0)
     return w, b, w - b
 
 
-def _hhi_effective_n(magnitudes: pd.Series) -> Tuple[int, float]:
-    n = len(magnitudes)
-    if n == 0:
-        return 0, np.nan
-    shares = magnitudes / magnitudes.sum()
-    hhi = float((shares**2).sum())
-    return n, 1.0 / hhi
-
-
-# ---------------------------------------------------------------------------
-# Raw portfolio stats (not vs. benchmark) -- whole portfolio or one sector's columns
-# ---------------------------------------------------------------------------
-
-
-def portfolio_stats_raw(weights_wide: pd.DataFrame) -> pd.DataFrame:
-    def _row(row: pd.Series) -> pd.Series:
-        w = row.dropna()
-        w = w[w != 0]
-        n, effective_n = _hhi_effective_n(w.abs())
-        return pd.Series(
-            {
-                "n_holdings": n,
-                "effective_n": effective_n,
-                "weight": 100.0 * w.sum() if n else np.nan,
-            }
-        )
-
-    stats = weights_wide.apply(_row, axis=1)
-    stats["turnover"] = weight_turnover(weights_wide)
-    return stats
-
-
-def group_portfolio_stats_raw(
-    weights_wide: pd.DataFrame,
-    group_map: Dict[str, str],
-    other_label: str = "OTHER",
-) -> pd.DataFrame:
-    groups = pd.Series({c: group_map.get(c, other_label) for c in weights_wide.columns})
-    frames = []
-    for label in sorted(groups.unique()):
-        sub = weights_wide[groups.index[groups == label]]
-        stats = portfolio_stats_raw(sub)
-        stats.index.name = "real_date"
-        frames.append(stats.reset_index().assign(group=label))
-    out = pd.concat(frames, axis=0, ignore_index=True)
-    stat_cols = [c for c in out.columns if c not in ("real_date", "group")]
-    return (
-        out[["real_date", "group"] + stat_cols]
-        .sort_values(["group", "real_date"])
-        .reset_index(drop=True)
-    )
-
-
-# ---------------------------------------------------------------------------
-# Active portfolio stats (vs. benchmark)
-# ---------------------------------------------------------------------------
-
-
-def autocorr_active_weight(active_wide: pd.DataFrame) -> pd.Series:
-    # Cross-sectional correlation of the active-weight vector against its own prior
-    # date, restricted each pair to securities relevant in at least one of the two
-    # dates (a!=0 or b!=0) -- otherwise the ambient zero-filled universe dominates and
-    # trivially inflates the correlation toward 1.
-    vals = active_wide.to_numpy()
-    idx = active_wide.index
-    out = np.full(len(idx), np.nan)
-    for i in range(1, len(idx)):
-        cur, prev = vals[i], vals[i - 1]
-        mask = (cur != 0) | (prev != 0)
-        if mask.sum() > 1 and np.std(cur[mask]) > 0 and np.std(prev[mask]) > 0:
-            out[i] = np.corrcoef(cur[mask], prev[mask])[0, 1]
-    return pd.Series(out, index=idx, name="active_weight_autocorr")
-
-
-def _active_row_stats(active: pd.DataFrame) -> pd.DataFrame:
-    def _row(row: pd.Series) -> pd.Series:
-        a = row[row != 0]
-        n, effective_n = _hhi_effective_n(a.abs())
-        return pd.Series(
-            {
-                "n_active_holdings": n,
-                "effective_active_n": effective_n,  # inverse participation ratio
-                "active_share": (
-                    50.0 * a.abs().sum() if n else np.nan
-                ),  # 0.5 * sum|active w|
-            }
-        )
-
-    return active.apply(_row, axis=1)
-
-
-def portfolio_stats_active(
-    weights_wide: pd.DataFrame, benchmark_wide: pd.DataFrame
-) -> pd.DataFrame:
-    w, b, active = align_active(weights_wide, benchmark_wide)
-    stats = _active_row_stats(active)
-    stats["active_turnover"] = weight_turnover(w) - weight_turnover(b)
-    stats["active_weight_turnover"] = weight_turnover(active)
-    stats["active_weight_autocorr"] = autocorr_active_weight(active)
-    return stats
-
-
-def group_portfolio_stats_active(
-    weights_wide: pd.DataFrame,
-    benchmark_wide: pd.DataFrame,
-    group_map: Dict[str, str],
-    other_label: str = "OTHER",
-) -> pd.DataFrame:
-    w, b, active = align_active(weights_wide, benchmark_wide)
-    groups = pd.Series({c: group_map.get(c, other_label) for c in active.columns})
-    frames = []
-    for label in sorted(groups.unique()):
-        cols = groups.index[groups == label]
-        sub_w, sub_b, sub_active = w[cols], b[cols], active[cols]
-        stats = _active_row_stats(sub_active)
-        stats["active_turnover"] = weight_turnover(sub_w) - weight_turnover(sub_b)
-        stats["active_weight_turnover"] = weight_turnover(sub_active)
-        stats["active_weight_autocorr"] = autocorr_active_weight(sub_active)
-        stats.index.name = "real_date"
-        frames.append(stats.reset_index().assign(group=label))
-    out = pd.concat(frames, axis=0, ignore_index=True)
-    stat_cols = [c for c in out.columns if c not in ("real_date", "group")]
-    return (
-        out[["real_date", "group"] + stat_cols]
-        .sort_values(["group", "real_date"])
-        .reset_index(drop=True)
-    )
-
-
-# ---------------------------------------------------------------------------
-# Regression/correlation inputs: target stays a level, only the factors transform
-# ---------------------------------------------------------------------------
-
-
-def factor_target_frames(
-    df: pd.DataFrame, factor_xcats: List[str], target_xcats: List[str], cid: str
-) -> Dict[str, pd.DataFrame]:
-    factors = monthly_wide(df, factor_xcats, cid)
-    targets = monthly_wide(
-        df, target_xcats, cid
-    )  # left as computed, never diffed/squared
-
-    frames = {
-        "level": pd.concat([factors, targets], axis=1),
-        "change": pd.concat([factors.diff(), targets], axis=1),
-        "sq_change": pd.concat([factors.diff() ** 2, targets], axis=1),
-    }
-    return {name: wide_to_qdf(wide, cid) for name, wide in frames.items()}
-
-
-# Single-security portfolio return attribution
-
-
-def attribute_portfolio_return(
-    weights_wide: pd.DataFrame, returns_wide: pd.DataFrame
-) -> pd.DataFrame:
+def _concentration_stats(weights: pd.DataFrame) -> pd.DataFrame:
     """
-    Per-security contribution to total portfolio return.
+    Per-date size and concentration statistics of a wide weight matrix.
 
-    Weights are lagged one day before being applied to same-day returns, matching the
-    `lag=1` used throughout the learning pipeline: a weight set on date t-1 earns the
-    return realised on date t. A stock missing a weight or a return on a given day
-    contributes 0 rather than NaN.
+    A position is counted as held where its weight is present and non-zero, so that
+    the zero-filled remainder of the universe never registers as a holding.
 
     Parameters
     ----------
-    weights_wide : pd.DataFrame
-        Daily portfolio weights, as returned by `stitch_vintage_weights`.
-    returns_wide : pd.DataFrame
-        Daily single-security returns, index "real_date", one column per stock cid, same
-        units as the `EQCTR_NSA` category the weights were trained against.
+    weights : pd.DataFrame
+        Wide weight matrix (dates x cids). Weights are expected as fractions.
 
     Returns
     -------
     pd.DataFrame
-        Index "real_date", one column per stock plus "TOTAL" (the sum, i.e. the realised
-        portfolio return implied by the stitched weights).
+        Indexed by ``"real_date"``, with columns "n_holdings" (count of non-zero
+        positions), "effective_n" (reciprocal of the Herfindahl index of gross weight
+        shares, i.e. the inverse participation ratio), "weight" (net weight in
+        percentage points) and "gross_weight" (sum of absolute weights in percentage
+        points). Dates with no position at all carry no reading beyond a zero count.
     """
-    cols = sorted(set(weights_wide.columns) | set(returns_wide.columns))
-    w_lag = weights_wide.reindex(columns=cols).shift(1).fillna(0.0)
-    r = returns_wide.reindex(columns=cols).fillna(0.0)
-    idx = w_lag.index.intersection(r.index)
-    contrib = w_lag.loc[idx] * r.loc[idx]
-    contrib["TOTAL"] = contrib.sum(axis=1)
-    return contrib
+    held = weights.notna() & weights.ne(0.0)
+    n_holdings = held.sum(axis=1)
 
+    abs_w = weights.abs().where(held)
+    gross = abs_w.sum(axis=1)
+    hhi = abs_w.div(gross.replace(0.0, np.nan), axis=0).pow(2).sum(axis=1)
 
-def group_attribution(
-    weights_wide: pd.DataFrame,
-    returns_wide: pd.DataFrame,
-    group_map: Dict[str, str],
-    other_label: str = "OTHER",
-) -> pd.DataFrame:
-    contrib = attribute_portfolio_return(weights_wide, returns_wide).drop(
-        columns="TOTAL"
+    stats = pd.DataFrame(
+        {
+            "n_holdings": n_holdings,
+            "effective_n": 1.0 / hhi.replace(0.0, np.nan),
+            "weight": 100.0 * weights.where(held).sum(axis=1),
+            "gross_weight": 100.0 * gross,
+        }
     )
-    groups = pd.Series({c: group_map.get(c, other_label) for c in contrib.columns})
-    grouped = contrib.T.groupby(groups).sum().T
-    grouped["TOTAL"] = grouped.sum(axis=1)  # sums back to the portfolio-level TOTAL
-    return grouped
+    stats.loc[n_holdings.eq(0), ["effective_n", "weight", "gross_weight"]] = np.nan
+    stats.index.name = "real_date"
+    return stats
 
 
-# Position statistics as a QDF, joined to the macro factor panel
-
-
-def position_stats_to_qdf(
-    position_stats: pd.DataFrame, cid: str, xcat_prefix: str
-) -> pd.DataFrame:
-    dfa = (
-        position_stats.rename_axis("real_date")
-        .reset_index()
-        .melt(id_vars="real_date", var_name="stat", value_name="value")
-    )
-    dfa["xcat"] = xcat_prefix + "_" + dfa["stat"].str.upper()
-    dfa["cid"] = cid
-    return dfa.loc[dfa["value"].notna(), ["cid", "xcat", "real_date", "value"]]
-
-
-def group_stats_to_qdf(stats: pd.DataFrame, xcat_prefix: str) -> pd.DataFrame:
-    stat_cols = [c for c in stats.columns if c not in ("real_date", "group")]
-    dfa = stats.melt(
-        id_vars=["real_date", "group"],
-        value_vars=stat_cols,
-        var_name="stat",
-        value_name="value",
-    )
-    dfa["xcat"] = xcat_prefix + "_" + dfa["stat"].str.upper()
-    dfa["cid"] = dfa["group"].astype(str).str.replace("_", "-", regex=False)
-    return dfa.loc[dfa["value"].notna(), ["cid", "xcat", "real_date", "value"]]
-
-
-# Monthly-resampled inputs for the change / level / squared-level correlation matrices
-
-
-def monthly_wide(df: pd.DataFrame, xcats: List[str], cid: str) -> pd.DataFrame:
+def _trade_dates(index: pd.DatetimeIndex, rebalance_freq: str) -> pd.DatetimeIndex:
     """
-    Month-end mean level for a set of categories under a single cross-section.
+    First observed date of each rebalancing period, i.e. the dates the book is set on.
+
+    Trading only happens where the portfolio is reset to its targets. In between, a
+    daily weight matrix still changes every day as positions drift with returns, which
+    is market movement rather than turnover.
 
     Parameters
     ----------
-    df : pd.DataFrame
-        Standard QDF with "cid", "xcat", "real_date", "value" columns.
-    xcats : list of str
-        Categories to pivot into columns, in the given order.
-    cid : str
-        Single cross-section the categories are stored under.
+    index : pd.DatetimeIndex
+        Dates covered by the weight matrix.
+    rebalance_freq : str
+        Pandas period alias defining the rebalancing cadence, one of
+        {"B", "W", "M", "Q", "Y"}. Matches the argument of the same name on
+        :func:`macrosynergy.securities.index.compute_daily_weights`.
+
+    Returns
+    -------
+    pd.DatetimeIndex
+        One date per rebalancing period, in ascending order.
+    """
+    periods = _assign_period_labels(index, rebalance_freq)
+    firsts = pd.Series(index, index=periods).groupby(level=0).first()
+    return pd.DatetimeIndex(firsts.values, name="real_date")
+
+
+def _no_trade_weights(
+    weights: pd.DataFrame,
+    trade_dates: pd.DatetimeIndex,
+    returns: Optional[pd.DataFrame] = None,
+) -> pd.DataFrame:
+    """
+    Weights each rebalancing would have inherited had nothing been traded since the
+    previous one.
+
+    Anchoring on the previous trade date and compounding returns forward to the
+    current one reconstructs the book the market alone would have produced. It is the
+    right baseline whether or not the supplied weights already drift: weights that do
+    drift are reproduced exactly, so the difference against them is zero on every
+    non-trading date, while static target weights are grown over the whole holding
+    period rather than left flat.
+
+    Capital is grown by the exposure-weighted return rather than by the row sum, so
+    that a book which is not fully invested - a long/short or market-neutral one -
+    is not rescaled by a denominator that can approach zero.
+
+    Parameters
+    ----------
+    weights : pd.DataFrame
+        Wide weight matrix (dates x cids), with weights expressed as fractions.
+    trade_dates : pd.DatetimeIndex
+        Dates on which the book is reset, as returned by :func:`_trade_dates`.
+    returns : pd.DataFrame, optional
+        Wide returns (dates x cids) in percentage points. When None the anchor weights
+        are carried forward unchanged, so the comparison against them measures the
+        change in target weights with drift left in.
 
     Returns
     -------
     pd.DataFrame
-        Index "real_date" (month-end), one column per xcat: the monthly mean of the
-        native-frequency values.
+        Indexed by every trade date bar the first, which has no prior anchor, with the
+        same columns as ``weights``.
     """
-    wide = (
-        df.loc[
-            (df["cid"] == cid) & (df["xcat"].isin(xcats)),
-            ["real_date", "xcat", "value"],
+    later, earlier = trade_dates[1:], trade_dates[:-1]
+    anchor = weights.reindex(index=earlier).fillna(0.0).to_numpy(dtype=float)
+
+    if returns is None:
+        carried = anchor
+    else:
+        rets = (
+            returns.reindex(index=weights.index, columns=weights.columns).fillna(0.0)
+            / 100.0
+        )
+        # Growth from the start of the sample through the prior date, so that the
+        # growth between any two dates is the ratio of two of its rows.
+        growth = (1.0 + rets).cumprod().shift(1)
+        growth.iloc[0] = 1.0
+        ratio = growth.reindex(index=later).to_numpy(dtype=float) / growth.reindex(
+            index=earlier
+        ).to_numpy(dtype=float)
+
+        capital = 1.0 + (anchor * (ratio - 1.0)).sum(axis=1)
+        capital = np.where(capital != 0.0, capital, np.nan)[:, None]
+        with np.errstate(invalid="ignore", divide="ignore"):
+            carried = anchor * ratio / capital
+
+    return pd.DataFrame(carried, index=later, columns=weights.columns)
+
+
+def _turnover_against(
+    weights: pd.DataFrame,
+    carried: pd.DataFrame,
+    columns: Optional[pd.Index] = None,
+) -> pd.Series:
+    """
+    One-way turnover traded at each rebalancing, in percentage points.
+
+    Measured against the book the previous rebalancing would have left untouched, so
+    that only the buys and sells are counted and the drift in between is not. Missing
+    weights are read as "not held", so entries and exits register as a full move from
+    or to a zero weight.
+
+    Restricting ``columns`` measures one subgroup's share of the portfolio's trading.
+    The baseline must have been built on the whole portfolio and sliced here rather
+    than rebuilt per subgroup, so that each subgroup is drifted against the
+    portfolio's capital and the readings stay additive across subgroups.
+
+    Parameters
+    ----------
+    weights : pd.DataFrame
+        Wide weight matrix (dates x cids), with weights expressed as fractions.
+    carried : pd.DataFrame
+        No-trade baseline indexed by trade date, from :func:`_no_trade_weights`.
+    columns : pd.Index, optional
+        Securities to measure. Default is every column of ``weights``.
+
+    Returns
+    -------
+    pd.Series
+        Indexed by ``"real_date"`` over every date of ``weights``, carrying a reading
+        on each trade date bar the first and NaN everywhere else.
+    """
+    cols = weights.columns if columns is None else columns
+    turnover = pd.Series(np.nan, index=weights.index, name="turnover")
+    turnover.index.name = "real_date"
+    if carried.empty:
+        return turnover
+
+    traded = weights.loc[carried.index, cols].fillna(0.0) - carried[cols]
+    turnover.loc[carried.index] = 100.0 * 0.5 * traded.abs().sum(axis=1)
+    return turnover
+
+
+def _masked_rowwise_corr(cur: np.ndarray, prev: np.ndarray) -> np.ndarray:
+    """
+    Correlation of each row of ``cur`` against the matching row of ``prev``.
+
+    Each pair is restricted to the columns carrying a position in at least one of the
+    two rows. Without that restriction the zero-filled remainder of the universe
+    dominates the cross-section and pushes the correlation trivially towards one.
+
+    Parameters
+    ----------
+    cur : np.ndarray
+        Two-dimensional array of weight vectors, one row per observation.
+    prev : np.ndarray
+        Array of the same shape holding the vectors to correlate against.
+
+    Returns
+    -------
+    np.ndarray
+        One correlation per row, NaN where fewer than two columns are relevant or
+        either vector is flat across them.
+    """
+    mask = ((cur != 0.0) | (prev != 0.0)).astype(float)
+    n_relevant = mask.sum(axis=1)
+    with np.errstate(invalid="ignore", divide="ignore"):
+        # Deviations from the masked cross-sectional mean; the mask zeroes out every
+        # irrelevant security so it contributes to neither moment.
+        mean_c = (cur * mask).sum(axis=1, keepdims=True) / n_relevant[:, None]
+        mean_p = (prev * mask).sum(axis=1, keepdims=True) / n_relevant[:, None]
+        dev_c = (cur - mean_c) * mask
+        dev_p = (prev - mean_p) * mask
+
+        spread_c = np.sqrt((dev_c**2).sum(axis=1))
+        spread_p = np.sqrt((dev_p**2).sum(axis=1))
+        # A vector with no cross-sectional dispersion has no correlation to report -
+        # an equal-weighted book is the standard case. Judged against the vector's own
+        # magnitude rather than against zero, so that rounding in the weights cannot
+        # leave a flat vector looking dispersed and hand back an arbitrary reading.
+        varies = (
+            spread_c > _FLAT_VECTOR_TOL * np.sqrt(((cur * mask) ** 2).sum(axis=1))
+        ) & (spread_p > _FLAT_VECTOR_TOL * np.sqrt(((prev * mask) ** 2).sum(axis=1)))
+        corr = (dev_c * dev_p).sum(axis=1) / (spread_c * spread_p)
+    return np.where(varies & (n_relevant > 1), corr, np.nan)
+
+
+def _weight_autocorr(
+    weights: pd.DataFrame, trade_dates: pd.DatetimeIndex
+) -> pd.Series:
+    """
+    Correlation of each rebalancing's weight vector with the previous rebalancing's.
+
+    Measured across consecutive trade dates rather than consecutive days: between
+    rebalancings the book only drifts, so a daily reading answers "does today's
+    position look like yesterday's", which is trivially yes, instead of "does this
+    rebalancing keep the last one's positions".
+
+    Parameters
+    ----------
+    weights : pd.DataFrame
+        Wide weight matrix (dates x cids).
+    trade_dates : pd.DatetimeIndex
+        Dates on which the book is reset, as returned by :func:`_trade_dates`.
+
+    Returns
+    -------
+    pd.Series
+        Indexed by ``"real_date"`` over every date of ``weights``, carrying a reading
+        on each trade date bar the first and NaN everywhere else.
+    """
+    autocorr = pd.Series(np.nan, index=weights.index, name="weight_autocorr")
+    autocorr.index.name = "real_date"
+    if len(trade_dates) < 2 or weights.shape[1] < 2:
+        return autocorr
+
+    later, earlier = trade_dates[1:], trade_dates[:-1]
+    cur = weights.reindex(index=later).fillna(0.0).to_numpy(dtype=float)
+    prev = weights.reindex(index=earlier).fillna(0.0).to_numpy(dtype=float)
+    autocorr.loc[later] = _masked_rowwise_corr(cur, prev)
+    return autocorr
+
+
+def _group_labels(
+    columns: pd.Index,
+    group_map: Optional[Dict[str, str]],
+    other_label: str,
+) -> pd.Series:
+    """
+    Resolve the subgroup label of every security in ``columns``.
+
+    Parameters
+    ----------
+    columns : pd.Index
+        Security identifiers (cids) to label.
+    group_map : dict or None
+        Mapping of cid to subgroup label. Securities absent from the mapping, and
+        those mapped to a missing label, fall back to ``other_label``.
+    other_label : str
+        Label applied to unmapped securities.
+
+    Returns
+    -------
+    pd.Series
+        Group label per security, indexed by cid.
+    """
+    mapping = dict(group_map or {})
+    labels = pd.Series(
+        [mapping.get(cid, other_label) for cid in columns], index=columns, dtype=object
+    )
+    labels = labels.where(labels.notna(), other_label).astype(str)
+
+    unmapped = [cid for cid in columns if cid not in mapping]
+    if unmapped:
+        logger.info(
+            "%d security(ies) are absent from `groups` and were assigned to '%s': %s",
+            len(unmapped),
+            other_label,
+            sorted(map(str, unmapped)),
+        )
+    return labels
+
+
+def _cid_label_map(labels: Iterable[str]) -> Dict[str, str]:
+    """
+    Map subgroup labels onto valid cross-section identifiers.
+
+    A cid is the part of a ticker preceding the first underscore, so an underscore in
+    a label would corrupt the ticker it ends up in; underscores are replaced with
+    hyphens.
+
+    Parameters
+    ----------
+    labels : iterable of str
+        Labels to convert.
+
+    Raises
+    ------
+    ValueError
+        If two distinct labels collide once underscores are replaced.
+
+    Returns
+    -------
+    dict
+        Mapping of label to cid.
+    """
+    mapping = {str(lbl): str(lbl).replace("_", "-") for lbl in dict.fromkeys(labels)}
+
+    collisions: Dict[str, List[str]] = {}
+    for raw, cid in mapping.items():
+        collisions.setdefault(cid, []).append(raw)
+    clashing = {cid: raws for cid, raws in collisions.items() if len(raws) > 1}
+    if clashing:
+        raise ValueError(
+            "Subgroup labels collide once underscores are replaced with hyphens, so "
+            f"they cannot be used as cross-sections: {clashing}."
+        )
+    return mapping
+
+
+class PortfolioAnalyser:
+    """
+    Weight and return diagnostics for a portfolio of single securities.
+
+    The same statistics are available along three axes, combined freely:
+
+    - the portfolio as a whole, which is the default;
+    - subgroups of securities defined by ``groups``, selected with ``by_group=True``.
+      Every statistic is measured on the subgroup's own columns of the portfolio
+      weight matrix, so counts, weights, active shares and turnovers are contributions
+      that sum back to the whole-portfolio figure, while ``effective_n`` is normalised
+      within the subgroup;
+    - the active position against ``benchmark``, selected with ``active=True``, which
+      applies the same measurements to the portfolio's weights net of the benchmark's.
+
+    Parameters
+    ----------
+    weights : pd.DataFrame or QuantamentalDataFrame
+        Portfolio weights per security and date, as fractions of the portfolio. Either
+        long format with columns ``"cid"``, ``"real_date"`` and ``"value"`` - the
+        output of :func:`macrosynergy.securities.index.compute_daily_weights` - or a
+        wide frame indexed by date with one column per security. A missing weight is
+        read as "not held". Weights may be static targets held flat between
+        rebalancings or already drifting with returns; see
+        :meth:`adjust_weights_with_drift` to turn the former into the latter.
+    rebalance_freq : str
+        Pandas period alias defining how often the book is reset to its targets, one
+        of {"B", "W", "M", "Q", "Y"}. Matches the argument of the same name on
+        :func:`macrosynergy.securities.index.compute_daily_weights`, and must describe
+        the *portfolio's* schedule even when measuring against a benchmark. Turnover
+        and weight autocorrelation are reported only on these dates; on every other
+        date a daily weight matrix changes because positions drift with returns, not
+        because anything traded.
+    benchmark : pd.DataFrame or QuantamentalDataFrame, optional
+        Benchmark weights in the same format and units as ``weights``. Required for
+        any ``active=True`` call. Portfolio and benchmark are aligned on the union of
+        their securities and the intersection of their dates.
+    returns : pd.DataFrame or QuantamentalDataFrame, optional
+        Single-security returns in the same format as ``weights``, in percentage
+        points as JPMaQS return categories are. Required by :meth:`attribution`, whose
+        contributions come back in the same units. Also used to remove drift from the
+        turnover readings; without it, turnover measures the change in weights between
+        rebalancings with drift left in.
+    groups : dict or pd.Series, optional
+        Mapping of security (cid) to subgroup label - sector, region, book, or any
+        other partition. Required for any ``by_group=True`` call. Securities absent
+        from the mapping are collected under ``other_label``.
+    start : str or pd.Timestamp, optional
+        Earliest date to retain. Default is None, i.e. the earliest date available.
+    end : str or pd.Timestamp, optional
+        Latest date to retain. Default is None, i.e. the latest date available.
+    other_label : str, default "OTHER"
+        Subgroup label for securities missing from ``groups``.
+    portfolio_name : str, default "PORTFOLIO"
+        Name of the portfolio as a whole. Used as the cross-section of whole-portfolio
+        statistics converted to a QuantamentalDataFrame, and as the label of the total
+        column in :meth:`attribution`.
+
+    Raises
+    ------
+    TypeError
+        If ``groups`` is neither a mapping nor a pandas Series.
+    ValueError
+        If any input frame is empty, malformed, or cannot be aligned.
+
+    Attributes
+    ----------
+    weights, benchmark, returns : pd.DataFrame
+        The inputs as wide (dates x cids) float matrices, trimmed to the date window.
+        ``benchmark`` and ``returns`` are None when not supplied.
+    active_weights : pd.DataFrame
+        Portfolio weights net of the benchmark's, on the union of both universes and
+        the intersection of their dates. None when no benchmark was supplied.
+    groups : pd.Series
+        Subgroup label per security, indexed by cid. None when no mapping was supplied.
+    cids : list of str
+        Every security covered, i.e. the portfolio's universe widened by the
+        benchmark's.
+    trade_dates : pd.DatetimeIndex
+        The dates the book is reset on, implied by ``rebalance_freq``.
+    start, end : pd.Timestamp
+        First and last date of the portfolio weights actually retained.
+
+    Notes
+    -----
+    Weights are expected as fractions, i.e. a fully invested long-only portfolio sums
+    to one. All reported weights, turnovers and active shares are in percentage points.
+
+    Concentration statistics - ``n_holdings``, ``effective_n``, ``weight``,
+    ``gross_weight``, ``active_weight`` and ``active_share`` - are daily readings and
+    are reported on every date. ``turnover`` and the autocorrelations are only defined
+    between rebalancings and carry NaN elsewhere, so the returned frame keeps its daily
+    index either way.
+    """
+
+    def __init__(
+        self,
+        weights: pd.DataFrame,
+        rebalance_freq: str,
+        benchmark: Optional[pd.DataFrame] = None,
+        returns: Optional[pd.DataFrame] = None,
+        groups: Optional[Union[Dict[str, str], pd.Series]] = None,
+        start: Optional[Union[str, pd.Timestamp]] = None,
+        end: Optional[Union[str, pd.Timestamp]] = None,
+        other_label: str = "OTHER",
+        portfolio_name: str = "PORTFOLIO",
+    ):
+        if not isinstance(other_label, str):
+            raise TypeError("`other_label` must be a string.")
+        if not isinstance(portfolio_name, str):
+            raise TypeError("`portfolio_name` must be a string.")
+        if groups is not None and not isinstance(groups, (dict, pd.Series)):
+            raise TypeError("`groups` must be a dict or a pandas Series.")
+        _validate_frequency(rebalance_freq, "rebalance_freq")
+
+        self.other_label = other_label
+        self.portfolio_name = portfolio_name
+        self.rebalance_freq = rebalance_freq
+
+        self.weights = self._trim(_as_wide(weights, "weights"), start, end)
+        self.benchmark = (
+            self._trim(_as_wide(benchmark, "benchmark"), start, end)
+            if benchmark is not None
+            else None
+        )
+        self.returns = (
+            self._trim(_as_wide(returns, "returns"), start, end)
+            if returns is not None
+            else None
+        )
+        self.start, self.end = self.weights.index.min(), self.weights.index.max()
+        # Derived from the portfolio's own calendar: when measuring against a
+        # benchmark, the benchmark drifts and reconstitutes on its own schedule, so
+        # only the portfolio's rebalancings say when the book was actually traded.
+        self.trade_dates = _trade_dates(self.weights.index, rebalance_freq)
+        if len(self.trade_dates) < 2:
+            logger.warning(
+                "The weights span fewer than two '%s' rebalancing periods, so no "
+                "turnover or autocorrelation can be measured.",
+                rebalance_freq,
+            )
+
+        # Held alongside the raw weights: the standalone statistics must be measured
+        # on the portfolio's own universe and calendar, unaffected by the benchmark.
+        if self.benchmark is not None:
+            self._w_aligned, self._b_aligned, self.active_weights = _align_active(
+                self.weights, self.benchmark
+            )
+        else:
+            self._w_aligned = self._b_aligned = self.active_weights = None
+
+        self._group_map = (
+            {str(k): v for k, v in dict(groups).items()} if groups is not None else None
+        )
+        universe = (
+            self.weights.columns
+            if self.benchmark is None
+            else self.weights.columns.union(self.benchmark.columns)
+        )
+        self.cids = list(universe)
+        self.groups = (
+            _group_labels(universe, self._group_map, other_label)
+            if self._group_map is not None
+            else None
+        )
+
+        self._warn_if_percentage_weights()
+
+    @staticmethod
+    def adjust_weights_with_drift(
+        weights: pd.DataFrame,
+        returns: pd.DataFrame,
+        rebalance_freq: str = "M",
+    ) -> pd.DataFrame:
+        """
+        Let static target weights drift with returns between rebalancings.
+
+        Target weights recorded at each rebalancing describe the book as it is set,
+        not as it is held: between rebalancings the positions move with the market.
+        This reconstructs the daily path - the portfolio is reset to its targets on the
+        first business day of each period and drifts with returns until the next - so
+        that concentration and attribution are measured on the book actually held.
+
+        Statistics measured on the result are unaffected by the difference for
+        ``turnover``, which removes the drift either way, but ``n_holdings``,
+        ``effective_n`` and the weight columns all read differently on a drifting book
+        than on a flat one.
+
+        Parameters
+        ----------
+        weights : pd.DataFrame or QuantamentalDataFrame
+            Target weights per security and date, long or wide, as fractions. Values
+            are carried forward over gaps and need not be normalised.
+        returns : pd.DataFrame or QuantamentalDataFrame
+            Single-security returns in the same format, in percentage points.
+        rebalance_freq : str, default "M"
+            Pandas period alias defining how often the book is reset to its targets,
+            one of {"B", "W", "M", "Q", "Y"}.
+
+        Returns
+        -------
+        pd.DataFrame
+            Wide daily weights (business days x cids), each row summing to one where
+            any weight is in force, ready to pass back in as ``weights``.
+
+        See Also
+        --------
+        macrosynergy.securities.index.compute_daily_weights : the same drift applied to
+            an index constituent set, starting from membership flags.
+        """
+        _validate_frequency(rebalance_freq, "rebalance_freq")
+        target = _as_wide(weights, "weights")
+        rets = _as_wide(returns, "returns")
+
+        cids = target.columns.union(rets.columns)
+        dates = target.index.union(rets.index)
+        calendar = pd.bdate_range(dates.min(), dates.max(), freq="B")
+
+        target = target.reindex(index=calendar, columns=cids).ffill().fillna(0.0)
+        rets = rets.reindex(index=calendar, columns=cids).fillna(0.0) / 100.0
+
+        drifted = _apply_weight_drift(
+            target, rets, _assign_period_labels(calendar, rebalance_freq)
+        )
+        drifted.index.name = "real_date"
+        drifted.columns.name = "cid"
+        return drifted
+
+    @staticmethod
+    def _trim(
+        wide: pd.DataFrame,
+        start: Optional[Union[str, pd.Timestamp]],
+        end: Optional[Union[str, pd.Timestamp]],
+    ) -> pd.DataFrame:
+        """
+        Restrict a wide frame to the ``[start, end]`` date window.
+
+        Parameters
+        ----------
+        wide : pd.DataFrame
+            Wide frame indexed by date.
+        start : str or pd.Timestamp or None
+            Earliest date to retain, or None for no lower bound.
+        end : str or pd.Timestamp or None
+            Latest date to retain, or None for no upper bound.
+
+        Returns
+        -------
+        pd.DataFrame
+            The trimmed frame.
+        """
+        if start is None and end is None:
+            return wide
+        trimmed = wide.loc[
+            pd.Timestamp(start) if start is not None else None : (
+                pd.Timestamp(end) if end is not None else None
+            )
         ]
-        .pivot(index="real_date", columns="xcat", values="value")
-        .reindex(columns=xcats)
-    )
-    return wide.resample("M").mean()
+        if trimmed.empty:
+            raise ValueError(
+                f"No dates remain between start={start} and end={end}; the data spans "
+                f"{wide.index.min():%Y-%m-%d} to {wide.index.max():%Y-%m-%d}."
+            )
+        return trimmed
 
+    def _warn_if_percentage_weights(self) -> None:
+        """
+        Warn when the weights look like percentage points rather than fractions.
+        """
+        gross = self.weights.abs().sum(axis=1).replace(0.0, np.nan)
+        typical = float(gross.median()) if gross.notna().any() else np.nan
+        if np.isfinite(typical) and typical > _PCT_WEIGHT_THRESHOLD:
+            logger.warning(
+                "Gross exposure of `weights` has a median of %.1f, suggesting "
+                "percentage points rather than fractions; reported weights and "
+                "turnovers will be overstated by a factor of 100.",
+                typical,
+            )
 
-def wide_to_qdf(wide: pd.DataFrame, cid: str) -> pd.DataFrame:
-    """
-    Standard QDF from a wide (real_date x xcat) frame, single cross-section.
+    def _resolve_frames(self, active: bool) -> Tuple[pd.DataFrame, ...]:
+        """
+        Return the weight matrices a statistics call should be measured on.
 
-    Parameters
-    ----------
-    wide : pd.DataFrame
-        Index "real_date", one column per xcat.
-    cid : str
-        Cross-section to assign every row.
+        Parameters
+        ----------
+        active : bool
+            If True, return the benchmark-aligned portfolio, benchmark and active
+            matrices; otherwise the raw portfolio weights alone.
 
-    Returns
-    -------
-    pd.DataFrame
-        Standard QDF columns "cid", "xcat", "real_date", "value".
-    """
-    out = wide.reset_index().melt(
-        id_vars="real_date", var_name="xcat", value_name="value"
-    )
-    out["cid"] = cid
-    return out.loc[out["value"].notna(), ["cid", "xcat", "real_date", "value"]]
+        Raises
+        ------
+        ValueError
+            If ``active`` is True but no benchmark was supplied.
+
+        Returns
+        -------
+        tuple of pd.DataFrame
+            ``(weights,)`` when ``active`` is False, else
+            ``(weights, benchmark, active)``.
+        """
+        if not active:
+            return (self.weights,)
+        w, b, active_w = self._w_aligned, self._b_aligned, self.active_weights
+        if w is None or b is None or active_w is None:
+            raise ValueError(
+                "`benchmark` must be supplied to PortfolioAnalyser for active "
+                "statistics."
+            )
+        return (w, b, active_w)
+
+    def _no_trade_baselines(
+        self, frames: Tuple[pd.DataFrame, ...]
+    ) -> Tuple[pd.DataFrame, ...]:
+        """
+        No-trade baseline for every weight matrix a statistics call will measure.
+
+        Built once on the whole portfolio, so that a subgroup can be sliced out of it
+        and still be drifted against the portfolio's capital rather than its own.
+
+        Parameters
+        ----------
+        frames : tuple of pd.DataFrame
+            Output of :meth:`_resolve_frames`.
+
+        Returns
+        -------
+        tuple of pd.DataFrame
+            One baseline per input frame, each indexed by trade date. The active
+            baseline is the portfolio's less the benchmark's, differenced after the
+            fact because an active book nets to roughly zero and a zero-sum vector has
+            no capital base to grow.
+        """
+        trade_dates = self.trade_dates.intersection(frames[-1].index)
+        if len(frames) == 1:
+            return (_no_trade_weights(frames[0], trade_dates, self.returns),)
+
+        carry_w = _no_trade_weights(frames[0], trade_dates, self.returns)
+        carry_b = _no_trade_weights(frames[1], trade_dates, self.returns)
+        return (carry_w, carry_b, carry_w - carry_b)
+
+    def _weight_stats_block(
+        self,
+        frames: Tuple[pd.DataFrame, ...],
+        carries: Tuple[pd.DataFrame, ...],
+        columns: pd.Index,
+    ) -> pd.DataFrame:
+        """
+        Weight statistics for one set of securities, indexed by date.
+
+        Parameters
+        ----------
+        frames : tuple of pd.DataFrame
+            Output of :meth:`_resolve_frames`: the portfolio weights alone, or the
+            aligned portfolio, benchmark and active weights.
+        carries : tuple of pd.DataFrame
+            Matching no-trade baselines from :meth:`_no_trade_baselines`.
+        columns : pd.Index
+            Securities to measure, i.e. the whole universe or one subgroup's columns.
+
+        Returns
+        -------
+        pd.DataFrame
+            Indexed by ``"real_date"``, with the columns listed in
+            :data:`ACTIVE_STATS` when ``frames`` carries a benchmark and
+            :data:`STANDALONE_STATS` otherwise.
+        """
+        if len(frames) == 1:
+            w = frames[0][columns]
+            trade_dates = self.trade_dates.intersection(w.index)
+            stats = _concentration_stats(w)
+            stats["turnover"] = _turnover_against(frames[0], carries[0], columns)
+            stats["weight_autocorr"] = _weight_autocorr(w, trade_dates)
+            return stats[STANDALONE_STATS]
+
+        w, b, active_w = frames
+        trade_dates = self.trade_dates.intersection(active_w.index)
+
+        stats = _concentration_stats(active_w[columns]).rename(columns=_ACTIVE_RENAME)
+        # Active share is the one-way gross active position, i.e. half the sum of the
+        # absolute active weights.
+        stats["active_share"] = 0.5 * stats.pop("gross_weight")
+
+        # How much more the portfolio traded than the benchmark reconstituted, as
+        # distinct from the turnover of the active weight vector itself.
+        stats["active_turnover"] = _turnover_against(
+            w, carries[0], columns
+        ) - _turnover_against(b, carries[1], columns)
+        stats["active_weight_turnover"] = _turnover_against(
+            active_w, carries[2], columns
+        )
+        stats["active_weight_autocorr"] = _weight_autocorr(
+            active_w[columns], trade_dates
+        )
+        return stats[ACTIVE_STATS]
+
+    def weight_stats(
+        self,
+        by_group: bool = False,
+        active: bool = False,
+        as_qdf: bool = False,
+        xcat_prefix: str = "PORT",
+    ) -> pd.DataFrame:
+        """
+        Size, concentration and turnover statistics of the portfolio's weights.
+
+        Parameters
+        ----------
+        by_group : bool, default False
+            If True, report one set of statistics per subgroup of ``groups`` rather
+            than one for the portfolio as a whole.
+        active : bool, default False
+            If True, measure the active position against ``benchmark`` instead of the
+            portfolio's own weights.
+        as_qdf : bool, default False
+            If True, return a QuantamentalDataFrame instead of the tidy frame: one
+            cross-section per subgroup - or ``portfolio_name`` when ``by_group`` is
+            False - and one category per statistic. Underscores in subgroup labels
+            are replaced with hyphens so that the labels are valid cross-sections.
+        xcat_prefix : str, default "PORT"
+            Prefix of the category names when ``as_qdf`` is True, e.g. a prefix of
+            "PORT" yields "PORT_N_HOLDINGS".
+
+        Raises
+        ------
+        ValueError
+            If ``by_group`` is True but no ``groups`` mapping was supplied, if
+            ``active`` is True but no ``benchmark`` was supplied, or if ``as_qdf`` is
+            True and every statistic is missing.
+
+        Returns
+        -------
+        pd.DataFrame
+            Tidy frame with a ``"real_date"`` column, a ``"group"`` column when
+            ``by_group`` is True, and one column per statistic - the names in
+            :data:`ACTIVE_STATS` when ``active`` is True, :data:`STANDALONE_STATS`
+            otherwise. Returned as a QuantamentalDataFrame when ``as_qdf`` is True.
+
+        Notes
+        -----
+        Subgroup statistics are measured on the subgroup's columns of the
+        portfolio-level weight matrix, so ``n_holdings``, ``weight``,
+        ``gross_weight``, ``active_weight``, ``active_share`` and the turnovers are
+        contributions that sum across subgroups to the whole-portfolio figure.
+        ``effective_n`` and the autocorrelations are normalised within the subgroup
+        and do not aggregate.
+
+        The concentration columns are daily readings. ``turnover``,
+        ``active_turnover``, ``active_weight_turnover`` and the autocorrelations are
+        reported only on the rebalancing dates implied by ``rebalance_freq`` and are
+        NaN on every other date: between rebalancings the book changes because
+        positions drift with returns, not because anything was traded. Drop those rows
+        with ``.dropna(subset=["turnover"])`` to get one row per rebalancing.
+        """
+        frames = self._resolve_frames(active)
+        carries = self._no_trade_baselines(frames)
+        columns = frames[-1].columns
+
+        if by_group:
+            if self._group_map is None:
+                raise ValueError(
+                    "`groups` must be supplied to PortfolioAnalyser for subgroup "
+                    "statistics."
+                )
+            labels = _group_labels(columns, self._group_map, self.other_label)
+            blocks = []
+            for label in sorted(labels.unique()):
+                block = self._weight_stats_block(
+                    frames, carries, labels.index[labels == label]
+                )
+                blocks.append(block.reset_index().assign(group=label))
+            stats = pd.concat(blocks, axis=0, ignore_index=True)
+            stat_cols = [c for c in stats.columns if c not in ("real_date", "group")]
+            stats = (
+                stats[["real_date", "group"] + stat_cols]
+                .sort_values(["group", "real_date"])
+                .reset_index(drop=True)
+            )
+        else:
+            stats = (
+                self._weight_stats_block(frames, carries, columns)
+                .reset_index()
+                .sort_values("real_date")
+                .reset_index(drop=True)
+            )
+
+        if as_qdf:
+            return self._stats_to_qdf(stats, xcat_prefix)
+        return stats
+
+    def _stats_to_qdf(
+        self, stats: pd.DataFrame, xcat_prefix: str
+    ) -> QuantamentalDataFrame:
+        """
+        Convert a tidy statistics frame to a QuantamentalDataFrame.
+
+        Parameters
+        ----------
+        stats : pd.DataFrame
+            Output of :meth:`weight_stats`, i.e. a ``"real_date"`` column, an optional
+            ``"group"`` column and one column per statistic.
+        xcat_prefix : str
+            Prefix prepended to the upper-cased statistic name to form the category.
+
+        Raises
+        ------
+        ValueError
+            If every statistic is missing, leaving nothing to convert.
+
+        Returns
+        -------
+        QuantamentalDataFrame
+            Standard panel with columns "cid", "xcat", "real_date" and "value".
+        """
+        if not isinstance(xcat_prefix, str) or not xcat_prefix:
+            raise TypeError("`xcat_prefix` must be a non-empty string.")
+
+        id_vars = ["real_date"] + (["group"] if "group" in stats.columns else [])
+        long = stats.melt(
+            id_vars=id_vars, var_name="stat", value_name="value"
+        ).dropna(subset=["value"])
+        if long.empty:
+            raise ValueError("No statistics available to convert to a panel.")
+
+        long["xcat"] = xcat_prefix + "_" + long["stat"].str.upper()
+        if "group" in long.columns:
+            long["cid"] = long["group"].map(_cid_label_map(long["group"].unique()))
+        else:
+            long["cid"] = _cid_label_map([self.portfolio_name])[self.portfolio_name]
+
+        return QuantamentalDataFrame.from_long_df(
+            long[["cid", "xcat", "real_date", "value"]]
+        )
+
+    def attribution(
+        self,
+        by_group: bool = False,
+        active: bool = False,
+        lag: int = 1,
+        include_total: bool = True,
+        as_qdf: bool = False,
+        xcat: Optional[str] = None,
+    ) -> pd.DataFrame:
+        """
+        Contribution of each security, or each subgroup, to the portfolio's return.
+
+        Weights are lagged before being applied to same-day returns: a weight set on
+        date ``t - lag`` earns the return realised on date ``t``. A security missing a
+        weight or a return on a given date contributes zero rather than NaN, so that
+        the contributions always sum to the portfolio return implied by the weights.
+
+        Parameters
+        ----------
+        by_group : bool, default False
+            If True, sum contributions within each subgroup of ``groups`` rather than
+            reporting one column per security.
+        active : bool, default False
+            If True, attribute the active return by applying the active weights
+            against ``benchmark`` rather than the portfolio's own weights.
+        lag : int, default 1
+            Number of dates by which the weights are lagged before being applied to
+            returns. Matches the one-day lag used throughout the package's signal
+            pipelines.
+        include_total : bool, default True
+            If True, append a column holding the sum across securities or subgroups,
+            named after ``portfolio_name``.
+        as_qdf : bool, default False
+            If True, return a QuantamentalDataFrame instead of the wide contribution
+            matrix, with one cross-section per security or subgroup. Underscores in
+            subgroup labels are replaced with hyphens.
+        xcat : str, optional
+            Category assigned when ``as_qdf`` is True. Defaults to "ACTIVE_CONTRIB"
+            when ``active`` is True and "CONTRIB" otherwise.
+
+        Raises
+        ------
+        ValueError
+            If no ``returns`` were supplied, if ``by_group`` is True without a
+            ``groups`` mapping, if ``active`` is True without a ``benchmark``, or if
+            ``portfolio_name`` collides with a security or subgroup name.
+        TypeError
+            If ``lag`` is not a non-negative integer.
+
+        Returns
+        -------
+        pd.DataFrame
+            Indexed by ``"real_date"``, with one column per security - or per subgroup
+            when ``by_group`` is True - plus the total column. Contributions are in
+            the units of ``returns``. Returned as a QuantamentalDataFrame when
+            ``as_qdf`` is True.
+        """
+        if self.returns is None:
+            raise ValueError(
+                "`returns` must be supplied to PortfolioAnalyser for attribution."
+            )
+        if not isinstance(lag, (int, np.integer)) or isinstance(lag, bool) or lag < 0:
+            raise TypeError("`lag` must be a non-negative integer.")
+
+        weights = self._resolve_frames(active)[-1]
+
+        # Union of columns so that a security held without a return, or returning
+        # without a holding, still appears - contributing zero either way.
+        cids = weights.columns.union(self.returns.columns)
+        lagged = weights.reindex(columns=cids).shift(lag).fillna(0.0)
+        rets = self.returns.reindex(columns=cids).fillna(0.0)
+        dates = lagged.index.intersection(rets.index)
+        if len(dates) == 0:
+            raise ValueError(
+                "`weights` and `returns` share no dates; no contribution can be "
+                "attributed."
+            )
+        contrib = lagged.loc[dates] * rets.loc[dates]
+
+        if by_group:
+            if self._group_map is None:
+                raise ValueError(
+                    "`groups` must be supplied to PortfolioAnalyser for subgroup "
+                    "attribution."
+                )
+            labels = _group_labels(contrib.columns, self._group_map, self.other_label)
+            contrib = contrib.T.groupby(labels).sum().T
+            contrib = contrib[sorted(contrib.columns)]
+
+        if include_total:
+            if self.portfolio_name in contrib.columns:
+                raise ValueError(
+                    f"`portfolio_name` '{self.portfolio_name}' collides with an "
+                    "existing column; choose another name or set include_total=False."
+                )
+            contrib[self.portfolio_name] = contrib.sum(axis=1)
+
+        contrib.index.name = "real_date"
+        contrib.columns.name = "cid"
+
+        if as_qdf:
+            if xcat is None:
+                xcat = "ACTIVE_CONTRIB" if active else "CONTRIB"
+            if not isinstance(xcat, str) or not xcat:
+                raise TypeError("`xcat` must be a non-empty string.")
+            renamed = contrib.rename(columns=_cid_label_map(contrib.columns))
+            return QuantamentalDataFrame.from_long_df(
+                _wide_to_long(renamed, value_name="value"), xcat=xcat
+            )
+        return contrib
