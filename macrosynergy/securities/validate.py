@@ -1,12 +1,10 @@
+"""
+Input contracts for the single-security index and portfolio calculations.
+"""
+
 import logging
-from datetime import timedelta, datetime, date
-from typing import Optional, Dict, Tuple, Union
 
-import numpy as np
 import pandas as pd
-
-import matplotlib.pyplot as plt
-import seaborn as sns
 
 logger = logging.getLogger(__name__)
 
