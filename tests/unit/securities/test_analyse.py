@@ -1,4 +1,4 @@
-import unittest
+﻿import unittest
 import warnings
 from typing import Dict, List
 
@@ -7,8 +7,9 @@ import pandas as pd
 
 from macrosynergy.management.types import QuantamentalDataFrame
 from macrosynergy.securities.analyse import (
-    ACTIVE_STATS,
-    STANDALONE_STATS,
+    ACTIVE_WEIGHT_STATS,
+    STANDALONE_WEIGHT_STATS,
+    WEIGHT_STAT_LABELS,
     PortfolioAnalyser,
     _align_active,
     _as_wide,
@@ -16,9 +17,11 @@ from macrosynergy.securities.analyse import (
     _concentration_stats,
     _group_labels,
     _no_trade_weights,
+    _stat_xcat,
     _trade_dates,
     _turnover_against,
     _weight_autocorr,
+    weight_stat_labels,
 )
 
 # The shared fixture spans 60 business days; weekly rebalancing leaves ~13 trade dates,
@@ -363,6 +366,55 @@ class TestGroupLabels(unittest.TestCase):
         self.assertTrue((labels == "OTHER").all())
 
 
+class TestWeightStatLabels(unittest.TestCase):
+    def test_every_statistic_has_a_label(self):
+        for stat in STANDALONE_WEIGHT_STATS + ACTIVE_WEIGHT_STATS:
+            self.assertIn(stat, WEIGHT_STAT_LABELS)
+
+    def test_keys_match_the_categories_weight_stats_writes(self):
+        weights, benchmark, _, _ = _random_portfolio()
+        analyser = PortfolioAnalyser(weights, FREQ, benchmark=benchmark)
+        labels = weight_stat_labels("PORT")
+        for active, stats in ((False, STANDALONE_WEIGHT_STATS), (True, ACTIVE_WEIGHT_STATS)):
+            qdf = analyser.weight_stats(active=active, as_qdf=True, xcat_prefix="PORT")
+            self.assertTrue(set(map(str, qdf["xcat"].unique())).issubset(labels))
+
+    def test_prefix_is_applied(self):
+        labels = weight_stat_labels("PORTEW")
+        self.assertIn("PORTEW_ACTIVE_SHARE", labels)
+        self.assertNotIn("PORT_ACTIVE_SHARE", labels)
+
+    def test_benchmark_qualifies_only_the_active_labels(self):
+        labels = weight_stat_labels("PORT", benchmark="SP500")
+        self.assertEqual(labels["PORT_ACTIVE_SHARE"], "Active share, % (vs SP500)")
+        self.assertEqual(labels["PORT_N_HOLDINGS"], "Non-zero holdings")
+
+    def test_stats_restricts_the_output(self):
+        labels = weight_stat_labels("PORTEW", stats=ACTIVE_WEIGHT_STATS)
+        self.assertEqual(len(labels), len(ACTIVE_WEIGHT_STATS))
+        self.assertNotIn("PORTEW_N_HOLDINGS", labels)
+
+    def test_two_benchmarks_merge_without_clashing(self):
+        labels = {
+            **weight_stat_labels("PORT", benchmark="SP500"),
+            **weight_stat_labels(
+                "PORTEW", benchmark="equal wgt", stats=ACTIVE_WEIGHT_STATS
+            ),
+        }
+        self.assertEqual(labels["PORT_ACTIVE_SHARE"], "Active share, % (vs SP500)")
+        self.assertEqual(
+            labels["PORTEW_ACTIVE_SHARE"], "Active share, % (vs equal wgt)"
+        )
+
+    def test_unknown_statistic_raises(self):
+        with self.assertRaisesRegex(KeyError, "No label defined"):
+            weight_stat_labels("PORT", stats=["not_a_stat"])
+
+    def test_empty_prefix_raises(self):
+        with self.assertRaises(TypeError):
+            _stat_xcat("", "n_holdings")
+
+
 class TestCidLabelMap(unittest.TestCase):
     def test_underscores_become_hyphens(self):
         self.assertEqual(_cid_label_map(["INFO_TECH"]), {"INFO_TECH": "INFO-TECH"})
@@ -491,17 +543,17 @@ class TestWeightStats(unittest.TestCase):
 
     def test_standalone_columns(self):
         stats = self.analyser.weight_stats()
-        self.assertEqual(list(stats.columns), ["real_date"] + STANDALONE_STATS)
+        self.assertEqual(list(stats.columns), ["real_date"] + STANDALONE_WEIGHT_STATS)
         self.assertEqual(len(stats), len(self.weights))
 
     def test_active_columns(self):
         stats = self.analyser.weight_stats(active=True)
-        self.assertEqual(list(stats.columns), ["real_date"] + ACTIVE_STATS)
+        self.assertEqual(list(stats.columns), ["real_date"] + ACTIVE_WEIGHT_STATS)
 
     def test_group_columns(self):
         stats = self.analyser.weight_stats(by_group=True)
         self.assertEqual(
-            list(stats.columns), ["real_date", "group"] + STANDALONE_STATS
+            list(stats.columns), ["real_date", "group"] + STANDALONE_WEIGHT_STATS
         )
         self.assertEqual(set(stats["group"].unique()), {"TECH", "FINS"})
 
@@ -615,7 +667,7 @@ class TestWeightStats(unittest.TestCase):
         self.assertEqual(set(map(str, qdf["cid"].unique())), {"TECH", "FINS"})
         self.assertEqual(
             set(map(str, qdf["xcat"].unique())),
-            {f"PORT_{stat.upper()}" for stat in STANDALONE_STATS},
+            {f"PORT_{stat.upper()}" for stat in STANDALONE_WEIGHT_STATS},
         )
         self.assertFalse(qdf["value"].isna().any())
 

@@ -1,4 +1,4 @@
-"""
+﻿"""
 Diagnostics for a portfolio of single securities: size, concentration, turnover and
 return attribution, measured for the portfolio as a whole, for user-defined subgroups
 of securities, and - where a benchmark is supplied - for the active position against
@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 
 #: Statistics reported for a standalone portfolio, i.e. ``active=False``.
-STANDALONE_STATS: List[str] = [
+STANDALONE_WEIGHT_STATS: List[str] = [
     "n_holdings",
     "effective_n",
     "weight",
@@ -31,7 +31,7 @@ STANDALONE_STATS: List[str] = [
 ]
 
 #: Statistics reported against a benchmark, i.e. ``active=True``.
-ACTIVE_STATS: List[str] = [
+ACTIVE_WEIGHT_STATS: List[str] = [
     "n_active_holdings",
     "effective_active_n",
     "active_weight",
@@ -40,6 +40,24 @@ ACTIVE_STATS: List[str] = [
     "active_weight_turnover",
     "active_weight_autocorr",
 ]
+
+#: Display label of every statistic, keyed by its column name. Use
+#: :func:`weight_stat_labels` to key these by category name instead.
+WEIGHT_STAT_LABELS: Dict[str, str] = {
+    "n_holdings": "Non-zero holdings",
+    "effective_n": "Effective holdings",  # inverse of the HHI concentration
+    "weight": "Portfolio net weight, %",
+    "gross_weight": "Portfolio gross weight, %",  # sum of absolute weights
+    "turnover": "Portfolio turnover, %",  # traded at each rebalancing
+    "weight_autocorr": "Weight 1-period autocorrelation",
+    "n_active_holdings": "Active holdings",
+    "effective_active_n": "Effective active holdings",  # inverse participation ratio
+    "active_weight": "Active net weight, %",  # over- or underweight vs the benchmark
+    "active_share": "Active share, %",  # half the sum of absolute active weights
+    "active_turnover": "Signal-driven turnover, %",  # portfolio minus benchmark
+    "active_weight_turnover": "Active weight turnover, %",
+    "active_weight_autocorr": "Active weight 1-period autocorrelation",
+}
 
 # Concentration statistics carry over verbatim from the standalone to the active
 # calculation - only the matrix they are measured on changes - so they are computed
@@ -57,6 +75,88 @@ _PCT_WEIGHT_THRESHOLD: float = 5.0
 # Cross-sectional dispersion, relative to a weight vector's own magnitude, below which
 # the vector counts as flat and carries no correlation.
 _FLAT_VECTOR_TOL: float = 1e-12
+
+
+def _stat_xcat(xcat_prefix: str, stat: str) -> str:
+    """
+    Category name a statistic is written under when converted to a panel.
+
+    Parameters
+    ----------
+    xcat_prefix : str
+        Prefix naming the portfolio the statistics belong to, e.g. "PORT".
+    stat : str
+        Statistic's column name, e.g. "active_share".
+
+    Returns
+    -------
+    str
+        The prefix and the upper-cased statistic joined by an underscore, e.g.
+        "PORT_ACTIVE_SHARE".
+    """
+    if not isinstance(xcat_prefix, str) or not xcat_prefix:
+        raise TypeError("`xcat_prefix` must be a non-empty string.")
+    return f"{xcat_prefix}_{stat.upper()}"
+
+
+def weight_stat_labels(
+    xcat_prefix: str = "PORT",
+    benchmark: Optional[str] = None,
+    stats: Optional[List[str]] = None,
+) -> Dict[str, str]:
+    """
+    Display labels for the statistics of :meth:`PortfolioAnalyser.weight_stats`, keyed
+    by the category names they carry once converted to a panel.
+
+    Parameters
+    ----------
+    xcat_prefix : str, default "PORT"
+        Prefix the statistics were written under, matching the ``xcat_prefix``
+        argument of :meth:`PortfolioAnalyser.weight_stats`.
+    benchmark : str, optional
+        Name of the benchmark the active statistics are measured against, appended to
+        their labels as " (vs ...)". Standalone labels are left alone, since they do
+        not depend on a benchmark.
+    stats : list of str, optional
+        Statistics to label. Default is every entry of
+        :data:`STANDALONE_WEIGHT_STATS` followed by :data:`ACTIVE_WEIGHT_STATS`.
+
+    Raises
+    ------
+    KeyError
+        If ``stats`` names a statistic with no label in :data:`WEIGHT_STAT_LABELS`.
+
+    Returns
+    -------
+    dict
+        Mapping of category name to display label.
+
+    Examples
+    --------
+    Labelling one portfolio measured against two different benchmarks:
+
+    >>> labels = {
+    ...     **weight_stat_labels("PORT", benchmark="SP500"),
+    ...     **weight_stat_labels(
+    ...         "PORTEW", benchmark="equal wgt", stats=ACTIVE_WEIGHT_STATS
+    ...     ),
+    ... }
+    >>> labels["PORT_ACTIVE_SHARE"], labels["PORTEW_ACTIVE_SHARE"]
+    ('Active share, % (vs SP500)', 'Active share, % (vs equal wgt)')
+    """
+    if stats is None:
+        stats = STANDALONE_WEIGHT_STATS + ACTIVE_WEIGHT_STATS
+
+    missing = [stat for stat in stats if stat not in WEIGHT_STAT_LABELS]
+    if missing:
+        raise KeyError(f"No label defined for statistic(s): {sorted(missing)}.")
+
+    suffix = f" (vs {benchmark})" if benchmark is not None else ""
+    return {
+        _stat_xcat(xcat_prefix, stat): WEIGHT_STAT_LABELS[stat]
+        + (suffix if stat in ACTIVE_WEIGHT_STATS else "")
+        for stat in stats
+    }
 
 
 def _as_wide(df: pd.DataFrame, name: str, value_col: str = "value") -> pd.DataFrame:
@@ -892,8 +992,8 @@ class PortfolioAnalyser:
         -------
         pd.DataFrame
             Indexed by ``"real_date"``, with the columns listed in
-            :data:`ACTIVE_STATS` when ``frames`` carries a benchmark and
-            :data:`STANDALONE_STATS` otherwise.
+            :data:`ACTIVE_WEIGHT_STATS` when ``frames`` carries a benchmark and
+            :data:`STANDALONE_WEIGHT_STATS` otherwise.
         """
         if len(frames) == 1:
             w = frames[0][columns]
@@ -901,7 +1001,7 @@ class PortfolioAnalyser:
             stats = _concentration_stats(w)
             stats["turnover"] = _turnover_against(frames[0], carries[0], columns)
             stats["weight_autocorr"] = _weight_autocorr(w, trade_dates)
-            return stats[STANDALONE_STATS]
+            return stats[STANDALONE_WEIGHT_STATS]
 
         w, b, active_w = frames
         trade_dates = self.trade_dates.intersection(active_w.index)
@@ -922,7 +1022,7 @@ class PortfolioAnalyser:
         stats["active_weight_autocorr"] = _weight_autocorr(
             active_w[columns], trade_dates
         )
-        return stats[ACTIVE_STATS]
+        return stats[ACTIVE_WEIGHT_STATS]
 
     def weight_stats(
         self,
@@ -963,7 +1063,7 @@ class PortfolioAnalyser:
         pd.DataFrame
             Tidy frame with a ``"real_date"`` column, a ``"group"`` column when
             ``by_group`` is True, and one column per statistic - the names in
-            :data:`ACTIVE_STATS` when ``active`` is True, :data:`STANDALONE_STATS`
+            :data:`ACTIVE_WEIGHT_STATS` when ``active`` is True, :data:`STANDALONE_WEIGHT_STATS`
             otherwise. Returned as a QuantamentalDataFrame when ``as_qdf`` is True.
 
         Notes
@@ -1042,9 +1142,6 @@ class PortfolioAnalyser:
         QuantamentalDataFrame
             Standard panel with columns "cid", "xcat", "real_date" and "value".
         """
-        if not isinstance(xcat_prefix, str) or not xcat_prefix:
-            raise TypeError("`xcat_prefix` must be a non-empty string.")
-
         id_vars = ["real_date"] + (["group"] if "group" in stats.columns else [])
         long = stats.melt(
             id_vars=id_vars, var_name="stat", value_name="value"
@@ -1052,7 +1149,11 @@ class PortfolioAnalyser:
         if long.empty:
             raise ValueError("No statistics available to convert to a panel.")
 
-        long["xcat"] = xcat_prefix + "_" + long["stat"].str.upper()
+        # Named through the same helper as `weight_stat_labels`, so that the labels
+        # cannot fall out of step with the categories they are meant to describe.
+        long["xcat"] = long["stat"].map(
+            {stat: _stat_xcat(xcat_prefix, stat) for stat in long["stat"].unique()}
+        )
         if "group" in long.columns:
             long["cid"] = long["group"].map(_cid_label_map(long["group"].unique()))
         else:
