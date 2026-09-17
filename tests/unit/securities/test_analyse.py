@@ -49,6 +49,11 @@ def _to_long(wide: pd.DataFrame, xcat: str = None) -> pd.DataFrame:
     return long
 
 
+def _all_investable(frame: pd.DataFrame) -> pd.DataFrame:
+    """An unchanging universe, i.e. the identity argument to ``universe``."""
+    return pd.DataFrame(True, index=frame.index, columns=frame.columns)
+
+
 def _random_portfolio(seed: int = 0, n_cids: int = 8, n_dates: int = 60):
     rng = np.random.default_rng(seed)
     dates = pd.bdate_range("2020-01-01", periods=n_dates)
@@ -510,7 +515,9 @@ class TestAdjustWeightsWithDrift(unittest.TestCase):
     def test_static_targets_drift_between_rebalancings(self):
         targets = _wide([[0.5, 0.5]] * 4, ["A", "B"], start="2020-01-01")
         returns = _wide([[0.0, 0.0], [100.0, 0.0], [0.0, 0.0], [0.0, 0.0]], ["A", "B"])
-        drifted = PortfolioAnalyser.adjust_weights_with_drift(targets, returns, "Y")
+        drifted = PortfolioAnalyser.adjust_weights_with_drift(
+            targets, returns, _all_investable(targets), "Y"
+        )
 
         # A doubles on day two, so from day three the book is 2:1 rather than 1:1.
         np.testing.assert_allclose(drifted.iloc[0], [0.5, 0.5])
@@ -519,28 +526,320 @@ class TestAdjustWeightsWithDrift(unittest.TestCase):
     def test_rebalancing_resets_to_target(self):
         targets = _wide([[0.5, 0.5]] * 4, ["A", "B"])
         returns = _wide([[100.0, 0.0]] * 4, ["A", "B"])
-        drifted = PortfolioAnalyser.adjust_weights_with_drift(targets, returns, "B")
+        drifted = PortfolioAnalyser.adjust_weights_with_drift(
+            targets, returns, _all_investable(targets), "B"
+        )
         # Reset every day, so the book never leaves its target.
         np.testing.assert_allclose(drifted.to_numpy(), 0.5)
 
     def test_rows_sum_to_one(self):
         weights, _, returns, _ = _random_portfolio()
-        drifted = PortfolioAnalyser.adjust_weights_with_drift(weights, returns, FREQ)
+        drifted = PortfolioAnalyser.adjust_weights_with_drift(
+            weights, returns, _all_investable(weights), FREQ
+        )
         np.testing.assert_allclose(drifted.sum(axis=1), 1.0)
 
     def test_frequency_is_validated(self):
         weights, _, returns, _ = _random_portfolio()
         with self.assertRaisesRegex(ValueError, "rebalance_freq"):
-            PortfolioAnalyser.adjust_weights_with_drift(weights, returns, "daily")
+            PortfolioAnalyser.adjust_weights_with_drift(
+                weights, returns, _all_investable(weights), "daily"
+            )
+
+    def test_universe_is_required(self):
+        weights, _, returns, _ = _random_portfolio()
+        with self.assertRaises(TypeError):
+            PortfolioAnalyser.adjust_weights_with_drift(weights, returns, FREQ)
 
     def test_accepts_long_format(self):
         weights, _, returns, _ = _random_portfolio()
+        universe = _all_investable(weights)
         pd.testing.assert_frame_equal(
-            PortfolioAnalyser.adjust_weights_with_drift(weights, returns, FREQ),
             PortfolioAnalyser.adjust_weights_with_drift(
-                _to_long(weights), _to_long(returns, xcat="EQXR"), FREQ
+                weights, returns, universe, FREQ
+            ),
+            PortfolioAnalyser.adjust_weights_with_drift(
+                _to_long(weights),
+                _to_long(returns, xcat="EQXR"),
+                _to_long(universe.astype(float)),
+                FREQ,
             ),
         )
+
+    def test_returns_before_the_first_target_are_ignored(self):
+        # The first period would otherwise open before any target exists, be normalised
+        # by a zero target sum, and be deleted. The workaround this replaces was to
+        # slice the returns to the weights' own span by hand.
+        # The returns reach back to January; the targets only start in February, and
+        # expire at the end of March, so every period on the calendar carries one.
+        returns = _wide([[1.0, -0.5]] * 60, ["A", "B"], start="2020-01-01")
+        targets = _wide([[0.6, 0.4], [0.3, 0.7]], ["A", "B"], start="2020-02-12")
+
+        long_history = PortfolioAnalyser.adjust_weights_with_drift(
+            targets, returns, _all_investable(returns), "M"
+        )
+        sliced_returns = returns.loc[targets.index.min() :]
+        sliced = PortfolioAnalyser.adjust_weights_with_drift(
+            targets, sliced_returns, _all_investable(sliced_returns), "M"
+        )
+
+        self.assertEqual(long_history.index.min(), targets.index.min())
+        np.testing.assert_allclose(long_history.sum(axis=1), 1.0)
+        pd.testing.assert_frame_equal(long_history, sliced, check_freq=False)
+
+
+class TestAdjustWeightsWithDriftCarry(unittest.TestCase):
+    """
+    A target is in force for the rest of its own rebalancing period and for the one
+    that follows, then expires - so a stalled signal feed cannot read as a live book.
+    """
+
+    def setUp(self):
+        self.dates = pd.bdate_range("2020-01-01", periods=108)  # January to May
+        self.cids = ["A", "B"]
+        self.returns = pd.DataFrame(
+            0.0, index=self.dates, columns=self.cids
+        )  # zero returns, so the book is the carried target itself
+
+    def _drift(self, targets, freq="M"):
+        return PortfolioAnalyser.adjust_weights_with_drift(
+            targets, self.returns, _all_investable(self.returns), freq
+        )
+
+    def test_month_end_targets_cover_the_following_month(self):
+        # The canonical sparse panel: one row per rebalancing, recorded at month end
+        # and traded through the month that follows.
+        targets = pd.DataFrame(
+            [[0.5, 0.5], [0.2, 0.8], [0.7, 0.3], [0.4, 0.6], [0.1, 0.9]],
+            index=pd.to_datetime(
+                ["2020-01-31", "2020-02-28", "2020-03-31", "2020-04-30", "2020-05-29"]
+            ),
+            columns=self.cids,
+        )
+        drifted = self._drift(targets)
+
+        np.testing.assert_allclose(drifted.sum(axis=1), 1.0)
+        np.testing.assert_allclose(drifted.loc["2020-02-14"], [0.5, 0.5])
+        np.testing.assert_allclose(drifted.loc["2020-03-16"], [0.2, 0.8])
+
+    def test_period_start_targets_cover_their_own_period(self):
+        targets = pd.DataFrame(
+            [[0.5, 0.5], [0.2, 0.8], [0.7, 0.3], [0.4, 0.6], [0.1, 0.9]],
+            index=pd.to_datetime(
+                ["2020-01-01", "2020-02-03", "2020-03-02", "2020-04-01", "2020-05-01"]
+            ),
+            columns=self.cids,
+        )
+        drifted = self._drift(targets)
+
+        np.testing.assert_allclose(drifted.sum(axis=1), 1.0)
+        np.testing.assert_allclose(drifted.loc["2020-01-20"], [0.5, 0.5])
+        np.testing.assert_allclose(drifted.loc["2020-02-20"], [0.2, 0.8])
+
+    def test_targets_dated_off_the_business_calendar_still_land(self):
+        # `resample("ME")` states a target on a calendar month end, which falls on a
+        # weekend roughly a third of the time. Dropping those rows rather than reading
+        # them would expire the book a period early.
+        dates = pd.bdate_range("2020-02-01", "2020-04-30")
+        returns = pd.DataFrame(0.0, index=dates, columns=self.cids)
+        targets = pd.DataFrame(
+            [[0.5, 0.5], [0.2, 0.8]],
+            index=pd.to_datetime(["2020-02-29", "2020-03-31"]),  # Saturday, Tuesday
+            columns=self.cids,
+        )
+        drifted = PortfolioAnalyser.adjust_weights_with_drift(
+            targets, returns, _all_investable(returns), "M"
+        )
+
+        self.assertEqual(drifted.index.min(), pd.Timestamp("2020-03-02"))
+        np.testing.assert_allclose(drifted.loc["2020-03-16"], [0.5, 0.5])
+        np.testing.assert_allclose(drifted.loc["2020-04-15"], [0.2, 0.8])
+
+    def test_targets_do_not_outlive_the_returns(self):
+        # A single target against five months of returns: it expires at the end of
+        # February rather than running to the end of the sample.
+        targets = _wide([[0.5, 0.5]], self.cids, start="2020-01-31")
+        with self.assertRaisesRegex(ValueError, "no target in force"):
+            self._drift(targets)
+
+    def test_a_skipped_period_raises(self):
+        targets = pd.DataFrame(
+            [[0.5, 0.5], [0.2, 0.8]],
+            index=pd.to_datetime(["2020-01-31", "2020-04-30"]),  # February, March gone
+            columns=self.cids,
+        )
+        with self.assertRaisesRegex(ValueError, r"2020-03") as ctx:
+            self._drift(targets)
+        # February is covered by January's carry; only March is left with nothing.
+        self.assertNotIn("2020-02", str(ctx.exception))
+
+    def test_a_coarser_cadence_absorbs_the_gap(self):
+        targets = pd.DataFrame(
+            [[0.5, 0.5], [0.2, 0.8]],
+            index=pd.to_datetime(["2020-01-31", "2020-04-30"]),
+            columns=self.cids,
+        )
+        drifted = self._drift(targets, freq="Q")
+        np.testing.assert_allclose(drifted.sum(axis=1), 1.0)
+
+    def test_expiry_is_per_security(self):
+        # B is re-stated throughout, A only in January, so A expires at the end of
+        # February and B carries the book alone from March.
+        targets = pd.DataFrame(
+            [[0.5, 0.5], [np.nan, 0.8], [np.nan, 0.3], [np.nan, 0.6]],
+            index=pd.to_datetime(
+                ["2020-01-31", "2020-02-28", "2020-03-31", "2020-04-30"]
+            ),
+            columns=self.cids,
+        )
+        drifted = self._drift(targets)
+
+        np.testing.assert_allclose(drifted.loc["2020-02-14"], [0.5, 0.5])
+        np.testing.assert_allclose(drifted.loc["2020-03-16"], [0.0, 1.0])
+
+
+class TestAdjustWeightsWithDriftUniverse(unittest.TestCase):
+    """
+    ``universe`` separates "not re-recorded today" from "no longer investable", the two
+    readings of a missing target that the forward-fill cannot tell apart on its own.
+    """
+
+    def setUp(self):
+        self.cids = ["A", "B", "C"]
+        self.dates = pd.bdate_range("2020-01-01", periods=44)  # January and February
+        self.returns = pd.DataFrame(
+            [[1.0, -0.5, 2.0]] * len(self.dates), index=self.dates, columns=self.cids
+        )
+        # One target row per monthly rebalancing, i.e. the sparse panel the
+        # forward-fill exists for.
+        self.targets = pd.DataFrame(
+            [[0.5, 0.3, 0.2], [0.2, 0.3, 0.5]],
+            index=[pd.Timestamp("2020-01-01"), pd.Timestamp("2020-02-03")],
+            columns=self.cids,
+        )
+
+    def _drift(self, universe):
+        return PortfolioAnalyser.adjust_weights_with_drift(
+            self.targets, self.returns, universe, "M"
+        )
+
+    def _exits(self, cid: str, date: str) -> pd.DataFrame:
+        frame = _all_investable(self.returns)
+        frame.loc[pd.Timestamp(date) :, cid] = False
+        return frame
+
+    def test_sparse_targets_survive_an_unchanging_universe(self):
+        # The regression guard: an all-true universe leaves the sparse panel exactly as
+        # the caller's own forward-fill would, and masks nothing.
+        drifted = self._drift(_all_investable(self.returns))
+        dense = self.targets.reindex(self.dates).ffill()
+
+        pd.testing.assert_frame_equal(
+            drifted,
+            PortfolioAnalyser.adjust_weights_with_drift(
+                dense, self.returns, _all_investable(dense), "M"
+            ),
+        )
+        self.assertFalse(drifted.isna().any().any())
+        np.testing.assert_allclose(drifted.sum(axis=1), 1.0)
+        np.testing.assert_allclose(drifted.iloc[0], [0.5, 0.3, 0.2])
+
+    def test_exit_on_a_rebalancing_boundary(self):
+        exit_date = pd.Timestamp("2020-02-03")
+        drifted = self._drift(self._exits("C", exit_date))
+
+        self.assertTrue(drifted.loc[exit_date:, "C"].isna().all())
+        self.assertFalse(drifted.loc[:exit_date, "C"].iloc[:-1].isna().any())
+        np.testing.assert_allclose(drifted.sum(axis=1), 1.0)
+
+        # From the rebalancing the exit falls on, the book is the one the surviving
+        # universe would have produced on its own.
+        survivors = PortfolioAnalyser.adjust_weights_with_drift(
+            self.targets[["A", "B"]],
+            self.returns[["A", "B"]],
+            _all_investable(self.returns[["A", "B"]]),
+            "M",
+        )
+        pd.testing.assert_frame_equal(
+            drifted.loc[exit_date:, ["A", "B"]],
+            survivors.loc[exit_date:],
+            check_freq=False,
+        )
+
+    def test_exit_mid_period_rescales_the_survivors(self):
+        exit_date = pd.Timestamp("2020-02-12")  # not a rebalancing date
+        drifted = self._drift(self._exits("C", exit_date))
+        unmasked = self._drift(_all_investable(self.returns))
+
+        self.assertTrue(drifted.loc[exit_date:, "C"].isna().all())
+        self.assertFalse(drifted.loc[:exit_date, "C"].iloc[:-1].isna().any())
+        np.testing.assert_allclose(drifted.sum(axis=1), 1.0)
+        # The survivors are rescaled, not re-set, on a date that is no rebalancing:
+        # their relative sizes are the drifting book's, and only the weight freed by C
+        # is redistributed between them.
+        self.assertAlmostEqual(
+            drifted.loc[exit_date, "A"] / drifted.loc[exit_date, "B"],
+            unmasked.loc[exit_date, "A"] / unmasked.loc[exit_date, "B"],
+        )
+        self.assertGreater(drifted.loc[exit_date, "A"], unmasked.loc[exit_date, "A"])
+
+    def test_matches_caller_side_mask_and_renormalise(self):
+        universe = self._exits("C", "2020-02-12")
+        drifted = self._drift(universe)
+
+        # The workaround being replaced: drift the whole book, mask it, renormalise.
+        unmasked = self._drift(_all_investable(self.returns))
+        masked = unmasked.where(universe.reindex(unmasked.index).fillna(True))
+        masked = masked.div(masked.sum(axis=1).replace(0.0, np.nan), axis=0)
+
+        pd.testing.assert_frame_equal(masked, drifted, check_freq=False)
+
+    def test_membership_is_carried_forward(self):
+        # Membership is a state, so recording only the change is enough; an exit is
+        # stated as False rather than as an absence, so an unlimited carry is safe here
+        # in a way it is not for a target.
+        sparse = pd.DataFrame(
+            [[True, True, False]],
+            index=[pd.Timestamp("2020-02-12")],
+            columns=self.cids,
+        )
+        pd.testing.assert_frame_equal(
+            self._drift(sparse), self._drift(self._exits("C", "2020-02-12"))
+        )
+
+    def test_dates_before_the_first_record_are_investable(self):
+        # A partial frame narrows the book; it must not empty the dates it omits.
+        sparse = pd.DataFrame(
+            [[True, True, False]],
+            index=[pd.Timestamp("2020-02-12")],
+            columns=self.cids,
+        )
+        drifted = self._drift(sparse)
+        self.assertFalse(drifted.loc[: pd.Timestamp("2020-02-11")].isna().any().any())
+
+    def test_accepts_long_format_universe(self):
+        universe = self._exits("C", "2020-02-12")
+        pd.testing.assert_frame_equal(
+            self._drift(_to_long(universe.astype(float))), self._drift(universe)
+        )
+
+    def test_unknown_security_raises(self):
+        universe = self._exits("C", "2020-02-12")
+        universe["D"] = True
+        with self.assertRaisesRegex(ValueError, "unknown to `weights` and `returns`"):
+            self._drift(universe)
+
+    def test_missing_security_raises(self):
+        # The failure this parameter exists to prevent: a stale membership frame that
+        # would silently drop every security it has fallen behind on.
+        with self.assertRaisesRegex(ValueError, "Missing from `universe`"):
+            self._drift(self._exits("C", "2020-02-12").drop(columns=["C"]))
+
+    def test_masked_weights_never_register_as_holdings(self):
+        # NaN and 0.0 read the same downstream; only the panel is more informative.
+        stats = _concentration_stats(self._drift(self._exits("C", "2020-02-12")))
+        self.assertTrue(stats.loc[:"2020-02-11", "n_holdings"].eq(3).all())
+        self.assertTrue(stats.loc["2020-02-12":, "n_holdings"].eq(2).all())
 
 
 class TestWeightStats(unittest.TestCase):

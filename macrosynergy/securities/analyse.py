@@ -323,6 +323,137 @@ def _align_active(
     return w, b, w - b
 
 
+def _carry_targets_forward(
+    target: pd.DataFrame,
+    calendar: pd.DatetimeIndex,
+    rebalance_freq: str,
+) -> pd.DataFrame:
+    """
+    Carry target weights onto a calendar, expiring them one rebalancing period on.
+
+    A target panel records the book as it is set, typically once per rebalancing, so a
+    target has to be carried over the days that do not re-state it. How far is the
+    question a missing value cannot answer: carried without limit, the last target a
+    security ever receives is held to the end of the sample, and a stalled signal feed
+    reads as a live book. The cadence the caller already supplies bounds it - a target
+    is in force for the rest of the period it was recorded in and for the one that
+    follows, by which point a rebalancing has been and gone.
+
+    Parameters
+    ----------
+    target : pd.DataFrame
+        Wide target weights (dates x cids), NaN where none was recorded. Dates off the
+        calendar are read rather than dropped, since a panel resampled to calendar
+        month ends states a third of its targets on a weekend.
+    calendar : pd.DatetimeIndex
+        Business days the targets are wanted on.
+    rebalance_freq : str
+        Pandas period alias setting both the expiry and the periods checked below.
+
+    Raises
+    ------
+    ValueError
+        If any rebalancing period on the calendar ends up with no target in force at
+        all. Such a period cannot be traded, and carrying the previous one across it
+        would annualise one rebalancing as though it were several.
+
+    Returns
+    -------
+    pd.DataFrame
+        The targets on ``calendar``, NaN where none is in force.
+    """
+    index = pd.DatetimeIndex(target.index.union(calendar))
+    # Period ordinals are consecutive at every supported cadence, so "expired" is a
+    # difference of more than one whatever the alias.
+    ordinals = np.asarray(
+        _assign_period_labels(index, rebalance_freq).astype("int64")
+    )[:, None]
+
+    observed = target.reindex(index=index)
+    # Each cell's last recorded target is carried forward alongside the period it was
+    # recorded in, so that expiry is counted in rebalancings and not in days.
+    recorded_in = pd.DataFrame(
+        np.where(observed.notna(), ordinals, np.nan),
+        index=index,
+        columns=observed.columns,
+    ).ffill()
+    carried = (
+        observed.ffill().where(recorded_in.ge(ordinals - 1)).reindex(index=calendar)
+    )
+
+    periods = _assign_period_labels(calendar, rebalance_freq)
+    covered = carried.notna().any(axis=1).groupby(periods).any()
+    if not covered.all():
+        empty = [str(p) for p in covered.index[~covered]]
+        shown = ", ".join(empty[:10]) + (", ..." if len(empty) > 10 else "")
+        raise ValueError(
+            f"`weights` records no target in force for {len(empty)} '{rebalance_freq}' "
+            f"rebalancing period(s): {shown}. A target is carried forward for one "
+            "period beyond the one it was recorded in and then expires, so a gap this "
+            "long leaves a rebalancing with nothing to trade to. Record a target in "
+            "each period, or coarsen `rebalance_freq`."
+        )
+    return carried
+
+
+def _universe_mask(
+    universe: pd.DataFrame,
+    cids: pd.Index,
+    calendar: pd.DatetimeIndex,
+) -> pd.DataFrame:
+    """
+    Coerce an investable-universe frame to a boolean mask on a given calendar.
+
+    Membership is a state rather than an observation, so unlike a target it is carried
+    forward without limit: an exit is stated as ``False`` and not as an absence, so the
+    ambiguity that forces :func:`_carry_targets_forward` to expire its input does not
+    arise. What the frame leaves unsaid - dates before its first observation, a
+    security it never mentions - is read as investable, so that a partial frame narrows
+    the book rather than emptying it.
+
+    Parameters
+    ----------
+    universe : pd.DataFrame or QuantamentalDataFrame
+        Boolean membership per security and date, long or wide, truthy where the
+        security is investable.
+    cids : pd.Index
+        Securities the mask must cover.
+    calendar : pd.DatetimeIndex
+        Dates the mask is returned on.
+
+    Raises
+    ------
+    ValueError
+        If ``universe`` does not name exactly the securities in ``cids``. A membership
+        frame that is stale, or whose labels are spelled differently, would otherwise
+        silently drop the securities it fails to mention.
+
+    Returns
+    -------
+    pd.DataFrame
+        Boolean matrix indexed by ``calendar`` with one column per cid in ``cids``.
+    """
+    wide = _as_wide(universe, "universe")
+
+    missing = pd.Index(cids).difference(wide.columns)
+    unknown = wide.columns.difference(pd.Index(cids))
+    if len(missing) or len(unknown):
+        raise ValueError(
+            "`universe` must name exactly the securities covered by `weights` and "
+            "`returns`. Missing from `universe`: "
+            f"{sorted(map(str, missing))}; unknown to `weights` and `returns`: "
+            f"{sorted(map(str, unknown))}."
+        )
+
+    wide = wide.reindex(columns=cids)
+    # Carried on the union of the two calendars, so that a membership record dated off
+    # the business-day grid, or before it starts, still takes effect.
+    wide = (
+        wide.reindex(index=wide.index.union(calendar)).ffill().reindex(index=calendar)
+    )
+    return wide.fillna(1.0).ne(0.0)
+
+
 def _concentration_stats(weights: pd.DataFrame) -> pd.DataFrame:
     """
     Per-date size and concentration statistics of a wide weight matrix.
@@ -737,7 +868,10 @@ class PortfolioAnalyser:
         wide frame indexed by date with one column per security. A missing weight is
         read as "not held". Weights may be static targets held flat between
         rebalancings or already drifting with returns; see
-        :meth:`adjust_weights_with_drift` to turn the former into the latter.
+        :meth:`adjust_weights_with_drift` to turn the former into the latter. That
+        method requires a ``universe``, since a target panel alone cannot say whether a
+        security stopped being re-stated or stopped being investable, and holding one
+        that has left the universe at its last weight never sells it.
     rebalance_freq : str
         Pandas period alias defining how often the book is reset to its targets, one
         of {"B", "W", "M", "Q", "Y"}. Matches the argument of the same name on
@@ -911,6 +1045,7 @@ class PortfolioAnalyser:
     def adjust_weights_with_drift(
         weights: pd.DataFrame,
         returns: pd.DataFrame,
+        universe: pd.DataFrame,
         rebalance_freq: str = "M",
     ) -> pd.DataFrame:
         """
@@ -931,38 +1066,79 @@ class PortfolioAnalyser:
         ----------
         weights : pd.DataFrame or QuantamentalDataFrame
             Target weights per security and date, long or wide, as fractions. Values
-            are carried forward over gaps and need not be normalised.
+            need not be normalised, and are carried over the days that do not re-state
+            them - for the rest of the rebalancing period they were recorded in and for
+            the one that follows, after which they expire. A panel that skips a whole
+            period is therefore rejected rather than carried across it.
+
+            The carry alone cannot tell a security that is merely not re-stated today
+            from one that has left the investable set, which is why ``universe`` is
+            required and not inferred.
         returns : pd.DataFrame or QuantamentalDataFrame
             Single-security returns in the same format, in percentage points.
+        universe : pd.DataFrame or QuantamentalDataFrame
+            Boolean investable universe per security and date, long or wide, truthy
+            where the security can be held. A security is dropped from the book where
+            it is false, mid-period as readily as on a rebalancing, and the survivors
+            are rescaled to keep the row summing to one. Membership is carried forward
+            without limit, so it need only be recorded when it changes, and what it
+            leaves unsaid counts as investable: a partial frame narrows the book rather
+            than emptying it. Pass an all-true frame for a fixed universe.
         rebalance_freq : str, default "M"
             Pandas period alias defining how often the book is reset to its targets,
-            one of {"B", "W", "M", "Q", "Y"}.
+            one of {"B", "W", "M", "Q", "Y"}. Also bounds the carry above.
 
         Returns
         -------
         pd.DataFrame
             Wide daily weights (business days x cids), each row summing to one where
-            any weight is in force, ready to pass back in as ``weights``.
+            any weight is in force, ready to pass back in as ``weights``. The calendar
+            opens on the first date carrying a target, not on the first return: a
+            rebalancing period preceding every target has no book to report. A security
+            outside the universe carries NaN rather than 0.0 - both read as "not held"
+            by every statistic, so the distinction is there to be reported on, not to
+            change a reading.
+
+        Raises
+        ------
+        ValueError
+            If ``rebalance_freq`` is not a supported alias, if ``universe`` does not
+            name exactly the securities covered by ``weights`` and ``returns``, or if
+            ``weights`` leaves a whole rebalancing period without a target.
 
         See Also
         --------
         macrosynergy.securities.index.compute_daily_weights : the same drift applied to
-            an index constituent set, starting from membership flags.
+            an index constituent set. Membership is explicit there, in
+            ``constituents``; this was the one entry point where it was implicit.
         """
         _validate_frequency(rebalance_freq, "rebalance_freq")
         target = _as_wide(weights, "weights")
         rets = _as_wide(returns, "returns")
 
         cids = target.columns.union(rets.columns)
-        dates = target.index.union(rets.index)
-        calendar = pd.bdate_range(dates.min(), dates.max(), freq="B")
-
-        target = target.reindex(index=calendar, columns=cids).ffill().fillna(0.0)
+        # Opening on the first target rather than the first return. A period that
+        # precedes every target carries none on its first row, which is the row
+        # `_apply_weight_drift` normalises the period by, so the period would be
+        # divided by zero and silently deleted.
+        calendar = pd.bdate_range(
+            target.index.min(), target.index.union(rets.index).max(), freq="B"
+        )
+        target = _carry_targets_forward(
+            target.reindex(columns=cids), calendar, rebalance_freq
+        )
         rets = rets.reindex(index=calendar, columns=cids).fillna(0.0) / 100.0
 
+        # Masked before the drift, not after: `_apply_weight_drift` closes on a
+        # row-wise normalisation, which then rescales the survivors itself.
+        investable = _universe_mask(universe, cids, calendar)
         drifted = _apply_weight_drift(
-            target, rets, _assign_period_labels(calendar, rebalance_freq)
+            target.where(investable).fillna(0.0),
+            rets,
+            _assign_period_labels(calendar, rebalance_freq),
         )
+
+        drifted = drifted.where(investable)
         drifted.index.name = "real_date"
         drifted.columns.name = "cid"
         return drifted
