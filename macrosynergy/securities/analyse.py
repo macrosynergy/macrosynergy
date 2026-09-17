@@ -117,8 +117,7 @@ def _stat_xcat(xcat_prefix: str, stat: str) -> str:
     Returns
     -------
     str
-        The prefix and the upper-cased statistic joined by an underscore, e.g.
-        "PORT_ACTIVE_SHARE".
+        e.g. "PORT_ACTIVE_SHARE".
     """
     if not isinstance(xcat_prefix, str) or not xcat_prefix:
         raise TypeError("`xcat_prefix` must be a non-empty string.")
@@ -189,15 +188,12 @@ def _as_wide(df: pd.DataFrame, name: str, value_col: str = "value") -> pd.DataFr
     """
     Coerce a panel of security-level data to a wide (dates x cids) float matrix.
 
-    Both the long format produced elsewhere in this module - columns ``"cid"``,
-    ``"real_date"`` and a value column, optionally with ``"xcat"`` - and an
-    already-wide frame indexed by date are accepted.
-
     Parameters
     ----------
     df : pd.DataFrame or QuantamentalDataFrame
-        Long-format panel, or a wide frame with a date index (or a ``"real_date"``
-        column) and one column per security.
+        Either long format - columns ``"cid"``, ``"real_date"`` and a value column,
+        optionally with ``"xcat"`` - or a wide frame with a date index (or a
+        ``"real_date"`` column) and one column per security.
     name : str
         Name of the calling argument, used in error messages.
     value_col : str, default "value"
@@ -302,14 +298,17 @@ def _align_active(
     benchmark : pd.DataFrame
         Wide benchmark weights (dates x cids).
 
+    Raises
+    ------
+    ValueError
+        If the two share no dates, leaving no date an active weight is defined on.
+
     Returns
     -------
-    weights : pd.DataFrame
-        Portfolio weights on the common universe and dates.
-    benchmark : pd.DataFrame
-        Benchmark weights on the common universe and dates.
+    weights, benchmark : pd.DataFrame
+        Both sides on the common universe and dates.
     active : pd.DataFrame
-        Active weights, i.e. ``weights - benchmark``.
+        ``weights - benchmark``.
     """
     cids = weights.columns.union(benchmark.columns)
     dates = weights.index.intersection(benchmark.index)
@@ -348,7 +347,8 @@ def _carry_targets_forward(
     calendar : pd.DatetimeIndex
         Business days the targets are wanted on.
     rebalance_freq : str
-        Pandas period alias setting both the expiry and the periods checked below.
+        Pandas period alias setting both the expiry and the periods whose coverage is
+        checked.
 
     Raises
     ------
@@ -370,8 +370,8 @@ def _carry_targets_forward(
     )[:, None]
 
     observed = target.reindex(index=index)
-    # Each cell's last recorded target is carried forward alongside the period it was
-    # recorded in, so that expiry is counted in rebalancings and not in days.
+    # The period a target was recorded in travels forward alongside the target itself,
+    # so that expiry is counted in rebalancings rather than in days.
     recorded_in = pd.DataFrame(
         np.where(observed.notna(), ordinals, np.nan),
         index=index,
@@ -458,8 +458,8 @@ def _concentration_stats(weights: pd.DataFrame) -> pd.DataFrame:
     """
     Per-date size and concentration statistics of a wide weight matrix.
 
-    A position is counted as held where its weight is present and non-zero, so that
-    the zero-filled remainder of the universe never registers as a holding.
+    Only a present, non-zero weight counts as held, so that the zero-filled remainder
+    of the universe never registers as a holding.
 
     Parameters
     ----------
@@ -780,10 +780,10 @@ def _group_labels(
     columns : pd.Index
         Security identifiers (cids) to label.
     group_map : dict or None
-        Mapping of cid to subgroup label. Securities absent from the mapping, and
-        those mapped to a missing label, fall back to ``other_label``.
+        Mapping of cid to subgroup label.
     other_label : str
-        Label applied to unmapped securities.
+        Fallback for a security the mapping omits, and for one it maps to a missing
+        label.
 
     Returns
     -------
@@ -851,13 +851,13 @@ class PortfolioAnalyser:
     The same statistics are available along three axes, combined freely:
 
     - the portfolio as a whole, which is the default;
-    - subgroups of securities defined by ``groups``, selected with ``by_group=True``.
-      Every statistic is measured on the subgroup's own columns of the portfolio
-      weight matrix, so counts, weights, active shares and turnovers are contributions
-      that sum back to the whole-portfolio figure, while ``effective_n`` is normalised
-      within the subgroup;
+    - subgroups of securities defined by ``groups``, selected with ``by_group=True``,
+      measured on the subgroup's own columns of the portfolio weight matrix;
     - the active position against ``benchmark``, selected with ``active=True``, which
       applies the same measurements to the portfolio's weights net of the benchmark's.
+
+    Which statistics aggregate across subgroups, and which are daily rather than
+    per-rebalancing readings, is set out in :meth:`weight_stats`.
 
     Parameters
     ----------
@@ -876,10 +876,9 @@ class PortfolioAnalyser:
         Pandas period alias defining how often the book is reset to its targets, one
         of {"B", "W", "M", "Q", "Y"}. Matches the argument of the same name on
         :func:`macrosynergy.securities.index.compute_daily_weights`, and must describe
-        the *portfolio's* schedule even when measuring against a benchmark. Turnover
-        and weight autocorrelation are reported only on these dates; on every other
-        date a daily weight matrix changes because positions drift with returns, not
-        because anything traded.
+        the *portfolio's* schedule even when measuring against a benchmark: the
+        benchmark reconstitutes on its own, and only the portfolio's rebalancings say
+        when the book was actually traded.
     benchmark : pd.DataFrame or QuantamentalDataFrame, optional
         Benchmark weights in the same format and units as ``weights``. Required for
         any ``active=True`` call. Portfolio and benchmark are aligned on the union of
@@ -892,12 +891,10 @@ class PortfolioAnalyser:
         rebalancings with drift left in.
     groups : dict or pd.Series, optional
         Mapping of security (cid) to subgroup label - sector, region, book, or any
-        other partition. Required for any ``by_group=True`` call. Securities absent
-        from the mapping are collected under ``other_label``.
-    start : str or pd.Timestamp, optional
-        Earliest date to retain. Default is None, i.e. the earliest date available.
-    end : str or pd.Timestamp, optional
-        Latest date to retain. Default is None, i.e. the latest date available.
+        other partition. Required for any ``by_group=True`` call.
+    start, end : str or pd.Timestamp, optional
+        Bounds of the date window to retain. Default is None on either side, i.e. the
+        earliest and latest dates available.
     other_label : str, default "OTHER"
         Subgroup label for securities missing from ``groups``.
     portfolio_name : str, default "PORTFOLIO"
@@ -920,8 +917,7 @@ class PortfolioAnalyser:
         The inputs as wide (dates x cids) float matrices, trimmed to the date window.
         ``benchmark`` and ``returns`` are None when not supplied.
     active_weights : pd.DataFrame
-        Portfolio weights net of the benchmark's, on the union of both universes and
-        the intersection of their dates. None when no benchmark was supplied.
+        Portfolio weights net of the benchmark's. None when no benchmark was supplied.
     groups : pd.Series
         Subgroup label per security, indexed by cid. None when no mapping was supplied.
     cids : list of str
@@ -940,31 +936,18 @@ class PortfolioAnalyser:
     Weights are expected as fractions, i.e. a fully invested long-only portfolio sums
     to one. All reported weights, turnovers and active shares are in percentage points.
 
-    Concentration statistics - ``n_holdings``, ``effective_n``, ``weight``,
-    ``gross_weight``, ``active_weight`` and ``active_share`` - and the off-benchmark
-    split - ``off_benchmark_n``, ``off_benchmark_weight`` and ``benchmark_only_n`` -
-    are daily readings and are reported on every date. The turnovers and the
-    autocorrelations are only defined between rebalancings and carry NaN elsewhere, so
-    the returned frame keeps its daily index either way.
-
-    Each turnover is reported twice: per rebalancing, and annualised by multiplying
-    through by ``rebalancings_per_year``. The annualised figure answers what the book
-    costs to run over a year and is the one to compare across cadences - but it is not
-    a cadence-neutral measure of how active a strategy is, and the difference matters.
-    Turnover is the length of the path the weights travel, not the distance between
-    their endpoints. Only where every weight moves monotonically between rebalancings
-    does the path length telescope, and the same journey then annualises to the same
-    figure however finely it is cut. Movement that reverses does not: signal noise, and
-    the drift a fixed target has to be pulled back from, lengthen the measured path the
-    more often it is measured. That component behaves like a random walk, whose path
-    length grows with the square root of the number of steps, so its annualised
-    turnover scales with the square root of the rebalancing frequency - a daily and an
-    annual rebalancing of identical targets over identical markets differ by a factor
-    of around ``sqrt(252)`` on it.
-
-    Because a gap in the sample would let one turnover reading span several
-    rebalancings and be annualised as though it were one, a rebalancing period with no
-    observation at all is rejected at construction rather than absorbed.
+    The annualised turnover answers what the book costs to run over a year and is the
+    one to compare across cadences - but it is not a cadence-neutral measure of how
+    active a strategy is, and the difference matters. Turnover is the length of the
+    path the weights travel, not the distance between their endpoints. Only where every
+    weight moves monotonically between rebalancings does the path length telescope, and
+    the same journey then annualises to the same figure however finely it is cut.
+    Movement that reverses does not: signal noise, and the drift a fixed target has to
+    be pulled back from, lengthen the measured path the more often it is measured. That
+    component behaves like a random walk, whose path length grows with the square root
+    of the number of steps, so its annualised turnover scales with the square root of
+    the rebalancing frequency - a daily and an annual rebalancing of identical targets
+    over identical markets differ by a factor of around ``sqrt(252)`` on it.
     """
 
     def __init__(
@@ -1156,10 +1139,14 @@ class PortfolioAnalyser:
         ----------
         wide : pd.DataFrame
             Wide frame indexed by date.
-        start : str or pd.Timestamp or None
-            Earliest date to retain, or None for no lower bound.
-        end : str or pd.Timestamp or None
-            Latest date to retain, or None for no upper bound.
+        start, end : str or pd.Timestamp or None
+            Bounds of the window, either of them None for no bound on that side.
+
+        Raises
+        ------
+        ValueError
+            If the window leaves no dates, which otherwise surfaces much later as an
+            empty statistics frame.
 
         Returns
         -------
@@ -1201,8 +1188,7 @@ class PortfolioAnalyser:
         Parameters
         ----------
         active : bool
-            If True, return the benchmark-aligned portfolio, benchmark and active
-            matrices; otherwise the raw portfolio weights alone.
+            If True, measure against the benchmark.
 
         Raises
         ------
@@ -1212,8 +1198,9 @@ class PortfolioAnalyser:
         Returns
         -------
         tuple of pd.DataFrame
-            ``(weights,)`` when ``active`` is False, else
-            ``(weights, benchmark, active)``.
+            The raw portfolio weights alone, or the benchmark-aligned portfolio,
+            benchmark and active matrices. Callers read the last element, which is the
+            matrix to measure either way.
         """
         if not active:
             return (self.weights,)
@@ -1296,8 +1283,7 @@ class PortfolioAnalyser:
         trade_dates = self.trade_dates.intersection(active_w.index)
 
         stats = _concentration_stats(active_w[columns]).rename(columns=_ACTIVE_RENAME)
-        # Active share is the one-way gross active position, i.e. half the sum of the
-        # absolute active weights.
+        # Active share is the one-way gross active position, hence half.
         stats["active_share"] = 0.5 * stats.pop("gross_weight")
 
         # How much more the portfolio traded than the benchmark reconstituted, as
