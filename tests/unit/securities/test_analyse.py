@@ -389,6 +389,18 @@ class TestWeightStatLabels(unittest.TestCase):
         self.assertEqual(labels["PORT_ACTIVE_SHARE"], "Active share, % (vs SP500)")
         self.assertEqual(labels["PORT_N_HOLDINGS"], "Non-zero holdings")
 
+    def test_off_benchmark_labels_read_with_the_benchmark_suffix(self):
+        labels = weight_stat_labels("PORT", benchmark="SP500")
+        self.assertEqual(
+            labels["PORT_OFF_BENCHMARK_N"], "Off-benchmark holdings (vs SP500)"
+        )
+        self.assertEqual(
+            labels["PORT_OFF_BENCHMARK_WEIGHT"], "Off-benchmark weight, % (vs SP500)"
+        )
+        self.assertEqual(
+            labels["PORT_BENCHMARK_ONLY_N"], "Benchmark-only holdings (vs SP500)"
+        )
+
     def test_stats_restricts_the_output(self):
         labels = weight_stat_labels("PORTEW", stats=ACTIVE_WEIGHT_STATS)
         self.assertEqual(len(labels), len(ACTIVE_WEIGHT_STATS))
@@ -684,6 +696,156 @@ class TestWeightStats(unittest.TestCase):
         )
         qdf = analyser.weight_stats(by_group=True, as_qdf=True)
         self.assertEqual(list(map(str, qdf["cid"].unique())), ["INFO-TECH"])
+
+
+class TestOffBenchmarkStats(unittest.TestCase):
+    """
+    The portfolio and the benchmark hold different universes on both sides: A and E
+    are held but never in the benchmark, D is in the benchmark but never held, and C
+    sits in both universes at a zero portfolio weight on most dates. The third date
+    holds nothing at all and the fourth has no benchmark.
+    """
+
+    OFF_BENCHMARK_STATS = [
+        "off_benchmark_n",
+        "off_benchmark_weight",
+        "benchmark_only_n",
+    ]
+
+    def setUp(self):
+        self.weights = _wide(
+            [
+                [0.5, 0.3, 0.0, 0.2],
+                [0.5, 0.5, 0.0, 0.0],
+                [0.0, 0.0, 0.0, 0.0],
+                [0.2, 0.3, 0.5, 0.0],
+            ],
+            ["A", "B", "C", "E"],
+        )
+        self.benchmark = _wide(
+            [
+                [0.4, 0.3, 0.3],
+                [0.4, 0.3, 0.3],
+                [0.4, 0.3, 0.3],
+                [0.0, 0.0, 0.0],
+            ],
+            ["B", "C", "D"],
+        )
+        self.groups = {"A": "X", "B": "X", "C": "Y", "D": "Y", "E": "Y"}
+        self.analyser = PortfolioAnalyser(
+            self.weights, "B", benchmark=self.benchmark, groups=self.groups
+        )
+
+    def _active(self):
+        return self.analyser.weight_stats(active=True).set_index("real_date")
+
+    def test_columns_are_reported_on_the_active_side_only(self):
+        for stat in self.OFF_BENCHMARK_STATS:
+            self.assertIn(stat, ACTIVE_WEIGHT_STATS)
+            self.assertNotIn(stat, STANDALONE_WEIGHT_STATS)
+        self.assertEqual(
+            list(self.analyser.weight_stats().columns),
+            ["real_date"] + STANDALONE_WEIGHT_STATS,
+        )
+        self.assertEqual(
+            list(self.analyser.weight_stats(active=True).columns),
+            ["real_date"] + ACTIVE_WEIGHT_STATS,
+        )
+
+    def test_universes_differing_on_both_sides(self):
+        stats = self._active()
+        # A and E are held off-benchmark on the first date, A alone on the second.
+        np.testing.assert_allclose(stats["off_benchmark_n"].iloc[:2], [2.0, 1.0])
+        np.testing.assert_allclose(stats["off_benchmark_weight"].iloc[:2], [70.0, 50.0])
+        # C and D sit in the benchmark unheld on both.
+        np.testing.assert_allclose(stats["benchmark_only_n"].iloc[:2], [2.0, 2.0])
+
+    def test_zero_weight_is_held_by_neither_side(self):
+        # C carries a zero portfolio weight on the first two dates: it is neither an
+        # off-benchmark holding nor absent from the count of benchmark-only names.
+        stats = self._active()
+        self.assertEqual(stats["benchmark_only_n"].iloc[0], 2.0)
+        # On the last date C is genuinely held, but the benchmark is empty there, so
+        # the split is not reported at all.
+        self.assertTrue(np.isnan(stats["off_benchmark_n"].iloc[3]))
+
+    def test_off_benchmark_and_shared_holdings_rebuild_n_holdings(self):
+        standalone = self.analyser.weight_stats().set_index("real_date")
+        active = self._active()
+        held = self.analyser.weights.ne(0.0) & self.analyser.weights.notna()
+        aligned_bm = self.analyser.benchmark.reindex(
+            index=held.index, columns=held.columns
+        ).fillna(0.0)
+        shared = (held & aligned_bm.ne(0.0)).sum(axis=1)
+        # The last date has no benchmark, so the split carries no reading there.
+        measured = active["off_benchmark_n"].notna()
+        np.testing.assert_allclose(
+            active["off_benchmark_n"][measured] + shared[measured],
+            standalone["n_holdings"][measured],
+        )
+
+    def test_group_statistics_sum_to_the_whole_portfolio(self):
+        total = self._active()
+        grouped = self.analyser.weight_stats(by_group=True, active=True).pivot(
+            index="real_date", columns="group"
+        )
+        self.assertEqual(set(grouped["off_benchmark_n"].columns), {"X", "Y"})
+        for col in self.OFF_BENCHMARK_STATS:
+            np.testing.assert_allclose(
+                grouped[col].sum(axis=1, min_count=1),
+                total[col],
+                rtol=1e-10,
+                atol=1e-9,
+            )
+
+    def test_group_split_is_measured_within_the_subgroup(self):
+        grouped = self.analyser.weight_stats(by_group=True, active=True).pivot(
+            index="real_date", columns="group"
+        )
+        # X holds A off-benchmark and B in it; Y holds E off-benchmark against C and D.
+        np.testing.assert_allclose(grouped["off_benchmark_n"]["X"].iloc[0], 1.0)
+        np.testing.assert_allclose(grouped["off_benchmark_weight"]["X"].iloc[0], 50.0)
+        np.testing.assert_allclose(grouped["benchmark_only_n"]["X"].iloc[0], 0.0)
+        np.testing.assert_allclose(grouped["off_benchmark_n"]["Y"].iloc[0], 1.0)
+        np.testing.assert_allclose(grouped["off_benchmark_weight"]["Y"].iloc[0], 20.0)
+        np.testing.assert_allclose(grouped["benchmark_only_n"]["Y"].iloc[0], 2.0)
+
+    def test_empty_date_keeps_the_counts_but_drops_the_weight(self):
+        stats = self._active()
+        self.assertEqual(stats["off_benchmark_n"].iloc[2], 0.0)
+        self.assertTrue(np.isnan(stats["off_benchmark_weight"].iloc[2]))
+        # The benchmark is still there on that date, so its unheld members do count.
+        self.assertEqual(stats["benchmark_only_n"].iloc[2], 3.0)
+
+    def test_absent_benchmark_leaves_no_reading(self):
+        stats = self._active()
+        self.assertTrue(stats[self.OFF_BENCHMARK_STATS].iloc[3].isna().all())
+
+    def test_zero_weight_is_distinct_from_no_reading(self):
+        # Every holding sits inside the benchmark: a real zero, not a missing value.
+        weights = _wide([[0.6, 0.4], [0.6, 0.4]], ["A", "B"])
+        benchmark = _wide([[0.5, 0.5], [0.5, 0.5]], ["A", "B"])
+        stats = PortfolioAnalyser(weights, "B", benchmark=benchmark).weight_stats(
+            active=True
+        )
+        np.testing.assert_allclose(stats["off_benchmark_n"], 0.0)
+        np.testing.assert_allclose(stats["off_benchmark_weight"], 0.0)
+        np.testing.assert_allclose(stats["benchmark_only_n"], 0.0)
+
+    def test_split_is_a_daily_reading(self):
+        weights, benchmark, _, _ = _random_portfolio()
+        analyser = PortfolioAnalyser(weights, FREQ, benchmark=benchmark)
+        stats = analyser.weight_stats(active=True)
+        n_trades = len(analyser.trade_dates) - 1
+        for col in self.OFF_BENCHMARK_STATS:
+            self.assertEqual(int(stats[col].notna().sum()), len(stats), col)
+        self.assertGreater(len(stats), n_trades)
+
+    def test_as_qdf_carries_the_split_categories(self):
+        qdf = self.analyser.weight_stats(active=True, as_qdf=True)
+        xcats = set(map(str, qdf["xcat"].unique()))
+        for stat in self.OFF_BENCHMARK_STATS:
+            self.assertIn(f"PORT_{stat.upper()}", xcats)
 
 
 class TestAttribution(unittest.TestCase):

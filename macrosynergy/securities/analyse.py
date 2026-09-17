@@ -39,6 +39,9 @@ ACTIVE_WEIGHT_STATS: List[str] = [
     "active_turnover",
     "active_weight_turnover",
     "active_weight_autocorr",
+    "off_benchmark_n",
+    "off_benchmark_weight",
+    "benchmark_only_n",
 ]
 
 #: Display label of every statistic, keyed by its column name. Use
@@ -57,6 +60,9 @@ WEIGHT_STAT_LABELS: Dict[str, str] = {
     "active_turnover": "Signal-driven turnover, %",  # portfolio minus benchmark
     "active_weight_turnover": "Active weight turnover, %",
     "active_weight_autocorr": "Active weight 1-period autocorrelation",
+    "off_benchmark_n": "Off-benchmark holdings",  # held, absent from the benchmark
+    "off_benchmark_weight": "Off-benchmark weight, %",
+    "benchmark_only_n": "Benchmark-only holdings",  # in the benchmark, never held
 }
 
 # Concentration statistics carry over verbatim from the standalone to the active
@@ -718,10 +724,11 @@ class PortfolioAnalyser:
     to one. All reported weights, turnovers and active shares are in percentage points.
 
     Concentration statistics - ``n_holdings``, ``effective_n``, ``weight``,
-    ``gross_weight``, ``active_weight`` and ``active_share`` - are daily readings and
-    are reported on every date. ``turnover`` and the autocorrelations are only defined
-    between rebalancings and carry NaN elsewhere, so the returned frame keeps its daily
-    index either way.
+    ``gross_weight``, ``active_weight`` and ``active_share`` - and the off-benchmark
+    split - ``off_benchmark_n``, ``off_benchmark_weight`` and ``benchmark_only_n`` -
+    are daily readings and are reported on every date. ``turnover`` and the
+    autocorrelations are only defined between rebalancings and carry NaN elsewhere, so
+    the returned frame keeps its daily index either way.
     """
 
     def __init__(
@@ -1022,6 +1029,35 @@ class PortfolioAnalyser:
         stats["active_weight_autocorr"] = _weight_autocorr(
             active_w[columns], trade_dates
         )
+
+        # Which side of the universe each name sits on, read off the two weight
+        # matrices rather than the active weight: the sign of an active weight says
+        # which way the bet runs, not whether the other side holds the name at all.
+        # `_align_active` has zero-filled both, so a zero is "not held" - a security
+        # sitting in the universe at a zero weight is not an off-benchmark position.
+        held = w[columns].ne(0.0)
+        in_benchmark = b[columns].ne(0.0)
+        off_benchmark = held & ~in_benchmark
+
+        stats["off_benchmark_n"] = off_benchmark.sum(axis=1).astype(float)
+        stats["off_benchmark_weight"] = 100.0 * w[columns].where(off_benchmark).sum(
+            axis=1
+        )
+        stats["benchmark_only_n"] = (in_benchmark & ~held).sum(axis=1).astype(float)
+
+        # A date the portfolio sits out carries no weight reading, as in
+        # `_concentration_stats`; the count still stands at zero. Where the portfolio
+        # is held but sits entirely inside the benchmark, the zero weight is a real
+        # reading and is kept.
+        stats.loc[~held.any(axis=1), "off_benchmark_weight"] = np.nan
+        # Measured on the whole benchmark rather than on `columns`: a subgroup the
+        # benchmark does not reach is a genuine off-benchmark allocation, but a date
+        # the benchmark is absent on gives nothing to be off - every holding would
+        # register as off-benchmark, which is true and tells you nothing.
+        stats.loc[
+            ~b.ne(0.0).any(axis=1),
+            ["off_benchmark_n", "off_benchmark_weight", "benchmark_only_n"],
+        ] = np.nan
         return stats[ACTIVE_WEIGHT_STATS]
 
     def weight_stats(
@@ -1070,10 +1106,25 @@ class PortfolioAnalyser:
         -----
         Subgroup statistics are measured on the subgroup's columns of the
         portfolio-level weight matrix, so ``n_holdings``, ``weight``,
-        ``gross_weight``, ``active_weight``, ``active_share`` and the turnovers are
-        contributions that sum across subgroups to the whole-portfolio figure.
-        ``effective_n`` and the autocorrelations are normalised within the subgroup
-        and do not aggregate.
+        ``gross_weight``, ``active_weight``, ``active_share``, the off-benchmark
+        split - ``off_benchmark_n``, ``off_benchmark_weight`` and
+        ``benchmark_only_n`` - and the turnovers are contributions that sum across
+        subgroups to the whole-portfolio figure. ``effective_n`` and the
+        autocorrelations are normalised within the subgroup and do not aggregate.
+
+        The off-benchmark split reports how far the portfolio's universe departs from
+        the benchmark's, which ``n_active_holdings`` and ``active_share`` fold in
+        without distinguishing: ``off_benchmark_n`` counts securities held with no
+        benchmark weight, ``off_benchmark_weight`` sums their portfolio weight in
+        percentage points, and ``benchmark_only_n`` counts benchmark members the
+        portfolio does not hold. A security sitting in the universe at a zero weight
+        counts as held by neither side, so ``off_benchmark_n`` and the number of
+        holdings shared with the benchmark add back to the standalone ``n_holdings``.
+        On a date with no position the counts still stand at zero but
+        ``off_benchmark_weight`` is NaN, as ``weight`` is; a zero there means the book
+        is held and sits entirely inside the benchmark. On a date the benchmark itself
+        carries no weight all three are NaN, since every holding would otherwise
+        register as off-benchmark against nothing.
 
         The concentration columns are daily readings. ``turnover``,
         ``active_turnover``, ``active_weight_turnover`` and the autocorrelations are
