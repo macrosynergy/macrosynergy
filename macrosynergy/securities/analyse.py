@@ -565,8 +565,7 @@ def _trade_dates(index: pd.DatetimeIndex, rebalance_freq: str) -> pd.DatetimeInd
     Raises
     ------
     ValueError
-        If a rebalancing period in the sample holds no observation, which would let a
-        single turnover reading span more than one rebalancing. See
+        If a rebalancing period in the sample holds no observation. See
         :func:`_assert_unbroken_schedule`.
 
     Returns
@@ -1254,8 +1253,7 @@ class PortfolioAnalyser:
         Parameters
         ----------
         frames : tuple of pd.DataFrame
-            Output of :meth:`_resolve_frames`: the portfolio weights alone, or the
-            aligned portfolio, benchmark and active weights.
+            Output of :meth:`_resolve_frames`.
         carries : tuple of pd.DataFrame
             Matching no-trade baselines from :meth:`_no_trade_baselines`.
         columns : pd.Index
@@ -1455,8 +1453,7 @@ class PortfolioAnalyser:
         Parameters
         ----------
         stats : pd.DataFrame
-            Output of :meth:`weight_stats`, i.e. a ``"real_date"`` column, an optional
-            ``"group"`` column and one column per statistic.
+            Output of :meth:`weight_stats`.
         xcat_prefix : str
             Prefix prepended to the upper-cased statistic name to form the category.
 
@@ -1517,9 +1514,8 @@ class PortfolioAnalyser:
             If True, attribute the active return by applying the active weights
             against ``benchmark`` rather than the portfolio's own weights.
         lag : int, default 1
-            Number of dates by which the weights are lagged before being applied to
-            returns. Matches the one-day lag used throughout the package's signal
-            pipelines.
+            Number of dates the weights are lagged by. The default matches the one-day
+            lag used throughout the package's signal pipelines.
         include_total : bool, default True
             If True, append a column holding the sum across securities or subgroups,
             named after ``portfolio_name``.
@@ -1544,9 +1540,9 @@ class PortfolioAnalyser:
         -------
         pd.DataFrame
             Indexed by ``"real_date"``, with one column per security - or per subgroup
-            when ``by_group`` is True - plus the total column. Contributions are in
-            the units of ``returns``. Returned as a QuantamentalDataFrame when
-            ``as_qdf`` is True.
+            when ``by_group`` is True - plus the total column when ``include_total`` is
+            True. Contributions are in the units of ``returns``. Returned as a
+            QuantamentalDataFrame when ``as_qdf`` is True.
         """
         if self.returns is None:
             raise ValueError(
