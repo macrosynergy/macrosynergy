@@ -1,14 +1,12 @@
 from numbers import Number
-from typing import Dict, List, Tuple, Optional, Any, Union, Sequence
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import pandas as pd
 import seaborn as sns
-import matplotlib as mpl
 from matplotlib import pyplot as plt
 
 from macrosynergy.management import reduce_df
-from macrosynergy.visuals import timelines
 
 FREQ_TO_DAYS_MAP = {"D": 1, "W": 5, "M": 21, "Q": 63}
 
@@ -147,13 +145,44 @@ def covariance_estimates_scatterplot(
     x_vals: np.ndarray,
     y_vals: np.ndarray,
     configs: List[dict],
-    title: str = "Bias vs Variance",
-    xlabel: str = "Bias",
-    ylabel: str = "Variance",
+    title: str = "",
+    xlabel: str = "",
+    ylabel: str = "",
     title_fontsize: int = 14,
     figsize: Tuple[float, float] = (10, 6),
 ) -> None:
+    """
+    Scatter-plot outcomes of alternative covariance estimation configurations.
+    Each point corresponds to one entry in configs. The marker shape encodes
+    the lookback method, the colour the estimation frequencies, and the marker
+    size the effective lookback expressed in business days.
 
+    Notes
+    -----
+    For exponential moving averages the effective lookback is derived from the
+    half-life as (1 + lam) / (1 - lam), with lam = 2 ** (-1 / half_life). Where
+    several estimation frequencies are combined, the effective lookback is
+    their weighted average.
+
+    Parameters
+    ----------
+    x_vals : np.ndarray
+        Values for the x-axis, one per configuration.
+    y_vals : np.ndarray
+        Values for the y-axis, one per configuration.
+    configs : List[dict]
+        Covariance estimation configurations, one per plotted point
+    title : str
+        Title of the plot
+    xlabel : str
+        Label for the x-axis
+    ylabel : str
+        Label for the y-axis
+    title_fontsize : int
+        Font size of the title. Defaults to 14.
+    figsize : Tuple[float, float]
+        Size of the figure. Defaults to (10, 6).
+    """
     # define point colours, size, and shape
     z = {"D": 1, "W": 5, "M": 21}
     styles, hues, effective_lbacks = [], [], []
@@ -249,15 +278,51 @@ def notional_positions_scatterplot(
     figsize: Tuple[float, float] = (15, 5),
     point_size: float = 5,
 ) -> Tuple[plt.Figure, Any]:
+    """
+    Scatterplot showing aggregate notional positions against aggregate
+    signal strength
+
+    Parameters
+    ----------
+    pos_dfs : List[pd.DataFrame]
+        Notional position data in long format, one data frame per subplot.
+    sig_df : pd.DataFrame
+        Signal data in long format, shared across all subplots
+    df_labels : List[str]
+        Subplot titles, one per entry in pos_dfs
+    title : str
+        Overall figure title
+    xlabel : str
+        Shared label for the x-axis
+    ylabel : str
+        Shared label for the y-axis
+    title_fontsize : int
+        Font size of the figure title. Defaults to 14.
+    sharex : bool
+        Whether the subplots share the x-axis. Defaults to True.
+    sharey : bool
+        Whether the subplots share the y-axis. Defaults to False.
+    n_cols : int
+        Number of subplot columns. Defaults to 3.
+    figsize : Tuple[float, float]
+        Size of the figure. Defaults to (15, 5).
+    point_size : float
+        Size of the scatter points. Defaults to 5.
+
+    Returns
+    -------
+    Tuple[plt.Figure, Any]
+        The figure and the two-dimensional array of axes.
+    """
     with sns.axes_style("whitegrid"), sns.plotting_context("notebook"):
         fig, axes = plt.subplots(
-            nrows=1 + (len(pos_dfs) // (n_cols + 1)),
+            nrows=(len(pos_dfs) + n_cols - 1) // n_cols,
             ncols=n_cols,
             figsize=figsize,
             sharex=sharex,
             sharey=sharey,
+            squeeze=False,
         )
-        axes = np.atleast_2d(axes)
 
         piv_sig = sig_df.pivot(
             index="real_date", columns=["cid", "xcat"], values="value"
@@ -311,6 +376,51 @@ def compare_proxy_pnls(
     line_width: float = 1,
     figsize: Tuple[float, float] = (12, 6),
 ):
+    """
+    Compare proxy PnLs before and after transaction costs. Each portfolio is drawn
+    in its own subplot, with one line for the PnL including costs and one for the
+    PnL excluding costs.
+
+    Parameters
+    ----------
+    pnl_dfs : List[pd.DataFrame]
+        PnL data including transaction costs, in long format, one data frame
+        per portfolio
+    pnle_dfs : List[pd.DataFrame]
+        PnL data excluding transaction costs, in the same format and order as
+        pnl_dfs.
+    portfolio_names : List[str]
+        Cross section identifiers of the portfolios, used to select the rows
+        of each PnL data frame.
+    pnl_names : Optional[List[str]]
+        Subplot titles, one per portfolio
+    title : str
+        Overall figure title.
+    ylabel : str
+        Label for the y-axis, shown on the leftmost subplot of each row.
+    title_fontsize : int
+        Font size of the figure title. Defaults to 18.
+    incl_costs_label : str
+        Legend label for the PnL including costs. Defaults to "Incl. Costs".
+    excl_costs_label : str
+        Legend label for the PnL excluding costs. Defaults to "Excl. Costs".
+    sharey : bool
+        Whether the subplots share the y-axis. Defaults to False.
+    ncols : Optional[int]
+        Number of subplot columns. Defaults to None, in which case at most
+        three columns are used.
+    cumsum : bool
+        Whether to plot cumulative rather than period PnL. Defaults to True.
+    line_width : float
+        Width of the plotted lines. Defaults to 1.
+    figsize : Tuple[float, float]
+        Size of the figure. Defaults to (12, 6).
+
+    Returns
+    -------
+    Tuple[plt.Figure, np.ndarray]
+        The figure and the two-dimensional array of axes.
+    """
     assert len(pnl_dfs) == len(pnle_dfs) == len(portfolio_names)
 
     if pnl_names is None:
@@ -432,6 +542,49 @@ def implied_leverage_plot(
     baseline: bool = False,
     drop_leading_zeros: bool = True,
 ):
+    """
+    Plot the leverage implied by notional positions over time. For each
+    date the absolute notional positions are summed across all
+    contracts and divided by the assets under management, giving the gross
+    exposure as a multiple of AUM. One line is drawn per position dataframe.
+
+    Parameters
+    ----------
+    npos_dfs : Union[pd.DataFrame, List[pd.DataFrame]]
+        Notional position data in long format, either a single data frame or
+        one per line to plot
+    labels : Union[str, List[str]]
+        Legend labels, one per entry in npos_dfs.
+    aum : Number
+        Assets under management, in the same units as the notional positions.
+    figsize : Tuple[float, float]
+        Size of the figure. Defaults to (13, 6).
+    alpha : float
+        Opacity of the plotted lines. Defaults to 0.9.
+    linewidth : float
+        Width of the plotted lines. Defaults to 2.0.
+    title : str
+        Title of the plot. Defaults to "Implied leverage".
+    title_fontsize : int
+        Font size of the title. Defaults to 14.
+    xlabel : str
+        Label for the x-axis
+    ylabel : str
+        Label for the y-axis. Defaults to "Leverage".
+    label_fontsize : int
+        Font size of the axis labels and the legend. Defaults to 11.
+    baseline : bool
+        Whether to draw a horizontal reference line at a leverage of one.
+        Defaults to False.
+    drop_leading_zeros : bool
+        Whether to start each line at its first non-zero leverage, dropping
+        the period before any position is held. Defaults to True.
+
+    Returns
+    -------
+    Tuple[plt.Figure, plt.Axes]
+        The figure and the axes containing the line plot.
+    """
     if isinstance(npos_dfs, pd.DataFrame):
         npos_dfs = [npos_dfs]
 
@@ -479,7 +632,6 @@ def implied_leverage_plot(
     ax.set_xlabel(xlabel, fontsize=label_fontsize)
     ax.set_ylabel(ylabel, fontsize=label_fontsize)
 
-    # Cleaner chart appearance
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
 
@@ -522,10 +674,63 @@ def realized_vol_plot(
     title: str = "Rolling realized volatility of strategy PnL",
     title_fontsize: int = 14,
     xlabel: str = "",
-    ylabel: str = "Annualized volatility, % of AUM",
+    ylabel: str = "Annualized volatility (%)",
     label_fontsize: int = 11,
     show_mean: bool = True,
 ):
+    """
+    Plot the rolling realized volatility of strategy PnL as a share of AUM.
+    PnL is expressed in percent of assets under management, and its rolling
+    standard deviation is annualized with the square root of the annualization
+    factor. One line is drawn per PnL data frame.
+
+    Parameters
+    ----------
+    pnl_dfs : Union[pd.DataFrame, List[pd.DataFrame]]
+        PnL data in long format, either a single data frame or one per line to
+        plot
+    labels : Union[str, List[str]]
+        Legend labels, one per entry in pnl_dfs.
+    portfolio_names : Union[str, List[str]]
+        Cross-section identifiers of the portfolios to include, applied to
+        every PnL data frame.
+    aum : Number
+        Assets under management
+    lback : int
+        Number of observations in the rolling volatility window. Defaults to
+        252.
+    annualization_factor : int
+        Number of observations per year used to annualize the volatility.
+        Defaults to 252.
+    vol_target : Optional[float]
+        Volatility target, drawn as a horizontal reference line. Defaults to None,
+        in which case no line is drawn.
+    figsize : Tuple[float, float]
+        Size of the figure. Defaults to (13, 5).
+    alpha : float
+        Opacity of the plotted lines. Defaults to 0.9.
+    linewidth : float
+        Width of the plotted lines. Defaults to 1.5.
+    title : str
+        Title of the plot. Defaults to "Rolling realized volatility of
+        strategy PnL".
+    title_fontsize : int
+        Font size of the title. Defaults to 14.
+    xlabel : str
+        Label for the x-axis
+    ylabel : str
+        Label for the y-axis.
+    label_fontsize : int
+        Font size of the axis labels and the legend. Defaults to 11.
+    show_mean : bool
+        Whether to append each series' mean realized volatility to its legend
+        label. Defaults to True.
+
+    Returns
+    -------
+    Tuple[plt.Figure, plt.Axes]
+        The figure and the axes containing the line plot.
+    """
     if isinstance(pnl_dfs, pd.DataFrame):
         pnl_dfs = [pnl_dfs]
 
@@ -604,205 +809,6 @@ def realized_vol_plot(
     return fig, ax
 
 
-def _prepare_pnl_df(
-    pnl_df: pd.DataFrame,
-    portfolio_names: Optional[List[str]] = None,
-    aum: Optional[Number] = None,
-    cumsum: bool = True,
-) -> pd.DataFrame:
-    """
-    Filter a long-format PnL frame to the portfolios of interest, cumulate it
-    and put it on the desired scale.
-    """
-    df = reduce_df(pnl_df, cids=portfolio_names)
-    df = df.copy().sort_values(["cid", "real_date"])
-
-    if cumsum:
-        df["value"] = df.groupby("cid")["value"].cumsum()
-
-    if aum is not None:
-        df["value"] = 100 * df["value"] / aum
-
-    return df
-
-
-def _plot_pnl_panel(
-    ax: plt.Axes,
-    pnl_df: pd.DataFrame,
-    hue_order: List[str],
-    panel_title: str = "",
-    x_label: str = "",
-    y_label: str = "",
-    line_width: int = 1,
-    label_fontsize: int = 12,
-    tick_fontsize: int = 12,
-    panel_title_fontsize: int = 14,
-    background_vals: Optional[pd.Series] = None,
-    cmap: Optional[mpl.colors.Colormap] = None,
-    norm: Optional[mpl.colors.Normalize] = None,
-) -> Tuple[List[Any], List[str]]:
-    """
-    Draw a single cumulative-PnL panel on `ax` and return the legend
-    handles/labels so the caller can draw one legend for the whole figure.
-
-    `hue_order`, `cmap` and `norm` are passed in rather than derived here so
-    that colours and background shading are identical across panels.
-    """
-    sns.lineplot(
-        data=pnl_df,
-        x="real_date",
-        y="value",
-        hue="cid",
-        hue_order=hue_order,
-        estimator=None,
-        lw=line_width,
-        ax=ax,
-    )
-
-    ax.axhline(y=0, color="black", linestyle="--", lw=1)
-    ax.set_title(panel_title, fontsize=panel_title_fontsize)
-    ax.set_xlabel(x_label, fontsize=label_fontsize)
-    ax.set_ylabel(y_label, fontsize=label_fontsize)
-    ax.tick_params(axis="both", labelsize=tick_fontsize)
-
-    # shade the background by signal strength
-    if background_vals is not None:
-        vals = background_vals.sort_index()
-        for i in range(vals.shape[0] - 1):
-            ax.axvspan(
-                vals.index[i],
-                vals.index[i + 1],
-                color=cmap(norm(vals.iloc[i])),
-                alpha=0.2,
-                zorder=0,
-            )
-
-    # hand the legend back to the caller and drop the per-axes one
-    handles, labels = ax.get_legend_handles_labels()
-    legend = ax.get_legend()
-    if legend is not None:
-        legend.remove()
-
-    return handles, labels
-
-
-def proxy_pnl_plot(
-    pnl_df: pd.DataFrame,
-    pnle_df: Optional[pd.DataFrame] = None,
-    portfolio_names: Optional[List[str]] = None,
-    portfolio_labels: Optional[List[str]] = None,
-    background_vals: Optional[pd.Series] = None,
-    aum: Optional[Number] = None,
-    y_label: str = "",
-    x_label: str = "",
-    title: str = "",
-    panel_titles: Sequence[str] = ("Incl. costs", "Excl. costs"),
-    legend_title: str = "Portfolio",
-    title_fontsize: int = 20,
-    panel_title_fontsize: int = 14,
-    legend_fontsize: int = 10,
-    label_fontsize: int = 12,
-    tick_fontsize: int = 12,
-    cumsum: bool = True,
-    line_width: int = 1,
-    figsize: Optional[Tuple[float, float]] = None,
-    share_y: bool = True,
-    show: bool = True,
-) -> Tuple[plt.Figure, Any]:
-    """
-    Plot cumulative proxy PnL, optionally as two panels side by side.
-    """
-    frames = [_prepare_pnl_df(pnl_df, portfolio_names, aum, cumsum)]
-    if pnle_df is not None:
-        frames.append(_prepare_pnl_df(pnle_df, portfolio_names, aum, cumsum))
-
-    n_panels = len(frames)
-
-    # one colour per portfolio, identical across panels
-    if portfolio_names is not None:
-        hue_order = list(portfolio_names)
-    else:
-        hue_order = sorted(set().union(*(set(f["cid"].unique()) for f in frames)))
-
-    if portfolio_labels is not None and len(portfolio_labels) != len(hue_order):
-        raise ValueError(
-            f"`portfolio_labels` has {len(portfolio_labels)} entries but there "
-            f"are {len(hue_order)} portfolios to plot."
-        )
-
-    if figsize is None:
-        figsize = (12, 7) if n_panels == 1 else (16, 7)
-
-    cmap = norm = None
-    if background_vals is not None:
-        cmap = plt.get_cmap("viridis")
-        norm = mpl.colors.Normalize(
-            vmin=background_vals.min(), vmax=background_vals.max()
-        )
-
-    sns.set_theme(style="whitegrid", palette="colorblind")
-
-    fig, axes = plt.subplots(
-        nrows=1,
-        ncols=n_panels,
-        figsize=figsize,
-        sharex=True,
-        sharey=share_y,
-        squeeze=False,
-        constrained_layout=True,
-    )
-    axes = axes.flatten()
-
-    handles: List[Any] = []
-    labels: List[str] = []
-    for i, (ax, frame) in enumerate(zip(axes, frames)):
-        panel_title = ""
-        if n_panels > 1 and panel_titles is not None and i < len(panel_titles):
-            panel_title = panel_titles[i]
-
-        handles, labels = _plot_pnl_panel(
-            ax=ax,
-            pnl_df=frame,
-            hue_order=hue_order,
-            panel_title=panel_title,
-            x_label=x_label,
-            # only the leftmost panel needs the y-label when the axis is shared
-            y_label=y_label if (i == 0 or not share_y) else "",
-            line_width=line_width,
-            label_fontsize=label_fontsize,
-            tick_fontsize=tick_fontsize,
-            panel_title_fontsize=panel_title_fontsize,
-            background_vals=background_vals,
-            cmap=cmap,
-            norm=norm,
-        )
-
-    # one legend and one colourbar for the whole figure
-    if portfolio_labels is not None:
-        labels = list(portfolio_labels)
-    axes[0].legend(
-        handles=handles,
-        labels=labels,
-        title=legend_title,
-        title_fontsize=legend_fontsize,
-        fontsize=legend_fontsize,
-    )
-
-    if background_vals is not None:
-        sm = mpl.cm.ScalarMappable(norm=norm, cmap=cmap)
-        sm.set_array([])
-        cbar = fig.colorbar(sm, ax=list(axes))
-        cbar.set_label("Signal strength")
-
-    if title:
-        fig.suptitle(title, fontsize=title_fontsize)
-
-    if show:
-        plt.show()
-
-    return fig, (axes[0] if n_panels == 1 else axes)
-
-
 def vol_target_scaling_factor_plot(
     vol_df: pd.DataFrame,
     vol_target: int,
@@ -815,6 +821,42 @@ def vol_target_scaling_factor_plot(
     title_fontsize: int = 15,
     figsize: Tuple[float, float] = (13, 6),
 ):
+    """
+    Plot portfolio volatility and the scaling factor implied by a vol target.
+
+    The left panel shows the portfolio volatility prior to volatility
+    targeting, the right panel the factor by which positions must be scaled to
+    meet the target, that is the target divided by the portfolio volatility.
+    The mean and median of each series are added to the panel legends.
+
+    Parameters
+    ----------
+    vol_df : pd.DataFrame
+        Portfolio volatility data in long format
+    vol_target : int
+        Annualized volatility target
+    vol_xcat : str
+        Category of the portfolio volatility series to plot.
+    linewidth : float
+        Width of the plotted lines. Defaults to 1.
+    x_label : str
+        Label for the x-axis of both panels
+    y_label_pvol : str
+        Label for the y-axis of the volatility panel
+    y_label_scale : str
+        Label for the y-axis of the scaling factor panel
+    title : str
+        Overall figure title
+    title_fontsize : int
+        Font size of the figure title. Defaults to 15.
+    figsize : Tuple[float, float]
+        Size of the figure. Defaults to (13, 6).
+
+    Returns
+    -------
+    Tuple[plt.Figure, np.ndarray]
+        The figure and the array of the two axes.
+    """
     df = reduce_df(vol_df, xcats=[vol_xcat]).sort_values(by="real_date")
 
     x_vals = df["real_date"].values
@@ -887,7 +929,46 @@ def scaling_factor_error_impact_plot(
     ylabel: str = "Standard deviation of the scaling factor",
     figsize: Tuple[float, float] = (16, 5),
     point_size: int = 170,
-):
+) -> None:
+    """
+    Plot the effect of scaling factor estimation error on costs and PnL vol.
+    Both panels scatter the bias of the scaling factor estimator against its
+    standard deviation, with one point per simulated estimator. Points are
+    coloured by transaction costs in the left panel and by realized PnL
+    volatility in the right panel.
+
+    Parameters
+    ----------
+    bias : np.ndarray
+        Bias of the scaling factor estimator, one value per point.
+    var : np.ndarray
+        Standard deviation of the scaling factor estimator, one value per
+        point.
+    costs : np.ndarray
+        Transaction costs used to colour the left panel, one value per point.
+    pnl_vols : np.ndarray
+        Realized PnL volatility used to colour the right panel, one value per
+        point.
+    title : str
+        Overall figure title. Defaults to "Impact of scaling factor estimator
+        bias and variance on cost and PnL vol".
+    title_fontsize : int
+        Font size of the figure title. Defaults to 15.
+    subtitles : List[str]
+        Panel titles, also used as the colour bar labels. Defaults to None, in
+        which case ["Transaction costs (USDmn)", "Realized PnL volatility"] is
+        used.
+    xlabel : str
+        Label for the x-axis of both panels. Defaults to "Bias of the scaling
+        factor".
+    ylabel : str
+        Label for the y-axis of the left panel. Defaults to "Standard
+        deviation of the scaling factor".
+    figsize : Tuple[float, float]
+        Size of the figure. Defaults to (16, 5).
+    point_size : int
+        Size of the scatter points. Defaults to 170.
+    """
     fig, axes = plt.subplots(1, 2, figsize=figsize)
 
     if subtitles is None:
@@ -932,6 +1013,33 @@ def plot_metrics_before_and_after_costs(
     title_fontsize: int = 15,
     figsize: Tuple[float, float] = (15, 5.5),
 ):
+    """
+    Plot performance metrics gross and net of transaction costs. Each metric is
+    drawn in its own panel as a grouped bar chart, with one group of bars per
+    position rule and one bar per signal within each group. The gross value is
+    drawn as a dashed outline and the net value as a filled bar, so that the
+    cost drag is the gap between the two.
+
+    Parameters
+    ----------
+    metric_df : pd.DataFrame
+        Performance metrics in long format. Must contain metric, rule_label,
+        signal_label, costs and value columns, where costs takes the values
+        "Gross" and "Net".
+    metrics : List[str]
+        Metrics to plot, one panel per metric.
+    rules : List[str]
+        Position rules to plot, one group of bars per rule.
+    signal_labels : List[str]
+        Signals to plot, one bar per signal within each group.
+    title : str
+        Overall figure title. Defaults to an empty string, in which case no
+        title is drawn.
+    title_fontsize : int
+        Font size of the figure title. Defaults to 15.
+    figsize : Tuple[float, float]
+        Size of the figure. Defaults to (15, 5.5).
+    """
     dfp = metric_df.pivot_table(
         index=["metric", "rule_label", "signal_label"],
         columns="costs",
@@ -980,16 +1088,9 @@ def plot_metrics_before_and_after_costs(
         ax.set_title(metric, fontsize=12)
 
         ax.set_xticks(xpos)
-        ax.set_xticklabels(
-            rules,
-            fontsize=9,
-        )
+        ax.set_xticklabels(rules, fontsize=9)
 
-        ax.axhline(
-            0,
-            color="black",
-            linewidth=0.8,
-        )
+        ax.axhline(0, color="black", linewidth=0.8)
 
         ax.grid(axis="y", linestyle="--", linewidth=0.7, alpha=0.3)
         ax.grid(axis="x", visible=False)
@@ -1015,10 +1116,7 @@ def plot_metrics_before_and_after_costs(
             linestyle="--",
         ),
     ]
-    labels += [
-        "Net of costs",
-        "Gross",
-    ]
+    labels += ["Net of costs", "Gross"]
 
     fig.legend(
         handles,
@@ -1033,8 +1131,7 @@ def plot_metrics_before_and_after_costs(
         fig.suptitle(title, fontsize=title_fontsize)
 
     fig.tight_layout()
-
-    return fig, axes
+    plt.show()
 
 
 def plot_costs_by_type(
@@ -1047,7 +1144,39 @@ def plot_costs_by_type(
     figsize: Tuple[float, float] = (11, 5.5),
     label_rotation: int = 90,
     sort_by_label: bool = False,
-):
+) -> Tuple[plt.Figure, plt.Axes]:
+    """
+    Plot cumulative transaction costs split into bid-offer and roll costs.
+
+    Parameters
+    ----------
+    cost_dfs : List[pd.DataFrame]
+        Transaction cost data in long format, one data frame per bar. Each
+        must contain xcat and value columns.
+    labels : List[str]
+        Bar labels, one per entry in cost_dfs.
+    rollcost_suffix : str
+        Suffix identifying roll cost categories in xcat. Defaults to
+        "TCOST_ROLLCOST".
+    bidoffer_suffix : str
+        Suffix identifying bid-offer cost categories in xcat. Defaults to
+        "TCOST_BIDOFFER".
+    title : str
+        Title of the plot. Defaults to an empty string.
+    title_fontsize : int
+        Font size of the title. Defaults to 16.
+    figsize : Tuple[float, float]
+        Size of the figure. Defaults to (11, 5.5).
+    label_rotation : int
+        Rotation of the x-axis tick labels, in degrees. Defaults to 90.
+    sort_by_label : bool
+        Whether to sort the bars alphabetically by label. Defaults to False.
+
+    Returns
+    -------
+    Tuple[plt.Figure, plt.Axes]
+        The figure and the axes containing the bar chart.
+    """
     if sort_by_label:
         sorted_idx = np.argsort(labels)
         labels = [labels[i] for i in sorted_idx]
@@ -1064,13 +1193,7 @@ def plot_costs_by_type(
             cost_df["xcat"].str.endswith(rollcost_suffix), "value"
         ].sum()
 
-        rows.append(
-            {
-                "label": label,
-                "Bid-offer": bidoffer_cost,
-                "Roll": roll_cost,
-            }
-        )
+        rows.append({"label": label, "Bid-offer": bidoffer_cost, "Roll": roll_cost})
 
     data = pd.DataFrame(rows).set_index("label")
 
