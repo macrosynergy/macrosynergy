@@ -13,6 +13,7 @@ from macrosynergy.securities.analyse import (
     PortfolioAnalyser,
     _align_active,
     _as_wide,
+    _assert_unbroken_schedule,
     _cid_label_map,
     _concentration_stats,
     _group_labels,
@@ -696,6 +697,202 @@ class TestWeightStats(unittest.TestCase):
         )
         qdf = analyser.weight_stats(by_group=True, as_qdf=True)
         self.assertEqual(list(map(str, qdf["cid"].unique())), ["INFO-TECH"])
+
+
+class TestUnbrokenSchedule(unittest.TestCase):
+    @staticmethod
+    def _weights(dates):
+        return pd.DataFrame(
+            0.5, index=dates, columns=["A", "B"], dtype=float
+        ).rename_axis("real_date")
+
+    def test_contiguous_sample_is_accepted(self):
+        dates = pd.bdate_range("2020-01-01", "2020-06-30")
+        for freq in ["B", "W", "M", "Q"]:
+            PortfolioAnalyser(self._weights(dates), freq)
+
+    def test_a_skipped_period_raises(self):
+        dates = pd.bdate_range("2020-01-01", "2020-06-30")
+        gapped = dates[dates.month != 3]
+        with self.assertRaisesRegex(ValueError, r"no observation in 1 'M'"):
+            PortfolioAnalyser(self._weights(gapped), "M")
+
+    def test_the_error_names_the_missing_periods(self):
+        dates = pd.bdate_range("2020-01-01", "2020-12-31")
+        gapped = dates[~dates.month.isin([3, 7])]
+        with self.assertRaises(ValueError) as caught:
+            PortfolioAnalyser(self._weights(gapped), "M")
+        message = str(caught.exception)
+        self.assertIn("2020-03", message)
+        self.assertIn("2020-07", message)
+        self.assertIn("no observation in 2 'M'", message)
+
+    def test_business_day_holidays_are_not_a_gap(self):
+        # Each "B" period is a single observation, so an absent one is a market
+        # holiday, not missing data - and 252 is already net of holidays.
+        dates = pd.bdate_range("2020-01-01", "2020-06-30")
+        holidays = dates[~dates.isin(dates[[10, 11, 40]])]
+        analyser = PortfolioAnalyser(self._weights(holidays), "B")
+        self.assertEqual(len(analyser.trade_dates), len(holidays))
+
+    def test_partial_periods_at_the_edges_are_not_a_gap(self):
+        # Starting and ending mid-month leaves both periods short, not absent.
+        dates = pd.bdate_range("2020-01-17", "2020-05-08")
+        analyser = PortfolioAnalyser(self._weights(dates), "M")
+        self.assertEqual(len(analyser.trade_dates), 5)
+
+    def test_helper_raises_on_a_broken_period_index(self):
+        _assert_unbroken_schedule(pd.PeriodIndex(["2020-01", "2020-02"], freq="M"), "M")
+        with self.assertRaises(ValueError):
+            _assert_unbroken_schedule(
+                pd.PeriodIndex(["2020-01", "2020-03"], freq="M"), "M"
+            )
+
+
+class TestAnnualisedTurnover(unittest.TestCase):
+    ANNUALISED = [
+        "turnover_annualised",
+        "active_turnover_annualised",
+        "active_weight_turnover_annualised",
+    ]
+    FACTORS = {"B": 252.0, "W": 52.0, "M": 12.0, "Q": 4.0, "Y": 1.0}
+
+    def setUp(self):
+        self.weights, self.benchmark, self.returns, self.groups = _random_portfolio()
+        self.analyser = PortfolioAnalyser(
+            self.weights,
+            FREQ,
+            benchmark=self.benchmark,
+            returns=self.returns,
+            groups=self.groups,
+        )
+
+    def test_factor_follows_the_rebalance_frequency(self):
+        for freq, factor in self.FACTORS.items():
+            analyser = PortfolioAnalyser(self.weights, freq)
+            self.assertEqual(analyser.rebalancings_per_year, factor)
+
+    def test_annualised_is_the_raw_reading_times_the_factor(self):
+        stats = self.analyser.weight_stats(active=True)
+        standalone = self.analyser.weight_stats()
+        factor = self.analyser.rebalancings_per_year
+        np.testing.assert_allclose(
+            standalone["turnover_annualised"].dropna(),
+            standalone["turnover"].dropna() * factor,
+        )
+        for stat in ["active_turnover", "active_weight_turnover"]:
+            np.testing.assert_allclose(
+                stats[f"{stat}_annualised"].dropna(), stats[stat].dropna() * factor
+            )
+
+    def test_annualised_columns_are_trade_date_only(self):
+        stats = self.analyser.weight_stats(active=True).set_index("real_date")
+        standalone = self.analyser.weight_stats().set_index("real_date")
+        n_trades = len(self.analyser.trade_dates) - 1
+        self.assertEqual(int(standalone["turnover_annualised"].notna().sum()), n_trades)
+        pd.testing.assert_series_equal(
+            standalone["turnover"].isna(),
+            standalone["turnover_annualised"].isna(),
+            check_names=False,
+        )
+        for stat in self.ANNUALISED[1:]:
+            self.assertEqual(int(stats[stat].notna().sum()), n_trades, stat)
+
+    def test_annual_rebalancing_is_the_identity(self):
+        weights, _, returns, _ = _random_portfolio(n_dates=800)
+        analyser = PortfolioAnalyser(weights, "Y", returns=returns)
+        stats = analyser.weight_stats()
+        np.testing.assert_allclose(
+            stats["turnover_annualised"].dropna(), stats["turnover"].dropna()
+        )
+
+    def test_group_statistics_sum_to_the_whole_portfolio(self):
+        total = self.analyser.weight_stats(active=True).set_index("real_date")
+        grouped = self.analyser.weight_stats(by_group=True, active=True).pivot(
+            index="real_date", columns="group"
+        )
+        for col in self.ANNUALISED[1:]:
+            np.testing.assert_allclose(
+                grouped[col].sum(axis=1, min_count=1), total[col], rtol=1e-10, atol=1e-9
+            )
+
+    def test_monotone_path_annualises_alike_across_cadences(self):
+        # The point of the feature: a book walking steadily from one allocation to
+        # another trades the same amount a year however finely the journey is cut,
+        # because turnover telescopes along a path that never doubles back.
+        dates = pd.bdate_range("2020-01-01", periods=252 * 3)
+        ramp = np.linspace(0.5, 0.9, len(dates))
+        weights = pd.DataFrame(
+            {"A": ramp, "B": 1.0 - ramp}, index=dates
+        ).rename_axis("real_date")
+
+        annualised = {}
+        for freq in self.FACTORS:
+            stats = PortfolioAnalyser(weights, freq).weight_stats()
+            annualised[freq] = stats["turnover_annualised"].dropna().mean()
+
+        # The spread is the calendar convention alone: 252 trading days a year is
+        # stated net of holidays, while the fixture runs on ~261 business days.
+        readings = np.array(list(annualised.values()))
+        self.assertLess(np.ptp(readings) / readings.mean(), 0.05)
+        np.testing.assert_allclose(annualised["M"], annualised["Y"], rtol=0.01)
+
+    def test_reversing_path_does_not_annualise_alike(self):
+        # The documented caveat: turnover is the length of the path the weights
+        # travel, not the distance between its endpoints, so a book that doubles back
+        # trades far more a year when it is rebalanced more often. Same endpoints.
+        dates = pd.bdate_range("2020-01-01", periods=252 * 3)
+        ramp = np.linspace(0.5, 0.9, len(dates))
+        wiggle = ramp + 0.05 * np.sin(np.linspace(0, 40 * np.pi, len(dates)))
+        wiggle[0], wiggle[-1] = ramp[0], ramp[-1]
+        weights = pd.DataFrame(
+            {"A": wiggle, "B": 1.0 - wiggle}, index=dates
+        ).rename_axis("real_date")
+
+        daily, yearly = (
+            PortfolioAnalyser(weights, freq)
+            .weight_stats()["turnover_annualised"]
+            .dropna()
+            .mean()
+            for freq in ("B", "Y")
+        )
+        self.assertGreater(daily / yearly, 5.0)
+
+    def test_drift_correction_scales_with_the_root_of_the_frequency(self):
+        # A constant target pulled back to itself each period trades only to undo
+        # drift. That is a random walk in weight space, whose path length grows with
+        # the square root of the number of steps, so the annualised figure grows with
+        # the square root of the cadence rather than staying put.
+        rng = np.random.default_rng(0)
+        dates = pd.bdate_range("2020-01-01", periods=252 * 3)
+        cids = [f"S{i}" for i in range(20)]
+        returns = pd.DataFrame(
+            rng.normal(0, 1.0, (len(dates), len(cids))), index=dates, columns=cids
+        )
+        target = pd.DataFrame(1.0 / len(cids), index=dates, columns=cids)
+
+        daily, yearly = (
+            PortfolioAnalyser(target, freq, returns=returns)
+            .weight_stats()["turnover_annualised"]
+            .dropna()
+            .mean()
+            for freq in ("B", "Y")
+        )
+        self.assertGreater(daily / yearly, 0.4 * np.sqrt(252))
+        self.assertLess(daily / yearly, 2.0 * np.sqrt(252))
+
+    def test_labels_and_categories(self):
+        labels = weight_stat_labels("PORT", benchmark="SP500")
+        self.assertEqual(labels["PORT_TURNOVER_ANNUALISED"], "Portfolio turnover, % p.a.")
+        self.assertEqual(
+            labels["PORT_ACTIVE_TURNOVER_ANNUALISED"],
+            "Signal-driven turnover, % p.a. (vs SP500)",
+        )
+        qdf = self.analyser.weight_stats(active=True, as_qdf=True)
+        self.assertIn(
+            "PORT_ACTIVE_WEIGHT_TURNOVER_ANNUALISED",
+            set(map(str, qdf["xcat"].unique())),
+        )
 
 
 class TestOffBenchmarkStats(unittest.TestCase):

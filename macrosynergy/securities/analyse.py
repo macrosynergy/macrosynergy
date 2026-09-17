@@ -27,6 +27,7 @@ STANDALONE_WEIGHT_STATS: List[str] = [
     "weight",
     "gross_weight",
     "turnover",
+    "turnover_annualised",
     "weight_autocorr",
 ]
 
@@ -37,7 +38,9 @@ ACTIVE_WEIGHT_STATS: List[str] = [
     "active_weight",
     "active_share",
     "active_turnover",
+    "active_turnover_annualised",
     "active_weight_turnover",
+    "active_weight_turnover_annualised",
     "active_weight_autocorr",
     "off_benchmark_n",
     "off_benchmark_weight",
@@ -52,13 +55,16 @@ WEIGHT_STAT_LABELS: Dict[str, str] = {
     "weight": "Portfolio net weight, %",
     "gross_weight": "Portfolio gross weight, %",  # sum of absolute weights
     "turnover": "Portfolio turnover, %",  # traded at each rebalancing
+    "turnover_annualised": "Portfolio turnover, % p.a.",
     "weight_autocorr": "Weight 1-period autocorrelation",
     "n_active_holdings": "Active holdings",
     "effective_active_n": "Effective active holdings",  # inverse participation ratio
     "active_weight": "Active net weight, %",  # over- or underweight vs the benchmark
     "active_share": "Active share, %",  # half the sum of absolute active weights
     "active_turnover": "Signal-driven turnover, %",  # portfolio minus benchmark
+    "active_turnover_annualised": "Signal-driven turnover, % p.a.",
     "active_weight_turnover": "Active weight turnover, %",
+    "active_weight_turnover_annualised": "Active weight turnover, % p.a.",
     "active_weight_autocorr": "Active weight 1-period autocorrelation",
     "off_benchmark_n": "Off-benchmark holdings",  # held, absent from the benchmark
     "off_benchmark_weight": "Off-benchmark weight, %",
@@ -72,6 +78,20 @@ _ACTIVE_RENAME: Dict[str, str] = {
     "n_holdings": "n_active_holdings",
     "effective_n": "effective_active_n",
     "weight": "active_weight",
+}
+
+# Rebalancings a year implied by each supported cadence, i.e. the factor turning a
+# per-rebalancing turnover into an annualised one. Deliberately not taken from
+# `macrosynergy.management.constants.ANNUALIZATION_FACTORS`: that map keys the annual
+# cadence as "A" where this module validates "Y", and it is iterated - not merely keyed
+# - in `management.utils.frequency` to rank the single-letter aliases, so adding "Y" to
+# it would silently reshuffle that ranking for unrelated callers.
+_REBALANCINGS_PER_YEAR: Dict[str, float] = {
+    "B": 252.0,  # trading days, i.e. already stated net of market holidays
+    "W": 52.0,
+    "M": 12.0,
+    "Q": 4.0,
+    "Y": 1.0,
 }
 
 # Gross exposure above which the weights are more likely to be percentage points than
@@ -344,6 +364,56 @@ def _concentration_stats(weights: pd.DataFrame) -> pd.DataFrame:
     return stats
 
 
+def _assert_unbroken_schedule(periods: pd.PeriodIndex, rebalance_freq: str) -> None:
+    """
+    Raise if any rebalancing period in the sample carries no observation at all.
+
+    Every turnover reading is taken between two consecutive trade dates and is charged
+    to exactly one rebalancing. A period the weights skip entirely silently widens one
+    of those gaps to span two periods or more, so the reading picks up the trading of
+    several rebalancings and its annualisation then scales it as though it were one.
+    The error is invisible in the output - a plausible number, simply too large - which
+    is why this raises rather than warns.
+
+    Business-day rebalancing is exempt: there, each period is a single observation, so
+    an absent period is a market holiday rather than missing data, and the 252-day
+    annualisation factor is already stated net of holidays.
+
+    Parameters
+    ----------
+    periods : pd.PeriodIndex
+        Period label of every observed date, from
+        :func:`macrosynergy.securities.index._assign_period_labels`.
+    rebalance_freq : str
+        Pandas period alias defining the rebalancing cadence, one of
+        {"B", "W", "M", "Q", "Y"}.
+
+    Raises
+    ------
+    ValueError
+        If a period between the first and last observation holds no date.
+    """
+    if rebalance_freq == "B":
+        return
+
+    observed = periods.unique()
+    expected = pd.period_range(observed.min(), observed.max(), freq=observed.freq)
+    missing = expected.difference(observed)
+    if len(missing) == 0:
+        return
+
+    shown = ", ".join(str(period) for period in missing[:5])
+    if len(missing) > 5:
+        shown += f", ... ({len(missing)} in total)"
+    raise ValueError(
+        f"The weights have no observation in {len(missing)} '{rebalance_freq}' "
+        f"rebalancing period(s) between {observed.min()} and {observed.max()}: "
+        f"{shown}. Turnover is charged to one rebalancing apiece and annualised on "
+        "that basis, so a gap would overstate both. Trim the sample with `start` and "
+        "`end`, or supply the missing dates."
+    )
+
+
 def _trade_dates(index: pd.DatetimeIndex, rebalance_freq: str) -> pd.DatetimeIndex:
     """
     First observed date of each rebalancing period, i.e. the dates the book is set on.
@@ -361,12 +431,20 @@ def _trade_dates(index: pd.DatetimeIndex, rebalance_freq: str) -> pd.DatetimeInd
         {"B", "W", "M", "Q", "Y"}. Matches the argument of the same name on
         :func:`macrosynergy.securities.index.compute_daily_weights`.
 
+    Raises
+    ------
+    ValueError
+        If a rebalancing period in the sample holds no observation, which would let a
+        single turnover reading span more than one rebalancing. See
+        :func:`_assert_unbroken_schedule`.
+
     Returns
     -------
     pd.DatetimeIndex
         One date per rebalancing period, in ascending order.
     """
     periods = _assign_period_labels(index, rebalance_freq)
+    _assert_unbroken_schedule(periods, rebalance_freq)
     firsts = pd.Series(index, index=periods).groupby(level=0).first()
     return pd.DatetimeIndex(firsts.values, name="real_date")
 
@@ -698,7 +776,9 @@ class PortfolioAnalyser:
     TypeError
         If ``groups`` is neither a mapping nor a pandas Series.
     ValueError
-        If any input frame is empty, malformed, or cannot be aligned.
+        If any input frame is empty, malformed, or cannot be aligned, or if the
+        weights skip a whole ``rebalance_freq`` period, which would let one turnover
+        reading cover several rebalancings.
 
     Attributes
     ----------
@@ -715,6 +795,9 @@ class PortfolioAnalyser:
         benchmark's.
     trade_dates : pd.DatetimeIndex
         The dates the book is reset on, implied by ``rebalance_freq``.
+    rebalancings_per_year : float
+        Rebalancings a year implied by ``rebalance_freq``, i.e. the factor the
+        annualised turnovers are scaled by.
     start, end : pd.Timestamp
         First and last date of the portfolio weights actually retained.
 
@@ -726,9 +809,28 @@ class PortfolioAnalyser:
     Concentration statistics - ``n_holdings``, ``effective_n``, ``weight``,
     ``gross_weight``, ``active_weight`` and ``active_share`` - and the off-benchmark
     split - ``off_benchmark_n``, ``off_benchmark_weight`` and ``benchmark_only_n`` -
-    are daily readings and are reported on every date. ``turnover`` and the
+    are daily readings and are reported on every date. The turnovers and the
     autocorrelations are only defined between rebalancings and carry NaN elsewhere, so
     the returned frame keeps its daily index either way.
+
+    Each turnover is reported twice: per rebalancing, and annualised by multiplying
+    through by ``rebalancings_per_year``. The annualised figure answers what the book
+    costs to run over a year and is the one to compare across cadences - but it is not
+    a cadence-neutral measure of how active a strategy is, and the difference matters.
+    Turnover is the length of the path the weights travel, not the distance between
+    their endpoints. Only where every weight moves monotonically between rebalancings
+    does the path length telescope, and the same journey then annualises to the same
+    figure however finely it is cut. Movement that reverses does not: signal noise, and
+    the drift a fixed target has to be pulled back from, lengthen the measured path the
+    more often it is measured. That component behaves like a random walk, whose path
+    length grows with the square root of the number of steps, so its annualised
+    turnover scales with the square root of the rebalancing frequency - a daily and an
+    annual rebalancing of identical targets over identical markets differ by a factor
+    of around ``sqrt(252)`` on it.
+
+    Because a gap in the sample would let one turnover reading span several
+    rebalancings and be annualised as though it were one, a rebalancing period with no
+    observation at all is rejected at construction rather than absorbed.
     """
 
     def __init__(
@@ -754,6 +856,7 @@ class PortfolioAnalyser:
         self.other_label = other_label
         self.portfolio_name = portfolio_name
         self.rebalance_freq = rebalance_freq
+        self.rebalancings_per_year = _REBALANCINGS_PER_YEAR[rebalance_freq]
 
         self.weights = self._trim(_as_wide(weights, "weights"), start, end)
         self.benchmark = (
@@ -1007,6 +1110,9 @@ class PortfolioAnalyser:
             trade_dates = self.trade_dates.intersection(w.index)
             stats = _concentration_stats(w)
             stats["turnover"] = _turnover_against(frames[0], carries[0], columns)
+            stats["turnover_annualised"] = (
+                stats["turnover"] * self.rebalancings_per_year
+            )
             stats["weight_autocorr"] = _weight_autocorr(w, trade_dates)
             return stats[STANDALONE_WEIGHT_STATS]
 
@@ -1026,6 +1132,8 @@ class PortfolioAnalyser:
         stats["active_weight_turnover"] = _turnover_against(
             active_w, carries[2], columns
         )
+        for stat in ("active_turnover", "active_weight_turnover"):
+            stats[f"{stat}_annualised"] = stats[stat] * self.rebalancings_per_year
         stats["active_weight_autocorr"] = _weight_autocorr(
             active_w[columns], trade_dates
         )
@@ -1108,9 +1216,9 @@ class PortfolioAnalyser:
         portfolio-level weight matrix, so ``n_holdings``, ``weight``,
         ``gross_weight``, ``active_weight``, ``active_share``, the off-benchmark
         split - ``off_benchmark_n``, ``off_benchmark_weight`` and
-        ``benchmark_only_n`` - and the turnovers are contributions that sum across
-        subgroups to the whole-portfolio figure. ``effective_n`` and the
-        autocorrelations are normalised within the subgroup and do not aggregate.
+        ``benchmark_only_n`` - and the turnovers, annualised or not, are contributions
+        that sum across subgroups to the whole-portfolio figure. ``effective_n`` and
+        the autocorrelations are normalised within the subgroup and do not aggregate.
 
         The off-benchmark split reports how far the portfolio's universe departs from
         the benchmark's, which ``n_active_holdings`` and ``active_share`` fold in
@@ -1126,12 +1234,19 @@ class PortfolioAnalyser:
         carries no weight all three are NaN, since every holding would otherwise
         register as off-benchmark against nothing.
 
-        The concentration columns are daily readings. ``turnover``,
-        ``active_turnover``, ``active_weight_turnover`` and the autocorrelations are
-        reported only on the rebalancing dates implied by ``rebalance_freq`` and are
-        NaN on every other date: between rebalancings the book changes because
-        positions drift with returns, not because anything was traded. Drop those rows
-        with ``.dropna(subset=["turnover"])`` to get one row per rebalancing.
+        The concentration columns and the off-benchmark split are daily readings. The
+        turnovers and the autocorrelations are reported only on the rebalancing dates
+        implied by ``rebalance_freq`` and are NaN on every other date: between
+        rebalancings the book changes because positions drift with returns, not
+        because anything was traded. Drop those rows with
+        ``.dropna(subset=["turnover"])`` to get one row per rebalancing.
+
+        Every turnover is paired with an ``_annualised`` column holding the same
+        reading multiplied by ``rebalancings_per_year``, so that books rebalanced on
+        different cadences can be set side by side. Read the class Notes before
+        comparing across cadences: annualisation makes the yearly cost comparable, not
+        the amount of signal churn, and the drift component of turnover grows with the
+        square root of the rebalancing frequency rather than staying put.
         """
         frames = self._resolve_frames(active)
         carries = self._no_trade_baselines(frames)
