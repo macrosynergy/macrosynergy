@@ -641,7 +641,15 @@ class TestAdjustWeightsMain(unittest.TestCase):
         # make sure the sum is not 100
         self.qdf.loc[:, "value"] = self.qdf["value"] * 1e7
 
-        all_nan_date: pd.Timestamp = np.random.choice(self.qdf["real_date"].unique())
+        # pick a date where at least one cid still has a non-NaN weight, so forcing
+        # AZ to all-NaN on that date lands in the "missing ZNs" (not "missing
+        # weights") path and is guaranteed to show up in that warning
+        wg_df = self.qdf[self.qdf["xcat"] == "WG"]
+        dates_with_some_weight = wg_df.groupby("real_date")["value"].apply(
+            lambda s: s.notna().any()
+        )
+        candidate_dates = dates_with_some_weight[dates_with_some_weight].index
+        all_nan_date: pd.Timestamp = np.random.choice(candidate_dates)
         self.qdf.loc[
             (self.qdf["real_date"] == all_nan_date) & self.qdf["xcat"].eq("AZ"), "value"
         ] = np.nan
