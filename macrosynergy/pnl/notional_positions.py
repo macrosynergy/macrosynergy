@@ -8,7 +8,6 @@ import numpy as np
 import pandas as pd
 from numbers import Number
 from typing import List, Union, Tuple, Optional, Set
-import warnings
 
 from macrosynergy.management.utils import (
     standardise_dataframe,
@@ -141,13 +140,11 @@ def _resample_signals_to_rebal_dates(
     rebal_freq: str,
 ) -> pd.DataFrame:
     """
-    Reduce contract signals to the values in force on each rebalance date.
-
-    A signal is read only on a rebalance date and then held for the rest of the
-    holding period, so values falling between rebalance dates are discarded and the
-    rebalance date's value is carried forward. The forward fill is bounded to a single
-    rebalance window, so a contract missing its signal on a rebalance date does not
-    silently inherit the previous period's position..
+    Reduce contract signals to the values in force on each rebalance date. A signal
+    is read only on a rebalance date and then held for the rest of the
+    holding period. The forward fill is bounded to a single rebalance window, so
+    a contract missing its signal on a rebalance date does not silently inherit
+    the previous period's position.
 
     Parameters
     ----------
@@ -193,7 +190,6 @@ def _vol_target_positions(
     lback_meth: str,
     rstring: str,
     pname: str,
-    dof_correct: bool = False,
 ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """
     Uses historic portfolio volatility to calculate notional positions based on contract
@@ -221,7 +217,6 @@ def _vol_target_positions(
         rebal_freq=rebal_freq,
         remove_zeros=remove_zeros,
         return_variance_covariance=True,
-        dof_correct=dof_correct,
     )
     # histpvol: only on rebalance dates...
     histpvol["scale"] = ((vol_target / histpvol["value"]) * aum).replace(np.inf, np.nan)
@@ -364,7 +359,6 @@ def notional_positions(
     pname: str = "POS",
     return_pvol: bool = False,
     return_vcv: bool = False,
-    dof_correct: bool = False,
 ) -> Union[
     QuantamentalDataFrame,
     Tuple[QuantamentalDataFrame, QuantamentalDataFrame],
@@ -418,7 +412,7 @@ def notional_positions(
         0.25. This only affects the volatility-targeting method, and is passed through
         to the function :func:`macrosynergy.pnl.historic_portfolio_vol`.
     remove_zeros : bool
-        if True (default) any returns that are exact zeros will not be included in the
+        if True any returns that are exact zeros will not be included in the
         lookback window. This only affects the volatility-targeting method, and is
         passed through to the function :func:`macrosynergy.pnl.historic_portfolio_vol`.
     rebal_freq : str
@@ -472,9 +466,6 @@ def notional_positions(
         the name of the position. Default is 'POS'.
     return_pvol : bool
         whether to return the historic portfolio volatility. Default is False.
-    dof_correct : bool
-        whether the covariance estimator corrects for the degree of freedom spent on its
-        weighted mean. Default is False
     return_vcv : bool
         whether to return the variance-covariance matrix. Default is False.
 
@@ -607,7 +598,6 @@ def notional_positions(
             pname=pname,
             nan_tolerance=nan_tolerance,
             remove_zeros=remove_zeros,
-            dof_correct=dof_correct,
         )
 
     return_pvol = return_pvol and (locals().get("pvol") is not None)

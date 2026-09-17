@@ -180,7 +180,6 @@ class ProxyPnL(object):
         end: Optional[str] = None,
         blacklist: Optional[dict] = None,
         pname: str = None,
-        dof_correct: bool = False,
     ) -> Union[
         QuantamentalDataFrame,
         Tuple[QuantamentalDataFrame, QuantamentalDataFrame],
@@ -247,7 +246,6 @@ class ProxyPnL(object):
             end=end,
             blacklist=blacklist,
             pname=pname,
-            dof_correct=dof_correct,
             return_pvol=True,
             return_vcv=True,
         )
@@ -382,6 +380,7 @@ class ProxyPnL(object):
             of months, optional benchmark correlations, optional transaction
             costs, and the number of traded months.
         """
+        # Input validation
         for arg, value, types in [
             ("aum", aum, Number),
             ("include_pnle", include_pnle, bool),

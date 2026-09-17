@@ -55,7 +55,6 @@ def _weighted_covariance(
     lback_periods: int,
     half_life: int,
     min_obs: int = 1,
-    dof_correct: bool = False,
 ) -> float:
     """
     Estimate covariance between two series after applying weights.
@@ -91,13 +90,7 @@ def _weighted_covariance(
     x_mean, y_mean = (w * x).sum(), (w * y).sum()
     array_of_products = (x - x_mean) * (y - y_mean)
 
-    cov = w.T.dot(array_of_products)
-
-    if not dof_correct:
-        return cov
-
-    dof_factor = 1.0 - (w**2).sum()
-    return cov / dof_factor if dof_factor > 0 else np.nan
+    return w.T.dot(array_of_products)
 
 
 def estimate_variance_covariance(
@@ -107,7 +100,6 @@ def estimate_variance_covariance(
     lback_periods: int,
     half_life: int,
     lback_min_obs: int = 1,
-    dof_correct: bool = False,
 ) -> pd.DataFrame:
     """
     Estimation of the variance-covariance matrix needs to have the following
@@ -136,7 +128,6 @@ def estimate_variance_covariance(
                 lback_periods=lback_periods,
                 half_life=half_life,
                 min_obs=lback_min_obs,
-                dof_correct=dof_correct,
             )
             cov_mat[i_a, i_b] = cov_mat[i_b, i_a] = est_vol
 
@@ -147,13 +138,9 @@ def estimate_variance_covariance(
 
 def _downsample_returns(piv_df: pd.DataFrame, freq: str) -> pd.DataFrame:
     """
-    Compound daily percentage returns into `freq`-length buckets.
-
-    Buckets are counted backwards from the most recent row, so the newest bucket is
-    always complete and every bucket holds exactly `_bdays_per_period(freq)` rows; the
-    oldest rows that cannot fill a whole bucket are dropped. Anchoring to calendar
-    period ends instead would leave a partial bucket wherever the window happens to end,
-    biasing the compounded return of that bucket downwards.
+    Compound daily percentage returns into freq-length buckets. Buckets are counted
+    backwards from the most recent row, so the newest bucket is always complete and
+    every bucket holds exactly _bdays_per_period(freq) rows.
     """
     n = _bdays_per_period(freq)
     n_rows = piv_df.shape[0]
@@ -200,7 +187,7 @@ def _blend_frequency_vcvs(
 ) -> pd.DataFrame:
     """
     Combine the per-frequency covariance estimates into one annualized matrix.
-    Each entry is the `est_weights`-weighted mean of the annualized estimates actually
+    Each entry is the `est_weights` weighted mean of the annualized estimates actually
     available for it, with the surviving weights renormalized so a contract dropped
     at one estimation frequency still gets an estimate from the others
     """
@@ -239,17 +226,7 @@ def _calculate_multi_frequency_vcv_for_period(
     nan_tolerance: float,
     remove_zeros: bool,
     lback_min_obs: List[int],
-    dof_correct: bool = False,
 ) -> pd.DataFrame:
-    """
-    Blended annualized covariance matrix for a single estimation date.
-
-    Each frequency is estimated over its own lookback window ending at `rebal_date`,
-    with contracts breaching `nan_tolerance` dropped from that window, and the
-    per-frequency results are combined by `_blend_frequency_vcvs`. Returns an empty
-    frame if any frequency has nothing left to estimate from, which the caller treats as
-    "no estimate for this date".
-    """
     dict_vcv: Dict[str, pd.DataFrame] = {}
 
     for freq, lb, hl, min_obs in zip(
@@ -286,7 +263,6 @@ def _calculate_multi_frequency_vcv_for_period(
             weights_func=weights_func,
             half_life=hl,
             lback_min_obs=min_obs,
-            dof_correct=dof_correct,
         )
 
     return _blend_frequency_vcvs(
@@ -353,7 +329,7 @@ def _get_first_usable_date(
     the first date at which enough return data exists so that a matrix can be estimated
     for all est_freqs.
 
-    When one request a lookback of -1 (all data), the first date when we have twice as
+    When one request a lookback of -1, the first date when we have twice as
     many data points as fids. For example, with 5 fids we would need 10 months/weeks/
     days depending on the est_freq.
     """
@@ -392,7 +368,6 @@ def _check_lookback_supports_fids(
                 f"`lback_periods` of {lback} at est_freq '{freq}' cannot support "
                 f"{n_fids} contracts: a covariance matrix for {n_fids} contracts needs "
                 f"at least {required} observations and this lookback provides {lback}. "
-                f"Increase `lback_periods` to at least {required} or use -1 for all "
             )
 
 
@@ -407,7 +382,6 @@ def _cov_matrix_history(
     remove_zeros: bool,
     weights_func: Callable[[int, int], np.ndarray],
     lback_min_obs: List[int],
-    dof_correct: bool = False,
 ) -> np.ndarray:
     """
     Covariance matrices for every estimation date, as one
@@ -415,7 +389,7 @@ def _cov_matrix_history(
 
     Both axes of every slice follow `pivot_returns.columns`, so a slice can be indexed
     positionally regardless of which contracts were estimable on that date. Dates with
-    no estimate - and the rows and columns of contracts without enough history - are
+    no estimate and the rows and columns of contracts without enough history are
     left as NaN.
     """
     _check_lookback_supports_fids(
@@ -444,9 +418,7 @@ def _cov_matrix_history(
         if len(avails) == 0:
             logger.info(
                 "No contract has enough return history on date: %s to enter a "
-                "covariance matrix estimate at est_freqs=%s with lback_periods=%s "
-                "(in periods of the corresponding est_freq; -1 means all history "
-                "available at that date).",
+                "covariance matrix estimate at est_freqs=%s with lback_periods=%s",
                 estimation_date,
                 est_freqs,
                 lback_periods,
@@ -464,7 +436,6 @@ def _cov_matrix_history(
             nan_tolerance=nan_tolerance,
             remove_zeros=remove_zeros,
             lback_min_obs=lback_min_obs,
-            dof_correct=dof_correct,
         )
 
         if vcv_df.empty:
@@ -493,7 +464,6 @@ def _calculate_portfolio_volatility(
     lback_min_obs: List[int],
     portfolio_return_name: str,
     cov_freq: str,
-    dof_correct: bool = False,
 ) -> Tuple[pd.DataFrame, pd.DataFrame]:
     # signals are paired with the covariance axes positionally, so they must have
     # the same order
@@ -528,7 +498,6 @@ def _calculate_portfolio_volatility(
         remove_zeros=remove_zeros,
         weights_func=weights_func,
         lback_min_obs=lback_min_obs,
-        dof_correct=dof_correct,
     )
 
     # determine the signals on rebalancing dates
@@ -587,7 +556,6 @@ def _hist_vol(
     remove_zeros: bool,
     return_variance_covariance: bool,
     cov_freq: Optional[str] = None,
-    dof_correct: bool = False,
 ) -> List[pd.DataFrame]:
     """
     Calculates historic volatility for a given strategy. It assumes that the dataframe
@@ -611,7 +579,7 @@ def _hist_vol(
         method. Default is 21.
     lback_meth : str
         "ma" for flat weights over the lookback window, or "xma" for exponentially
-        decaying weights. Any other value raises `NotImplementedError`.
+        decaying weights.
     lback_periods : List[int]
         the lookback window per estimation frequency, counted in that frequency's own
         periods. -1 uses all history available at the rebalance date.
@@ -636,17 +604,13 @@ def _hist_vol(
         if True, return the variance-covariance frame alongside the volatility series.
     cov_freq : str, optional
         the frequency at which the covariance matrix is re-estimated. Defaults to
-        `rebal_freq`, i.e. a fresh estimate for every rebalance date. A coarser value
+        rebal_freq. i.e. a fresh estimate for every rebalance date. A coarser value
         reuses the most recent estimate across the intervening rebalance dates.
 
     Returns
     -------
     List[pd.DataFrame]
-        `[pvol_df]`, or `[pvol_df, vcv_df]` when `return_variance_covariance` is True.
-        `pvol_df` is indexed by rebalance date with a single "<sname>_PNL_USD1S_ASD"
-        column; dates for which no estimate could be produced are dropped rather than
-        returned as NaN. `vcv_df` is a long frame with columns "fid1", "fid2",
-        "real_date" and "value".
+        [pvol_df], or [pvol_df, vcv_df] when return_variance_covariance is True.
     """
 
     lback_meth = lback_meth.lower()
@@ -678,7 +642,6 @@ def _hist_vol(
         est_freqs=est_freqs,
         est_weights=est_weights,
         cov_freq=cov_freq or rebal_freq, # default to cov matrix re-estimated every rebal date
-        dof_correct=dof_correct,
     )
 
     # assert portfolio_return_name the only column
@@ -860,7 +823,6 @@ def historic_portfolio_vol(
     nan_tolerance: float = 0.25,
     remove_zeros: bool = True,
     return_variance_covariance: bool = True,
-    dof_correct: bool = False,
 ) -> Union[QuantamentalDataFrame, Tuple[QuantamentalDataFrame, pd.DataFrame]]:
     """
     Historical portfolio volatility.  Estimates annualized standard deviations of a
@@ -896,14 +858,14 @@ def historic_portfolio_vol(
         before applying. Where a frequency produced no estimate for a given entry of the
         covariance matrix, the weights of the frequencies that did are renormalized over
         that entry, so a contract dropped at one frequency still gets an estimate from
-        the others. Default is [1, 1, 1], i.e. equal weights.
+        the others. Default is [1, 1, 1].
     lback_meth : str
         the method to use for the lookback period of the volatility-targeting method.
         Default is "ma" for moving average. Alternative is "xma", for exponential moving
         average.
     lback_periods : List[int]
         the number of periods to use for the lookback period of the volatility-targeting
-        method. Each element corresponds to the same index in `est_freqs`. Passing a
+        method. Each element corresponds to the same index in est_freqs. Passing a
         single element will apply the same value to all frequencies. Default is [-1], which
         means that the lookback period is the full available data for all specified
         frequencies.
@@ -914,7 +876,7 @@ def historic_portfolio_vol(
         minimum number of observations required to estimate the covariance
         between two contracts. A pair with fewer is set to NaN, which drops it from the
         blend at that frequency. Each element corresponds to the same index in
-        `est_freqs`. Default is 1.
+        est_freqs. Default is 1.
     start : str
         the start date of the data. Default is None, which means that the start date is
         taken from the dataframe.
@@ -931,36 +893,32 @@ def historic_portfolio_vol(
         penalised for the history it predates. A contract above the tolerance is dropped
         from that frequency's covariance estimate. Default is 0.25.
     remove_zeros : bool
-        if True (default) returns that are exactly zero are treated as missing while the
+        if True returns that are exactly zero are treated as missing while the
         covariance is estimated, shortening the effective sample for the pairs involved.
         This is applied to the downsampled returns, so at estimation frequencies coarser
         than daily it removes whole periods that compounded to zero.
     return_variance_covariance : bool
         if True (default) return the variance-covariance estimates alongside the
         volatility series.
-    dof_correct : bool
-        whether the covariance estimator corrects for the degree of freedom spent on its
-        weighted mean. Default is False
 
     Returns
     -------
     QuantamentalDataFrame or Tuple[QuantamentalDataFrame, pd.DataFrame]
         JPMaQS dataframe of the annualized standard deviation of the estimated strategy
         PnL, with category name <sname>_PNL_USD1S_ASD, in % annualized. It carries one
-        row per rebalance date - values are not forward filled between rebalance dates -
-        and rebalance dates for which no estimate could be produced are dropped. When
-        `return_variance_covariance` is True a tuple is returned whose second element is
-        a long frame of the underlying covariances with columns "fid1", "fid2",
-        "real_date" and "value", holding one row per unordered contract pair per
-        rebalance date.
+        row per rebalance date and rebalance dates for which no estimate could be
+        produced are dropped. When return_variance_covariance is True a tuple is
+        returned whose second element is a long frame of the underlying covariances
+        with columns "fid1", "fid2", "real_date" and "value", holding one row per
+        unordered contract pair per rebalance date.
 
     Notes
     -----
-    Each frequency in `est_freqs` is estimated independently: the lookback window is
+    Each frequency in est_freqs is estimated independently: the lookback window is
     sliced in that frequency's business days, compounded into equal-length buckets
     counted back from the rebalance date, and passed to a weighted covariance whose
-    weights are flat (`lback_meth="ma"`) or exponential (`lback_meth="xma"`). The
-    per-frequency estimates are then annualized and combined using `est_weights`.
+    weights are flat (lback_meth="ma") or exponential (lback_meth="xma"). The
+    per-frequency estimates are then annualized and combined using est_weights.
     """
 
     if isinstance(lback_periods, Number):
@@ -1068,7 +1026,6 @@ def historic_portfolio_vol(
         nan_tolerance=nan_tolerance,
         remove_zeros=remove_zeros,
         return_variance_covariance=return_variance_covariance,
-        dof_correct=dof_correct,
     )
 
     assert len(result) == 1 + int(return_variance_covariance)

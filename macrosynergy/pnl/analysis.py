@@ -27,10 +27,8 @@ CONFIG_KEYS = {
     "lback_meth",
     "lback_periods",
     "half_life",
-    "dof_correct",
 }
 
-# the cid `proxy_pnl_calc` aggregates the per-contract PnL and costs under
 PORTFOLIO_NAME = "GLB"
 DEFAULT_END_DATE = "2025-01-15"
 
@@ -261,7 +259,6 @@ def _resolve_config(config: Dict[str, Any]) -> Dict[str, Any]:
         half_life=half_life,
         lback_min_obs=lback_min_obs,
         weights_func=flat_weights_arr if lback_meth == "ma" else expo_weights_arr,
-        dof_correct=bool(config.get("dof_correct", False)),
     )
 
 
@@ -376,13 +373,10 @@ def scaling_factor_bias_variance(
     end_date: str = DEFAULT_END_DATE,
 ) -> Tuple[np.ndarray, ...]:
     """
-    Volatility-target miss of each covariance estimator, against its own noise floor.
-
-    Simulates `n_iter` panels from a known data generating process, runs every config in
-    `configs` over each, and scores its forecast against the DGP's own covariance for the
-    interval that follows. The score is `sqrt(w' cov_true w / w' cov_est w)`, the realized
-    volatility over the target a portfolio scaled under that forecast would have been
-    aiming at.
+    Volatility target miss of each covariance estimator. Simulates n_iter panels from
+    a known data generating process, runs every config in configs over each, and
+    scores its forecast against the DGP's own covariance for the interval that follows.
+    The score is sqrt(w' cov_true w / w' cov_est w)
 
     Parameters
     ----------
@@ -419,10 +413,7 @@ def scaling_factor_bias_variance(
         fast the weights move, and so the turnover a cost study sees.
     common_sample : bool
         whether to score every config on the dates where all of them have an estimate.
-        Default is True. Configs warm up at different rates, so otherwise each is
-        averaged over its own set of dates and the comparison between them is made on
-        unequal samples. The cost is that the slowest-warming config sets the start
-        date for all of them.
+        Default is True.
     weights : Optional[Union[np.ndarray, Dict[pd.Timestamp, np.ndarray]]]
         portfolio weights to score the estimators at, as
         `realized_to_forecast_vol_ratios` takes them.
@@ -435,16 +426,14 @@ def scaling_factor_bias_variance(
     Notes
     -----
     Positions scale with `1 / sqrt(variance)`, which is convex, so a noisy
-    but perfectly centred estimate still oversizes on average - averaging a convex
-    function of a noisy input exceeds the function of the average (Jensen's inequality).
-    The size of that effect depends only on how noisy the estimator is, so it falls
-    monotonically with the lookback. A short lookback therefore scores worse than
-    a long one even on a DGP where volatility is constant and there is nothing to forecast.
+    but unbiased estimate still oversizes on average because of Jensen's inequality.
+    The size of that effect depends only on how noisy the estimator is. A short
+    lookback therefore scores worse than a long one even on a DGP where volatility is
+    constant and there is nothing to forecast.
 
-    `report_floor` measures that floor rather than assuming it away: the same configs are
+    `report_floor` measures that floor. The same configs are
     run again over the same DGP with `vol_of_vol=0`, where every estimator is correctly
-    specified, so whatever they score is noise. `excess_bias` is the reading net of it,
-    and is the column to rank on.
+    specified, so whatever they score is noise. `excess_bias` is the reading net of it
     """
     shared = dict(
         configs=configs,
@@ -487,7 +476,6 @@ def _config_to_positions_kwargs(config: Dict[str, Any]) -> Dict[str, Any]:
         est_weights=resolved["est_weights"],
         lback_periods=resolved["lback_periods"],
         half_life=resolved["half_life"],
-        dof_correct=resolved["dof_correct"],
     )
 
 
@@ -517,7 +505,7 @@ def cov_estimators_cost_accuracy(
     """
     Transaction cost of running each covariance estimator, measured through a real PnL.
 
-    Each config is put through `notional_positions` at the shared vol target and then
+    Each config is put through `notional_positions` at the vol target and then
     `proxy_pnl_calc`, so the cost reflects the turnover the estimator's scaling actually
     generates.
 

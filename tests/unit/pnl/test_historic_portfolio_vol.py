@@ -1086,7 +1086,9 @@ class TestCovMatrixHistory(unittest.TestCase):
         )
 
     def test_shape_and_symmetry(self):
-        """Test output has correct dimensions and each cov matrix is symmetric"""
+        """
+        Test output has correct dimensions and each cov matrix is symmetric
+        """
         history = _cov_matrix_history(**self.good_args)
 
         self.assertEqual(
@@ -1402,115 +1404,3 @@ class TestFrequencyBlend(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-
-
-class TestDofCorrection(unittest.TestCase):
-    """
-    `dof_correct` divides out the degree of freedom spent estimating the weighted mean.
-
-    The uncorrected estimate has expectation `cov * (1 - sum(w ** 2))`, so it understates
-    risk and oversizes the positions built on it, most sharply at short lookbacks. The
-    correction is opt-in: the default path must stay byte-identical.
-    """
-
-    def setUp(self):
-        rng = np.random.default_rng(0)
-        self.piv_ret = pd.DataFrame(
-            rng.standard_normal((40, 3)),
-            index=pd.bdate_range(end="2024-12-31", periods=40),
-            columns=["A_FX", "B_FX", "C_FX"],
-        )
-
-    def _vcv(self, **overrides):
-        args = dict(
-            piv_ret=self.piv_ret,
-            remove_zeros=False,
-            weights_func=flat_weights_arr,
-            lback_periods=40,
-            half_life=1,
-            lback_min_obs=1,
-        )
-        args.update(overrides)
-        return estimate_variance_covariance(**args).to_numpy()
-
-    def test_default_is_uncorrected(self):
-        # the guard on the opt-in design: untouched callers keep the old numbers
-        np.testing.assert_allclose(
-            self._vcv(), np.cov(self.piv_ret.to_numpy().T, ddof=0)
-        )
-
-    def test_flat_weights_recover_bessel(self):
-        np.testing.assert_allclose(
-            self._vcv(dof_correct=True), np.cov(self.piv_ret.to_numpy().T, ddof=1)
-        )
-
-    def test_expo_weights_use_the_general_form(self):
-        # 1 / (1 - sum(w ** 2)), not n / (n - 1): exponential weights concentrate more
-        # mass on fewer observations, so they lose more than one degree of freedom
-        x = self.piv_ret["A_FX"].to_numpy()
-        common = dict(
-            x=x, y=x, weights_func=expo_weights_arr, lback_periods=40, half_life=12
-        )
-        raw = _weighted_covariance(**common)
-        corrected = _weighted_covariance(**common, dof_correct=True)
-
-        w = expo_weights_arr(lback_periods=40, half_life=12)
-        self.assertAlmostEqual(corrected / raw, 1 / (1 - (w**2).sum()), places=12)
-        self.assertNotAlmostEqual(corrected / raw, 40 / 39, places=4)
-
-    def test_single_observation_is_nan_not_zero(self):
-        # all the weight sits on one point, so there is no deviation left to measure.
-        # Uncorrected this reports a hard zero, which reads as "no risk"
-        one = np.array([1.5])
-        self.assertEqual(
-            _weighted_covariance(
-                x=one, y=one, weights_func=flat_weights_arr,
-                lback_periods=1, half_life=1,
-            ),
-            0.0,
-        )
-        self.assertTrue(
-            np.isnan(
-                _weighted_covariance(
-                    x=one, y=one, weights_func=flat_weights_arr,
-                    lback_periods=1, half_life=1, dof_correct=True,
-                )
-            )
-        )
-
-    def test_correction_is_applied_per_frequency(self):
-        # each frequency has its own window length and so its own sum(w ** 2); a single
-        # factor applied to the blend would be wrong for both
-        rng = np.random.default_rng(1)
-        piv = pd.DataFrame(
-            rng.standard_normal((800, 3)),
-            index=pd.bdate_range(end="2024-12-31", periods=800),
-            columns=["A_FX", "B_FX", "C_FX"],
-        )
-        rebal_date = piv.index[-1]
-
-        def vcv(freqs, weights, lbacks, dof_correct):
-            return _calculate_multi_frequency_vcv_for_period(
-                pivot_returns=piv,
-                rebal_date=rebal_date,
-                est_freqs=freqs,
-                est_weights=weights,
-                weights_func=flat_weights_arr,
-                lback_periods=lbacks,
-                half_life=[1] * len(freqs),
-                nan_tolerance=0.0,
-                remove_zeros=False,
-                lback_min_obs=[1] * len(freqs),
-                dof_correct=dof_correct,
-            ).to_numpy()
-
-        blended = vcv(["D", "M"], [0.5, 0.5], [60, 12], True)
-        daily = vcv(["D"], [1.0], [60], True)
-        monthly = vcv(["M"], [1.0], [12], True)
-        np.testing.assert_allclose(blended, 0.5 * daily + 0.5 * monthly, rtol=1e-12)
-
-        # and the two factors really do differ, so the blend is not a rescaled whole
-        daily_factor = daily / vcv(["D"], [1.0], [60], False)
-        monthly_factor = monthly / vcv(["M"], [1.0], [12], False)
-        np.testing.assert_allclose(daily_factor, 60 / 59, rtol=1e-12)
-        np.testing.assert_allclose(monthly_factor, 12 / 11, rtol=1e-12)
