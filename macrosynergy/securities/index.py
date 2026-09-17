@@ -18,6 +18,7 @@ from macrosynergy.securities.validate import (
     _validate_returns,
     _validate_index_returns,
     _validate_weights_col,
+    assert_weight_grid,
 )
 
 logger = logging.getLogger(__name__)
@@ -212,7 +213,11 @@ def compute_daily_weights(
         Long-format DataFrame with columns ``"cid"``, ``"real_date"``, and
         ``"membership"`` (binary 0/1). Each row records whether a security was a
         constituent on a given date. A non-negative ``"raw_weight"`` column is
-        additionally required when ``weights_col`` is ``"raw_weight"``.
+        additionally required when ``weights_col`` is ``"raw_weight"``. The
+        ``weights_col`` column must hold at least one observation per reconstitution
+        period (see ``reconstitution_freq``); gaps coarser than that are
+        forward-filled, so a sparser input would silently reset the target to a stale
+        value on reconstitution. An ``AssertionError`` is raised otherwise.
     returns : pd.DataFrame or QuantamentalDataFrame
         Long-format DataFrame with columns ``"cid"``, ``"real_date"``, ``"xcat"``,
         and ``"value"`` (daily return in percentage points). Must be filtered to a
@@ -249,11 +254,12 @@ def compute_daily_weights(
     _validate_frequency(rebalance_freq, "rebalance_freq")
     if reconstitution_freq is not None:
         _validate_frequency(reconstitution_freq, "reconstitution_freq")
-    _validate_constituents(constituents) # TODO should they be daily ?
+    _validate_constituents(constituents)
     _validate_returns(returns)
     _validate_weights_col(constituents, weights_col)
 
     recon_freq = _resolve_reconstitution_freq(rebalance_freq, reconstitution_freq)
+    assert_weight_grid(constituents, recon_freq, weights_col=weights_col)
 
     # Pivot to wide. Membership always defines the constituent set; "weights_col"
     # only defines the target weighting *within* that set. All matrices are held as

@@ -3,6 +3,7 @@ Input contracts for the single-security index and portfolio calculations.
 """
 
 import logging
+from typing import Tuple
 
 import pandas as pd
 
@@ -159,3 +160,74 @@ def _validate_index_returns(df: pd.DataFrame) -> None:
     assert (
         not df["real_date"].duplicated().any()
     ), "index returns has duplicate real_date entries."
+
+
+# A weighting input can be provided at a coarser cadence than the rebalancing
+# frequency it is meant to support. compute_daily_weights forward-fills over gaps,
+# which would otherwise mask that staleness silently.
+
+
+def weight_grid_coverage(
+    df: pd.DataFrame,
+    freq: str,
+    weights_col: str = "value",
+) -> Tuple[int, int]:
+    """
+    Periods of a given frequency holding a weight observation, against those spanned.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Long-format dataframe with a "real_date" column and the weighting input in
+        `weights_col`.
+    freq : str
+        Pandas period alias of the cadence to test, e.g. "M" or "Q".
+    weights_col : str
+        Column holding the weighting input. Default is "value".
+
+    Returns
+    -------
+    tuple of int
+        Number of `freq` periods holding at least one observation, and the number of
+        periods the observations span. The span is taken from the observed dates
+        themselves, so a security set whose members simply did not exist early in the
+        sample does not register as a gap.
+    """
+    dates = pd.DatetimeIndex(
+        pd.to_datetime(df.loc[df[weights_col].notna(), "real_date"]).unique()
+    ).sort_values()
+    return (
+        dates.to_period(freq).nunique(),
+        pd.period_range(dates.min(), dates.max(), freq=freq).size,
+    )
+
+
+def assert_weight_grid(
+    df: pd.DataFrame,
+    freq: str,
+    weights_col: str = "value",
+) -> None:
+    """
+    Fail if the weighting input is staler than the rebalancing cadence.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Long-format dataframe holding the weighting input, as for
+        `weight_grid_coverage`.
+    freq : str
+        Pandas period alias of the rebalancing cadence the weights have to support.
+    weights_col : str
+        Column holding the weighting input. Default is "value".
+
+    Raises
+    ------
+    AssertionError
+        If any `freq` period spanned by the weighting input holds no observation.
+    """
+    observed, expected = weight_grid_coverage(df, freq, weights_col=weights_col)
+    assert observed == expected, (
+        f"Weighting input covers {observed} of {expected} '{freq}' periods: rebalancing "
+        f"at '{freq}' would reset weights to a stale target. Provide the weighting "
+        f"input at '{freq}' frequency or higher, or rebalance/reconstitute less often."
+    )

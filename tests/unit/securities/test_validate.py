@@ -8,6 +8,8 @@ from macrosynergy.securities.validate import (
     _validate_constituents,
     _validate_returns,
     _validate_index_returns,
+    weight_grid_coverage,
+    assert_weight_grid,
 )
 
 
@@ -133,6 +135,62 @@ class TestValidateIndexReturns(unittest.TestCase):
         dup = pd.concat([self.df, self.df.iloc[[0]]], ignore_index=True)
         with self.assertRaises(AssertionError):
             _validate_index_returns(dup)
+
+
+class TestWeightGridCoverage(unittest.TestCase):
+    def test_daily_data_covers_monthly_grid(self):
+        bdays = pd.bdate_range("2020-01-01", "2020-03-31")
+        df = pd.DataFrame({"real_date": bdays, "value": 1.0})
+        observed, expected = weight_grid_coverage(df, "M")
+        self.assertEqual(observed, expected)
+        self.assertEqual(expected, 3)
+
+    def test_quarterly_data_understates_monthly_grid(self):
+        dates = pd.to_datetime(["2020-01-15", "2020-04-15", "2020-07-15"])
+        df = pd.DataFrame({"real_date": dates, "value": 1.0})
+        observed, expected = weight_grid_coverage(df, "M")
+        self.assertEqual(observed, 3)
+        self.assertEqual(expected, 7)
+
+    def test_quarterly_data_covers_quarterly_grid(self):
+        dates = pd.to_datetime(["2020-01-15", "2020-04-15", "2020-07-15"])
+        df = pd.DataFrame({"real_date": dates, "value": 1.0})
+        observed, expected = weight_grid_coverage(df, "Q")
+        self.assertEqual((observed, expected), (3, 3))
+
+    def test_missing_values_excluded(self):
+        bdays = pd.bdate_range("2020-01-01", "2020-03-31")
+        df = pd.DataFrame({"real_date": bdays, "value": 1.0})
+        df.loc[df["real_date"].dt.month == 2, "value"] = np.nan
+        observed, expected = weight_grid_coverage(df, "M")
+        self.assertEqual(observed, 2)
+        self.assertEqual(expected, 3)
+
+    def test_custom_weights_col(self):
+        bdays = pd.bdate_range("2020-01-01", "2020-01-31")
+        df = pd.DataFrame({"real_date": bdays, "raw_weight": 1.0})
+        observed, expected = weight_grid_coverage(df, "M", weights_col="raw_weight")
+        self.assertEqual((observed, expected), (1, 1))
+
+
+class TestAssertWeightGrid(unittest.TestCase):
+    def test_dense_input_passes(self):
+        bdays = pd.bdate_range("2020-01-01", "2020-03-31")
+        df = pd.DataFrame({"real_date": bdays, "value": 1.0})
+        assert_weight_grid(df, "M")
+
+    def test_sparse_input_raises(self):
+        dates = pd.to_datetime(["2020-01-15", "2020-04-15", "2020-07-15"])
+        df = pd.DataFrame({"real_date": dates, "value": 1.0})
+        with self.assertRaises(AssertionError):
+            assert_weight_grid(df, "M")
+
+    def test_error_message_names_frequency(self):
+        dates = pd.to_datetime(["2020-01-15", "2020-04-15"])
+        df = pd.DataFrame({"real_date": dates, "value": 1.0})
+        with self.assertRaises(AssertionError) as ctx:
+            assert_weight_grid(df, "M")
+        self.assertIn("'M'", str(ctx.exception))
 
 
 if __name__ == "__main__":
