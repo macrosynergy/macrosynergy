@@ -1,5 +1,6 @@
 ﻿from .analyse import (
     ACTIVE_WEIGHT_STATS,
+    BRINSON_STATS,
     STANDALONE_WEIGHT_STATS,
     WEIGHT_STAT_LABELS,
     PortfolioAnalyser,
@@ -10,6 +11,7 @@ from .misc import rescale_to_anchor
 
 __all__ = [
     "ACTIVE_WEIGHT_STATS",
+    "BRINSON_STATS",
     "STANDALONE_WEIGHT_STATS",
     "WEIGHT_STAT_LABELS",
     "PortfolioAnalyser",

@@ -71,6 +71,9 @@ WEIGHT_STAT_LABELS: Dict[str, str] = {
     "benchmark_only_n": "Benchmark-only holdings",  # in the benchmark, never held
 }
 
+#: Statistics reported by :meth:`PortfolioAnalyser.brinson_attribution`.
+BRINSON_STATS: List[str] = ["allocation", "selection"]
+
 # Concentration statistics carry over verbatim from the standalone to the active
 # calculation - only the matrix they are measured on changes - so they are computed
 # once and renamed. "gross_weight" is the exception: halved, it becomes active share.
@@ -1597,3 +1600,143 @@ class PortfolioAnalyser:
                 _wide_to_long(renamed, value_name="value"), xcat=xcat
             )
         return contrib
+
+    def brinson_attribution(
+        self,
+        lag: int = 1,
+        include_total: bool = True,
+        as_qdf: bool = False,
+        xcat_prefix: str = "PORT",
+    ) -> pd.DataFrame:
+        """
+        Brinson-Fachler decomposition of the active return into allocation and
+        selection effects per subgroup of ``groups``.
+
+        Allocation is the return earned by over- or underweighting a subgroup relative
+        to ``benchmark``, with the subgroup's own return held fixed at the benchmark's:
+        ``(w_p - w_b) * (r_b_group - r_b_total)``. Selection is the return earned by
+        picking better- or worse-performing securities within a subgroup, held at the
+        portfolio's own weight in that subgroup: ``w_p_group * (r_p_group -
+        r_b_group)``. The two sum exactly to the active return with no separate
+        interaction term - weighting selection by the portfolio's own subgroup weight
+        absorbs it, following the Brinson-Fachler rather than the
+        Brinson-Hood-Beebower model.
+
+        Weights are lagged before being applied to same-day returns, as in
+        :meth:`attribution`.
+
+        Parameters
+        ----------
+        lag : int, default 1
+            Number of dates the weights are lagged by.
+        include_total : bool, default True
+            If True, append a row per date under ``portfolio_name`` holding the sum of
+            allocation and selection across every subgroup, which reconciles to the
+            active return implied by the weights.
+        as_qdf : bool, default False
+            If True, return a QuantamentalDataFrame instead of the tidy frame, with one
+            cross-section per subgroup - or ``portfolio_name`` for the total - and one
+            category per effect, named ``f"{xcat_prefix}_ALLOCATION"`` and
+            ``f"{xcat_prefix}_SELECTION"``. Underscores in subgroup labels are replaced
+            with hyphens so that the labels are valid cross-sections.
+        xcat_prefix : str, default "PORT"
+            Prefix of the category names when ``as_qdf`` is True.
+
+        Raises
+        ------
+        ValueError
+            If no ``returns`` or ``groups`` were supplied to the analyser, if no
+            ``benchmark`` was supplied, if the three share no dates, or if
+            ``portfolio_name`` collides with a subgroup name.
+        TypeError
+            If ``lag`` is not a non-negative integer.
+
+        Returns
+        -------
+        pd.DataFrame
+            Tidy frame with a ``"real_date"`` column, a ``"group"`` column, and
+            ``"allocation"`` and ``"selection"`` columns, in the units of ``returns``.
+            Returned as a QuantamentalDataFrame when ``as_qdf`` is True.
+        """
+        if self.returns is None:
+            raise ValueError(
+                "`returns` must be supplied to PortfolioAnalyser for Brinson "
+                "attribution."
+            )
+        if self._group_map is None:
+            raise ValueError(
+                "`groups` must be supplied to PortfolioAnalyser for Brinson "
+                "attribution."
+            )
+        if not isinstance(lag, (int, np.integer)) or isinstance(lag, bool) or lag < 0:
+            raise TypeError("`lag` must be a non-negative integer.")
+
+        w_p, w_b, _ = self._resolve_frames(active=True)
+
+        # Union of columns so that a security missing a return, or returning without a
+        # holding on either side, still appears - contributing zero either way.
+        cids = w_p.columns.union(self.returns.columns)
+        w_p = w_p.reindex(columns=cids).shift(lag).fillna(0.0)
+        w_b = w_b.reindex(columns=cids).shift(lag).fillna(0.0)
+        r = self.returns.reindex(columns=cids).fillna(0.0)
+        dates = w_p.index.intersection(r.index)
+        if len(dates) == 0:
+            raise ValueError(
+                "`weights`, `benchmark` and `returns` share no dates; no Brinson "
+                "attribution can be computed."
+            )
+        w_p, w_b, r = w_p.loc[dates], w_b.loc[dates], r.loc[dates]
+
+        labels = _group_labels(cids, self._group_map, self.other_label)
+        r_b_total = (w_b * r).sum(axis=1)
+
+        blocks = []
+        for label in sorted(labels.unique()):
+            gcols = labels.index[labels == label]
+            wp_g = w_p[gcols].sum(axis=1)
+            wb_g = w_b[gcols].sum(axis=1)
+            # Weighted-average subgroup return; 0/0 (no holdings in the subgroup) -> 0,
+            # which then correctly zeroes out allocation/selection via the wp_g/wb_g
+            # factor each is multiplied by below.
+            rp_g = (
+                ((w_p[gcols] * r[gcols]).sum(axis=1) / wp_g).where(wp_g != 0).fillna(0.0)
+            )
+            rb_g = (
+                ((w_b[gcols] * r[gcols]).sum(axis=1) / wb_g).where(wb_g != 0).fillna(0.0)
+            )
+            blocks.append(
+                pd.DataFrame(
+                    {
+                        "real_date": dates,
+                        "group": label,
+                        "allocation": (wp_g - wb_g) * (rb_g - r_b_total),
+                        "selection": wp_g * (rp_g - rb_g),
+                    }
+                )
+            )
+        stats = pd.concat(blocks, ignore_index=True)
+
+        if include_total:
+            if self.portfolio_name in stats["group"].unique():
+                raise ValueError(
+                    f"`portfolio_name` '{self.portfolio_name}' collides with an "
+                    "existing subgroup name; choose another name or set "
+                    "include_total=False."
+                )
+            total = (
+                stats.groupby("real_date")[BRINSON_STATS]
+                .sum()
+                .reset_index()
+                .assign(group=self.portfolio_name)
+            )
+            stats = pd.concat([stats, total], ignore_index=True)
+
+        stats = (
+            stats[["real_date", "group"] + BRINSON_STATS]
+            .sort_values(["group", "real_date"])
+            .reset_index(drop=True)
+        )
+
+        if as_qdf:
+            return self._stats_to_qdf(stats, xcat_prefix)
+        return stats

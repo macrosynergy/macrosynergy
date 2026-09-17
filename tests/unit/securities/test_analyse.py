@@ -8,6 +8,7 @@ import pandas as pd
 from macrosynergy.management.types import QuantamentalDataFrame
 from macrosynergy.securities.analyse import (
     ACTIVE_WEIGHT_STATS,
+    BRINSON_STATS,
     STANDALONE_WEIGHT_STATS,
     WEIGHT_STAT_LABELS,
     PortfolioAnalyser,
@@ -1439,6 +1440,126 @@ class TestAttribution(unittest.TestCase):
     def test_as_qdf_defaults_to_a_distinct_active_category(self):
         qdf = self.analyser.attribution(active=True, as_qdf=True)
         self.assertEqual(list(map(str, qdf["xcat"].unique())), ["ACTIVE_CONTRIB"])
+
+
+class TestBrinsonAttribution(unittest.TestCase):
+    def setUp(self):
+        self.weights, self.benchmark, self.returns, self.groups = _random_portfolio()
+        self.analyser = PortfolioAnalyser(
+            self.weights,
+            FREQ,
+            benchmark=self.benchmark,
+            returns=self.returns,
+            groups=self.groups,
+        )
+
+    def test_pure_selection_case(self):
+        # Both sides fully invested in the same single group, holding opposite
+        # securities: the group weights match exactly (no allocation bet), so the
+        # whole active return must show up as selection.
+        weights = _wide([[1.0, 0.0], [1.0, 0.0]], ["A", "B"])
+        benchmark = _wide([[0.0, 1.0], [0.0, 1.0]], ["A", "B"])
+        returns = _wide([[0.0, 0.0], [10.0, -10.0]], ["A", "B"])
+        analyser = PortfolioAnalyser(
+            weights,
+            "B",
+            benchmark=benchmark,
+            returns=returns,
+            groups={"A": "G", "B": "G"},
+        )
+        contrib = analyser.brinson_attribution(include_total=False)
+        row = contrib[contrib["real_date"] == returns.index[1]].iloc[0]
+        self.assertAlmostEqual(row["allocation"], 0.0)
+        self.assertAlmostEqual(row["selection"], 20.0)
+
+    def test_pure_allocation_case(self):
+        # Single-security groups: portfolio and benchmark hold the same security in
+        # each group, just at different weights, so there is no selection to be made
+        # and the whole active return must show up as allocation.
+        weights = _wide([[0.7, 0.3], [0.7, 0.3]], ["A", "B"])
+        benchmark = _wide([[0.5, 0.5], [0.5, 0.5]], ["A", "B"])
+        returns = _wide([[0.0, 0.0], [10.0, -10.0]], ["A", "B"])
+        analyser = PortfolioAnalyser(
+            weights,
+            "B",
+            benchmark=benchmark,
+            returns=returns,
+            groups={"A": "G1", "B": "G2"},
+        )
+        day1 = analyser.brinson_attribution(include_total=False)
+        day1 = day1[day1["real_date"] == returns.index[1]]
+        self.assertAlmostEqual(day1["allocation"].sum(), 4.0)
+        self.assertAlmostEqual(day1["selection"].sum(), 0.0)
+
+    def test_total_reconciles_to_active_return(self):
+        active_return = self.analyser.attribution(active=True)["PORTFOLIO"]
+        total = self.analyser.brinson_attribution()
+        total = total[total["group"] == self.analyser.portfolio_name].set_index(
+            "real_date"
+        )
+        reconciled = total["allocation"] + total["selection"]
+        np.testing.assert_allclose(
+            reconciled.reindex(active_return.index), active_return, rtol=1e-8, atol=1e-8
+        )
+
+    def test_group_effects_sum_to_total(self):
+        brinson = self.analyser.brinson_attribution()
+        by_group = brinson[brinson["group"] != self.analyser.portfolio_name]
+        summed = by_group.groupby("real_date")[BRINSON_STATS].sum()
+        total = brinson[
+            brinson["group"] == self.analyser.portfolio_name
+        ].set_index("real_date")[BRINSON_STATS]
+        pd.testing.assert_frame_equal(summed, total, check_like=True)
+
+    def test_include_total_can_be_switched_off(self):
+        brinson = self.analyser.brinson_attribution(include_total=False)
+        self.assertNotIn(self.analyser.portfolio_name, brinson["group"].unique())
+
+    def test_returns_are_required(self):
+        analyser = PortfolioAnalyser(
+            self.weights, FREQ, benchmark=self.benchmark, groups=self.groups
+        )
+        with self.assertRaisesRegex(ValueError, "`returns` must be supplied"):
+            analyser.brinson_attribution()
+
+    def test_groups_are_required(self):
+        analyser = PortfolioAnalyser(
+            self.weights, FREQ, benchmark=self.benchmark, returns=self.returns
+        )
+        with self.assertRaisesRegex(ValueError, "`groups` must be supplied"):
+            analyser.brinson_attribution()
+
+    def test_benchmark_is_required(self):
+        analyser = PortfolioAnalyser(
+            self.weights, FREQ, returns=self.returns, groups=self.groups
+        )
+        with self.assertRaisesRegex(ValueError, "`benchmark` must be supplied"):
+            analyser.brinson_attribution()
+
+    def test_lag_must_be_a_non_negative_integer(self):
+        for bad in (-1, 1.5, "1", True):
+            with self.assertRaises(TypeError):
+                self.analyser.brinson_attribution(lag=bad)
+
+    def test_total_label_collision_raises(self):
+        analyser = PortfolioAnalyser(
+            self.weights,
+            FREQ,
+            benchmark=self.benchmark,
+            returns=self.returns,
+            groups=self.groups,
+            portfolio_name="TECH",
+        )
+        with self.assertRaisesRegex(ValueError, "collides"):
+            analyser.brinson_attribution()
+
+    def test_as_qdf_carries_two_categories(self):
+        qdf = self.analyser.brinson_attribution(as_qdf=True)
+        self.assertIsInstance(qdf, QuantamentalDataFrame)
+        self.assertEqual(
+            sorted(map(str, qdf["xcat"].unique())),
+            ["PORT_ALLOCATION", "PORT_SELECTION"],
+        )
 
 
 class TestLongFormatParity(unittest.TestCase):
