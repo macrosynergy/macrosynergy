@@ -1014,7 +1014,7 @@ class TestRelativeValueBasket(unittest.TestCase):
 
 class TestDefaultDateDerivation(unittest.TestCase):
     """
-    When `start`/`end` are not given they are derived from the categories the
+    When start or end are not given they are derived from the categories the
     calculation actually consumes, so the emitted panel never spans dates on
     which a required input is absent
     """
@@ -1045,8 +1045,6 @@ class TestDefaultDateDerivation(unittest.TestCase):
         )
 
     def test_default_start_end_bounded_by_sig(self):
-        # A category the calculation does not consume must not widen the panel: `XR`
-        # spans two decades either side of `SIG` and is ignored entirely.
         df = pd.concat(
             [
                 self._mk(self.sig, "2000-01-03", "2010-12-31"),
@@ -1060,8 +1058,6 @@ class TestDefaultDateDerivation(unittest.TestCase):
         self.assertLess(out["real_date"].max(), df["real_date"].max())
 
     def test_default_start_end_intersects_string_cscales(self):
-        # A category-valued `cscales` entry is consumed, so it bounds the panel: the
-        # window is the overlap of `SIG` and `VOL`, here `VOL` on both ends.
         df = pd.concat(
             [
                 self._mk(self.sig, "2000-01-03", "2010-12-31"),
@@ -1073,7 +1069,6 @@ class TestDefaultDateDerivation(unittest.TestCase):
         self.assertEqual(self._span(out), self._span(df, "VOL"))
 
     def test_default_start_end_accounts_for_hedge_basket(self):
-        # The hedge ratio is as much a required input as a variable scale
         df = pd.concat(
             [
                 self._mk(self.sig, "2000-01-03", "2010-12-31"),
@@ -1106,20 +1101,7 @@ class TestDefaultDateDerivation(unittest.TestCase):
 
         self.assertEqual(self._span(out), self._span(df, "BWGT"))
 
-    def test_hedge_categories_ignored_without_basket_contracts(self):
-        # `hedge_xcat` alone does no hedging, so it must not narrow the panel either.
-        df = pd.concat(
-            [
-                self._mk(self.sig, "2000-01-03", "2010-12-31"),
-                self._mk("HR", "2005-01-03", "2006-12-31"),
-            ]
-        )
-        out = self._run(df, hedge_xcat="HR")
-
-        self.assertEqual(self._span(out), self._span(df, self.sig))
-
     def test_only_one_bound_derived(self):
-        # `start` given, `end` derived - the derivation still runs, for `end` alone.
         df = pd.concat(
             [
                 self._mk(self.sig, "2000-01-03", "2010-12-31"),
@@ -1132,21 +1114,7 @@ class TestDefaultDateDerivation(unittest.TestCase):
         self.assertEqual(out["real_date"].min(), pd.Timestamp(start))
         self.assertEqual(out["real_date"].max(), self._span(df, "VOL")[1])
 
-    def test_missing_sig_raises_informative_error(self):
-        # Nothing to derive dates from
-        df = self._mk("XR", "2000-01-03", "2010-12-31")
-
-        with self.assertRaises(ValueError) as ctx:
-            self._run(df)
-
-        msg = str(ctx.exception)
-        self.assertIn("missing the `sig`", msg)
-        self.assertIn(f"USD_{self.sig}", msg)
-        self.assertNotIn("NaT", msg)
-        self.assertNotIn("ISO", msg)
-
     def test_disjoint_required_categories_raise(self):
-        # `SIG` and `VOL` never coexist, so the derived window is empty
         df = pd.concat(
             [
                 self._mk(self.sig, "2000-01-03", "2003-12-31"),

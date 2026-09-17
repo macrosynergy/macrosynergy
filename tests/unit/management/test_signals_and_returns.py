@@ -14,7 +14,7 @@ from macrosynergy.management.simulate.signals_and_returns import (
 )
 from macrosynergy.management.types import QuantamentalDataFrame
 
-# A known, well conditioned correlation matrix used throughout.
+# A known well conditioned correlation matrix used throughout.
 CORR_3: np.ndarray = np.array(
     [
         [1.0, 0.3, 0.0],
