@@ -65,6 +65,7 @@ def __getattr__(name):
             NegMeanPortfolioReturn,
             NegSharpeRatio,
             LongShortModule,
+            SwiGLU,
         )
         return locals()[name]
     if name in _nn_names:
@@ -107,5 +108,6 @@ __all__ = [
     "NegSharpeRatio",
     "MLPRegressor",
     "LongShortModule",
+    "SwiGLU",
     "LarsSurrogateModel",
 ]
