@@ -767,33 +767,32 @@ class TestAdjustWeightsWithDriftUniverse(unittest.TestCase):
             check_freq=False,
         )
 
-    def test_exit_mid_period_rescales_the_survivors(self):
-        exit_date = pd.Timestamp("2020-02-12")  # not a rebalancing date
+    def test_exit_mid_period_waits_for_the_next_rebalancing(self):
+        # February opens on 2020-02-03; an exit recorded on 2020-02-12 falls inside
+        # that period rather than on its first day, so it is unread until the book is
+        # next reset.
+        exit_date = pd.Timestamp("2020-02-12")
+        next_rebalancing = pd.Timestamp("2020-03-02")
         drifted = self._drift(self._exits("C", exit_date))
         unmasked = self._drift(_all_investable(self.returns))
 
-        self.assertTrue(drifted.loc[exit_date:, "C"].isna().all())
-        self.assertFalse(drifted.loc[:exit_date, "C"].iloc[:-1].isna().any())
-        np.testing.assert_allclose(drifted.sum(axis=1), 1.0)
-        # The survivors are rescaled, not re-set, on a date that is no rebalancing:
-        # their relative sizes are the drifting book's, and only the weight freed by C
-        # is redistributed between them.
-        self.assertAlmostEqual(
-            drifted.loc[exit_date, "A"] / drifted.loc[exit_date, "B"],
-            unmasked.loc[exit_date, "A"] / unmasked.loc[exit_date, "B"],
+        # Nothing is sold or rescaled mid-period: C keeps drifting exactly as if it
+        # were still investable right through the rest of February.
+        pd.testing.assert_frame_equal(
+            drifted.loc[:"2020-02-28"], unmasked.loc[:"2020-02-28"]
         )
-        self.assertGreater(drifted.loc[exit_date, "A"], unmasked.loc[exit_date, "A"])
+        # Only the next rebalancing reads and trades away the exit.
+        self.assertTrue(drifted.loc[next_rebalancing:, "C"].isna().all())
+        np.testing.assert_allclose(drifted.sum(axis=1), 1.0)
 
-    def test_matches_caller_side_mask_and_renormalise(self):
+    def test_universe_is_read_only_on_the_rebalancing_dates(self):
+        # A change recorded mid-period is invisible: feeding a mask that flips
+        # mid-period produces exactly what feeding the same mask, pre-snapped to each
+        # period's first day and held flat across it, would.
         universe = self._exits("C", "2020-02-12")
-        drifted = self._drift(universe)
+        snapped = universe.groupby(universe.index.to_period("M")).transform("first")
 
-        # The workaround being replaced: drift the whole book, mask it, renormalise.
-        unmasked = self._drift(_all_investable(self.returns))
-        masked = unmasked.where(universe.reindex(unmasked.index).fillna(True))
-        masked = masked.div(masked.sum(axis=1).replace(0.0, np.nan), axis=0)
-
-        pd.testing.assert_frame_equal(masked, drifted, check_freq=False)
+        pd.testing.assert_frame_equal(self._drift(universe), self._drift(snapped))
 
     def test_membership_is_carried_forward(self):
         # Membership is a state, so recording only the change is enough; an exit is
@@ -838,9 +837,81 @@ class TestAdjustWeightsWithDriftUniverse(unittest.TestCase):
 
     def test_masked_weights_never_register_as_holdings(self):
         # NaN and 0.0 read the same downstream; only the panel is more informative.
+        # The exit itself is mid-period, so it only registers from the next
+        # rebalancing (2020-03-02) onward.
         stats = _concentration_stats(self._drift(self._exits("C", "2020-02-12")))
-        self.assertTrue(stats.loc[:"2020-02-11", "n_holdings"].eq(3).all())
-        self.assertTrue(stats.loc["2020-02-12":, "n_holdings"].eq(2).all())
+        self.assertTrue(stats.loc[:"2020-02-28", "n_holdings"].eq(3).all())
+        self.assertTrue(stats.loc["2020-03-02":, "n_holdings"].eq(2).all())
+
+
+class TestAdjustWeightsWithDriftReturnGaps(unittest.TestCase):
+    """
+    A security ``universe`` still names can go untradable mid-period - a data gap, a
+    delisting, a blacklist the caller encodes as missing returns - and that is read
+    from ``returns``, not ``universe``: a missing return parks the security at its
+    last weight rather than selling it out and handing its weight to the survivors.
+    """
+
+    def setUp(self):
+        self.cids = ["A", "B", "C"]
+        # All ten business days sit inside a single "M" rebalancing period, so
+        # nothing here is reset by a rebalancing along the way.
+        self.dates = pd.bdate_range("2020-01-01", periods=10)
+        self.targets = pd.DataFrame(
+            [[1.0, 1.0, 1.0]], index=[self.dates[0]], columns=self.cids
+        )
+        self.returns = pd.DataFrame(0.0, index=self.dates, columns=self.cids)
+        self.returns.loc[self.dates[1], "A"] = 10.0  # a market move to dilute against
+        self.returns.loc[self.dates[3], "C"] = 20.0  # a move C would miss if gapped
+
+    def _drift(self, returns):
+        return PortfolioAnalyser.adjust_weights_with_drift(
+            self.targets, returns, _all_investable(returns), "M"
+        )
+
+    def test_missing_return_parks_the_weight_instead_of_selling_it(self):
+        gapped = self.returns.copy()
+        gapped.loc[self.dates[2] :, "C"] = np.nan  # C stops reporting mid-period
+
+        drifted = self._drift(gapped)
+        unmasked = self._drift(self.returns)
+
+        # C is never sold out: it keeps a live, non-NaN weight that simply stops
+        # moving on its own - diluted by A's gain exactly like B, which really is
+        # still trading, rather than dropping out and being redistributed away from.
+        self.assertFalse(drifted["C"].isna().any())
+        # Unaffected by C's own moves, gapped or not, it is diluted purely by A's
+        # gain exactly like B, which really is still trading.
+        np.testing.assert_allclose(drifted["C"], drifted["B"])
+        # A weight reflects returns through the day before, so C's 20% move on day
+        # four first would have shown up on day five - missed here because it fell
+        # inside the gap.
+        self.assertLess(
+            drifted.loc[self.dates[4], "C"], unmasked.loc[self.dates[4], "C"]
+        )
+        np.testing.assert_allclose(drifted.sum(axis=1), 1.0)
+
+    def test_return_resumes_after_the_gap(self):
+        gapped = self.returns.copy()
+        gapped.loc[self.dates[2], "C"] = np.nan  # a single missing day
+        gapped.loc[self.dates[3], "C"] = 5.0  # C resumes trading
+
+        drifted = self._drift(gapped)
+        # The gap does not stop C from drifting once data resumes - it is read as a
+        # flat day, not as an exit that would need a fresh rebalancing to reverse.
+        self.assertFalse(drifted.loc[self.dates[3] :, "C"].isna().any())
+        self.assertGreater(drifted.loc[self.dates[4], "C"], drifted.loc[self.dates[3], "C"])
+
+    def test_security_outside_the_universe_ignores_its_own_returns(self):
+        # `universe` is a selection, not a tradability signal: a security it excludes
+        # stays excluded even though it has perfectly good returns of its own.
+        universe = _all_investable(self.returns)
+        universe["C"] = False
+        drifted = PortfolioAnalyser.adjust_weights_with_drift(
+            self.targets, self.returns, universe, "M"
+        )
+        self.assertTrue(drifted["C"].isna().all())
+        np.testing.assert_allclose(drifted.sum(axis=1), 1.0)
 
 
 class TestWeightStats(unittest.TestCase):

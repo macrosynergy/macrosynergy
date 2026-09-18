@@ -14,7 +14,11 @@ import pandas as pd
 from macrosynergy.management.types import QuantamentalDataFrame
 from macrosynergy.management.utils.df_utils import _long_to_wide, _wide_to_long
 
-from macrosynergy.securities.index import _apply_weight_drift, _assign_period_labels
+from macrosynergy.securities.index import (
+    _apply_weight_drift,
+    _assign_period_labels,
+    _build_reconstitution_membership,
+)
 from macrosynergy.securities.validate import _validate_frequency
 
 logger = logging.getLogger(__name__)
@@ -1060,18 +1064,33 @@ class PortfolioAnalyser:
             from one that has left the investable set, which is why ``universe`` is
             required and not inferred.
         returns : pd.DataFrame or QuantamentalDataFrame
-            Single-security returns in the same format, in percentage points.
+            Single-security returns in the same format, in percentage points. A
+            security the ``universe`` still names can nonetheless go untradable
+            mid-period - a data gap, a delisting, a blacklist the caller encodes as
+            missing returns - and that is read from here, not from ``universe``: a
+            missing return parks the security at its last weight, earning nothing,
+            rather than being sold and handed to the survivors. It resumes drifting
+            the day a return is next recorded, or stays parked, diluted like any other
+            holding, until the next rebalancing resets the book.
         universe : pd.DataFrame or QuantamentalDataFrame
-            Boolean investable universe per security and date, long or wide, truthy
-            where the security can be held. A security is dropped from the book where
-            it is false, mid-period as readily as on a rebalancing, and the survivors
-            are rescaled to keep the row summing to one. Membership is carried forward
-            without limit, so it need only be recorded when it changes, and what it
-            leaves unsaid counts as investable: a partial frame narrows the book rather
-            than emptying it. Pass an all-true frame for a fixed universe.
+            Boolean set of securities under consideration per date, long or wide,
+            truthy where a security belongs to it. Read at the first business day of
+            each rebalancing period and held for the whole period, like the target
+            itself - a change recorded mid-period only takes effect at the rebalancing
+            it falls in, never between. This is a selection, not a tradability
+            signal: a security ``universe`` does not name is excluded outright
+            regardless of what its returns are doing, while mid-period tradability for
+            a security it does name is ``returns``' concern, above. A security
+            excluded as of a rebalancing is dropped from the book there and the
+            survivors are rescaled to keep the row summing to one. Membership is
+            carried forward without limit, so it need only be recorded when it
+            changes, and what it leaves unsaid counts as investable: a partial frame
+            narrows the book rather than emptying it. Pass an all-true frame for a
+            fixed universe.
         rebalance_freq : str, default "M"
             Pandas period alias defining how often the book is reset to its targets,
-            one of {"B", "W", "M", "Q", "Y"}. Also bounds the carry above.
+            one of {"B", "W", "M", "Q", "Y"}. Also bounds the carry above, and sets the
+            cadence ``universe`` is snapped to.
 
         Returns
         -------
@@ -1112,11 +1131,25 @@ class PortfolioAnalyser:
         target = _carry_targets_forward(
             target.reindex(columns=cids), calendar, rebalance_freq
         )
-        rets = rets.reindex(index=calendar, columns=cids).fillna(0.0) / 100.0
+        # Left as NaN rather than filled: a security the universe still names can go
+        # untradable mid-period (a data gap, a delisting, a blacklist the caller
+        # encodes as missing returns), and `_apply_weight_drift`'s own NaN handling is
+        # what parks it at its last weight - `growth`'s cumulative product skips a NaN
+        # return without disturbing the days around it, and the shift that follows
+        # neutralises the gap to a flat 1.0 rather than reintroducing it. Filling with
+        # 0.0 here would instead read the gap as a real zero return, compounding it
+        # into the position like any other trading day.
+        rets = rets.reindex(index=calendar, columns=cids) / 100.0
 
-        # Masked before the drift, not after: `_apply_weight_drift` closes on a
-        # row-wise normalisation, which then rescales the survivors itself.
-        investable = _universe_mask(universe, cids, calendar)
+        # Snapped to the rebalancing cadence, like the target itself: an exit is
+        # traded at the rebalancing it falls in, not sold out and redistributed
+        # among the survivors mid-period. Applying it day by day would starve
+        # `_apply_weight_drift` of the exited security's contribution to the row's
+        # total, which its closing normalisation would then read as freed capital
+        # and hand straight to whatever is left - a forced, unrequested rebalancing.
+        investable = _build_reconstitution_membership(
+            _universe_mask(universe, cids, calendar).astype(float), rebalance_freq
+        ).ne(0.0)
         drifted = _apply_weight_drift(
             target.where(investable).fillna(0.0),
             rets,
