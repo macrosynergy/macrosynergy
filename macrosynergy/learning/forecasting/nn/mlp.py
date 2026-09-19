@@ -478,26 +478,26 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
                     "training_target_sensitivities": [],
                 }
 
-                # Initialize model
-                model = self.initialize_model(
-                    torch_model = self.torch_model,
-                    n_inputs = X.shape[1],
-                    n_latent = self.n_latent,
-                    n_outputs = y.shape[1],
-                    encoder_activation = self.encoder_activation,
-                    head_activation = self.head_activation,
-                    fit_encoder_intercept = self.fit_encoder_intercept,
-                    fit_head_intercept = self.fit_head_intercept,
-                    signal_modifier = self.signal_modifier,
-                    head_rank = self.head_rank,
-                    dropout_p = self.dropout_p,
-                    normalization = self.normalization, 
-                )
-
-                # Set up optimizer 
-                optim = self.make_optimizer(model, optimizer, self.learning_rate, self.weight_decay)
-
                 if self.patience is None:
+                    # Initialize model
+                    model = self.initialize_model(
+                        torch_model = self.torch_model,
+                        n_inputs = X.shape[1],
+                        n_latent = self.n_latent,
+                        n_outputs = y.shape[1],
+                        encoder_activation = self.encoder_activation,
+                        head_activation = self.head_activation,
+                        fit_encoder_intercept = self.fit_encoder_intercept,
+                        fit_head_intercept = self.fit_head_intercept,
+                        signal_modifier = self.signal_modifier,
+                        head_rank = self.head_rank,
+                        dropout_p = self.dropout_p,
+                        normalization = self.normalization, 
+                    )
+    
+                    # Set up optimizer 
+                    optim = self.make_optimizer(model, optimizer, self.learning_rate, self.weight_decay)
+
                     # Make torch dataloaders
                     train_loader, _, _ = self.make_dataloaders_(
                         train_dataset = train_datasets[0],
@@ -541,6 +541,26 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
                     self.mean_epochs_es = 0
                     for idx, (train_dataset, valid_dataset) in enumerate(zip(train_datasets, valid_datasets)):
                         torch.manual_seed(random_state)
+
+                        # Initialize model
+                        model = self.initialize_model(
+                            torch_model = self.torch_model,
+                            n_inputs = X.shape[1],
+                            n_latent = self.n_latent,
+                            n_outputs = y.shape[1],
+                            encoder_activation = self.encoder_activation,
+                            head_activation = self.head_activation,
+                            fit_encoder_intercept = self.fit_encoder_intercept,
+                            fit_head_intercept = self.fit_head_intercept,
+                            signal_modifier = self.signal_modifier,
+                            head_rank = self.head_rank,
+                            dropout_p = self.dropout_p,
+                            normalization = self.normalization, 
+                        )
+        
+                        # Set up optimizer 
+                        optim = self.make_optimizer(model, optimizer, self.learning_rate, self.weight_decay)
+
                         train_loader, train_loader_eval, valid_loader = self.make_dataloaders_(
                             train_dataset = train_dataset,
                             batch_size = self.batch_size,
@@ -889,13 +909,13 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         if not use_ts_sampler:
             train_loader = torch.utils.data.DataLoader(
                 dataset = train_dataset,
-                batch_size = self.batch_size,
+                batch_size = batch_size,
                 shuffle = True,
                 drop_last = drop_last
             )
             train_loader_eval = torch.utils.data.DataLoader(
                 dataset = train_dataset,
-                batch_size = self.batch_size,
+                batch_size = batch_size,
                 shuffle = False,
                 drop_last = False,
             )
