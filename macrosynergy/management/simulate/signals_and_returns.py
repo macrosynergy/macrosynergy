@@ -250,10 +250,8 @@ def _simulate_decaying_signals(
     n_fids : int
         number of financial contract identifiers (columns) to simulate.
     signal_ic : float
-        target information coefficient against the *next* period's return, i.e.
-        `corr(signals[t], z[t + 1])`. This is the head of the decay profile rather than
-        the only non-zero point on it. Must not exceed `sqrt(1 - decay ** 2)` in absolute
-        value, with `decay` the per-period decay implied by `half_life`.
+        target information coefficient against the next period's return, i.e.
+        corr(signals[t], z[t + 1]).
     signal_autocorr : float
         AR(1) coefficient of the persistent noise component, strictly between -1 and 1.
     half_life : float
@@ -263,8 +261,7 @@ def _simulate_decaying_signals(
         (n_periods, n_fids) array of unit-variance return innovations, as returned by
         `_simulate_returns` with `return_z=True`.
     rng : Optional[np.random.Generator]
-        random number generator. Unlike the other simulation helpers this argument has
-        no fallback, so a generator must be passed.
+        random number generator
 
     Returns
     -------
@@ -290,8 +287,7 @@ def _simulate_decaying_signals(
         \sqrt{\frac{1 - \lambda^{2(T-1-t)}}{1 - \lambda^{2}}}
 
     The denominator is the exact standard deviation of the truncated sum, so
-    :math:`Z^{*}` has unit variance on every row - including the tail, where fewer future
-    innovations remain. The last row has none at all and is therefore zero.
+    :math:`Z^{*}` has unit variance on every row.
 
     A unit-variance AR(1) noise component is built as in `_simulate_signals`,
 
@@ -316,23 +312,6 @@ def _simulate_decaying_signals(
     .. math::
 
         \mathrm{corr}(s_{t}, z_{t+k}) = \mathrm{IC} \, \lambda^{k-1}
-
-    and, against the standardized return accumulated over the next :math:`m` periods,
-
-    .. math::
-
-        \mathrm{corr}\left(s_{t},
-        m^{-1/2}\sum_{k=1}^{m} z_{t+k}\right)
-        = \mathrm{IC} \, \frac{1 - \lambda^{m}}{(1 - \lambda)\sqrt{m}}
-
-    which is the formula to invert when calibrating against a horizon other than one
-    period. Requiring :math:`\rho \le 1` bounds the information coefficient above by
-    :math:`\sqrt{1 - \lambda^{2}}`: a high one-period IC cannot persist over a long half
-    life without the predictable component exceeding the variance of the return.
-
-    As :math:`\lambda \to 0` the normalisation tends to one on every row but the last, so
-    :math:`Z^{*}_{t} = z_{t+1}` and the construction reduces exactly to
-    `_simulate_signals`.
     """
 
     if half_life <= 0.0:
@@ -364,7 +343,10 @@ def _simulate_decaying_signals(
     horizon = np.arange(n_periods - 1, -1, -1)
     scale = np.sqrt((1.0 - decay ** (2 * horizon)) / (1.0 - decay**2))
     aggregate = np.divide(
-        weighted, scale[:, None], out=np.zeros_like(weighted), where=scale[:, None] > 0.0
+        weighted,
+        scale[:, None],
+        out=np.zeros_like(weighted),
+        where=scale[:, None] > 0.0,
     )
 
     persistent = np.empty((n_periods, n_fids))
@@ -377,7 +359,7 @@ def _simulate_decaying_signals(
     # persistent[t + 1] pairs with the aggregate that starts forecasting at t + 1, which
     # makes this reduce to `_simulate_signals` when there is no decay
     signals = ic * aggregate + np.sqrt(1.0 - ic**2) * np.roll(persistent, -1, axis=0)
-    signals[-1] = 0.0  # last signal forecasts an unobserved future return
+    signals[-1] = 0.0
 
     return signals
 
@@ -546,13 +528,14 @@ def _simulate_signals_and_returns(
 
 
 class SignalsAndReturnsGenerator:
-    """
+    r"""
     Generates mock signals and returns with known ground-truth risk characteristics.
 
-    Holds the data generating process on the instance, so that a simulation can be
-    requested once and then served in the formats consumed by the package - wide
-    DataFrames, quantamental DataFrames, or the realized covariance matrices the
-    portfolio construction code estimates.
+    Returns are correlated Gaussian innovations scaled by a persistent stochastic
+    volatility path, and the signals are those same innovations, mixed with
+    autocorrelated noise in whatever proportion delivers the requested information
+    coefficient. Both the risk and the predictability are therefore known by
+    construction rather than estimated.
 
     Parameters
     ----------
@@ -560,7 +543,7 @@ class SignalsAndReturnsGenerator:
         number of financial contract identifiers to simulate.
     corr : np.ndarray
         (n_fids, n_fids) correlation matrix of the return innovations. Default is None,
-        in which case a random (but deterministic) correlation matrix is drawn.
+        in which case a random correlation matrix is drawn.
     base_vol : np.ndarray
         long-run daily volatilities, broadcast to (n_fids,). Default is None, in which
         case 0.01 per day is used for every contract, i.e. roughly 16% annualized.
@@ -571,13 +554,7 @@ class SignalsAndReturnsGenerator:
     signal_autocorr : float
         AR(1) coefficient of the persistent signal component, strictly between -1 and
         1. Default is 0.9. This governs how fast the signal *moves*, and so its
-        turnover. When `half_life` is set the forecasting component carries its own
-        persistence, so the observed autocorrelation at lag `k` is
-        `rho ** 2 * decay ** k + (1 - rho ** 2) * signal_autocorr ** k` with
-        `rho = signal_ic / sqrt(1 - decay ** 2)`, and this parameter governs only the
-        `1 - rho ** 2` share of it. A high `signal_ic` over a long half life therefore
-        puts a floor under the signal's persistence that no `signal_autocorr` can
-        undercut.
+        turnover.
     half_life : float
         half life, in business days, of the signal's forecasting power. Default is None,
         in which case each signal forecasts the next day only and nothing beyond it.
@@ -590,6 +567,73 @@ class SignalsAndReturnsGenerator:
         standard deviation of the shocks to the log-variance. Default is 0.15.
     mean_return : float
         daily mean return, broadcast to (n_fids,). Default is 0.0.
+
+    Attributes
+    ----------
+    signals : Optional[pd.DataFrame]
+        wide DataFrame of the most recent simulation's signals, or None before
+        `simulate_signals_and_returns` has been called.
+    returns : Optional[pd.DataFrame]
+        wide DataFrame of the most recent simulation's returns, as fractions.
+    realized_vol : Optional[pd.DataFrame]
+        wide DataFrame of the per-day volatilities that generated those returns
+
+    Notes
+    -----
+    Each call to simulate_signals_and_returns runs three stages off a single seeded
+    generator, volatilities, then returns, then signals, at business-daily frequency.
+
+    *Volatility.* Every contract is given its own log-variance AR(1) path,
+
+    .. math::
+
+        \log \sigma_{i,t}^{2} = \phi \log \sigma_{i,t-1}^{2}
+        + (1 - \phi) \log \bar{\sigma}_{i}^{2} + \eta_{i,t},
+        \qquad \eta_{i,t} \sim N(0, \omega^{2})
+
+    with :math:`\phi` = `vol_persistence`, :math:`\omega` = `vol_of_vol` and
+    :math:`\bar{\sigma}` = `base_vol`, which gives volatility clustering rather than a
+    constant risk level. The shocks are independent across contracts.
+
+    *Returns.* Standard normal draws are correlated through the Cholesky factor of
+    `corr` and scaled by that day's volatilities,
+
+    .. math::
+
+        r_{t} = \mu + D_{t} z_{t},
+        \qquad z_{t} = L \xi_{t},
+        \qquad \xi_{t} \sim N(0, I),
+        \qquad C = L L^{\top},
+        \qquad D_{t} = \mathrm{diag}(\sigma_{1,t}, \dots, \sigma_{N,t})
+
+    so `corr` is the correlation *within* a day, holding the volatility path fixed, and
+    the covariance of day :math:`t` is exactly :math:`D_{t} C D_{t}`
+
+    *Signals.* Two constructions, selected by `half_life`. Both give approximately
+    unit-variance signals, and both set the final row to zero, since a signal on the
+    last date would forecast a return outside the sample.
+
+    Without a `half_life`, each signal predicts exactly one day. A unit-variance AR(1)
+    noise path :math:`p` with coefficient :math:`a` = `signal_autocorr` is mixed with
+    the innovation the signal has to predict,
+
+    .. math::
+
+        s_{t} = \rho z_{t+1} + \sqrt{1 - \rho^{2}} \, p_{t+1},
+        \qquad \rho = \mathrm{IC}
+
+    so that :math:`\mathrm{corr}(s_{t}, z_{t+1}) = \rho` and nothing is forecast beyond
+    the next day. The mixture is what keeps the realized information coefficient on
+    target at any persistence.
+
+    With a `half_life` of :math:`H` days, the noise path is mixed instead with a
+    geometrically weighted, unit-variance sum of *all* future innovations, so that a
+    signal forecasts every subsequent day on a decaying profile,
+
+    .. math::
+
+        \mathrm{corr}(s_{t}, z_{t+k}) = \mathrm{IC} \, \lambda^{k-1},
+        \qquad \lambda = 2^{-1/H}
     """
 
     def __init__(
@@ -636,13 +680,10 @@ class SignalsAndReturnsGenerator:
         return_names: Optional[List[str]] = None,
         seed: int = 29,
     ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-        """
+        r"""
         Simulate business-daily signals and returns using the parameters held on the
-        instance.
-
-        The results are stored on the instance, so that the conversion methods can be
-        called afterwards. Calling this method again overwrites the previous
-        simulation.
+        instance. Draws the volatility paths first, then the returns along them,
+        then the signals.
 
         Parameters
         ----------
@@ -653,7 +694,8 @@ class SignalsAndReturnsGenerator:
             case today's date is used.
         signal_names : Optional[List[str]]
             column names of the signals DataFrame. Default is None, in which case
-            `CID{i}_SIG` is used.
+            `CID{i}_SIG` is used. Names must be `cid_xcat` tickers for the quantamental
+            conversions, which split them on the first underscore.
         return_names : Optional[List[str]]
             column names of the returns and volatility DataFrames. Default is None, in
             which case `CID{i}_XR` is used.
@@ -665,7 +707,10 @@ class SignalsAndReturnsGenerator:
         Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]
             wide DataFrames of signals, returns and realized volatilities, each indexed
             by the simulated dates. Returns and volatilities are expressed as
-            fractions, not percentages.
+            fractions, not percentages. The volatilities are the per-day
+            :math:`\sigma_{i,t}` that generated the returns, and the last row of the
+            signals is zero, as it would otherwise forecast a return beyond the end of
+            the sample.
         """
 
         signals, returns, realized_vol = _simulate_signals_and_returns(
