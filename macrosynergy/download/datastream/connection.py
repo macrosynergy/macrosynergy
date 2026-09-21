@@ -31,7 +31,7 @@ except ImportError as _exc:  # pragma: no cover
 
 logger: logging.Logger = logging.getLogger(__name__)
 
-# Ticker used only for connection testing — a liquid, always-available instrument.
+# Ticker used only for connection testing - a liquid, always-available instrument.
 _TEST_TICKER: str = "U:IBM"
 _TEST_FIELD: str = "P"
 
@@ -107,7 +107,7 @@ class DatastreamConnection:
         ConnectionError
             If ``DatastreamPy`` raises any exception during instantiation.
         """
-        logger.info("Connecting to Datastream Web Service as '%s' …", self._username)
+        logger.info("Connecting to Datastream Web Service as '%s' ...", self._username)
         try:
             self.ds = dsweb.DataClient(None, self._username, self._password)
             self._is_connected = True
@@ -158,7 +158,7 @@ class DatastreamConnection:
         """
         if not self.is_connected():
             logger.debug(
-                "No active connection found — calling connect() automatically."
+                "No active connection found - calling connect() automatically."
             )
             self.connect()
         return self.ds  # type: ignore[return-value]  # guaranteed non-None after connect
@@ -175,7 +175,7 @@ class DatastreamConnection:
             ``True`` if the test request returns a non-empty DataFrame, ``False``
             otherwise.
         """
-        logger.info("Testing DSWS connection with a trivial request …")
+        logger.info("Testing DSWS connection with a trivial request ...")
         try:
             ds = self.get_connection()
             result = ds.get_data(
@@ -187,7 +187,7 @@ class DatastreamConnection:
                 logger.info("Connection test passed.")
                 return True
             logger.warning(
-                "Connection test returned an empty DataFrame — treating as failure."
+                "Connection test returned an empty DataFrame - treating as failure."
             )
             return False
         except Exception as exc:
@@ -216,7 +216,7 @@ class DatastreamConnection:
         Returns
         -------
         bool
-            Always ``False`` — exceptions are never suppressed.
+            Always ``False`` - exceptions are never suppressed.
         """
         self.disconnect()
         return False

@@ -225,9 +225,9 @@ class TestContractSignals(unittest.TestCase):
         np.testing.assert_allclose(result["GBP_FX_CSIG"].values, -3.0, atol=1e-10)
         np.testing.assert_allclose(result["EUR_FX_CSIG"].values, 0.0, atol=1e-10)
 
-        # Two ctypes — each computed independently
-        # FX: AUD=8, GBP=2 → mean=5 → RV: 3, -3
-        # IRS: AUD=-1, GBP=-3 → mean=-2 → RV: 1, -1
+        # Two ctypes - each computed independently
+        # FX: AUD=8, GBP=2 -> mean=5 -> RV: 3, -3
+        # IRS: AUD=-1, GBP=-3 -> mean=-2 -> RV: 1, -1
         df2 = pd.DataFrame(
             {
                 "AUD_FX_CSIG": 8.0,
@@ -248,8 +248,8 @@ class TestContractSignals(unittest.TestCase):
         np.testing.assert_allclose(result2["GBP_IRS_CSIG"].values, -1.0, atol=1e-10)
 
         # NaN excludes cid from the mean for that date
-        # date 0: AUD=8, GBP=NaN, EUR=4 → mean=(8+4)/2=6 → AUD=2, EUR=-2
-        # date 1: AUD=8, GBP=2, EUR=4   → mean=(8+2+4)/3≈4.667
+        # date 0: AUD=8, GBP=NaN, EUR=4 -> mean=(8+4)/2=6 -> AUD=2, EUR=-2
+        # date 1: AUD=8, GBP=2, EUR=4   -> mean=(8+2+4)/3~=4.667
         df3 = pd.DataFrame(
             {
                 "AUD_FX_CSIG": [8.0, 8.0],
@@ -273,7 +273,7 @@ class TestContractSignals(unittest.TestCase):
         self.assertAlmostEqual(result3["GBP_FX_CSIG"].iloc[1], 2.0 - mean_d1, places=10)
         self.assertAlmostEqual(result3["EUR_FX_CSIG"].iloc[1], 4.0 - mean_d1, places=10)
 
-        # Single tradable cid → position = 0
+        # Single tradable cid -> position = 0
         df4 = pd.DataFrame(
             {
                 "AUD_FX_CSIG": [7.0],
@@ -790,7 +790,7 @@ class TestRelativeValueBasket(unittest.TestCase):
             relative_value=True,
         )
 
-        # Dates 0-1: only AUD tradable → position = 0
+        # Dates 0-1: only AUD tradable -> position = 0
         for date in dates[:2]:
             aud_val = dfc.loc[
                 (dfc["cid"] == "AUD") & (dfc["real_date"] == date), "value"

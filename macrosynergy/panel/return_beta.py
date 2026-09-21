@@ -349,7 +349,7 @@ def return_beta(
         raise ValueError(min_obs_error)
 
     if not isinstance(max_obs, int) or max_obs < min_obs:
-        raise ValueError(f"`max_obs` must be an integer ≫ `min_obs`.")
+        raise ValueError(f"`max_obs` must be an integer >> `min_obs`.")
 
     # Information on hedge return and potential panel adjustment.
 

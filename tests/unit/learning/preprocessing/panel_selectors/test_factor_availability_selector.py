@@ -92,10 +92,10 @@ class TestDetermineFeatures:
         dates = pd.date_range("2000-01-01", periods=36, freq="M")
         n = len(cids) * len(dates)
 
-        # xcat1: fully populated — should pass
+        # xcat1: fully populated - should pass
         xcat1 = np.random.randn(n)
 
-        # xcat2: only one cid has data — should fail with min_cids=2
+        # xcat2: only one cid has data - should fail with min_cids=2
         xcat2 = np.full(n, np.nan)
         xcat2[: len(dates)] = np.random.randn(len(dates))  # only "US"
 
@@ -122,7 +122,7 @@ class TestDetermineFeatures:
             cids=cids,
             dates=dates,
         )
-        # min_periods=100 but only 10 dates exist — should still pass
+        # min_periods=100 but only 10 dates exist - should still pass
         selector = FactorAvailabilitySelector(min_cids=2, min_periods=100)
         mask = selector.determine_features(df, y=None)
 
@@ -256,10 +256,10 @@ class TestFit:
         dates = pd.date_range("2000-01-01", periods=36, freq="M")
         n = len(cids) * len(dates)
 
-        # xcat1: fully populated — should pass
+        # xcat1: fully populated - should pass
         xcat1 = np.random.randn(n)
 
-        # xcat2: only one cid has data — should fail with min_cids=2
+        # xcat2: only one cid has data - should fail with min_cids=2
         xcat2 = np.full(n, np.nan)
         xcat2[: len(dates)] = np.random.randn(len(dates))  # only "US"
 
@@ -286,7 +286,7 @@ class TestFit:
             cids=cids,
             dates=dates,
         )
-        # min_periods=100 but only 10 dates exist — should still pass
+        # min_periods=100 but only 10 dates exist - should still pass
         selector = FactorAvailabilitySelector(min_cids=2, min_periods=100)
         selector.fit(X=df, y=None)
 
