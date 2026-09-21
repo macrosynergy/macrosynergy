@@ -641,7 +641,15 @@ class TestAdjustWeightsMain(unittest.TestCase):
         # make sure the sum is not 100
         self.qdf.loc[:, "value"] = self.qdf["value"] * 1e7
 
-        all_nan_date: pd.Timestamp = np.random.choice(self.qdf["real_date"].unique())
+        # pick a date where at least one cid still has a non-NaN weight, so forcing
+        # AZ to all-NaN on that date lands in the "missing ZNs" (not "missing
+        # weights") path and is guaranteed to show up in that warning
+        wg_df = self.qdf[self.qdf["xcat"] == "WG"]
+        dates_with_some_weight = wg_df.groupby("real_date")["value"].apply(
+            lambda s: s.notna().any()
+        )
+        candidate_dates = dates_with_some_weight[dates_with_some_weight].index
+        all_nan_date: pd.Timestamp = np.random.choice(candidate_dates)
         self.qdf.loc[
             (self.qdf["real_date"] == all_nan_date) & self.qdf["xcat"].eq("AZ"), "value"
         ] = np.nan
@@ -662,18 +670,34 @@ class TestAdjustWeightsMain(unittest.TestCase):
         with warnings.catch_warnings(record=True) as w:
             adjusted = adjust_weights(df=self.qdf, **args)
 
-            split_warning = w[-2].message.args[0]
+            warning_msgs = [str(warning.message) for warning in w]
             ts_str = pd.Timestamp(all_nan_date).strftime("%Y-%m-%d")
             err_str = "Missing ZNs data (will be filled with 1"
+            split_warning = next(
+                (msg for msg in warning_msgs if err_str in msg), None
+            )
+            self.assertIsNotNone(split_warning)
             self.assertIn(ts_str, split_warning)
-            self.assertIn(err_str, split_warning)
 
             miss_dates = set(pd.bdate_range(self.start, self.end)) - set(
                 adjusted["real_date"]
             )
-            nan_date_warning = w[-1].message.args[0]
-            for mdt in miss_dates:
-                self.assertIn(mdt.strftime("%Y-%m-%d"), nan_date_warning)
+            # depending on the random NaN pattern, some, all, or none of the dates
+            # may end up with no data at all after the adjustment is applied, in
+            # which case no "no data after applying the adjustment" warning is
+            # raised
+            if miss_dates:
+                nan_date_warning = next(
+                    (
+                        msg
+                        for msg in warning_msgs
+                        if "no data after applying the adjustment" in msg
+                    ),
+                    None,
+                )
+                self.assertIsNotNone(nan_date_warning)
+                for mdt in miss_dates:
+                    self.assertIn(mdt.strftime("%Y-%m-%d"), nan_date_warning)
 
         self.assertFalse(adjusted.isna().any().any())
         self.assertFalse(any(adjusted.groupby("real_date")["value"].sum() == 100))

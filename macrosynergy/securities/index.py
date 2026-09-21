@@ -18,6 +18,7 @@ from macrosynergy.securities.validate import (
     _validate_returns,
     _validate_index_returns,
     _validate_weights_col,
+    assert_weight_grid,
 )
 
 logger = logging.getLogger(__name__)
@@ -102,6 +103,58 @@ def _build_reconstitution_membership(
     return result
 
 
+def _apply_weight_drift(
+    target_wide: pd.DataFrame,
+    ret_wide: pd.DataFrame,
+    rebal_periods: pd.PeriodIndex,
+) -> pd.DataFrame:
+    """
+    Let target weights drift with returns within each rebalancing period.
+
+    On the first day of a period the portfolio is set to the target weights,
+    normalised over the securities in force: ``1 / N`` for equal weighting, or
+    ``target_i / total_target`` for a custom weighting. On day ``d`` of the period the
+    unnormalised weight is ``w_i(0) * prod_{t=0}^{d-1}(1 + r_i(t))``, i.e. the
+    cumulative product is shifted so that day 0 carries the initial weight and day
+    ``d`` reflects returns through day ``d - 1``. Each row is then normalised to sum
+    to one.
+
+    Parameters
+    ----------
+    target_wide : pd.DataFrame
+        Wide-format target weights (rows = dates, columns = cids), already snapped to
+        the reconstitution cadence. Need not be normalised.
+    ret_wide : pd.DataFrame
+        Wide-format returns on the same index and columns, expressed as decimal
+        fractions (not percentage points).
+    rebal_periods : pd.PeriodIndex
+        Rebalancing period label of each row, as produced by
+        :func:`_assign_period_labels`.
+
+    Returns
+    -------
+    pd.DataFrame
+        Wide-format daily drifting weights with the same shape as ``target_wide``,
+        each row summing to one where any weight is in force and to zero otherwise.
+    """
+    # Initial target weights per period, normalised over the period's constituents.
+    total_w_denominator = (
+        target_wide.groupby(rebal_periods).transform("first").sum(axis=1)
+    )
+    initial_w = target_wide.div(
+        total_w_denominator.replace(0, np.nan), axis=0
+    ).fillna(0.0)
+
+    # Cumulative growth factor within each period, shifted so day 0 = 1.0
+    growth = (1 + ret_wide).groupby(rebal_periods).cumprod()
+    growth_shifted = growth.groupby(rebal_periods).shift(1).fillna(1.0)
+
+    weights_raw = initial_w * growth_shifted
+
+    row_sums = weights_raw.sum(axis=1).replace(0, np.nan)
+    return weights_raw.div(row_sums, axis=0).fillna(0.0)
+
+
 def _apply_er_formula(
     stock_returns: pd.DataFrame,
     bench_returns: pd.Series,
@@ -160,7 +213,11 @@ def compute_daily_weights(
         Long-format DataFrame with columns ``"cid"``, ``"real_date"``, and
         ``"membership"`` (binary 0/1). Each row records whether a security was a
         constituent on a given date. A non-negative ``"raw_weight"`` column is
-        additionally required when ``weights_col`` is ``"raw_weight"``.
+        additionally required when ``weights_col`` is ``"raw_weight"``. The
+        ``weights_col`` column must hold at least one observation per reconstitution
+        period (see ``reconstitution_freq``); gaps coarser than that are
+        forward-filled, so a sparser input would silently reset the target to a stale
+        value on reconstitution. An ``AssertionError`` is raised otherwise.
     returns : pd.DataFrame or QuantamentalDataFrame
         Long-format DataFrame with columns ``"cid"``, ``"real_date"``, ``"xcat"``,
         and ``"value"`` (daily return in percentage points). Must be filtered to a
@@ -197,11 +254,12 @@ def compute_daily_weights(
     _validate_frequency(rebalance_freq, "rebalance_freq")
     if reconstitution_freq is not None:
         _validate_frequency(reconstitution_freq, "reconstitution_freq")
-    _validate_constituents(constituents) # TODO should they be daily ?
+    _validate_constituents(constituents)
     _validate_returns(returns)
     _validate_weights_col(constituents, weights_col)
 
     recon_freq = _resolve_reconstitution_freq(rebalance_freq, reconstitution_freq)
+    assert_weight_grid(constituents, recon_freq, weights_col=weights_col)
 
     # Pivot to wide. Membership always defines the constituent set; "weights_col"
     # only defines the target weighting *within* that set. All matrices are held as
@@ -313,35 +371,7 @@ def compute_daily_weights(
     # Assign rebalancing periods
     rebal_periods = _assign_period_labels(full_bdays, rebalance_freq)
 
-    # Vectorized weight drift using cumprod within each rebalancing period.
-    #
-    # On rebalancing day 1, weight_i = target_i / sum_j(target_j), i.e. 1/N for
-    # equal weighting and target_i / total_target for a custom weighting.
-    # On day d within the period, the unnormalized weight is:
-    #   w_i(d) = w_i(0) * prod_{t=0}^{d-1}(1 + r_i(t))
-    #
-    # We shift the cumulative product so that day 0 uses the initial weight
-    # (cumprod hasn't started yet) and day d reflects returns through day d-1.
-    # Then we normalize row-wise so weights sum to 1.
-
-    # Initial target weights per period, normalized over the period's constituents
-    total_w_denominator = (
-        target_effective.groupby(rebal_periods).transform("first").sum(axis=1)
-    )
-    initial_w = target_effective.div(
-        total_w_denominator.replace(0, np.nan), axis=0
-    ).fillna(0.0)
-
-    # Cumulative growth factor within each period, shifted so day 0 = 1.0
-    growth = (1 + ret_wide).groupby(rebal_periods).cumprod()
-    growth_shifted = growth.groupby(rebal_periods).shift(1).fillna(1.0)
-
-    # Unnormalized drifted weights
-    weights_raw = initial_w * growth_shifted
-
-    # Normalize so each row sums to 1
-    row_sums = weights_raw.sum(axis=1).replace(0, np.nan)
-    weights = weights_raw.div(row_sums, axis=0).fillna(0.0)
+    weights = _apply_weight_drift(target_effective, ret_wide, rebal_periods)
 
     # Convert to long, drop zero-weight rows
     weights_long = _wide_to_long(weights, value_name="value")

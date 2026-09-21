@@ -211,7 +211,11 @@ import polars as pl
 import requests
 from tqdm import tqdm
 
-from macrosynergy.compat import PD_2_0_OR_LATER, PYTHON_3_8_OR_LATER
+from macrosynergy.compat import (
+    PD_2_0_OR_LATER,
+    PYTHON_3_8_OR_LATER,
+    PYTHON_3_8_POLARS_PIVOT,
+)
 from macrosynergy.download.dataquery import JPMAQS_GROUP_ID, OAUTH_TOKEN_URL
 from macrosynergy.download.exceptions import DownloadError, InvalidResponseError
 from macrosynergy.download.fusion_interface import (
@@ -2988,13 +2992,22 @@ def lazy_load_from_parquets(
     cat_cols = ["cid", "xcat", "ticker"]
     if dataframe_type in ["polars", "polars-lazy"]:
         if dataframe_format == "wide":
-            lf = lf.pivot(
-                "ticker",
-                on_columns=valid_tickers,
-                index="real_date",
-                values=metrics[0],
-                aggregate_function=None,
-                separator=";",
+            pivot_kwargs = dict(
+                index="real_date", values=metrics[0], aggregate_function=None
+            )
+            if PYTHON_3_8_POLARS_PIVOT:
+                wide_df: pl.DataFrame = _collect_naming_paths(lf, paths).pivot(
+                    "ticker", **pivot_kwargs
+                )
+                tickers_present, lf = set(wide_df.columns), wide_df.lazy()
+            else:
+                tickers_present = set(lf.select("ticker").unique().collect()["ticker"])
+                lf = lf.pivot(
+                    "ticker", on_columns=sorted(tickers_present), **pivot_kwargs
+                )
+            # filter and order by valid tickers to drop null columns
+            lf = lf.select(
+                ["real_date", *(t for t in valid_tickers if t in tickers_present)]
             ).sort("real_date")
         if categorical_dataframe and dataframe_format != "wide":
             cols = None
@@ -3010,11 +3023,9 @@ def lazy_load_from_parquets(
     if dataframe_type == "pandas":
         df = _collect_naming_paths(lf, paths).to_pandas()
         if dataframe_format == "wide":
-            # reindex so the column set matches the polars path: one column per
-            # requested ticker, even where the data holds no rows for it
-            wide = df.pivot(
-                index="real_date", columns="ticker", values=metrics[0]
-            ).reindex(columns=valid_tickers)
+            wide = df.pivot(index="real_date", columns="ticker", values=metrics[0])
+            # keep only the relevant tickers and drop null columns
+            wide = wide.reindex(columns=[t for t in valid_tickers if t in wide.columns])
             # gated, so `dropna=False` keeps the all-null dates the polars path keeps
             return wide.dropna(how="all") if dropna else wide
         if categorical_dataframe and dataframe_format != "wide":
