@@ -336,7 +336,7 @@ def _dollar_per_signal_positions(
 
 
 def notional_positions(
-    df: QuantamentalDataFrame,
+    df: Union[QuantamentalDataFrame, pd.DataFrame],
     sname: str,
     fids: List[str],
     aum: Number = 100,

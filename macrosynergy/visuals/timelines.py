@@ -58,7 +58,6 @@ def timelines(
     footnote_fontsize: int = 9,
     return_fig: bool = False,
     y_axis_label: Optional[str] = None,
-    linewidth: float = None,
 ):
     """
     Displays a facet grid of time line charts of one or more categories.
@@ -136,7 +135,7 @@ def timelines(
         Optional text shown at the bottom-left of the figure canvas.
     footnote_fontsize : int
         Font size of the footnote. Default is 9.
-    y_axis_label: str
+    y_axis_label : str
         The label for the y-axis. Default is None.
     """
 
@@ -305,7 +304,6 @@ def timelines(
                 show=not return_fig,
                 return_figure=return_fig,
                 y_axis_label=y_axis_label,
-                linewidth=linewidth,
             )
 
     elif single_chart or (len(cids) == 1):
@@ -337,7 +335,6 @@ def timelines(
                 show=not return_fig,
                 return_figure=return_fig,
                 y_axis_label=y_axis_label,
-                linewidth=linewidth,
             )
 
     else:
@@ -386,7 +383,6 @@ def timelines(
                 show=not return_fig,
                 return_figure=return_fig,
                 y_axis_label=y_axis_label,
-                linewidth=linewidth,
             )
 
     if return_fig:
