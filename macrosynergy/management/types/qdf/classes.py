@@ -4,7 +4,7 @@ Module hosting custom types and meta-classes for use across the package.
 
 from typing import Optional, Mapping, Union, Sequence, List, Tuple, Dict
 import pandas as pd
-from macrosynergy.compat import PD_2_0_OR_LATER
+from macrosynergy.compat import PD_2_0_OR_LATER, PD_SUBCLASS_SAFE_SELECT_DTYPES
 from .methods import (
     get_col_sort_order,
     change_column_format,
@@ -74,6 +74,17 @@ class QuantamentalDataFrame(QuantamentalDataFrameBase):
                 self.to_categorical()
         else:
             self.to_string_type()
+
+    def select_dtypes(self, *args, **kwargs) -> pd.DataFrame:
+        """
+        Returns a plain DataFrame, as pandas>=2.2 does for `pd.DataFrame` subclasses.
+        """
+
+        # Strip the subclass so pandas can rebuild the result; `self` is unchanged.
+        if PD_SUBCLASS_SAFE_SELECT_DTYPES:
+            return super().select_dtypes(*args, **kwargs)
+
+        return pd.DataFrame(self).select_dtypes(*args, **kwargs)
 
     def is_categorical(self) -> bool:
         """

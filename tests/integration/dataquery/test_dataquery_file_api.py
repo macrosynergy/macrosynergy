@@ -27,7 +27,12 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
 
         filename = available["file-name"].iloc[0]
         with tempfile.TemporaryDirectory() as tempdir:
-            path = self.client.download_file(filename=filename, out_dir=tempdir)
+            client = DataQueryFileAPIClient(
+                client_id=os.getenv("DQ_CLIENT_ID"),
+                client_secret=os.getenv("DQ_CLIENT_SECRET"),
+                out_dir=tempdir,
+            )
+            path = client.download_file(filename=filename)
             self.assertTrue(
                 os.path.isfile(path),
                 f"Downloaded delta file not found at {path}",
@@ -45,7 +50,12 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
 
         filename = available["file-name"].iloc[0]
         with tempfile.TemporaryDirectory() as tempdir:
-            path = self.client.download_file(filename=filename, out_dir=tempdir)
+            client = DataQueryFileAPIClient(
+                client_id=os.getenv("DQ_CLIENT_ID"),
+                client_secret=os.getenv("DQ_CLIENT_SECRET"),
+                out_dir=tempdir,
+            )
+            path = client.download_file(filename=filename)
             self.assertTrue(
                 os.path.isfile(path),
                 f"Downloaded snapshot file not found at {path}",

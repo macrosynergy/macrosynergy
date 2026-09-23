@@ -16,7 +16,10 @@ from .losses import (
     NegMeanVarianceUtility,
     NegSharpeRatio,
 )
-from .modules import LongShortModule
+from .modules import (
+    LongShortModule,
+    SwiGLU
+)
 
 __all__ = [
     # models
@@ -32,4 +35,5 @@ __all__ = [
     "NegSharpeRatio",
     # modules
     "LongShortModule",
+    "SwiGLU",
 ]

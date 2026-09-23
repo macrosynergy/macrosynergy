@@ -4,8 +4,9 @@ import pandas as pd
 import torch
 import torch.nn as nn
 
-from sklearn.base import BaseEstimator, RegressorMixin
+from sklearn.base import BaseEstimator, RegressorMixin, clone
 from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import BaseCrossValidator
 
 from typing import Optional
 import inspect
@@ -36,7 +37,8 @@ _DIAGNOSTIC_LOG_EVERY = 5
 
 class MLPRegressor(BaseEstimator, RegressorMixin):
     """
-    Scikit-learn compatible multi-layer perceptron, implemented in PyTorch.
+    Multi-layer perceptron/feed-forward neural network, implemented in PyTorch, for use 
+    within the `scikit-learn` API.
 
     Parameters
     ----------
@@ -45,53 +47,48 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         If an integer is provided, the MLP will have a single hidden layer with n_latent
         units. If a list of integers is provided, the MLP will have multiple hidden layers
         with the number of units in each layer specified by the corresponding element in
-        the list. If provided, all (n_latent, fit_encoder_intercept, fit_head_intercept, encoder_activation, head_activation, dropout_p, dollar_neutral, normalization)
+        the list. If provided, all (n_latent, fit_encoder_intercept, fit_head_intercept, encoder_activation, head_activation)
         must be specified and torch_model must be None. Default is 32.
     fit_encoder_intercept : bool, optional
         Whether to include an intercept (bias term) in the encoder layers of the MLP.
-        If provided, all (n_latent, fit_encoder_intercept, fit_head_intercept, encoder_activation, head_activation, dropout_p, dollar_neutral, normalization)
+        If provided, all (n_latent, fit_encoder_intercept, fit_head_intercept, encoder_activation, head_activation)
         must be specified and torch_model must be None. Default is True.
     fit_head_intercept : bool, optional
         Whether to include an intercept (bias term) in the output layer of the MLP.
-        If provided, all (n_latent, fit_encoder_intercept, fit_head_intercept, encoder_activation, head_activation, dropout_p, dollar_neutral, normalization)
-        must be specified and torch_model must be None.Default is True.
+        If provided, all (n_latent, fit_encoder_intercept, fit_head_intercept, encoder_activation, head_activation)
+        must be specified and torch_model must be None. Default is True.
     encoder_activation : str, optional
         Activation function for the encoder (hidden) component of the network.
-        If provided, all (n_latent, fit_encoder_intercept, fit_head_intercept, encoder_activation, head_activation, dropout_p, dollar_neutral, normalization)
+        If provided, all (n_latent, fit_encoder_intercept, fit_head_intercept, encoder_activation, head_activation)
         must be specified and torch_model must be None. Default is "relu".
-        Must be one of "tanh", "relu", or "sigmoid".
+        Must be one of "tanh", "relu", "sigmoid", "gelu" or "silu".
     head_activation : str, optional
         Activation function for the head (output) component of the network.
-        If provided, all (n_latent, fit_encoder_intercept, fit_head_intercept, encoder_activation, head_activation, dropout_p, dollar_neutral, normalization)
+        If provided, all (n_latent, fit_encoder_intercept, fit_head_intercept, encoder_activation, head_activation)
         must be specified and torch_model must be None. Default is "identity". Must be one
-        of "tanh", "relu", "sigmoid", or "identity".
+        of "tanh", "relu", "sigmoid", "softmax" or "identity".
+    signal_modifier : nn.Module, optional
+        Module to modify the output of the neural network in accordance with the intention of the trading strategy and the loss function. 
+        For example, `nn.Softmax(dim = 1)` is appropriate for a long-only strategy with a unit sum requirement
+        and a portfolio-wide loss function. If provided, all (n_latent, fit_encoder_intercept, fit_head_intercept, encoder_activation, head_activation)
+        must be specified and torch_model must be None. Default is None.
+    head_rank : int, optional
+        Rank of the head (output) component of the network. This makes sense only for
+        multi-output neural networks. If provided, all (n_latent, fit_encoder_intercept, fit_head_intercept, encoder_activation, head_activation)
+        must be specified and torch_model must be None. Default is None.
     dropout_p : float, optional
         Dropout probability for the encoder (hidden) component of the network.
-        If provided, all (n_latent, fit_encoder_intercept, fit_head_intercept, encoder_activation, head_activation, dropout_p, dollar_neutral, normalization)
+        If provided, all (n_latent, fit_encoder_intercept, fit_head_intercept, encoder_activation, head_activation)
         must be specified and torch_model must be None. Default is 0.
-    long_only : bool, optional
-        Whether to constrain the model outputs to sum to 1 or for the absolute values
-        to sum to 1. If None, the model outputs are unconstrained. If True, the output 
-        from the `head_activation` layer is passed through a softmax function. If False,
-        the output from the `head_activation` layer is passed through a softmax function
-        with the denominator accepting the absolute values of the outputs. If provided,
-        all (n_latent, fit_encoder_intercept, fit_head_intercept, encoder_activation, head_activation, dropout_p, dollar_neutral, normalization)
-        must be specified and torch_model must be None. Default is None.
-    dollar_neutral : bool, optional
-        Whether to constrain the model outputs to sum to 0. This is only relevant when `long_only` is False.
-        When True and `long_only` is False, the output from the `head_activation` layer is
-        demeaned to sum to 0, before being passed through the adjusted softmax. 
-        If provided, all (n_latent, fit_encoder_intercept, fit_head_intercept, encoder_activation, head_activation, dropout_p, dollar_neutral, normalization)
-        must be specified, `long_only` should be False and torch_model must be None. Default is False.
     normalization: str, optional
         Whether to apply normalization following each linear layer in the encoder (hidden) component of the network.
-        Can be either "layer" for LayerNorm, "batch" for BatchNorm, or "none" for no normalization.
-        If provided, all (n_latent, fit_encoder_intercept, fit_head_intercept, encoder_activation, head_activation, dropout_p, dollar_neutral, normalization)
+        Can be either "layer" for LayerNorm or "batch" for BatchNorm.
+        If provided, all (n_latent, fit_encoder_intercept, fit_head_intercept, encoder_activation, head_activation)
         must be specified and torch_model must be None. Default is None.
     torch_model : Intersection[torch.nn.Module, BaseEstimator], optional
         Custom PyTorch model to use instead of the default MLP. Must be a subclass of both
         torch.nn.Module and sklearn.base.BaseEstimator. If torch_model is provided, all 
-        parameters (n_latent, fit_encoder_intercept, fit_head_intercept, encoder_activation, head_activation, dropout_p, long_only, dollar_neutral, normalization)
+        parameters (n_latent, fit_encoder_intercept, fit_head_intercept, encoder_activation, head_activation, dropout_p, head_rank, signal_modifier, normalization)
         must be None. Default is None.
     loss_func : torch.nn.Module, optional
         Loss function used during training. Must be a subclass of torch.nn.Module.
@@ -127,10 +124,13 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
     epochs : int, optional
         Maximum number of training epochs. Default is 10000.
     patience : int, optional
-        Number of epochs to wait for improvement before early stopping. Default is 1000.
-    train_pct : float, optional
-        Fraction of samples used for training (remainder used for validation). This is
-        needed for the early stopping process. Default is 0.7.
+        Number of epochs to wait for improvement before early stopping. If None, 
+        early stopping is disabled. Default is 1000.
+    train_splitter : float or BaseCrossValidator, optional
+        If a float, it is the fraction of samples used for training (remainder used for
+        validation). If a BaseCrossValidator, it is used to split the data into training
+        and validation sets. This is needed to estimate the number of epochs to terminate
+        training. If patience is None, this parameter is ignored. Default is 0.7.
     x_scaler : Optional[TransformerMixin], optional
         Scaler for the input features. Must be a subclass of sklearn's TransformerMixin.
         This can also be set to None.
@@ -272,10 +272,10 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         fit_head_intercept = True,
         encoder_activation = "relu",
         head_activation = "identity",
+        signal_modifier = None,
+        head_rank = None,
         dropout_p = 0,
-        long_only = None,
-        dollar_neutral = False,
-        normalization = "none",
+        normalization = None,
         torch_model = None,
         # Neural network training dynamics
         loss_func = torch.nn.MSELoss(),
@@ -290,7 +290,7 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         drop_last = False,
         epochs = 10000, # NOTE: when a scheduler is used, the epochs default is way too high unless the patience is high
         patience = 1000,
-        train_pct = 0.7,
+        train_splitter = 0.7,
         x_scaler = StandardScaler(with_mean=False),
         y_scaler = StandardScaler(with_mean=False), 
         refit = False,
@@ -302,36 +302,36 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
     ):
         # Checks 
         self._check_init_params(
-            n_latent,
-            fit_encoder_intercept,
-            fit_head_intercept,
-            encoder_activation,
-            head_activation,
-            dropout_p,
-            long_only,
-            dollar_neutral,
-            normalization,
-            torch_model,
-            loss_func,
-            optimizer,
-            scheduler,
-            batch_size,
-            learning_rate,
-            weight_decay,
-            reg_turnover,
-            use_ts_sampler,
-            aggregate_last,
-            drop_last,
-            epochs,
-            patience,
-            train_pct,
-            x_scaler,
-            y_scaler,
-            refit,
-            verbose,
-            random_state,
-            inverse_transform_preds,
-            min_samples,
+            n_latent = n_latent,
+            fit_encoder_intercept = fit_encoder_intercept,
+            fit_head_intercept = fit_head_intercept,
+            encoder_activation = encoder_activation,
+            head_activation = head_activation,
+            signal_modifier = signal_modifier,
+            head_rank = head_rank,
+            dropout_p = dropout_p,
+            normalization = normalization,
+            torch_model = torch_model,
+            loss_func = loss_func,
+            optimizer = optimizer,
+            scheduler = scheduler,
+            batch_size = batch_size,
+            learning_rate = learning_rate,
+            weight_decay = weight_decay,
+            reg_turnover = reg_turnover,
+            use_ts_sampler = use_ts_sampler,
+            aggregate_last = aggregate_last,
+            drop_last = drop_last,
+            epochs = epochs,
+            patience = patience,
+            train_splitter = train_splitter,
+            x_scaler = x_scaler,
+            y_scaler = y_scaler,
+            refit = refit,
+            verbose = verbose,
+            random_state = random_state,
+            inverse_transform_preds = inverse_transform_preds,
+            min_samples = min_samples,
         )
 
         # Attributes
@@ -340,9 +340,9 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         self.fit_head_intercept = fit_head_intercept
         self.encoder_activation = encoder_activation
         self.head_activation = head_activation
+        self.signal_modifier = signal_modifier
+        self.head_rank = head_rank
         self.dropout_p = dropout_p
-        self.long_only = long_only
-        self.dollar_neutral = dollar_neutral
         self.normalization = normalization
         self.torch_model = torch_model
         self.loss_func = loss_func
@@ -358,7 +358,7 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         self.drop_last = drop_last
         self.epochs = epochs
         self.patience = patience
-        self.train_pct = train_pct
+        self.train_splitter = train_splitter
         self.x_scaler = x_scaler
         self.y_scaler = y_scaler
         self.refit = refit
@@ -370,9 +370,9 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         self.optimizers = [self.optimizer] if not isinstance(self.optimizer, list) else self.optimizer
         self.random_states = [self.random_state] if not isinstance(self.random_state, list) else self.random_state
 
-    def fit(self, X, y, sample_weight=None):
+    def fit(self, X, y):
         # Fit checks 
-        self._check_fit_params(X, y, sample_weight)
+        self._check_fit_params(X, y)
 
         # Copy data and initialize empty list of models to be trained, with diagnostic
         # dictionaries
@@ -382,11 +382,12 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
 
         self.early_stopping_dynamics = {}
         self.early_stopping_inference = {}
+        self.final_model_inference = {}
 
         # Data checks
         # TODO: if torch_model is provided, check it has the right structure 
         # to be trained by this class by passing a batch through it
-        sample_weight_strategy = self._check_fit_params(X, y, sample_weight)
+        self._check_fit_params(X, y)
 
         # Filter assets with insufficient samples to have a head in the network
         target_counts = y.count()
@@ -395,35 +396,37 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
 
         y = y[self.targets]
 
-        # Check this doesn't interfere with dollar neutrality constraint
-        if self.dollar_neutral and self.n_targets < 3:
-            raise ValueError("Dollar neutrality constraint requires at least 3 assets to be predicted.")
+        if self.patience is None:
+            # Then we are training a single model on the entire dataset, with no early stopping,
+            # but with possible different trainings for random seeds and optimizers.
+            X_s, y_s, _, _, x_scalers, y_scalers = self.scale_data_(
+                X_trains = [X],
+                y_trains = [y],
+                x_scaler = self.x_scaler,
+                y_scaler = self.y_scaler,
+            )
+            train_datasets, _ = self.make_tensor_datasets_(
+                X_trains_s = X_s,
+                y_trains_s = y_s,
+            )
+        else:
+            # Then we are training multiple models on different train/validation splits.
+            # If refit = False, the average model is used as the "final model".
+            # If refit = True, the number of stopping epochs is averaged across folds
+            # and a final model is trained on the entire dataset for that number of epochs.
+            X_trains, X_valids, y_trains, y_valids = self.create_train_valid_splits_(X, y, self.train_splitter)
 
-        # Create training and validation splits
-        X_train, X_valid, y_train, y_valid = self.create_train_valid_splits(X, y, self.train_pct)
+            # Scale training and validation splits for each fold 
+            X_trains_s, y_trains_s, X_valids_s, y_valids_s, x_scalers, y_scalers = self.scale_data_(X_trains, y_trains, self.x_scaler, self.y_scaler, X_valids, y_valids)
 
-        # Scale training and validation splits
-        X_train_s, y_train_s, X_valid_s, y_valid_s = self.scale_data(X_train, y_train, self.x_scaler, self.y_scaler, X_valid, y_valid)
-
-        # Make tensor datasets
-        train_dataset, valid_dataset = self.make_tensor_datasets(X_train_s, y_train_s, X_valid_s, y_valid_s, sample_weight)
-
-        # Recorded alongside the training diagnostics so that each fit can be identified by
-        # its window when screening a full sequential run, where `fit` is called per fold
-        fit_dates = X.index.get_level_values(1)
-        fit_context = {
-            "fit_index": next(_FIT_SEQUENCE),
-            "fit_start": f"{fit_dates.min():%Y-%m-%d}",
-            "fit_end": f"{fit_dates.max():%Y-%m-%d}",
-            "train_end": f"{X_train.index.get_level_values(1).max():%Y-%m-%d}",
-            "n_features": X.shape[1],
-            "n_targets": self.n_targets,
-            # The output constraint, so that runs of different variants stay separable when
-            # several are fitted into one log
-            "long_only": self.long_only,
-            "dollar_neutral": self.dollar_neutral,
-        }
-
+            # Make tensor datasets for each fold 
+            train_datasets, valid_datasets = self.make_tensor_datasets_(
+                X_trains_s = X_trains_s,
+                y_trains_s = y_trains_s,
+                X_valids_s = X_valids_s,
+                y_valids_s = y_valids_s
+            )
+            
         # Iterate through random states
         for optim_idx, optimizer in enumerate(self.optimizers):
             for random_state_idx, random_state in enumerate(self.random_states):
@@ -442,12 +445,36 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
                     "improvement_path_diff": [],
         
                     # Best model information
-                    "selected_epoch": None,
-                    "termination_epoch": None,
-                    "bestmodel_train_loss": None,
-                    "bestmodel_valid_loss": None,
-                    "bestmodel_generalization_gap": None,
+                    "selected_epoch": [],
+                    "termination_epoch": [],
+                    "bestmodel_train_loss": [],
+                    "bestmodel_valid_loss": [],
+                    "bestmodel_generalization_gap": [],
+                }
 
+                self.early_stopping_inference[(optim_idx, random_state_idx)] = {
+                    # Best model gradient information
+                    "gradient_mean_per_layer": [],
+                    "gradient_std_per_layer": [],
+                    "gradient_max_per_layer": [],
+                    "gradient_min_per_layer": [],
+                    "gradient_norm_per_layer": [],
+                    "global_gradient_norm": [],
+
+                    # Best model NaN and inf checks
+                    "train_loss_isnan": [],
+                    "train_loss_isinf": [],
+                    "nan_gradients_per_layer": [],
+                    "inf_gradients_per_layer": [],
+                    "nan_gradients_global": [],
+                    "inf_gradients_global": [],
+
+                    # Loss and target sensitivities
+                    "training_loss_sensitivity": [],
+                    "training_target_sensitivities": [],
+                }
+
+                self.final_model_inference[(optim_idx, random_state_idx)] = {
                     # Best model gradient information
                     "gradient_mean_per_layer": {},
                     "gradient_std_per_layer": {},
@@ -463,79 +490,15 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
                     "inf_gradients_per_layer": {},
                     "nan_gradients_global": None,
                     "inf_gradients_global": None,
-                }
 
-                self.early_stopping_inference[(optim_idx, random_state_idx)] = {
+                    # Loss and target sensitivities
                     "training_loss_sensitivity": [],
-                    "training_target_sensitivities": {},
+                    "training_target_sensitivities": [],
                 }
 
-                # Make torch dataloaders
-                train_loader, train_loader_eval, valid_loader = self.make_dataloaders(train_dataset, self.batch_size, self.use_ts_sampler, self.aggregate_last, self.drop_last, valid_dataset)
-
-                # Initialize model
-                model = self.initialize_model(
-                    torch_model = self.torch_model,
-                    n_inputs = X.shape[1],
-                    n_latent = self.n_latent,
-                    n_outputs = y.shape[1],
-                    encoder_activation = self.encoder_activation,
-                    head_activation = self.head_activation,
-                    fit_encoder_intercept = self.fit_encoder_intercept,
-                    fit_head_intercept = self.fit_head_intercept,
-                    dropout_p = self.dropout_p,
-                    long_only = self.long_only,
-                    dollar_neutral = self.dollar_neutral,
-                    normalization = self.normalization, 
-                )            
-
-                # Set up optimizer 
-                optim = self.make_optimizer(model, optimizer, self.learning_rate, self.weight_decay)
-
-                # Set up scheduler
-                if self.scheduler is not None:
-                    scheduler = self.make_scheduler(optim, self.scheduler, self.epochs, len(train_loader))
-                else:
-                    scheduler = None
-        
-                # Train model
-                model_es, epochs_es, early_stopping_trace = self.train_model(
-                    model = model,
-                    epochs = self.epochs,
-                    train_loader = train_loader,
-                    train_loader_eval = train_loader_eval,
-                    valid_loader = valid_loader, 
-                    optimizer = optim, 
-                    scheduler = scheduler,
-                    loss_func = self.loss_func,
-                    sample_weight = sample_weight,
-                    sample_weight_strategy = sample_weight_strategy,
-                    reg_turnover = self.reg_turnover,
-                    patience = self.patience,
-                    verbose = self.verbose,
-                    context = run_context,
-                )
-                self.early_stopping_dynamics[(optim_idx, random_state_idx)].update(early_stopping_trace)
-
-                # Store model diagnostics on gradients and NaN/inf checks
-                model_es_diagnostics = self._get_model_diagnostics(model_es, torch.Tensor(X_train_s), torch.Tensor(y_train_s))
-                self.early_stopping_dynamics[(optim_idx, random_state_idx)].update(model_es_diagnostics)
-
-                # Infer properties of the trained model
-                model_es_inference = self._inspect_model(model_es, torch.Tensor(X_train_s), torch.Tensor(y_train_s))
-                self.early_stopping_inference[(optim_idx, random_state_idx)].update(model_es_inference)
-
-                if self.refit:
-                    # Create training set dataloader over the full dataset
-                    X_s, y_s, _, _ = self.scale_data(X, y, self.x_scaler, self.y_scaler)
-                    full_train_dataset, _ = self.make_tensor_datasets(X_train_s = X_s, y_train_s = y_s, sample_weight = sample_weight)
-                    full_train_loader, _, _ = self.make_dataloaders(full_train_dataset, self.batch_size, self.use_ts_sampler, self.aggregate_last, self.drop_last)
-
-                    # Reset seed
-                    torch.manual_seed(random_state)
-
-                    # Reinitialize model
-                    final_model = self.initialize_model(
+                if self.patience is None:
+                    # Initialize model
+                    model = self.initialize_model(
                         torch_model = self.torch_model,
                         n_inputs = X.shape[1],
                         n_latent = self.n_latent,
@@ -544,37 +507,198 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
                         head_activation = self.head_activation,
                         fit_encoder_intercept = self.fit_encoder_intercept,
                         fit_head_intercept = self.fit_head_intercept,
+                        signal_modifier = self.signal_modifier,
+                        head_rank = self.head_rank,
                         dropout_p = self.dropout_p,
-                        long_only = self.long_only,
-                        dollar_neutral = self.dollar_neutral,
                         normalization = self.normalization, 
                     )
-                    optim = self.make_optimizer(final_model, optimizer, self.learning_rate, self.weight_decay)
+    
+                    # Set up optimizer 
+                    optim = self.make_optimizer(model, optimizer, self.learning_rate, self.weight_decay)
+
+                    # Make torch dataloaders
+                    train_loader, _, _ = self.make_dataloaders_(
+                        train_dataset = train_datasets[0],
+                        batch_size = self.batch_size,
+                        use_ts_sampler = self.use_ts_sampler,
+                        aggregate_last = self.aggregate_last,
+                        drop_last = self.drop_last,
+                        valid_dataset = None
+                    )
                     if self.scheduler is not None:
-                        scheduler = self.make_scheduler(optim, self.scheduler, self.epochs, len(full_train_loader))
+                        scheduler = self.make_scheduler(optim, self.scheduler, self.epochs, len(train_loader))
                     else:
                         scheduler = None
-                        
+
                     # Train model
-                    model_full, _, _ = self.train_model(
-                        model = final_model,
-                        epochs = epochs_es,
-                        train_loader = full_train_loader,
+                    model, _, _ = self.train_model(
+                        model = model,
+                        epochs = self.epochs,
+                        train_loader = train_loader,
                         train_loader_eval = None,
                         valid_loader = None, 
                         optimizer = optim, 
                         scheduler = scheduler,
                         loss_func = self.loss_func,
-                        sample_weight = sample_weight,
-                        sample_weight_strategy = sample_weight_strategy,
                         reg_turnover = self.reg_turnover, 
-                        patience = None, 
-                        verbose = self.verbose
+                        patience = self.patience, 
+                        verbose = self.verbose,
                     )
-                    self.models.append(model_full)
 
+                    # Store model diagnostics on gradients and NaN/inf checks
+                    model_diagnostics = self._get_model_diagnostics(model, torch.Tensor(X_s[0]), torch.Tensor(y_s[0]))
+                    self.final_model_inference[(optim_idx, random_state_idx)].update(model_diagnostics)
+
+                    # Infer properties of the trained model
+                    model_inference = self._inspect_model(model, torch.Tensor(X_s[0]), torch.Tensor(y_s[0]))
+                    self.final_model_inference[(optim_idx, random_state_idx)].update(model_inference)
+                    
+                    self.models.append(model)
                 else:
-                    self.models.append(model_es)
+                    self.validated_models = []
+                    self.mean_epochs_es = 0
+                    for idx, (train_dataset, valid_dataset) in enumerate(zip(train_datasets, valid_datasets)):
+                        torch.manual_seed(random_state)
+
+                        # Initialize model
+                        model = self.initialize_model(
+                            torch_model = self.torch_model,
+                            n_inputs = X.shape[1],
+                            n_latent = self.n_latent,
+                            n_outputs = y.shape[1],
+                            encoder_activation = self.encoder_activation,
+                            head_activation = self.head_activation,
+                            fit_encoder_intercept = self.fit_encoder_intercept,
+                            fit_head_intercept = self.fit_head_intercept,
+                            signal_modifier = self.signal_modifier,
+                            head_rank = self.head_rank,
+                            dropout_p = self.dropout_p,
+                            normalization = self.normalization, 
+                        )
+        
+                        # Set up optimizer 
+                        optim = self.make_optimizer(model, optimizer, self.learning_rate, self.weight_decay)
+
+                        train_loader, train_loader_eval, valid_loader = self.make_dataloaders_(
+                            train_dataset = train_dataset,
+                            batch_size = self.batch_size,
+                            use_ts_sampler = self.use_ts_sampler,
+                            aggregate_last = self.aggregate_last,
+                            drop_last = self.drop_last,
+                            valid_dataset = valid_dataset
+                        )
+                        if self.scheduler is not None:
+                            scheduler = self.make_scheduler(optim, self.scheduler, self.epochs, len(train_loader))
+                        else:
+                            scheduler = None
+
+                        # Train model
+                        model_es, epochs_es, early_stopping_trace = self.train_model(
+                            model = model,
+                            epochs = self.epochs,
+                            train_loader = train_loader,
+                            train_loader_eval = train_loader_eval,
+                            valid_loader = valid_loader,
+                            optimizer = optim,
+                            scheduler = scheduler,
+                            loss_func = self.loss_func,
+                            reg_turnover = self.reg_turnover,
+                            patience = self.patience,
+                            verbose = self.verbose,
+                        )
+
+                        # Store early stopping information
+                        for key, value in early_stopping_trace.items():
+                            self.early_stopping_dynamics[(optim_idx, random_state_idx)][key].append(value)
+
+                        # Store model diagnostics on gradients and NaN/inf checks
+                        model_diagnostics = self._get_model_diagnostics(model_es, torch.Tensor(X_trains_s[idx]), torch.Tensor(y_trains_s[idx]))
+                        for key, value in model_diagnostics.items():
+                            self.early_stopping_inference[(optim_idx, random_state_idx)][key].append(value)
+
+                        # Infer properties of the trained model
+                        model_inference = self._inspect_model(model_es, torch.Tensor(X_trains_s[idx]), torch.Tensor(y_trains_s[idx]))
+                        for key, value in model_inference.items():
+                            self.early_stopping_inference[(optim_idx, random_state_idx)][key].append(value)
+
+                        self.validated_models.append(model_es)
+                        self.mean_epochs_es += epochs_es
+                    self.mean_epochs_es /= len(self.validated_models)
+                    self.mean_epochs_es = int(self.mean_epochs_es)
+                    if self.refit:
+                        # Create training set dataloader over the full dataset
+                        X_s, y_s, _, _, x_scalers, y_scalers = self.scale_data_(
+                            X_trains = [X],
+                            y_trains = [y],
+                            x_scaler = self.x_scaler,
+                            y_scaler = self.y_scaler,
+                        )
+                        train_datasets, _ = self.make_tensor_datasets_(
+                            X_trains_s = X_s,
+                            y_trains_s = y_s
+                        )
+                        train_loader, _, _ = self.make_dataloaders_(
+                            train_dataset = train_datasets[0],
+                            batch_size = self.batch_size,
+                            use_ts_sampler = self.use_ts_sampler,
+                            aggregate_last = self.aggregate_last,
+                            drop_last = self.drop_last,
+                            valid_dataset = None
+                        )
+
+                        # Reset seed
+                        torch.manual_seed(random_state)
+
+                        # Reinitialize model
+                        final_model = self.initialize_model(
+                            torch_model = self.torch_model,
+                            n_inputs = X.shape[1],
+                            n_latent = self.n_latent,
+                            n_outputs = y.shape[1],
+                            encoder_activation = self.encoder_activation,
+                            head_activation = self.head_activation,
+                            fit_encoder_intercept = self.fit_encoder_intercept,
+                            fit_head_intercept = self.fit_head_intercept,
+                            signal_modifier = self.signal_modifier,
+                            head_rank = self.head_rank,
+                            dropout_p = self.dropout_p,
+                            normalization = self.normalization, 
+                        )
+
+                        optim = self.make_optimizer(final_model, optimizer, self.learning_rate, self.weight_decay)
+                        
+                        if self.scheduler is not None:
+                            scheduler = self.make_scheduler(optim, self.scheduler, int(self.mean_epochs_es), len(train_loader))
+                        else:
+                            scheduler = None
+
+                        # Train model
+                        model_full, _, _ = self.train_model(
+                            model = final_model,
+                            epochs = int(self.mean_epochs_es),
+                            train_loader = train_loader,
+                            train_loader_eval = None,
+                            valid_loader = None, 
+                            optimizer = optim, 
+                            scheduler = scheduler,
+                            loss_func = self.loss_func,
+                            reg_turnover = self.reg_turnover, 
+                            patience = None, 
+                            verbose = self.verbose,
+                        )
+
+                        # Infer properties of the trained model
+                        model_inference = self._inspect_model(model_full, torch.Tensor(X_s[0]), torch.Tensor(y_s[0]))
+                        for key, value in model_inference.items():
+                            self.final_model_inference[(optim_idx, random_state_idx)][key].append(value)
+
+                        self.models.append(model_full)
+
+                    else:
+                        self.models.append(self.validated_models)
+
+        self.x_scalers = x_scalers
+        self.y_scalers = y_scalers
 
         return self
     
@@ -582,21 +706,44 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         # Predict checks
         self._check_predict_params(X)
 
-        # Scale data 
-        X_s = self.x_scaler.transform(X)
+        # Scale data
+        Xs_s = [
+            x_scaler.transform(X) 
+            if x_scaler is not None
+            else X.to_numpy()
+            for x_scaler in self.x_scalers
+        ]
+
         model_preds = []
 
         with torch.no_grad():
-            # Convert to tensor and pass through each network
-            X_s_torch = torch.Tensor(X_s)
             for model in self.models:
-                model.eval()
-                preds = model(X_s_torch).numpy()
+                if isinstance(model, list):
+                    # If model is a list of validated models, average predictions across them
+                    # First scale the input data
+                    preds_list = []
+                    for idx, m in enumerate(model):
+                        m.eval()
+                        X_s_torch = torch.Tensor(Xs_s[idx])
+                        preds = m(X_s_torch).numpy()
 
-                # Inverse scale predictions
-                if self.inverse_transform_preds:
-                    preds = self.y_scaler.inverse_transform(preds)
-                model_preds.append(preds)
+                        # Inverse scale predictions
+                        if self.inverse_transform_preds:
+                            preds = self.y_scalers[idx].inverse_transform(preds)
+                        preds_list.append(preds)
+
+                    # Average predictions across validated models
+                    avg_preds = np.mean(np.stack(preds_list, axis=0), axis=0)
+                    model_preds.append(avg_preds)
+                else:
+                    model.eval()
+                    X_s_torch = torch.Tensor(Xs_s[0])
+                    preds = model(X_s_torch).numpy()
+
+                    # Inverse scale predictions
+                    if self.inverse_transform_preds:
+                        preds = self.y_scalers[0].inverse_transform(preds)
+                    model_preds.append(preds)
 
         # Concatenate predictions and average across models
         final_preds = np.mean(np.stack(model_preds, axis=0), axis = 0)
@@ -613,9 +760,9 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         head_activation,
         fit_encoder_intercept,
         fit_head_intercept,
+        signal_modifier,
+        head_rank,
         dropout_p,
-        long_only,
-        dollar_neutral,
         normalization,
     ):            
         if torch_model is not None:
@@ -631,85 +778,141 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
                 head_activation=head_activation,
                 fit_encoder_intercept=fit_encoder_intercept,
                 fit_head_intercept=fit_head_intercept,
+                signal_modifier = signal_modifier,
+                head_rank=head_rank,
                 dropout_p=dropout_p,
-                long_only=long_only,
-                dollar_neutral=dollar_neutral,
                 normalization=normalization,
             )
 
         return model
     
-    def create_train_valid_splits(self, X, y, train_pct):
-        dates = sorted(X.index.get_level_values(1).unique())
-        cut = int(train_pct * len(dates))
-        train_dates, valid_dates = dates[:cut], dates[cut:] # TODO: upfront check this doesn't create empty splits
+    def create_train_valid_splits_(self, X, y, splitter):
+        """
+        Create train/validation splits based on the provided splitter object.
+        Output lists of X_trains, X_valids, y_trains, y_valids for each split.
+        """
+        X_trains, X_valids, y_trains, y_valids = [], [], [], []
+        if isinstance(splitter, BaseCrossValidator):
+            for train_idx, valid_idx in splitter.split(X, y):
+                X_trains.append(X.iloc[train_idx])
+                X_valids.append(X.iloc[valid_idx])
+                y_trains.append(y.iloc[train_idx])
+                y_valids.append(y.iloc[valid_idx])
+        else:
+            # it is a train_pct 
+            dates = sorted(X.index.get_level_values(1).unique())
+            cut = int(splitter * len(dates))
+            train_dates, valid_dates = dates[:cut], dates[cut:] # TODO: upfront check this doesn't create empty splits
 
-        X_train = X[X.index.get_level_values(1).isin(train_dates)]
-        y_train = y[y.index.get_level_values(1).isin(train_dates)]
-        X_valid = X[X.index.get_level_values(1).isin(valid_dates)]
-        y_valid = y[y.index.get_level_values(1).isin(valid_dates)]
+            X_train = X[X.index.get_level_values(1).isin(train_dates)]
+            y_train = y[y.index.get_level_values(1).isin(train_dates)]
+            X_valid = X[X.index.get_level_values(1).isin(valid_dates)]
+            y_valid = y[y.index.get_level_values(1).isin(valid_dates)]
 
-        return X_train, X_valid, y_train, y_valid
+            X_trains.append(X_train)
+            X_valids.append(X_valid)
+            y_trains.append(y_train)
+            y_valids.append(y_valid)
+
+        return X_trains, X_valids, y_trains, y_valids
     
-    def scale_data(
+    def scale_data_(
         self,
-        X_train,
-        y_train,
+        X_trains,
+        y_trains,
         x_scaler,
         y_scaler,
-        X_valid = None,
-        y_valid = None,
+        X_valids=None,
+        y_valids=None,
     ):
-        X_valid_s = None
-        y_valid_s = None
-        # Scale independent variables
-        if x_scaler:
-            x_scaler.fit(X_train)
-            X_train_s = x_scaler.transform(X_train)
-            if X_valid is not None:
-                X_valid_s = x_scaler.transform(X_valid)
-        else:
-            X_train_s = X_train.values
-            if X_valid is not None:
-                X_valid_s = X_valid.values
+        """
+        Input list of X_trains, y_trains, x_scalers, y_scalers and optional X_valids, y_valids.
+        Output lists of scaled X_trains, y_trains, X_valids, y_valids.
+        """
+        X_trains_s, y_trains_s, X_valids_s, y_valids_s, x_scalers, y_scalers = [], [], [], [], [], []
+        for i in range(len(X_trains)):
+            X_train = X_trains[i]
+            y_train = y_trains[i]
+            X_valid = X_valids[i] if X_valids is not None else None
+            y_valid = y_valids[i] if y_valids is not None else None
 
+            if x_scaler is not None:
+                x_scaler_i = clone(x_scaler)
+                x_scaler_i.fit(X_train)
+                X_train_s = x_scaler_i.transform(X_train)
+                if X_valid is not None:
+                    X_valid_s = x_scaler_i.transform(X_valid)
+                else:
+                    X_valid_s = None
+            else:
+                X_train_s = X_train.values
+                if X_valid is not None:
+                    X_valid_s = X_valid.values
+                else:
+                    X_valid_s = None
 
-        # Scale dependent variables
-        # TODO: ensure ys are 2d for this to work
-        if y_scaler:
-            y_scaler.fit(y_train)
-            y_train_s = y_scaler.transform(y_train)
-            if y_valid is not None:
-                y_valid_s = y_scaler.transform(y_valid)
-        else:
-            y_train_s = y_train.values
-            if y_valid is not None:
-                y_valid_s = y_valid.values
+            # Scale dependent variables
+            if y_scaler is not None:
+                y_scaler_i = clone(y_scaler)
+                y_scaler_i.fit(y_train)
+                y_train_s = y_scaler_i.transform(y_train)
+                if y_valid is not None:
+                    y_valid_s = y_scaler_i.transform(y_valid)
+                else:
+                    y_valid_s = None
+            else:
+                y_train_s = y_train.values
+                if y_valid is not None:
+                    y_valid_s = y_valid.values
+                else:
+                    y_valid_s = None
 
-        return X_train_s, y_train_s, X_valid_s, y_valid_s
+            X_trains_s.append(X_train_s)
+            y_trains_s.append(y_train_s)
+            X_valids_s.append(X_valid_s)
+            y_valids_s.append(y_valid_s)
+
+            if x_scaler is not None:
+                x_scalers.append(x_scaler_i)
+            else:
+                x_scalers.append(None)
+
+            if y_scaler is not None:
+                y_scalers.append(y_scaler_i)
+            else:
+                y_scalers.append(None)
+
+        return X_trains_s, y_trains_s, X_valids_s, y_valids_s, x_scalers, y_scalers
     
-    def make_tensor_datasets(
+    def make_tensor_datasets_(
         self,
-        X_train_s,
-        y_train_s,
-        X_valid_s = None,
-        y_valid_s = None,
-        sample_weight = None,
+        X_trains_s,
+        y_trains_s,
+        X_valids_s = None,
+        y_valids_s = None,
     ):
-        # TODO: check that both X_valid_s and y_valid_s have to be None
-        if sample_weight is not None: 
-            train_dataset = torch.utils.data.TensorDataset(torch.Tensor(X_train_s), torch.Tensor(y_train_s), torch.Tensor(sample_weight))
-        else:
-            train_dataset = torch.utils.data.TensorDataset(torch.Tensor(X_train_s), torch.Tensor(y_train_s))
+        train_datasets = []
+        valid_datasets = []
 
-        if X_valid_s is not None:
-            valid_dataset = torch.utils.data.TensorDataset(torch.Tensor(X_valid_s), torch.Tensor(y_valid_s))
-        else:
-            valid_dataset = None
+        for i in range(len(X_trains_s)):
+            train_dataset = torch.utils.data.TensorDataset(
+                torch.Tensor(X_trains_s[i]),
+                torch.Tensor(y_trains_s[i]),
+            )
+            if X_valids_s is not None:
+                valid_dataset = torch.utils.data.TensorDataset(
+                    torch.Tensor(X_valids_s[i]),
+                    torch.Tensor(y_valids_s[i]),
+                )
+            else:
+                valid_dataset = None
 
-        return train_dataset, valid_dataset
+            train_datasets.append(train_dataset)
+            valid_datasets.append(valid_dataset)
 
-    def make_dataloaders(
+        return train_datasets, valid_datasets
+
+    def make_dataloaders_(
         self,
         train_dataset,
         batch_size,
@@ -724,13 +927,13 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         if not use_ts_sampler:
             train_loader = torch.utils.data.DataLoader(
                 dataset = train_dataset,
-                batch_size = self.batch_size,
+                batch_size = batch_size,
                 shuffle = True,
                 drop_last = drop_last
             )
             train_loader_eval = torch.utils.data.DataLoader(
                 dataset = train_dataset,
-                batch_size = self.batch_size,
+                batch_size = batch_size,
                 shuffle = False,
                 drop_last = False,
             )
@@ -822,8 +1025,6 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         optimizer,
         scheduler,
         loss_func,
-        sample_weight,
-        sample_weight_strategy,
         reg_turnover,
         patience,
         verbose,
@@ -850,36 +1051,17 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         
         for epoch in range(epochs):
             model.train()
-            epoch_preds = []
-            if sample_weight:
-                for X_i, y_i, sw_i in train_loader:
-                    model, preds_i = self._fit_one_batch(
-                        model = model,
-                        X_i = X_i,
-                        y_i = y_i,
-                        optimizer = optimizer,
-                        scheduler = scheduler,
-                        loss_func = loss_func,
-                        sample_weight = sw_i,
-                        sample_weight_strategy = sample_weight_strategy,
-                        reg_turnover = reg_turnover
-                    )
-                    epoch_preds.append(preds_i)
-            else:
-                for X_i, y_i in train_loader:
-                    model, preds_i = self._fit_one_batch(
-                        model = model,
-                        X_i = X_i,
-                        y_i = y_i,
-                        optimizer = optimizer,
-                        scheduler = scheduler,
-                        loss_func = loss_func,
-                        sample_weight = None,
-                        sample_weight_strategy = sample_weight_strategy,
-                        reg_turnover = reg_turnover
-                    )
-                    epoch_preds.append(preds_i)
-
+            for X_i, y_i in train_loader:
+                model = self._fit_one_batch(
+                    model = model,
+                    X_i = X_i,
+                    y_i = y_i,
+                    optimizer = optimizer,
+                    scheduler = scheduler,
+                    loss_func = loss_func,
+                    reg_turnover = reg_turnover
+                )  
+            
             if patience is not None:
                 # The cross-sectional diagnostics cost a pass per period, so they are only
                 # computed on the epochs that report them
@@ -929,8 +1111,6 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
             pass
 
         early_stopping_trace["selected_epoch"] = best_epoch
-        early_stopping_trace["train_loss_isinf"] = np.isinf(early_stopping_trace["train_loss_path"]).any()
-        early_stopping_trace["train_loss_isnan"] = np.isnan(early_stopping_trace["train_loss_path"]).any()
 
         return model, best_epoch, early_stopping_trace
 
@@ -942,19 +1122,12 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         optimizer,
         scheduler,
         loss_func,
-        sample_weight,
-        sample_weight_strategy,
         reg_turnover
     ):
         optimizer.zero_grad()
         preds = model(X_i)
-        if not sample_weight:
-            loss = loss_func(preds, y_i)
-        elif sample_weight_strategy == "native":
-            loss = loss_func(preds, y_i, sample_weight)
-        elif sample_weight_strategy == "reduction_none":
-            loss = loss_func(preds, y_i) * sample_weight
-            loss = loss.mean()
+        
+        loss = loss_func(preds, y_i)
 
         if reg_turnover > 0:
             pweight_changes = preds[1:] - preds[:-1]
@@ -1299,9 +1472,9 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         fit_head_intercept,
         encoder_activation,
         head_activation,
+        signal_modifier,
+        head_rank,
         dropout_p,
-        long_only,
-        dollar_neutral,
         normalization,
         torch_model,
         loss_func,
@@ -1316,7 +1489,7 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         drop_last,
         epochs,
         patience,
-        train_pct,
+        train_splitter,
         x_scaler,
         y_scaler,
         refit,
@@ -1327,14 +1500,14 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
     ):
         # First check either torch_model is set or (n_latent, fit_encoder_intercept, fit_head_intercept, encoder_activation, head_activation) are set.
         if torch_model is None:
-            if n_latent is None or fit_encoder_intercept is None or fit_head_intercept is None or encoder_activation is None or head_activation is None or dropout_p is None or dollar_neutral is None or normalization is None:
+            if n_latent is None or fit_encoder_intercept is None or fit_head_intercept is None or encoder_activation is None or head_activation is None:
                 raise ValueError(
-                    "When torch_model is not provided, (n_latent, fit_encoder_intercept, fit_head_intercept, encoder_activation, head_activation, dropout_p, dollar_neutral, normalization) must all be specified."
+                    "When torch_model is not provided, (n_latent, fit_encoder_intercept, fit_head_intercept, encoder_activation, head_activation) must all be specified."
                 )
         else:
-            if n_latent is not None or fit_encoder_intercept is not None or fit_head_intercept is not None or encoder_activation is not None or head_activation is not None or dropout_p is not None or long_only is not None or dollar_neutral is not None or normalization is not None:
+            if n_latent is not None or fit_encoder_intercept is not None or fit_head_intercept is not None or encoder_activation is not None or head_activation is not None or signal_modifier is not None or dropout_p is not None or normalization is not None or head_rank is not None:
                 raise ValueError(
-                    "When torch_model is provided, (n_latent, fit_encoder_intercept, fit_head_intercept, encoder_activation, head_activation, dropout_p, long_only, dollar_neutral, normalization) should be set to None."
+                    "When torch_model is provided, (n_latent, fit_encoder_intercept, fit_head_intercept, encoder_activation, head_activation, signal_modifier, dropout_p, normalization, head_rank) should be set to None."
                 )
             
         if torch_model is None:
@@ -1363,9 +1536,9 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
             # encoder_activation
             if not isinstance(encoder_activation, str):
                 raise TypeError("encoder_activation must be a string.")
-            if encoder_activation not in {"tanh", "relu", "sigmoid"}:
+            if encoder_activation not in {"tanh", "relu", "sigmoid", "gelu", "silu"}:
                 raise ValueError(
-                    "encoder_activation must be one of 'tanh', 'relu', or 'sigmoid'."
+                    "encoder_activation must be one of 'tanh', 'relu', 'sigmoid', 'gelu', or 'silu'."
                 )
         
             # head_activation
@@ -1375,30 +1548,50 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
                 raise ValueError(
                     "head_activation must be one of 'tanh', 'relu', 'sigmoid', or 'identity'."
                 )
-        
+
+            # signal_modifier 
+            if signal_modifier is not None:
+                if not isinstance(signal_modifier, nn.Module):
+                    raise TypeError("signal_modifier must be an instance of torch.nn.Module or None.")
+                # this will be the final layer in a neural net so associated checks that it can be used are needed
+                if not hasattr(signal_modifier, "forward"):
+                    raise ValueError("signal_modifier must have a forward method.")
+                if not callable(signal_modifier.forward):
+                    raise ValueError("signal_modifier.forward must be callable.")
+
+            # head_rank
+            if head_rank is not None:
+                if not isinstance(head_rank, int):
+                    raise TypeError("head_rank must be an integer.")
+                if head_rank <= 0:
+                    raise ValueError("head_rank must be a positive integer.")
+
             # dropout_p
-            if not isinstance(dropout_p, numbers.Real):
-                raise TypeError("dropout_p must be a real number.")
-            if not (0 <= dropout_p < 0.5):
-                raise ValueError("dropout_p must be between 0 and 0.5.")
-            
-            # long_only
-            if long_only is not None:
-                if not isinstance(long_only, bool):
-                    raise TypeError("long_only must be a boolean or None.")
-                
-            # dollar_neutral
-            if not isinstance(dollar_neutral, bool):
-                raise TypeError("dollar_neutral must be a boolean.")
-            if dollar_neutral:
-                if long_only is None or long_only:
-                    raise ValueError("dollar_neutral can only be True if long_only is False.")
+            if dropout_p is not None:
+                if not isinstance(dropout_p, (numbers.Real, list)):
+                    raise TypeError("dropout_p must be a real number or a list.")
+                if isinstance(dropout_p, numbers.Real):
+                    if not (0 <= dropout_p < 1):
+                        raise ValueError("dropout_p must be between 0 and 1.")
+                else:
+                    if len(dropout_p) == 0:
+                        raise ValueError("dropout_p list must not be empty.")
+                    if type(n_latent) is not list:
+                        raise TypeError("n_latent must be a list when dropout_p is a list.")
+                    if len(dropout_p) != len(n_latent):
+                        raise ValueError("dropout_p list must have the same length as n_latent list.")
+                    for p in dropout_p:
+                        if not isinstance(p, numbers.Real):
+                            raise TypeError("Each element in dropout_p list must be a real number.")
+                        if not (0 <= p < 1):
+                            raise ValueError("Each element in dropout_p list must be between 0 (inclusive) and 1 (exclusive).")
+        
             # normalization
-            if normalization != "none":
+            if normalization is not None:
                 if not isinstance(normalization, str):
                     raise TypeError("normalization must be a string.")
-                if normalization not in {"batch", "layer", "none"}:
-                    raise ValueError("normalization must be one of 'batch', 'layer', or 'none'.")
+                if normalization not in {"batch", "layer"}:
+                    raise ValueError("normalization must be one of 'batch' or 'layer'.")
         
         # torch_model
         if torch_model is not None:
@@ -1413,6 +1606,12 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
             # it needs a forward method
             if type(torch_model).forward is nn.Module.forward:
                 raise ValueError("torch_model must have a forward method.")
+            # it needs an encoder module
+            if not hasattr(torch_model, "encoder"):
+                raise ValueError("torch_model must have an 'encoder' moduleattribute.")
+            # it needs a head module
+            if not hasattr(torch_model, "head"):
+                raise ValueError("torch_model must have a 'head' module attribute.")
 
         # loss_func
         if not isinstance(loss_func, nn.Module):
@@ -1489,17 +1688,19 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
             raise ValueError("epochs must be at least 1.")
         
         # patience
-        if not isinstance(patience, numbers.Integral):
-            raise TypeError("patience must be an integer.")
-        if patience < 1:
-            raise ValueError("patience must be at least 1.")
+        if patience is not None:
+            if not isinstance(patience, numbers.Integral):
+                raise TypeError("patience must be an integer.")
+            if patience < 1:
+                raise ValueError("patience must be at least 1.")
         
-        # train_pct
-        if not isinstance(train_pct, numbers.Real):
-            raise TypeError("train_pct must be a real number.")
-        if not (0 < train_pct < 1):
-            raise ValueError("train_pct must be between 0 and 1.")
-        
+        # train_splitter
+        if not isinstance(train_splitter, (numbers.Real, BaseCrossValidator)):
+            raise TypeError("train_splitter must be either a real number or an instance of BaseCrossValidator from scikit-learn.")
+        if isinstance(train_splitter, numbers.Real):
+            if not (0 < train_splitter < 1):
+                raise ValueError("train_splitter must be between 0 and 1.")
+
         # x_scaler
         if x_scaler is not None:
             if not isinstance(x_scaler, StandardScaler):
@@ -1543,7 +1744,7 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         if min_samples < 1:
             raise ValueError("min_samples must be at least 1.")
         
-    def _check_fit_params(self, X, y, sample_weight):
+    def _check_fit_params(self, X, y):
         # X 
         if not isinstance(X, pd.DataFrame):
             raise TypeError("X must be a pandas DataFrame.")
@@ -1571,44 +1772,12 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
             raise TypeError("The inner index of y must be datetime.date.")
         if not X.index.equals(y.index):
             raise ValueError("X and y must have the same multi-index.")
-        
-        # sample_weight 
-        if sample_weight is not None:
-            if not isinstance(sample_weight, np.ndarray):
-                raise TypeError("sample_weight must be a numpy array or None.")
-            if not all(isinstance(x, numbers.Real) for x in sample_weight):
-                raise TypeError("All elements in sample_weight must be real numbers.")
-            if not all(x >= 0 for x in sample_weight):
-                raise ValueError("All elements in sample_weight must be non-negative.")
-            if sample_weight.ndim != 1:
-                raise ValueError("sample_weight must be a 1D array.")
-            if len(sample_weight) != len(X):
-                raise ValueError("Length of sample_weight must match number of samples in X.")
-            
-            # Check compatibility with loss function
-            sig_forward = inspect.signature(self.loss_func.forward)
-            sig_constructor = inspect.signature(self.loss_func.__init__)
-            if "sample_weight" not in sig_forward.parameters:
-                if "reduction" not in sig_constructor.parameters:
-                    raise ValueError(
-                        "Sample weights are not supported by the specified loss function. The loss function must either accept a `sample_weight` tensor in its forward method or have a `reduction` parameter in its constructor."
-                    )
-                else:
-                    reduction = sig_constructor.parameters["reduction"]
-                    if reduction.default == "none":
-                        return "reduction_none"
-                    else:
-                        raise ValueError(
-                            "When the loss function does not accept a `sample_weight` tensor in its forward method but has a `reduction` parameter in its constructor, the `reduction` must be set to 'none' to support sample weights."
-                        )
-            else:
-                return "native" 
-        else:
-            return None
 
 if __name__ == "__main__":
     from macrosynergy.learning import (
         SignalOptimizer,
+        NegSharpeRatio,
+        RollingKFoldPanelSplit,
     )
     from macrosynergy.management.simulate import make_qdf
     import pandas as pd
@@ -1678,39 +1847,43 @@ if __name__ == "__main__":
     #         return out
 
     mlp = MLPRegressor(
-        n_latent = 2, 
-        fit_encoder_intercept = False,
+        n_latent = [64,32], 
+        fit_encoder_intercept = True,
         fit_head_intercept = True,
         encoder_activation = "tanh",
         head_activation="identity",
         dropout_p = 0.1,
-        long_only = None,
-        dollar_neutral = False,
-        normalization = "none",
+        signal_modifier=nn.Softmax(dim=1),
+        normalization = "layer",
         #torch_model = BasicMLP(n_inputs=X.shape[1], n_latent=16, n_outputs=y.shape[1]),
-        loss_func=torch.nn.MSELoss(),
-        optimizer = ["AdamW","SGD+mom"],
+        loss_func=NegSharpeRatio(),
+        optimizer = "AdamW",
         scheduler = None, 
         batch_size = 16,
         learning_rate = 3e-4, 
         weight_decay = 1e-4,
-        reg_turnover = 0,
+        reg_turnover = 1e-4,
         use_ts_sampler = True,
         aggregate_last=True,
         drop_last=False,
-        epochs = 10000,
+        epochs = 100,
         patience = 10, 
-        refit=True,
-        train_pct = 0.7,
-        x_scaler = StandardScaler(with_mean=False),
-        y_scaler = StandardScaler(with_mean=False),
-        verbose = False, 
-        random_state = [42,43],
+        refit = False,
+        train_splitter=RollingKFoldPanelSplit(n_splits=5),
+        x_scaler = None,
+        y_scaler = None,
+        #refit=False,
+        ##train_pct = 0.7,
+        #x_scaler = StandardScaler(with_mean=False),
+        #y_scaler = StandardScaler(with_mean=False),
+        #verbose = False, 
+        random_state = 42,
         inverse_transform_preds = False,
         min_samples = 36,
     ).fit(X,y)
     print(mlp.early_stopping_dynamics[(0,0)])
     print(mlp.early_stopping_inference[(0,0)])
+    print(mlp.predict(X))
 
     # so.calculate_predictions(
     #     name = "MLP",

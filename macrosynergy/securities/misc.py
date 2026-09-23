@@ -3,14 +3,9 @@ Miscellaneous helpers for managing cached single-security data.
 """
 
 import logging
-from datetime import timedelta, datetime, date
-from typing import Optional, Dict, Tuple, Union
 
 import numpy as np
 import pandas as pd
-
-import matplotlib.pyplot as plt
-import seaborn as sns
 
 logger = logging.getLogger(__name__)
 
@@ -64,10 +59,12 @@ def rescale_to_anchor(
 
     unusual = scale.loc[(scale - 1).abs() > ratio_tolerance]
     if len(unusual) > 0:
-        for ticker, ratio in unusual.items():
-            print(
-                f"  Warning: unusual rescale ratio {ratio:.3f} for {ticker} at the anchor date — RI level may have shifted materially"
-            )
+        logger.warning(
+            "Unusual rescale ratio at the anchor date for %d ticker(s) — the RI level "
+            "may have shifted materially: %s",
+            len(unusual),
+            {str(ticker): round(float(ratio), 3) for ticker, ratio in unusual.items()},
+        )
 
     frame["value"] = frame["value"] * frame["ticker"].map(scale).fillna(1.0)
     return (
