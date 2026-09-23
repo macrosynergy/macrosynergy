@@ -13,6 +13,7 @@ from macrosynergy.management.utils import (
     is_valid_iso_date,
     reduce_df,
     estimate_release_frequency,
+    _map_to_business_day_frequency,
 )
 import logging
 
@@ -321,7 +322,7 @@ def contract_signals(
     relative_value: bool = False,
     start: Optional[str] = None,
     end: Optional[str] = None,
-    rebal_freq: str = "M",
+    rebal_freq: Optional[str] = None,
     blacklist: Optional[dict] = None,
     sname: str = "STRAT",
     *args,
@@ -408,6 +409,9 @@ def contract_signals(
     end : str
         latest date in ISO format. Default is None, in which case the end date is derived
         as the earliest last date across the same categories described under `start`.
+    rebal_freq : str
+        optional rebalancing frequency of the contract signals. Default is None, in
+        which case the contract signals are returned at the frequency of the inputs.
     blacklist : dict
         cross-sections with date ranges that should be excluded from the calculation of
         contract signals.
@@ -435,6 +439,7 @@ def contract_signals(
         (relative_value, "relative_value", bool),
         (start, "start", (str, NoneType)),
         (end, "end", (str, NoneType)),
+        (rebal_freq, "rebal_freq", (str, NoneType)),
         (blacklist, "blacklist", (dict, NoneType)),
         (sname, "sname", str),
     ]:
@@ -443,6 +448,9 @@ def contract_signals(
 
         if typex in [list, str, dict] and len(varx) == 0:
             raise ValueError(f"`{namex}` must not be an empty {str(typex)}")
+
+    if rebal_freq is not None:
+        _map_to_business_day_frequency(rebal_freq)
 
     if not isinstance(df, QuantamentalDataFrame):
         raise TypeError("`df` must be a standardised quantamental dataframe")
@@ -561,6 +569,16 @@ def contract_signals(
         df_wide_hs=df_hedge_signals,
     )
 
+    ## Hold the final contract signals between rebalance dates if requested
+    if rebal_freq is not None:
+        csig_suffix: str = "_CSIG"
+        df_out = _resample_signals_to_rebal_dates(
+            df_wide=df_out,
+            fids=[col[: -len(csig_suffix)] for col in df_out.columns],
+            sig_ident=csig_suffix,
+            rebal_freq=rebal_freq,
+        )
+
     ## Wide to quantamental
     df_out: pd.DataFrame = QuantamentalDataFrame.from_wide(df=df_out)
 
@@ -621,6 +639,7 @@ def multi_signal_contract_signals(
         "relative_value": bool,
         "start": (str, NoneType),
         "end": (str, NoneType),
+        "rebal_freq": (str, NoneType),
         "blacklist": (dict, NoneType),
         "sname": str,
     }

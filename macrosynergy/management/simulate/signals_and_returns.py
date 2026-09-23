@@ -5,6 +5,7 @@ import pandas as pd
 
 from macrosynergy.management.constants import ANNUALIZATION_FACTORS
 from macrosynergy.management.types import QuantamentalDataFrame
+from macrosynergy.management.utils import _map_to_business_day_frequency, get_sops
 
 DATA_FREQ: str = "B"
 
@@ -742,12 +743,33 @@ class SignalsAndReturnsGenerator:
                 "No simulated data available. Call simulate_signals_and_returns first."
             )
 
-    def quantamental_signals(self) -> pd.DataFrame:
+    def _held_signals(self, freq: str) -> pd.DataFrame:
+        """
+        Read the simulated signals on the first business day of each period and
+        forward fill them over the rest of that period.
+        """
+        sops = get_sops(
+            dates=self.signals.index, freq=_map_to_business_day_frequency(freq)
+        )
+        is_sop = pd.Series(self.signals.index.isin(sops), index=self.signals.index)
+        return self.signals.where(is_sop, axis=0).ffill()
+
+    def quantamental_signals(self, freq: Optional[str] = None) -> pd.DataFrame:
         """
         Convert the simulated signals to a quantamental DataFrame.
+
+        Parameters
+        ----------
+        freq : Optional[str]
+            frequency at which the signals are updated. Default is None, in which case
+            the business-daily signals are returned as simulated. If given ('D', 'W',
+            'M', 'Q' or 'A'), each signal is read on the first business day of the
+            period and forward filled over the rest of it.
         """
         self._require_simulated()
-        return QuantamentalDataFrame.from_wide(self.signals)
+        if freq is None:
+            return QuantamentalDataFrame.from_wide(self.signals)
+        return QuantamentalDataFrame.from_wide(self._held_signals(freq))
 
     def quantamental_returns(self) -> pd.DataFrame:
         """
@@ -759,11 +781,16 @@ class SignalsAndReturnsGenerator:
         self._require_simulated()
         return QuantamentalDataFrame.from_wide(100 * self.returns)
 
-    def quantamental_returns_and_signals(self):
+    def quantamental_returns_and_signals(self, freq: Optional[str] = None):
         """
         Concatenate the quantamental signals and returns into a single DataFrame.
+
+        Parameters
+        ----------
+        freq : Optional[str]
+            frequency at which the signals are updated, as in `quantamental_signals`.
         """
-        signals = self.quantamental_signals()
+        signals = self.quantamental_signals(freq=freq)
         returns = self.quantamental_returns()
         return pd.concat((signals, returns), ignore_index=True)
 

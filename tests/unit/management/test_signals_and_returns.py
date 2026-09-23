@@ -918,6 +918,44 @@ class TestGeneratorQuantamentalConversions(unittest.TestCase):
             100.0 * self.generator.returns.to_numpy(),
         )
 
+    def test_monthly_signals_are_held_over_the_month(self):
+        wide = QuantamentalDataFrame(
+            self.generator.quantamental_signals(freq="M")
+        ).to_wide()[self.signal_names]
+        daily = self.generator.signals
+
+        self.assertTrue(wide.index.equals(daily.index))
+        self.assertTrue(wide.notna().all().all())
+        for _, grp in wide.groupby(wide.index.to_period("M")):
+            # constant within the month, equal to the first business day's signal
+            self.assertTrue((grp.nunique() == 1).all())
+            np.testing.assert_allclose(
+                grp.iloc[0].to_numpy(), daily.loc[grp.index[0]].to_numpy()
+            )
+
+    def test_signal_freq_leaves_simulated_state_unchanged(self):
+        before = self.generator.signals.copy()
+        self.generator.quantamental_signals(freq="M")
+        # from_wide names the index "real_date" in place, so only compare values
+        pd.testing.assert_frame_equal(self.generator.signals, before, check_names=False)
+
+    def test_quantamental_returns_and_signals_with_monthly_signals(self):
+        qdf = self.generator.quantamental_returns_and_signals(freq="M")
+        wide = QuantamentalDataFrame(qdf).to_wide()
+
+        np.testing.assert_allclose(
+            wide[self.return_names].to_numpy(),
+            100.0 * self.generator.returns.to_numpy(),
+        )
+        held = wide[self.signal_names]
+        self.assertTrue(
+            (held.groupby(held.index.to_period("M")).nunique() == 1).all().all()
+        )
+
+    def test_invalid_signal_freq_raises(self):
+        with self.assertRaises(ValueError):
+            self.generator.quantamental_signals(freq="X")
+
 
 class TestGeneratorRealizedCov(unittest.TestCase):
     def setUp(self):
