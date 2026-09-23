@@ -340,8 +340,10 @@ if __name__=="__main__":
         n_latent = [64,32,16],
         n_outputs=1,
         encoder_activation="silu",
+        normalization="batch",
         head_activation="softmax",
         dropout_p=0.1,
     )
     print(model)
+    print(model(torch.randn(16, 5)))
     print("========================================")
