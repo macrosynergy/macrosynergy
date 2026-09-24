@@ -512,10 +512,10 @@ class TestGetFirstUsableDate(unittest.TestCase):
         pivot_returns = self._pivot({"USD_EQ": ret_start, "EUR_EQ": ret_start})
 
         res = self._first_usable(
-            pivot_returns, est_freqs=["D", "BME"], lback_periods=[15, 3]
+            pivot_returns, est_freqs=["D", "M"], lback_periods=[15, 3]
         )
 
-        buffer_bdays = max(15 * _bdays_per_period("D"), 3 * _bdays_per_period("BME"))
+        buffer_bdays = max(15 * _bdays_per_period("D"), 3 * _bdays_per_period("M"))
         self.assertEqual(res["USD_EQ"], self._expected(ret_start, buffer_bdays))
 
     def test_full_lookback_requires_twice_as_many_periods_as_contracts(self):

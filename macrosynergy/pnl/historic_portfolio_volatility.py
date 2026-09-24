@@ -24,7 +24,7 @@ from macrosynergy.management.utils import (
 )
 
 RETURN_SERIES_XCAT = "_PNL_USD1S_ASD"
-FREQ_TO_BDAY_MAP = {"B": 1, "W-FRI": 5, "BME": 21, "BQE": 63, "BA": 252}
+FREQ_TO_BDAY_MAP = {"B": 1, "W-FRI": 5, "BME": 21, "BM": 21, "BQE": 63, "BA": 252}
 
 
 def _bdays_per_period(freq: str) -> int:

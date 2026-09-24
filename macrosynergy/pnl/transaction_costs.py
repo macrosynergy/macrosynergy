@@ -227,7 +227,11 @@ def _costs_heatmap(
     if show_as_bps:
         cbar_unit, annot, fmt = "bps", True, ".3f"
     else:
-        cbar_unit, annot, fmt = "% of trade size", data.map(lambda x: f"{x:.4f}%"), ""
+        cbar_unit, annot, fmt = (
+            "% of trade size",
+            data.apply(lambda col: col.map("{:.4f}%".format)),
+            "",
+        )
 
     sns.heatmap(
         data,

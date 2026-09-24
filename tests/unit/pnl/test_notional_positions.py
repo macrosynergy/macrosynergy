@@ -1,3 +1,4 @@
+import importlib
 import unittest
 import warnings
 from typing import List, Tuple
@@ -26,6 +27,10 @@ from macrosynergy.pnl.notional_positions import (
 
 
 MOCK_PVOL_XCAT: str = "PNL_USD1S_ASD"
+
+_notional_positions_module = importlib.import_module(
+    "macrosynergy.pnl.notional_positions"
+)
 
 
 def mock_historic_portfolio_vol(
@@ -556,8 +561,9 @@ class TestNotionalPositions(unittest.TestCase):
                 dollar_per_signal="not-a-number",
             )
 
-    @mock.patch(
-        "macrosynergy.pnl.notional_positions.historic_portfolio_vol",
+    @mock.patch.object(
+        _notional_positions_module,
+        "historic_portfolio_vol",
         side_effect=mock_historic_portfolio_vol,
     )
     def test__vol_target_positions(
