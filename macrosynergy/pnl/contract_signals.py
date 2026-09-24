@@ -17,6 +17,8 @@ from macrosynergy.management.utils import (
 )
 import logging
 
+from macrosynergy.pnl.notional_positions import _resample_signals_to_rebal_dates
+
 logger = logging.getLogger(__name__)
 
 

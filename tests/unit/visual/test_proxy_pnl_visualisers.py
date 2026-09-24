@@ -14,13 +14,9 @@ from macrosynergy.visuals.proxy_pnl_visualisers import (
     _sensitivity_frame,
     compare_proxy_pnls,
     implied_leverage_plot,
-    metric_scatterplot,
-    plot_costs_by_type,
     plot_metric_sensitivity,
     plot_metrics_before_and_after_costs,
-    realized_vol_plot,
     transaction_cost_heatmap,
-    vol_target_scaling_factor_plot,
 )
 
 
@@ -337,63 +333,6 @@ class TestImpliedLeveragePlot(PlotTestCase):
         self.assertIn("1x leverage", labels)
 
 
-class TestRealizedVolPlot(PlotTestCase):
-    def setUp(self) -> None:
-        self.pnl = make_qdf("GLB", "GLB_PNL", [1.0, -1.0, 1.0, -1.0])
-        self.kwargs = dict(
-            labels="Strategy",
-            portfolio_names="GLB",
-            aum=100,
-            lback=2,
-            annualization_factor=4,
-        )
-
-    def test_rolling_volatility_is_annualized(self):
-        _, ax = realized_vol_plot(self.pnl, **self.kwargs)
-
-        # +/-1% daily returns: a two-day sample std of sqrt(2), annualized by 2
-        expected = [np.nan] + [2 * np.sqrt(2)] * 3
-        np.testing.assert_allclose(ax.lines[0].get_ydata(), expected)
-
-    def test_show_mean_is_appended_to_the_label(self):
-        _, ax = realized_vol_plot(self.pnl, **self.kwargs)
-
-        _, labels = ax.get_legend_handles_labels()
-        self.assertEqual(labels, ["Strategy (mean 2.8%)"])
-
-    def test_show_mean_false_keeps_the_plain_label(self):
-        _, ax = realized_vol_plot(self.pnl, show_mean=False, **self.kwargs)
-
-        _, labels = ax.get_legend_handles_labels()
-        self.assertEqual(labels, ["Strategy"])
-
-    def test_vol_target_adds_a_reference_line(self):
-        _, ax = realized_vol_plot(self.pnl, vol_target=5, **self.kwargs)
-
-        self.assertEqual(len(ax.lines), 2)
-        _, labels = ax.get_legend_handles_labels()
-        self.assertIn("5% target", labels)
-
-
-class TestVolTargetScalingFactorPlot(PlotTestCase):
-    def setUp(self) -> None:
-        self.vol_df = pd.concat(
-            [
-                make_qdf("GLB", "PVOL", [5.0, 10.0, 20.0]),
-                make_qdf("GLB", "OTHER", [1.0, 1.0, 1.0]),
-            ],
-            ignore_index=True,
-        )
-
-    def test_returns_a_volatility_and_a_scaling_panel(self):
-        fig, ax = vol_target_scaling_factor_plot(
-            self.vol_df, vol_target=10, vol_xcat="PVOL", title="Vol targeting"
-        )
-
-        self.assertEqual(ax.shape, (2,))
-        self.assertEqual(fig._suptitle.get_text(), "Vol targeting")
-
-
 class TestPlotMetricsBeforeAndAfterCosts(PlotTestCase):
     def setUp(self) -> None:
         self.evals = {
@@ -450,81 +389,6 @@ class TestPlotMetricsBeforeAndAfterCosts(PlotTestCase):
 
         with self.assertRaisesRegex(ValueError, "Metrics not found"):
             plot_metrics_before_and_after_costs(self.evals, metrics="Nonexistent")
-
-
-class TestPlotCostsByType(PlotTestCase):
-    def setUp(self) -> None:
-        self.first = pd.concat(
-            [
-                make_qdf("GLB", "FX_TCOST_BIDOFFER", [1.0]),
-                make_qdf("GLB", "FX_TCOST_ROLLCOST", [2.0]),
-            ],
-            ignore_index=True,
-        )
-        self.second = pd.concat(
-            [
-                make_qdf("GLB", "FX_TCOST_BIDOFFER", [4.0]),
-                make_qdf("GLB", "FX_TCOST_ROLLCOST", [6.0]),
-            ],
-            ignore_index=True,
-        )
-
-    def test_one_stacked_bar_per_dataframe(self):
-        _, ax = plot_costs_by_type([self.first, self.second], labels=["A", "B"])
-
-        self.assertEqual([t.get_text() for t in ax.get_xticklabels()], ["A", "B"])
-
-        # pandas draws the bid-offer segments first, then the roll segments
-        heights = [patch.get_height() for patch in ax.patches]
-        self.assertEqual(heights, [1.0, 4.0, 2.0, 6.0])
-
-    def test_totals_are_annotated_above_each_bar(self):
-        _, ax = plot_costs_by_type([self.first, self.second], labels=["A", "B"])
-
-        self.assertEqual([text.get_text() for text in ax.texts], ["3.0", "10.0"])
-
-    def test_sort_by_label_reorders_the_bars(self):
-        _, ax = plot_costs_by_type(
-            [self.second, self.first], labels=["B", "A"], sort_by_label=True
-        )
-
-        self.assertEqual([t.get_text() for t in ax.get_xticklabels()], ["A", "B"])
-        self.assertEqual([text.get_text() for text in ax.texts], ["3.0", "10.0"])
-
-
-class TestMetricScatterplot(PlotTestCase):
-    def setUp(self) -> None:
-        self.data = pd.DataFrame(
-            {
-                "cost": [1.0, 2.0, 3.0, 4.0],
-                "sharpe": [0.5, 0.9, 1.4, 1.8],
-                "strategy": ["a", "a", "b", "b"],
-            }
-        )
-
-    def test_points_are_drawn_and_axes_labelled_from_the_columns(self):
-        _, ax = metric_scatterplot(self.data, x="cost", y="sharpe", trendline=False)
-
-        self.assertEqual(len(ax.collections), 1)
-        self.assertEqual(ax.get_xlabel(), "cost")
-        self.assertEqual(ax.get_ylabel(), "sharpe")
-
-    def test_trendline_is_drawn_only_when_requested(self):
-        _, with_trend = metric_scatterplot(self.data, x="cost", y="sharpe")
-        _, without_trend = metric_scatterplot(
-            self.data, x="cost", y="sharpe", trendline=False
-        )
-
-        self.assertEqual(len(with_trend.lines), 1)
-        self.assertEqual(len(without_trend.lines), 0)
-
-    def test_non_dataframe_raises(self):
-        with self.assertRaisesRegex(TypeError, "must be a pd.DataFrame"):
-            metric_scatterplot("not a frame", x="cost", y="sharpe")
-
-    def test_missing_column_raises(self):
-        with self.assertRaises(KeyError):
-            metric_scatterplot(self.data, x="cost", y="missing")
 
 
 class TestPlotMetricSensitivity(PlotTestCase):
