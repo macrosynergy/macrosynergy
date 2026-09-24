@@ -2,27 +2,22 @@
 Implementation of the ProxyPnL class.
 """
 
-import numpy as np
-import pandas as pd
 from numbers import Number
-from typing import List, Union, Tuple, Optional, Dict
+from typing import Dict, List, Optional, Tuple, Union
 
-from macrosynergy.management.utils import (
-    reduce_df,
-    is_valid_iso_date,
-    _map_to_business_day_frequency,
-)
-from macrosynergy.management.types import QuantamentalDataFrame, NoneType
+import pandas as pd
+
 import macrosynergy.visuals as msv
-from macrosynergy.pnl import notional_positions, contract_signals, proxy_pnl_calc
-from macrosynergy.pnl.sharpe_stability_ratio import sharpe_stability_ratio
-
+from macrosynergy.management.types import NoneType, QuantamentalDataFrame
+from macrosynergy.management.utils import is_valid_iso_date, reduce_df
+from macrosynergy.pnl.contract_signals import contract_signals
+from macrosynergy.pnl.notional_positions import notional_positions
+from macrosynergy.pnl.pnl_evaluation import evaluate_pnl
+from macrosynergy.pnl.proxy_pnl_calc import proxy_pnl_calc
 from macrosynergy.pnl.transaction_costs import (
     TransactionCosts,
     TransactionCostsDictAdapter,
 )
-import matplotlib.pyplot as plt
-import warnings
 
 
 class ProxyPnL(object):
@@ -184,7 +179,7 @@ class ProxyPnL(object):
         start: Optional[str] = None,
         end: Optional[str] = None,
         blacklist: Optional[dict] = None,
-        pname: str = "POS",
+        pname: str = None,
     ) -> Union[
         QuantamentalDataFrame,
         Tuple[QuantamentalDataFrame, QuantamentalDataFrame],
@@ -220,6 +215,7 @@ class ProxyPnL(object):
                     "or run `ProxyPnL.contract_signals` first."
                 )
         sname = sname or self.sname
+        pname = pname or self.pname
         start = start or self.start
         end = end or self.end
         blacklist = blacklist or self.blacklist
@@ -365,10 +361,10 @@ class ProxyPnL(object):
             output columns.
         start : str
             Start date (ISO format) used to filter the PnL prior to computing statistics.
-            If not provided, no lower bound is applied.
+            If not provided, the start date of the class is used.
         end : str
             End date (ISO format) used to filter the PnL prior to computing statistics.
-            If not provided, no upper bound is applied.
+            If not provided, the end date of the class is used.
         benchmark_data : pd.DataFrame
             QuantamentalDataFrame of benchmark series. If provided, the correlation
             between each PnL column and each benchmark ticker (cid_xcat) is added as
@@ -397,117 +393,28 @@ class ProxyPnL(object):
             if not isinstance(value, types):
                 raise TypeError(f"Argument {arg} must be one of: {types}")
 
-        pnl_exists = hasattr(self, "proxy_pnl") and self.proxy_pnl is not None
-        pnle_exists = (
-            hasattr(self, "pnl_excl_costs") and self.pnl_excl_costs is not None
-        )
-        tcosts_exists = hasattr(self, "txn_costs_df") and self.txn_costs_df is not None
-
         missing_data_msg = "self.{} is missing"
-        if not pnl_exists:
+        if getattr(self, "proxy_pnl", None) is None:
             raise ValueError(missing_data_msg.format("proxy_pnl"))
-        if not pnle_exists and include_pnle:
+        if include_pnle and getattr(self, "pnl_excl_costs", None) is None:
             raise ValueError(missing_data_msg.format("pnl_excl_costs"))
-        if not tcosts_exists and include_tcosts:
+        if include_tcosts and getattr(self, "txn_costs_df", None) is None:
             raise ValueError(missing_data_msg.format("txn_costs_df"))
 
-        # Data preparation
-        df_pnl = self.proxy_pnl
-        df_pnle = self.pnl_excl_costs if include_pnle else pd.DataFrame()
-
-        df = pd.concat((df_pnl, df_pnle), ignore_index=True)
-        df = reduce_df(df, cids=[self.portfolio_name], start=start, end=end)
-
-        dfw = df.pivot(index="real_date", columns="xcat", values="value")
-        dfw = 100 * dfw / aum  # percentage return instead of $
-        dfw = dfw.rename(columns=label_dict if label_dict is not None else {})
-
-        # Summary statistics
-        ## Annualized mean and std
-        mean = dfw.mean(axis=0) * 252
-        std = dfw.std(axis=0) * np.sqrt(252)
-
-        ## Sharpes and Sortino
-        sharpe = mean / std
-        sortino = np.divide(
-            mean,
-            dfw.apply(lambda x: np.sqrt(np.sum(x[x < 0] ** 2) / len(x))) * np.sqrt(252),
+        metrics = evaluate_pnl(
+            df_pnl=self.proxy_pnl,
+            aum=aum,
+            df_pnle=self.pnl_excl_costs if include_pnle else None,
+            df_tcosts=self.txn_costs_df if include_tcosts else None,
+            label_dict=label_dict,
+            start=self.start if start is None else start,
+            end=self.end if end is None else end,
+            benchmark_data=benchmark_data,
+            portfolio_name=self.portfolio_name,
         )
-        sharpe_stability = [
-            sharpe_stability_ratio(
-                dfw[col].dropna(),
-                window=252,
-                benchmark_sr=0.0,
-                annualization_factor=252,
-            )
-            for col in dfw.columns
-        ]
 
-        ## Draws
-        draw_21_day = dfw.rolling(21).sum().min()
-        draw_6_month = dfw.rolling(6 * 21).sum().min()
-        draw_peak_to_trough = -(dfw.cumsum().cummax() - dfw.cumsum()).max()
+        return metrics
 
-        ## PnL share
-        mfreq = _map_to_business_day_frequency("M")
-        monthly_pnl = dfw.resample(mfreq).sum()
-        total_pnl = monthly_pnl.sum(axis=0)
-        n_top = int(max(np.ceil(len(monthly_pnl) * 0.05), 1))
-        n_top_pnl = -np.sort(-monthly_pnl.values, axis=0)[:n_top].sum(0)
-        pnl_share = n_top_pnl / total_pnl
-
-        ## Number of traded months
-        n_traded_months = dfw.notna().resample(mfreq).sum().ne(0).sum()
-
-        ## Benchmark correlations
-        correlations = {}
-        if benchmark_data is not None and not benchmark_data.empty:
-            bm_data = benchmark_data.copy()
-            bm_data["ticker"] = bm_data["cid"] + "_" + bm_data["xcat"]
-            bm_data_w = bm_data.pivot(
-                index="real_date", columns="ticker", values="value"
-            )
-            shared_idx = dfw.index.intersection(bm_data_w.index)
-            correlations = {
-                f"{bm} correl": dfw.loc[shared_idx].corrwith(
-                    other=bm_data_w.loc[shared_idx][bm],
-                    drop=True,
-                )
-                for bm in bm_data_w.columns
-            }
-
-        ## Transaction costs
-        tcosts = {}
-        if include_tcosts:
-            txn_costs = reduce_df(
-                df=self.txn_costs_df,
-                cids=[self.portfolio_name],
-                blacklist=self.blacklist,
-            )
-            total_txn_costs = txn_costs["value"].sum()
-            total_txn_cost = [total_txn_costs, 0] if include_pnle else [total_txn_costs]
-            tcosts["Transaction Cost"] = total_txn_cost
-
-        # Format output
-        summary_statistics = {
-            "Return %": mean,
-            "St. Dev. %": std,
-            "Sharpe Ratio": sharpe,
-            "Sortino Ratio": sortino,
-            "Sharpe Stability": sharpe_stability,
-            "Max 21-Day Draw %": draw_21_day,
-            "Max 6-Month Draw %": draw_6_month,
-            "Peak to Trough Draw %": draw_peak_to_trough,
-            "Top 5% Monthly PnL Share": pnl_share,
-            **correlations,
-            **tcosts,
-            "Traded Months": n_traded_months,
-        }
-
-        summary_statistics = pd.DataFrame(summary_statistics).T
-        summary_statistics.columns = dfw.columns
-
-        return summary_statistics
 
     def plot_pnl(
         self,
@@ -537,92 +444,6 @@ class ProxyPnL(object):
         msv.timelines(
             rdf, title=title, title_fontsize=title_fontsize, cumsum=cumsum, **kwargs
         )
-
-
-def compare_proxy_pnls(
-    proxy_pnls: Union[ProxyPnL, List[ProxyPnL]],
-    pnl_names: Optional[List[str]] = None,
-    title: str = "Proxy PnL Comparison",
-    title_fontsize: int = 22,
-    common_portfolio_name: str = "GLB",
-    pnl_incl_costs_name="PNL",
-    include_exclude_cost_labels=["Incl. Costs", "Excl. Costs"],
-    cumsum: bool = True,
-    return_fig: bool = False,
-    **kwargs,
-) -> plt.Figure:
-    if isinstance(proxy_pnls, ProxyPnL):
-        proxy_pnls = [proxy_pnls]
-
-    pnlcount = len(proxy_pnls)
-
-    if pnl_names is None:
-        pnl_names = [f"PnL-{i+1}" for i in range(pnlcount)]
-    elif (len(pnl_names) != pnlcount) or not all(isinstance(x, str) for x in pnl_names):
-        raise ValueError(
-            f"Length of pnl_names ({len(pnl_names)}) does not match number of "
-            f"ProxyPnL objects ({pnlcount})."
-        )
-
-    pnl_dfs = []
-    for i, x in enumerate(proxy_pnls):
-        if x.portfolio_name != common_portfolio_name:
-            pnl_names[i] = None
-            continue
-        pnl_df = reduce_df(
-            pd.concat([x.proxy_pnl, x.pnl_excl_costs], axis=0),
-            cids=[common_portfolio_name],
-        )
-
-        pnl_xcats_found = []
-        for pnlcatname in [pnl_incl_costs_name, pnl_incl_costs_name + "e"]:
-            pnl_xcat = (
-                pnl_df["xcat"][pnl_df["xcat"].str.endswith(pnlcatname)]
-                .unique()
-                .tolist()
-            )
-            if len(pnl_xcat) != 1:
-                raise ValueError(
-                    f"Expected exactly one xcat ending with {pnlcatname}, "
-                    f"found {len(pnl_xcat)}: {pnl_xcat}"
-                )
-            pnl_xcats_found.append(pnl_xcat[0])
-
-        if len(pnl_xcats_found) != 2:
-            raise ValueError(
-                f"Expected exactly two xcats for PnL (including and excluding costs), "
-                f"found {len(pnl_xcats_found)}: {pnl_xcats_found}"
-            )
-        pnlname, pnle_name = sorted(pnl_xcats_found)
-        rename_map = dict(zip([pnlname, pnle_name], include_exclude_cost_labels))
-        pnl_df["xcat"] = pnl_df["xcat"].replace(rename_map)
-        pnl_df["cid"] = pnl_names[i]
-        pnl_dfs.append(pnl_df)
-
-    if not pnl_dfs:
-        raise ValueError(
-            f"No proxy PnL DataFrames found for portfolio name '{common_portfolio_name}'"
-        )
-    elif pnlcount != len(pnl_dfs):
-        warnings.warn(
-            f"Expected {pnlcount} proxy PnL DataFrames for portfolio name "
-            f"'{common_portfolio_name}', but found {len(pnl_dfs)}. "
-            f"Some ProxyPnL objects may have a different portfolio name."
-        )
-
-    fig = msv.timelines(
-        pd.concat(pnl_dfs, axis=0),
-        title=title,
-        cumsum=cumsum,
-        return_fig=True,
-        cid_labels=pnl_names,
-        ax_hline=0.0,
-        title_fontsize=title_fontsize,
-        **kwargs,
-    )
-    if return_fig:
-        return fig
-    plt.show()
 
 
 if __name__ == "__main__":
