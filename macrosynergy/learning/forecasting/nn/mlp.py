@@ -9,7 +9,6 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import BaseCrossValidator
 
 from typing import Optional
-import inspect
 
 from macrosynergy.learning.forecasting.torch.samplers.timeseries_sampler import TimeSeriesSampler
 from macrosynergy.learning.forecasting.torch.models.mlps import MultiLayerPerceptron
@@ -384,10 +383,8 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         self.early_stopping_inference = {}
         self.final_model_inference = {}
 
-        # Data checks
         # TODO: if torch_model is provided, check it has the right structure 
         # to be trained by this class by passing a batch through it
-        self._check_fit_params(X, y)
 
         # Filter assets with insufficient samples to have a head in the network
         target_counts = y.count()
@@ -395,6 +392,23 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         self.n_targets = len(self.targets)
 
         y = y[self.targets]
+
+        # Identifying information recorded alongside every epoch of every training run
+        # started by this call, so that a persisted training log can be grouped back into
+        # runs without parsing formatted text
+        fit_dates = X.index.get_level_values(1)
+        fit_context = {
+            "fit_index": next(_FIT_SEQUENCE),
+            "fit_start": fit_dates.min(),
+            "fit_end": fit_dates.max(),
+            "n_features": X.shape[1],
+            "n_targets": self.n_targets,
+            "signal_modifier": (
+                type(self.signal_modifier).__name__
+                if self.signal_modifier is not None
+                else None
+            ),
+        }
 
         if self.patience is None:
             # Then we are training a single model on the entire dataset, with no early stopping,
@@ -543,6 +557,7 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
                         reg_turnover = self.reg_turnover, 
                         patience = self.patience, 
                         verbose = self.verbose,
+                        context = run_context,
                     )
 
                     # Store model diagnostics on gradients and NaN/inf checks
@@ -605,6 +620,7 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
                             reg_turnover = self.reg_turnover,
                             patience = self.patience,
                             verbose = self.verbose,
+                            context = {**run_context, "fold": idx},
                         )
 
                         # Store early stopping information
@@ -685,6 +701,7 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
                             reg_turnover = self.reg_turnover, 
                             patience = None, 
                             verbose = self.verbose,
+                            context = {**run_context, "refit": True},
                         )
 
                         # Infer properties of the trained model
@@ -749,6 +766,111 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         final_preds = np.mean(np.stack(model_preds, axis=0), axis = 0)
 
         return pd.DataFrame(final_preds, index=X.index, columns=self.targets)
+
+    def predict_uncertainty(self, X, n_dropout_samples=0):
+        """
+        Dispersion of the predictions across the model's own sources of uncertainty.
+
+        Parameters
+        ----------
+        X : pd.DataFrame
+            Input features, indexed as in `fit`.
+        n_dropout_samples : int, optional
+            Number of Monte Carlo dropout passes to draw from each trained network, on
+            top of the spread across networks. Zero, the default, uses the trained
+            networks alone, which costs one forward pass each and nothing more.
+
+        Returns
+        -------
+        pd.DataFrame
+            Standard deviation of the predictions, indexed and columned like `predict`.
+
+        Notes
+        -----
+        This is an *epistemic* uncertainty estimate: it measures how much the prediction
+        depends on choices that were arbitrary — the random initialisation, the optimiser,
+        which fold a network was trained on, and, with `n_dropout_samples`, which units
+        happened to be active. Where those choices move the prediction a lot, the data did
+        not determine it.
+
+        It is not the conditional variance of the target. That is *aleatoric* uncertainty,
+        the part of the return that is unpredictable given the features, and it needs a
+        variance head — see `HeteroskedasticMLP` and `GaussianNLL`. A prediction can be
+        perfectly stable across every network and still be about an essentially
+        unforecastable return.
+
+        The estimate is only as rich as the ensemble behind it. With a single seed, a
+        single optimiser and a float `train_splitter` there is exactly one network, and
+        the dispersion is zero unless `n_dropout_samples` is set. Passing a list of seeds
+        to `random_state`, or a `BaseCrossValidator` to `train_splitter`, is what makes it
+        informative.
+
+        Monte Carlo dropout puts the networks back into training mode, so it is available
+        only when `dropout_p` is non-zero; with dropout off, every pass is identical.
+        """
+        self._check_predict_params(X)
+
+        if not isinstance(n_dropout_samples, numbers.Integral):
+            raise TypeError("n_dropout_samples must be an integer.")
+        if n_dropout_samples < 0:
+            raise ValueError("n_dropout_samples must be non-negative.")
+
+        samples = self._member_predictions(X, n_dropout_samples=n_dropout_samples)
+
+        if len(samples) < 2:
+            dispersion = np.zeros_like(samples[0])
+        else:
+            dispersion = np.std(np.stack(samples, axis=0), axis=0, ddof=1)
+
+        return pd.DataFrame(dispersion, index=X.index, columns=self.targets)
+
+    def _member_predictions(self, X, n_dropout_samples=0):
+        """
+        One prediction array per trained network, flattened across folds and ensemble
+        members, optionally with extra Monte Carlo dropout passes per network.
+
+        Parameters
+        ----------
+        X : pd.DataFrame
+            Input features, indexed as in `fit`.
+        n_dropout_samples : int, optional
+            Monte Carlo dropout passes to draw from each network. Default is 0.
+
+        Returns
+        -------
+        list of np.ndarray
+            Each of dimension (n_rows, n_targets).
+        """
+        Xs_s = [
+            x_scaler.transform(X) if x_scaler is not None else X.to_numpy()
+            for x_scaler in self.x_scalers
+        ]
+
+        samples = []
+        with torch.no_grad():
+            for entry in self.models:
+                networks = entry if isinstance(entry, list) else [entry]
+                for idx, network in enumerate(networks):
+                    # A fold's network is paired with the scaler fitted on that fold
+                    scaler_idx = idx if isinstance(entry, list) else 0
+                    X_s_torch = torch.Tensor(Xs_s[scaler_idx])
+
+                    network.eval()
+                    preds = network(X_s_torch).numpy()
+                    if self.inverse_transform_preds:
+                        preds = self.y_scalers[scaler_idx].inverse_transform(preds)
+                    samples.append(preds)
+
+                    if n_dropout_samples > 0:
+                        network.train()
+                        for _ in range(n_dropout_samples):
+                            preds = network(X_s_torch).numpy()
+                            if self.inverse_transform_preds:
+                                preds = self.y_scalers[scaler_idx].inverse_transform(preds)
+                            samples.append(preds)
+                        network.eval()
+
+        return samples
 
     def initialize_model(
         self,
@@ -1051,8 +1173,11 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         
         for epoch in range(epochs):
             model.train()
+            # Raw head outputs of every training batch of this epoch: the weights actually
+            # used in this epoch's optimiser steps, with dropout on
+            epoch_preds = []
             for X_i, y_i in train_loader:
-                model = self._fit_one_batch(
+                model, preds_i = self._fit_one_batch(
                     model = model,
                     X_i = X_i,
                     y_i = y_i,
@@ -1060,7 +1185,8 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
                     scheduler = scheduler,
                     loss_func = loss_func,
                     reg_turnover = reg_turnover
-                )  
+                )
+                epoch_preds.append(preds_i)
             
             if patience is not None:
                 # The cross-sectional diagnostics cost a pass per period, so they are only
@@ -1077,6 +1203,13 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
                 early_stopping_trace["valid_loss_path"].append(valid_loss)
                 early_stopping_trace["generalization_gap_path"].append(valid_loss - train_loss)
                 early_stopping_trace["improvement_path"].append(best_score - valid_loss)
+                # Epoch-on-epoch change in validation loss, positive when it improved.
+                # `improvement_path` measures distance from the best score so far; this
+                # measures the step, which is what shows a plateau
+                valid_path = early_stopping_trace["valid_loss_path"]
+                early_stopping_trace["improvement_path_diff"].append(
+                    valid_path[-2] - valid_loss if len(valid_path) > 1 else np.nan
+                )
 
                 best_score_new, best_state, counter = self.update_es_stats(
                     model, train_loss, valid_loss, best_score, best_state, counter, patience
@@ -1200,6 +1333,7 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         """
         model.eval()
         total_loss = 0.0
+        n_samples = 0
         ics = []
         hits = 0
         n_obs = 0
@@ -1209,7 +1343,11 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
                 # Batches carry a third element when sample weights are in use
                 X_i, y_i = batch[0], batch[1]
                 preds = model(X_i)
-                total_loss += loss_func(preds, y_i).item()
+                # Weighted by batch size rather than counting every batch equally:
+                # `aggregate_last` merges the short final batch into the previous one, so
+                # batches are not all the same size and a plain mean mis-weights them
+                total_loss += loss_func(preds, y_i).item() * X_i.shape[0]
+                n_samples += X_i.shape[0]
 
                 if diagnostics:
                     batch_ics, batch_hits, batch_obs = self._cross_sectional_diagnostics(
@@ -1220,7 +1358,7 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
                     n_obs += batch_obs
 
         return {
-            "loss": total_loss / len(loader),
+            "loss": total_loss / n_samples if n_samples else np.nan,
             "ic": float(np.mean(ics)) if ics else np.nan,
             "hit_rate": hits / n_obs if n_obs else np.nan,
             "n_periods": len(ics),
@@ -1406,6 +1544,8 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
             "gradient_min_per_layer": {},
             "gradient_norm_per_layer": {},
             "global_gradient_norm": None,
+            "train_loss_isnan": bool(torch.isnan(eval_loss).item()),
+            "train_loss_isinf": bool(torch.isinf(eval_loss).item()),
             "nan_gradients_per_layer": {},
             "inf_gradients_per_layer": {},
             "nan_gradients_global": None,
@@ -1571,8 +1711,10 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
                 if not isinstance(dropout_p, (numbers.Real, list)):
                     raise TypeError("dropout_p must be a real number or a list.")
                 if isinstance(dropout_p, numbers.Real):
-                    if not (0 <= dropout_p < 1):
-                        raise ValueError("dropout_p must be between 0 and 1.")
+                    if not (0 <= dropout_p < 0.5):
+                        raise ValueError(
+                            "dropout_p must be at least 0 and less than 0.5. The encoder applies twice this probability to every hidden layer after the first, so 0.5 or more would drop every unit of those layers. Pass a list to set each layer's probability explicitly instead."
+                        )
                 else:
                     if len(dropout_p) == 0:
                         raise ValueError("dropout_p list must not be empty.")

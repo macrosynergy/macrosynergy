@@ -6,15 +6,25 @@ except ImportError as e:
         "Install it with: pip install macrosynergy[torch]"
     ) from e
 
-from .models import MultiLayerPerceptron
-from .samplers import TimeSeriesSampler
+from .models import MultiLayerPerceptron, HeteroskedasticMLP
+from .samplers import TimeSeriesSampler, PanelBatchSampler
 from .losses import (
     MultiOutputSharpe,
     MultiOutputMCR,
     NegMeanPortfolioReturn,
     PortfolioVariance,
     NegMeanVarianceUtility,
+    NegMeanVarianceSkewnessUtility,
     NegSharpeRatio,
+    AssetBaggingLoss,
+    NegCrossSectionalIC,
+    NegRankIC,
+    RankingRiskLoss,
+    GaussianNLL,
+    ActiveWeightModule,
+    ActiveReturnLoss,
+    BenchmarkWeightedIC,
+    BenchmarkFeasibilityPenalty,
 )
 from .modules import (
     LongShortModule,
@@ -24,15 +34,27 @@ from .modules import (
 __all__ = [
     # models
     "MultiLayerPerceptron",
+    "HeteroskedasticMLP",
     # samplers
     "TimeSeriesSampler",
+    "PanelBatchSampler",
     # losses
     "MultiOutputSharpe",
     "MultiOutputMCR",
     "NegMeanPortfolioReturn",
     "PortfolioVariance",
     "NegMeanVarianceUtility",
+    "NegMeanVarianceSkewnessUtility",
     "NegSharpeRatio",
+    "AssetBaggingLoss",
+    "NegCrossSectionalIC",
+    "NegRankIC",
+    "RankingRiskLoss",
+    "GaussianNLL",
+    "ActiveWeightModule",
+    "ActiveReturnLoss",
+    "BenchmarkWeightedIC",
+    "BenchmarkFeasibilityPenalty",
     # modules
     "LongShortModule",
     "SwiGLU",

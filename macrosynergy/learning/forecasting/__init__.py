@@ -50,9 +50,24 @@ def __getattr__(name):
         "NegMeanPortfolioReturn",
         "NegSharpeRatio",
         "LongShortModule",
+        "PanelBatchSampler",
+        "NegMeanVarianceSkewnessUtility",
+        "AssetBaggingLoss",
+        "AssetBaggingLoss",
+    "NegCrossSectionalIC",
+        "NegRankIC",
+        "RankingRiskLoss",
+        "HeteroskedasticMLP",
+        "GaussianNLL",
+        "ActiveWeightModule",
+        "ActiveReturnLoss",
+        "BenchmarkWeightedIC",
+        "BenchmarkFeasibilityPenalty",
+        "SwiGLU",
     }
     _nn_names = {
         "MLPRegressor",
+        "PanelMLPRegressor",
     }
     if name in _torch_names:
         from .torch import (
@@ -66,11 +81,23 @@ def __getattr__(name):
             NegSharpeRatio,
             LongShortModule,
             SwiGLU,
+            PanelBatchSampler,
+            NegMeanVarianceSkewnessUtility,
+            AssetBaggingLoss,
+            NegCrossSectionalIC,
+            NegRankIC,
+            RankingRiskLoss,
+            HeteroskedasticMLP,
+            GaussianNLL,
+            ActiveWeightModule,
+            ActiveReturnLoss,
+            BenchmarkWeightedIC,
+            BenchmarkFeasibilityPenalty,
         )
         return locals()[name]
     if name in _nn_names:
-        from .nn import MLPRegressor
-        return MLPRegressor
+        from .nn import MLPRegressor, PanelMLPRegressor
+        return locals()[name]
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 __all__ = [
@@ -106,8 +133,20 @@ __all__ = [
     "PortfolioVariance",
     "NegMeanVarianceUtility",
     "NegSharpeRatio",
+    "PanelMLPRegressor",
     "MLPRegressor",
     "LongShortModule",
+    "PanelBatchSampler",
+    "NegMeanVarianceSkewnessUtility",
+    "NegCrossSectionalIC",
+    "NegRankIC",
+    "RankingRiskLoss",
+    "HeteroskedasticMLP",
+    "GaussianNLL",
+    "ActiveWeightModule",
+    "ActiveReturnLoss",
+    "BenchmarkWeightedIC",
+    "BenchmarkFeasibilityPenalty",
     "SwiGLU",
     "LarsSurrogateModel",
 ]

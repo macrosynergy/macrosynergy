@@ -310,8 +310,10 @@ class MultiLayerPerceptron(nn.Module, BaseEstimator):
         if not isinstance(dropout_p, (numbers.Real, list)):
             raise TypeError("dropout_p must be a real number or a list.")
         if isinstance(dropout_p, numbers.Real):
-            if not (0 <= dropout_p < 1):
-                raise ValueError("dropout_p must be between 0 and 1.")
+            if not (0 <= dropout_p < 0.5):
+                raise ValueError(
+                    "dropout_p must be at least 0 and less than 0.5. The encoder applies twice this probability to every hidden layer after the first, so 0.5 or more would drop every unit of those layers. Pass a list to set each layer's probability explicitly instead."
+                )
         else:
             if len(dropout_p) == 0:
                 raise ValueError("dropout_p list cannot be empty.")

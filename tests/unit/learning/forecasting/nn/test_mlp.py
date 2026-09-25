@@ -11,7 +11,9 @@ from sklearn.base import BaseEstimator, RegressorMixin
 from sklearn.preprocessing import StandardScaler
 
 from macrosynergy.learning.forecasting.torch.models.mlps import MultiLayerPerceptron
+from macrosynergy.learning.forecasting.torch.modules import LongShortModule
 from macrosynergy.learning.forecasting.nn import MLPRegressor
+from macrosynergy.learning.splitters import RollingKFoldPanelSplit
 
 # Set up invalid torch_models for testing
 class InvalidModelNoBase(nn.Module):
@@ -56,21 +58,48 @@ class InvalidModelNoForward(nn.Module, BaseEstimator):
         )
 
 class ValidModel(nn.Module, BaseEstimator):
+    """
+    A custom network of the shape `MLPRegressor` accepts.
+
+    Beyond subclassing both `nn.Module` and `BaseEstimator` and defining `forward`, the
+    estimator requires an `encoder` and a `head` submodule, so that it can reason about
+    the two halves of the network separately.
+    """
     def __init__(self, n_latent = 4):
         super().__init__()
         self.n_latent = n_latent
 
-        self.model = nn.Sequential(
+        self.encoder = nn.Sequential(
             nn.Linear(2, self.n_latent),
             nn.ReLU(),
-            nn.Linear(self.n_latent, 2),
         )
+        self.head = nn.Linear(self.n_latent, 2)
 
     def forward(self, x):
-        out = self.model(x)
+        out = self.head(self.encoder(x))
         return out
     
 class TestMLPRegressor(unittest.TestCase):
+    @staticmethod
+    def first_model(fitted):
+        """
+        The first trained network of a fitted estimator.
+
+        With `refit=False` and early stopping on, `models` holds one *list* of
+        per-fold networks per ensemble member; otherwise it holds the networks
+        directly. This hides that difference from the assertions.
+        """
+        entry = fitted.models[0]
+        return entry[0] if isinstance(entry, list) else entry
+
+    @staticmethod
+    def all_models(fitted):
+        """Every trained network of a fitted estimator, flattened across folds."""
+        out = []
+        for entry in fitted.models:
+            out.extend(entry if isinstance(entry, list) else [entry])
+        return out
+
     @classmethod
     def setUpClass(self):
         # Generate data with true linear relationship
@@ -184,15 +213,21 @@ class TestMLPRegressor(unittest.TestCase):
         with self.assertRaises(ValueError):
             model = MLPRegressor(torch_model="not None", dropout_p=0.2)
 
-        """ long_only """
-        # should be a boolean
+        """ signal_modifier """
+        # should be an nn.Module or None
         with self.assertRaises(TypeError):
-            model = MLPRegressor(long_only="not a bool")
+            model = MLPRegressor(signal_modifier="not a module")
+        with self.assertRaises(TypeError):
+            model = MLPRegressor(signal_modifier=3)
 
-        """ dollar_neutral """
-        # should be a boolean
+        """ head_rank """
+        # should be a positive integer or None
         with self.assertRaises(TypeError):
-            model = MLPRegressor(dollar_neutral="not a bool")
+            model = MLPRegressor(head_rank="not an int")
+        with self.assertRaises(ValueError):
+            model = MLPRegressor(head_rank=0)
+        with self.assertRaises(ValueError):
+            model = MLPRegressor(head_rank=-1)
 
         """ normalization """
         # should be a string
@@ -213,7 +248,8 @@ class TestMLPRegressor(unittest.TestCase):
                 head_activation=None,
                 dropout_p=None,
                 n_latent=None,
-                dollar_neutral=None,
+                signal_modifier=None,
+                head_rank=None,
                 normalization=None
             )
         with self.assertRaises(TypeError):
@@ -225,7 +261,8 @@ class TestMLPRegressor(unittest.TestCase):
                 head_activation=None,
                 dropout_p=None,
                 n_latent=None,
-                dollar_neutral=None,
+                signal_modifier=None,
+                head_rank=None,
                 normalization=None
             )
         with self.assertRaises(TypeError):
@@ -237,7 +274,8 @@ class TestMLPRegressor(unittest.TestCase):
                 head_activation=None,
                 dropout_p=None,
                 n_latent=None,
-                dollar_neutral=None,
+                signal_modifier=None,
+                head_rank=None,
                 normalization=None
             )
         with self.assertRaises(ValueError):
@@ -249,7 +287,8 @@ class TestMLPRegressor(unittest.TestCase):
                 head_activation=None,
                 dropout_p=None,
                 n_latent=None,
-                dollar_neutral=None,
+                signal_modifier=None,
+                head_rank=None,
                 normalization=None
             )
 
@@ -263,7 +302,8 @@ class TestMLPRegressor(unittest.TestCase):
                 head_activation=None,
                 dropout_p=None,
                 n_latent=None,
-                dollar_neutral=None,
+                signal_modifier=None,
+                head_rank=None,
                 normalization=None
             )
         with self.assertRaises(ValueError):
@@ -275,7 +315,8 @@ class TestMLPRegressor(unittest.TestCase):
                 head_activation=None,
                 dropout_p=None,
                 n_latent=None,
-                dollar_neutral=None,
+                signal_modifier=None,
+                head_rank=None,
                 normalization=None
             )
         with self.assertRaises(ValueError):
@@ -287,7 +328,8 @@ class TestMLPRegressor(unittest.TestCase):
                 head_activation=None,
                 dropout_p=None,
                 n_latent=None,
-                dollar_neutral=None,
+                signal_modifier=None,
+                head_rank=None,
                 normalization=None
             )
         with self.assertRaises(ValueError):
@@ -299,7 +341,8 @@ class TestMLPRegressor(unittest.TestCase):
                 head_activation="relu",
                 dropout_p=None,
                 n_latent=None,
-                dollar_neutral=None,
+                signal_modifier=None,
+                head_rank=None,
                 normalization=None
             )
         with self.assertRaises(ValueError):
@@ -311,7 +354,8 @@ class TestMLPRegressor(unittest.TestCase):
                 head_activation=None,
                 dropout_p=0.2,
                 n_latent=None,
-                dollar_neutral=None,
+                signal_modifier=None,
+                head_rank=None,
                 normalization=None
             )
         with self.assertRaises(ValueError):
@@ -323,7 +367,8 @@ class TestMLPRegressor(unittest.TestCase):
                 head_activation=None,
                 dropout_p=None,
                 n_latent=4,
-                dollar_neutral=None,
+                signal_modifier=None,
+                head_rank=None,
                 normalization=None
             )
 
@@ -419,16 +464,16 @@ class TestMLPRegressor(unittest.TestCase):
         with self.assertRaises(ValueError):
             model = MLPRegressor(patience=0)
 
-        """ train_pct """
-        # Should be a float between 0 and 1
+        """ train_splitter """
+        # Should be a float strictly between 0 and 1, or a BaseCrossValidator
         with self.assertRaises(TypeError):
-            model = MLPRegressor(train_pct="not a float")
+            model = MLPRegressor(train_splitter="not a float")
         with self.assertRaises(ValueError):
-            model = MLPRegressor(train_pct=-0.1)
+            model = MLPRegressor(train_splitter=-0.1)
         with self.assertRaises(ValueError):
-            model = MLPRegressor(train_pct=1.1)
+            model = MLPRegressor(train_splitter=1.1)
         with self.assertRaises(ValueError):
-            model = MLPRegressor(train_pct=1)
+            model = MLPRegressor(train_splitter=1)
 
         """ x_scaler """
         # Instance of StandardScaler or None 
@@ -482,9 +527,9 @@ class TestMLPRegressor(unittest.TestCase):
         self.assertEqual(model.encoder_activation, "relu")
         self.assertEqual(model.head_activation, "identity")
         self.assertEqual(model.dropout_p, 0)
-        self.assertEqual(model.normalization, "none")
-        self.assertEqual(model.dollar_neutral, False)
-        self.assertEqual(model.long_only, None)
+        self.assertEqual(model.normalization, None)
+        self.assertEqual(model.signal_modifier, None)
+        self.assertEqual(model.head_rank, None)
         self.assertEqual(model.torch_model, None)
         self.assertIsInstance(model.loss_func, nn.MSELoss)
         self.assertEqual(model.optimizer, "AdamW")
@@ -498,7 +543,7 @@ class TestMLPRegressor(unittest.TestCase):
         self.assertEqual(model.drop_last, False)
         self.assertEqual(model.epochs, 10000)
         self.assertEqual(model.patience, 1000)
-        self.assertEqual(model.train_pct, 0.7)
+        self.assertEqual(model.train_splitter, 0.7)
         self.assertIsInstance(model.x_scaler, StandardScaler)
         self.assertIsInstance(model.y_scaler, StandardScaler)
         self.assertEqual(model.refit, False)
@@ -527,7 +572,8 @@ class TestMLPRegressor(unittest.TestCase):
             head_activation=None,
             dropout_p=None,
             normalization=None,
-            dollar_neutral=None,
+            signal_modifier=None,
+            head_rank=None,
             torch_model = ValidModel(),
             loss_func=nn.L1Loss(),
             optimizer=["AdamW", "SGD+mom"],
@@ -541,7 +587,7 @@ class TestMLPRegressor(unittest.TestCase):
             drop_last = True,
             epochs = 10,
             patience = 2,
-            train_pct = 0.8,
+            train_splitter = 0.8,
             x_scaler=StandardScaler(with_mean=True),
             y_scaler=None,
             verbose = True,
@@ -556,7 +602,8 @@ class TestMLPRegressor(unittest.TestCase):
         self.assertEqual(model.head_activation, None)
         self.assertEqual(model.dropout_p, None)
         self.assertEqual(model.normalization, None)
-        self.assertEqual(model.dollar_neutral, None)
+        self.assertEqual(model.signal_modifier, None)
+        self.assertEqual(model.head_rank, None)
         self.assertIsInstance(model.torch_model, ValidModel)
         self.assertIsInstance(model.loss_func, nn.L1Loss)
         self.assertEqual(model.optimizer, ["AdamW", "SGD+mom"])
@@ -570,7 +617,7 @@ class TestMLPRegressor(unittest.TestCase):
         self.assertEqual(model.drop_last, True)
         self.assertEqual(model.epochs, 10)
         self.assertEqual(model.patience, 2)
-        self.assertEqual(model.train_pct, 0.8)
+        self.assertEqual(model.train_splitter, 0.8)
         self.assertIsInstance(model.x_scaler, StandardScaler)
         self.assertIsNone(model.y_scaler)
         self.assertEqual(model.refit, False)
@@ -604,21 +651,25 @@ class TestMLPRegressor(unittest.TestCase):
         self.assertRaises(TypeError, model.fit, X=self.X, y="y")
         self.assertRaises(TypeError, model.fit, X=self.X, y=self.y.values)
         self.assertRaises(ValueError, model.fit, X=self.X, y=self.y.reset_index())
-        # Test type of sample_weight
-        self.assertRaises(TypeError, model.fit, X=self.X, y=self.y, sample_weight="weight")
-        self.assertRaises(TypeError, model.fit, X=self.X, y=self.y, sample_weight=np.array(["weight"] * len(self.X)))
-        self.assertRaises(ValueError, model.fit, X=self.X, y=self.y, sample_weight=np.array([1.0, 2.0]))
-        self.assertRaises(TypeError, model.fit, X=self.X, y=self.y, sample_weight=np.array([1.0, "two", 3.0] * (len(self.X)//3)))
-        self.assertRaises(ValueError, model.fit, X=self.X, y=self.y, sample_weight=np.array([1.0, -2.0, 3.0] * (len(self.X)//3)))
+        # X and y must carry the same index
+        self.assertRaises(ValueError, model.fit, X=self.X, y=self.y.iloc[:-1])
 
-        self.assertRaises(ValueError, model.fit, X=self.X, y=self.y, sample_weight=np.array([1.0, 2.0, 3.0] * (len(self.X)//3)))
-
-    @parameterized.expand(itertools.product([None, True, False], ["batch", "layer", "none"], [True, False]))
-    def test_valid_fit(self, long_only, normalization, refit):
+    @parameterized.expand(itertools.product(
+        [None, "softmax", "longshort"], [None, "batch", "layer"], [True, False]
+    ))
+    def test_valid_fit(self, modifier_name, normalization, refit):
         """ 
         Test that valid models run as expected under different hyperparameter settings with
         stored attributes as expected. 
         """
+        def make_modifier():
+            """A fresh signal modifier per model, mirroring how one is passed in."""
+            if modifier_name == "softmax":
+                return nn.Softmax(dim=1)
+            if modifier_name == "longshort":
+                return LongShortModule(dollar_neutral=True)
+            return None
+
         # Test on basic hyperparameter settings
         model1 = MLPRegressor(
             n_latent = 32,
@@ -627,8 +678,7 @@ class TestMLPRegressor(unittest.TestCase):
             encoder_activation="relu",
             head_activation="tanh",
             dropout_p=0.2,
-            long_only = long_only,
-            dollar_neutral = False,
+            signal_modifier = make_modifier(),
             normalization = normalization,
             torch_model = None,
             loss_func=nn.MSELoss(),
@@ -643,7 +693,7 @@ class TestMLPRegressor(unittest.TestCase):
             drop_last = False,
             epochs = 5,
             patience = 2,
-            train_pct = 0.7,
+            train_splitter = 0.7,
             x_scaler=StandardScaler(with_mean=False),
             y_scaler=StandardScaler(with_mean=False),
             refit = refit,
@@ -655,9 +705,9 @@ class TestMLPRegressor(unittest.TestCase):
 
         self.assertIsInstance(model1, MLPRegressor)
         self.assertIsInstance(model1.models, list)
-        self.assertIsInstance(model1.models[0], nn.Module)
+        self.assertIsInstance(self.first_model(model1), nn.Module)
 
-        for parameter in model1.models[0].parameters():
+        for parameter in self.first_model(model1).parameters():
             self.assertFalse(torch.isnan(parameter).any())
             self.assertFalse(torch.isinf(parameter).any())
 
@@ -669,8 +719,7 @@ class TestMLPRegressor(unittest.TestCase):
             encoder_activation="relu",
             head_activation="tanh",
             dropout_p=0.2,
-            long_only = long_only,
-            dollar_neutral = False,
+            signal_modifier = make_modifier(),
             normalization = normalization,
             torch_model = None,
             loss_func=nn.MSELoss(),
@@ -685,7 +734,7 @@ class TestMLPRegressor(unittest.TestCase):
             drop_last = False,
             epochs = 5,
             patience = 2,
-            train_pct = 0.7,
+            train_splitter = 0.7,
             x_scaler=StandardScaler(with_mean=False),
             y_scaler=StandardScaler(with_mean=False),
             refit = refit,
@@ -695,7 +744,7 @@ class TestMLPRegressor(unittest.TestCase):
             min_samples = 36,
         ).fit(self.X, self.y)
 
-        for param1, param2 in zip(model1.models[0].parameters(), model2.models[0].parameters()):
+        for param1, param2 in zip(self.first_model(model1).parameters(), self.first_model(model2).parameters()):
             self.assertTrue(torch.equal(param1, param2))
 
         # Test that different random state leads to different parameters
@@ -706,8 +755,7 @@ class TestMLPRegressor(unittest.TestCase):
             encoder_activation="relu",
             head_activation="tanh",
             dropout_p=0.2,
-            long_only = long_only,
-            dollar_neutral = False,
+            signal_modifier = make_modifier(),
             normalization = normalization,
             torch_model = None,
             loss_func=nn.MSELoss(),
@@ -722,7 +770,7 @@ class TestMLPRegressor(unittest.TestCase):
             drop_last = False,
             epochs = 5,
             patience = 2,
-            train_pct = 0.7,
+            train_splitter = 0.7,
             x_scaler=StandardScaler(with_mean=False),
             y_scaler=StandardScaler(with_mean=False),
             refit = refit,
@@ -732,7 +780,7 @@ class TestMLPRegressor(unittest.TestCase):
             min_samples = 36,
         ).fit(self.X, self.y)
 
-        for param1, param3 in zip(model1.models[0].parameters(), model3.models[0].parameters()):
+        for param1, param3 in zip(self.first_model(model1).parameters(), self.first_model(model3).parameters()):
             self.assertFalse(torch.equal(param1, param3))
 
         # Test on custom torch_model as expected 
@@ -747,7 +795,8 @@ class TestMLPRegressor(unittest.TestCase):
             epochs = 5,
             patience = 2,
             normalization = None,
-            dollar_neutral = None,
+            signal_modifier = None,
+            head_rank = None,
         ).fit(self.X, self.y)
 
         model5 = MLPRegressor(
@@ -761,7 +810,8 @@ class TestMLPRegressor(unittest.TestCase):
             epochs = 5,
             patience = 2,
             normalization = None,
-            dollar_neutral = None,
+            signal_modifier = None,
+            head_rank = None,
         ).fit(self.X, self.y)
 
         model6 = MLPRegressor(
@@ -775,22 +825,23 @@ class TestMLPRegressor(unittest.TestCase):
             epochs = 5,
             patience = 2,
             normalization = None,
-            dollar_neutral = None,
+            signal_modifier = None,
+            head_rank = None,
             random_state=123,
         ).fit(self.X, self.y)
 
         self.assertIsInstance(model4, MLPRegressor)
         self.assertIsInstance(model4.models, list)
-        self.assertIsInstance(model4.models[0], nn.Module)
+        self.assertIsInstance(self.first_model(model4), nn.Module)
 
-        for parameter in model4.models[0].parameters():
+        for parameter in self.first_model(model4).parameters():
             self.assertFalse(torch.isnan(parameter).any())
             self.assertFalse(torch.isinf(parameter).any())
 
-        for param4, param5 in zip(model4.models[0].parameters(), model5.models[0].parameters()):
+        for param4, param5 in zip(self.first_model(model4).parameters(), self.first_model(model5).parameters()):
             self.assertTrue(torch.equal(param4, param5))
 
-        for param4, param6 in zip(model4.models[0].parameters(), model6.models[0].parameters()):
+        for param4, param6 in zip(self.first_model(model4).parameters(), self.first_model(model6).parameters()):
             self.assertFalse(torch.equal(param4, param6))
 
         # Now test the model runs with multiple optimizers and random states
@@ -812,7 +863,7 @@ class TestMLPRegressor(unittest.TestCase):
         self.assertIsInstance(model7, MLPRegressor)
         self.assertIsInstance(model7.models, list)
         self.assertEqual(len(model7.models), 4)
-        for submodel in model7.models:
+        for submodel in self.all_models(model7):
             self.assertIsInstance(submodel, nn.Module)
             for parameter in submodel.parameters():
                 self.assertFalse(torch.isnan(parameter).any())
@@ -833,7 +884,7 @@ class TestMLPRegressor(unittest.TestCase):
             random_state=[42, 43],
         ).fit(self.X, self.y)
 
-        for submodel1, submodel8 in zip(model7.models, model8.models):
+        for submodel1, submodel8 in zip(self.all_models(model7), self.all_models(model8)):
             for param1, param8 in zip(submodel1.parameters(), submodel8.parameters()):
                 self.assertTrue(torch.equal(param1, param8))
 
@@ -847,7 +898,8 @@ class TestMLPRegressor(unittest.TestCase):
             dropout_p=None,
             n_latent=None,
             normalization=None,
-            dollar_neutral=None,
+            signal_modifier=None,
+            head_rank=None,
             epochs = 5,
             patience = 2,
             optimizer=["AdamW", "SGD+mom"],
@@ -865,12 +917,13 @@ class TestMLPRegressor(unittest.TestCase):
             patience = 2,
             n_latent = None,
             normalization=None,
-            dollar_neutral=None,
+            signal_modifier=None,
+            head_rank=None,
             optimizer=["AdamW", "SGD+mom"],
             random_state=[42, 43],
         ).fit(self.X, self.y)
 
-        for submodel9, submodel10 in zip(model9.models, model10.models):
+        for submodel9, submodel10 in zip(self.all_models(model9), self.all_models(model10)):
             for param9, param10 in zip(submodel9.parameters(), submodel10.parameters()):
                 self.assertTrue(torch.equal(param9, param10))
 
@@ -880,28 +933,40 @@ class TestMLPRegressor(unittest.TestCase):
         """
         model_refit = MLPRegressor(epochs = 5, patience = 2, refit=True).fit(self.X, self.y)
         model_norefit = MLPRegressor(epochs = 5, patience = 2, refit=False).fit(self.X, self.y)
-        params_norefit = [p.clone() for p in model_norefit.models[0].parameters()]
-        params_refit = [p.clone() for p in model_refit.models[0].parameters()]
+        params_norefit = [p.clone() for p in self.first_model(model_norefit).parameters()]
+        params_refit = [p.clone() for p in self.first_model(model_refit).parameters()]
         for p_norefit, p_refit in zip(params_norefit, params_refit):
             self.assertFalse(torch.equal(p_norefit, p_refit))
 
     def test_valid_fit_dollar_neutral(self):
         """
-        Test that the dollar neutral constraint is applied correctly during training.
+        Test that a dollar-neutral signal modifier yields weights summing to zero.
         """
-        model = MLPRegressor(epochs = 5, patience = 2, dollar_neutral=True, long_only = False).fit(self.X.iloc[:, :1], pd.concat((self.X.iloc[:, :1], self.y), axis=1))
-        for param in model.models[0].parameters():
+        y = pd.concat((self.X.iloc[:, :1], self.y), axis=1)
+        model = MLPRegressor(
+            epochs=5,
+            patience=2,
+            signal_modifier=LongShortModule(dollar_neutral=True),
+        ).fit(self.X.iloc[:, :1], y)
+
+        net = self.first_model(model)
+        for param in net.parameters():
             self.assertFalse(torch.isnan(param).any())
             self.assertFalse(torch.isinf(param).any())
 
-        # Get forward pass outputs for the training data
+        # Forward pass of a single network over the training data
         with torch.no_grad():
-            X_tensor = torch.tensor(model.x_scaler.transform(self.X.iloc[:, :1]), dtype=torch.float32)
-            outputs = model.models[0](X_tensor)
+            X_scaled = model.x_scalers[0].transform(self.X.iloc[:, :1])
+            outputs = net(torch.tensor(X_scaled, dtype=torch.float32))
 
-        # Check that the sum of the outputs across all samples is approximately zero (dollar neutral constraint)
-        output_mean = outputs.sum(dim = 1)
-        self.assertTrue(torch.allclose(output_mean, torch.zeros_like(output_mean), atol=1e-4))
+        # Weights sum to zero across assets in every period
+        row_sums = outputs.sum(dim=1)
+        self.assertTrue(torch.allclose(row_sums, torch.zeros_like(row_sums), atol=1e-4))
+
+        # Summing to zero is a linear property, so it survives the averaging that
+        # `predict` performs across folds and ensemble members
+        pred_sums = model.predict(self.X.iloc[:, :1]).sum(axis=1).values
+        np.testing.assert_allclose(pred_sums, 0, atol=1e-4)
 
     def test_types_predict(self):
         model = MLPRegressor().fit(self.X, self.y)
@@ -951,10 +1016,62 @@ class TestMLPRegressor(unittest.TestCase):
         self.assertIn("XR", preds_insufficient.columns)
         self.assertNotIn("XR2", preds_insufficient.columns)
 
+    def test_types_predict_uncertainty(self):
+        model = MLPRegressor(epochs=5, patience=2).fit(self.X, self.y)
+        self.assertRaises(TypeError, model.predict_uncertainty, X=1)
+        self.assertRaises(ValueError, model.predict_uncertainty, X=self.X_nan)
+        with self.assertRaises(TypeError):
+            model.predict_uncertainty(self.X, n_dropout_samples="three")
+        with self.assertRaises(ValueError):
+            model.predict_uncertainty(self.X, n_dropout_samples=-1)
+
+    def test_valid_predict_uncertainty(self):
+        # A single seed and a float splitter leave exactly one network, so there is
+        # nothing for the dispersion to be measured over
+        single = MLPRegressor(epochs=5, patience=2, dropout_p=0.2).fit(self.X, self.y)
+        dispersion = single.predict_uncertainty(self.X)
+        self.assertIsInstance(dispersion, pd.DataFrame)
+        pd.testing.assert_index_equal(dispersion.index, self.X.index)
+        pd.testing.assert_index_equal(dispersion.columns, single.targets)
+        np.testing.assert_allclose(dispersion.values, 0.0)
+
+        # Monte Carlo dropout makes it informative even from one network
+        mc = single.predict_uncertainty(self.X, n_dropout_samples=8)
+        self.assertTrue((mc.values > 0).any())
+        self.assertFalse(mc.isna().any().any())
+
+        # So does an ensemble, with no extra passes
+        ensemble = MLPRegressor(
+            epochs=5, patience=2, random_state=[0, 1, 2]
+        ).fit(self.X, self.y)
+        spread = ensemble.predict_uncertainty(self.X)
+        self.assertEqual(spread.shape, (len(self.X), len(ensemble.targets)))
+        self.assertTrue((spread.values > 0).any())
+
+        # Dispersion is a spread, never negative, and predict is unaffected by it
+        self.assertTrue((spread.values >= 0).all())
+        before = ensemble.predict(self.X)
+        ensemble.predict_uncertainty(self.X, n_dropout_samples=4)
+        pd.testing.assert_frame_equal(before, ensemble.predict(self.X))
+
+    def test_valid_predict_uncertainty_across_folds(self):
+        """Fold-to-fold disagreement is itself an uncertainty estimate."""
+        model = MLPRegressor(
+            epochs=5, patience=2, train_splitter=RollingKFoldPanelSplit(n_splits=3)
+        ).fit(self.X, self.y)
+        spread = model.predict_uncertainty(self.X)
+        self.assertEqual(spread.shape, (len(self.X), len(model.targets)))
+        self.assertTrue((spread.values > 0).any())
+
     def test_valid_create_train_test_splits(self):
-        # Test that there is no leakage between train and validation sets in the time split and that the split is done according to the specified train_pct
+        # The float path cuts chronologically on unique dates, so no date can land on
+        # both sides of the split
         model = MLPRegressor()
-        X_tr, X_va, y_tr, y_va = model.create_train_valid_splits(self.X, self.y, train_pct=0.6)
+        X_trs, X_vas, y_trs, y_vas = model.create_train_valid_splits_(self.X, self.y, 0.6)
+
+        self.assertEqual(len(X_trs), 1)
+        self.assertEqual(len(X_vas), 1)
+        X_tr, X_va, y_tr, y_va = X_trs[0], X_vas[0], y_trs[0], y_vas[0]
 
         dates = sorted(self.X.index.get_level_values(1).unique())
         cut = int(0.6 * len(dates))
@@ -965,41 +1082,79 @@ class TestMLPRegressor(unittest.TestCase):
         self.assertEqual(set(X_va.index.get_level_values("real_date").unique()), val_dates)
         self.assertEqual(set(y_tr.index.get_level_values("real_date").unique()), train_dates)
         self.assertEqual(set(y_va.index.get_level_values("real_date").unique()), val_dates)
+        self.assertEqual(train_dates & val_dates, set())
+        # Every training date precedes every validation date
+        self.assertLess(max(train_dates), min(val_dates))
+
+        # A BaseCrossValidator produces one train/validation pair per fold
+        X_trs, X_vas, y_trs, y_vas = model.create_train_valid_splits_(
+            self.X, self.y, RollingKFoldPanelSplit(n_splits=3)
+        )
+        self.assertEqual(len(X_trs), 3)
+        self.assertEqual(len(y_vas), 3)
+        for X_tr, X_va in zip(X_trs, X_vas):
+            self.assertEqual(len(X_tr) + len(X_va), len(self.X))
 
     def test_valid_scale_data(self):
-        # Test that the data is scaled correctly when both scalers are provided
         model = MLPRegressor()
-        X_tr, X_va, y_tr, y_va = model.create_train_valid_splits(self.X, self.y, train_pct=0.6)
-        X_tr_scaled, y_tr_scaled, X_va_scaled, y_va_scaled = model.scale_data(X_train=X_tr, X_valid=X_va, y_train=y_tr, y_valid=y_va, x_scaler=StandardScaler(with_mean=True), y_scaler=StandardScaler(with_mean=True))
+        X_trs, X_vas, y_trs, y_vas = model.create_train_valid_splits_(self.X, self.y, 0.6)
 
-        self.assertIsInstance(X_tr_scaled, np.ndarray)
-        self.assertIsInstance(X_va_scaled, np.ndarray)
-        self.assertIsInstance(y_tr_scaled, np.ndarray)
-        self.assertIsInstance(y_va_scaled, np.ndarray)
+        # Both scalers centring and scaling
+        X_tr_s, y_tr_s, X_va_s, y_va_s, x_scalers, y_scalers = model.scale_data_(
+            X_trains=X_trs,
+            y_trains=y_trs,
+            x_scaler=StandardScaler(with_mean=True),
+            y_scaler=StandardScaler(with_mean=True),
+            X_valids=X_vas,
+            y_valids=y_vas,
+        )
+        for arr in (X_tr_s[0], y_tr_s[0], X_va_s[0], y_va_s[0]):
+            self.assertIsInstance(arr, np.ndarray)
+        self.assertAlmostEqual(X_tr_s[0].mean(), 0, places=5)
+        self.assertAlmostEqual(y_tr_s[0].mean(), 0, places=5)
+        self.assertAlmostEqual(X_tr_s[0].std(), 1, places=5)
+        self.assertAlmostEqual(y_tr_s[0].std(), 1, places=5)
+        self.assertIsInstance(x_scalers[0], StandardScaler)
+        self.assertIsInstance(y_scalers[0], StandardScaler)
 
-        self.assertAlmostEqual(X_tr_scaled.mean(), 0, places=5)
-        self.assertAlmostEqual(y_tr_scaled.mean(), 0, places=5)
-        self.assertAlmostEqual(X_tr_scaled.std(), 1, places=5)
-        self.assertAlmostEqual(y_tr_scaled.std(), 1, places=5)
+        # Variance scaling only, the library default
+        X_tr_s, y_tr_s, X_va_s, y_va_s, _, _ = model.scale_data_(
+            X_trains=X_trs,
+            y_trains=y_trs,
+            x_scaler=StandardScaler(with_mean=False),
+            y_scaler=StandardScaler(with_mean=False),
+            X_valids=X_vas,
+            y_valids=y_vas,
+        )
+        for arr in (X_tr_s[0], y_tr_s[0], X_va_s[0], y_va_s[0]):
+            self.assertIsInstance(arr, np.ndarray)
 
-        # Repeat for the case where the means are not removed (a common use case)
-        X_tr_scaled, y_tr_scaled, X_va_scaled, y_va_scaled = model.scale_data(X_train=X_tr, X_valid = X_va, y_train = y_tr, y_valid = y_va, x_scaler=StandardScaler(with_mean=False), y_scaler=StandardScaler(with_mean=False))
-        self.assertIsInstance(X_tr_scaled, np.ndarray)
-        self.assertIsInstance(X_va_scaled, np.ndarray)
-        self.assertIsInstance(y_tr_scaled, np.ndarray)
-        self.assertIsInstance(y_va_scaled, np.ndarray)
+        # A None y_scaler leaves the targets exactly as they were
+        X_tr_s, y_tr_s, X_va_s, y_va_s, _, y_scalers = model.scale_data_(
+            X_trains=X_trs,
+            y_trains=y_trs,
+            x_scaler=StandardScaler(with_mean=False),
+            y_scaler=None,
+            X_valids=X_vas,
+            y_valids=y_vas,
+        )
+        self.assertIsNone(y_scalers[0])
+        np.testing.assert_allclose(y_tr_s[0], y_trs[0].values)
+        np.testing.assert_allclose(y_va_s[0], y_vas[0].values)
 
-        # Repeat for the case where X is scaled but y is not
-        X_tr_scaled, y_tr_scaled, X_va_scaled, y_va_scaled = model.scale_data(X_train=X_tr, X_valid=X_va, y_train=y_tr, y_valid=y_va, x_scaler=StandardScaler(with_mean=False), y_scaler=None)
-        self.assertIsInstance(X_tr_scaled, np.ndarray)
-        self.assertIsInstance(X_va_scaled, np.ndarray)
-        self.assertIsInstance(y_tr_scaled, np.ndarray)
-        self.assertIsInstance(y_va_scaled, np.ndarray)
-
-        self.assertAlmostEqual(y_tr_scaled.mean(), y_tr.values.mean(), places=5)
-        self.assertAlmostEqual(y_va_scaled.mean(), y_va.values.mean(), places=5)
-        self.assertAlmostEqual(y_tr_scaled.std(), y_tr.values.std(), places=5)
-        self.assertAlmostEqual(y_va_scaled.std(), y_va.values.std(), places=5)
+        # The scaler is fitted on the training split alone: refitting on that split
+        # reproduces its statistics exactly, so the validation split never informs them
+        reference = StandardScaler(with_mean=True).fit(X_trs[0])
+        _, _, _, _, x_scalers, _ = model.scale_data_(
+            X_trains=X_trs,
+            y_trains=y_trs,
+            x_scaler=StandardScaler(with_mean=True),
+            y_scaler=None,
+            X_valids=X_vas,
+            y_valids=y_vas,
+        )
+        np.testing.assert_allclose(x_scalers[0].mean_, reference.mean_)
+        np.testing.assert_allclose(x_scalers[0].scale_, reference.scale_)
 
     def test_valid_fit_one_batch(self):
         """
@@ -1015,35 +1170,40 @@ class TestMLPRegressor(unittest.TestCase):
         before = {k: v.detach().clone() for k, v in torch_model.state_dict().items()}
 
         sklearn_model = MLPRegressor()
-        X_tr, X_va, y_tr, y_va = sklearn_model.create_train_valid_splits(self.X, self.y, train_pct=0.6)
-        X_tr_scaled, y_tr_scaled, X_va_scaled, y_va_scaled = sklearn_model.scale_data(X_train=X_tr, X_valid = X_va, y_train = y_tr, y_valid = y_va, x_scaler=StandardScaler(with_mean=True), y_scaler=StandardScaler(with_mean=True))
-
-        torch_model = sklearn_model._fit_one_batch(
-            torch_model,
-            torch.Tensor(X_tr_scaled[:8]),
-            torch.Tensor(y_tr_scaled[:8]),
-            optimizer=optimizer,
-            scheduler = None,
-            loss_func = nn.MSELoss(),
-            sample_weight = None,
-            sample_weight_strategy = None,
-            reg_turnover = 1
+        X_trs, _, y_trs, _ = sklearn_model.create_train_valid_splits_(self.X, self.y, 0.6)
+        X_tr_s, y_tr_s, _, _, _, _ = sklearn_model.scale_data_(
+            X_trains=X_trs,
+            y_trains=y_trs,
+            x_scaler=StandardScaler(with_mean=True),
+            y_scaler=StandardScaler(with_mean=True),
         )
+
+        torch_model, preds = sklearn_model._fit_one_batch(
+            torch_model,
+            torch.Tensor(X_tr_s[0][:8]),
+            torch.Tensor(y_tr_s[0][:8]),
+            optimizer=optimizer,
+            scheduler=None,
+            loss_func=nn.MSELoss(),
+            reg_turnover=1,
+        )
+        # The batch's raw head outputs come back detached, for the weight diagnostics
+        self.assertEqual(tuple(preds.shape), (8, self.y.shape[1]))
+        self.assertFalse(preds.requires_grad)
+
         after = {k: v.detach().clone() for k, v in torch_model.state_dict().items()}
         changed = any(not torch.equal(before[k], after[k]) for k in before.keys())
         self.assertTrue(changed)
 
-        # Repeat with a scheduler 
-        torch_model = sklearn_model._fit_one_batch(
+        # Repeat with a scheduler
+        torch_model, _ = sklearn_model._fit_one_batch(
             torch_model,
-            torch.Tensor(X_tr_scaled[8:16]),
-            torch.Tensor(y_tr_scaled[8:16]),
+            torch.Tensor(X_tr_s[0][8:16]),
+            torch.Tensor(y_tr_s[0][8:16]),
             optimizer=optimizer,
-            scheduler = scheduler,
-            loss_func = nn.MSELoss(),
-            sample_weight = None,
-            sample_weight_strategy = None,
-            reg_turnover = 1
+            scheduler=scheduler,
+            loss_func=nn.MSELoss(),
+            reg_turnover=1,
         )
         after2 = {k: v.detach().clone() for k, v in torch_model.state_dict().items()}
         changed2 = any(not torch.equal(after[k], after2[k]) for k in after.keys())
