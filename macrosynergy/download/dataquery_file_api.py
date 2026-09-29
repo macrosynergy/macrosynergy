@@ -2255,16 +2255,12 @@ class DataQueryFileAPIClient:
                     file_group_ids=datasets_to_download,
                 )
             else:
-                datasets_to_download = [
-                    str(f).replace("_DELTA", "") + "_DELTA"
-                    for f in datasets_to_download
-                ]
                 self.download_files(
                     since_datetime=JPMAQS_EARLIEST_FILE_DATE,
                     include_full_snapshots=False,
                     include_metadata=False,
                     include_delta=True,
-                    file_group_ids=datasets_to_download,
+                    file_group_ids=[f"{d}_DELTA" for d in datasets_to_download],
                 )
                 files_list = self.list_downloaded_files()["file-name"].tolist()
                 files_list = [f for f in files_list if "_DELTA" in f]
@@ -2283,7 +2279,7 @@ class DataQueryFileAPIClient:
                 delta_treatment=delta_treatment,
                 include_source_file=include_source_file,
                 dropna=dropna,
-                datasets=datasets,
+                datasets=datasets_to_download,
                 categorical_source_file_column=categorical_source_file_column,
                 files_list=files_list,
             )
@@ -3139,10 +3135,6 @@ def lazy_load_from_parquets(
             files_df=available_files_df,
             include_delta_files=include_delta_files,
         )
-    if datasets:
-        available_files_df = available_files_df.loc[
-            available_files_df["e-dataset"].isin(datasets)
-        ]
 
     # copy: `+=` and `.remove()` below must not mutate the caller's lists
     tickers = list(tickers or [])
@@ -3182,6 +3174,24 @@ def lazy_load_from_parquets(
             f"{sorted(tickers)}"
         )
 
+    # read only the datasets holding a requested ticker, narrowed by `datasets`: files
+    # of any other dataset on disk are ignored
+    ticker_ds = dict(
+        zip(catalog_df["Ticker"], catalog_df["Theme"].map(JPMAQS_DATASET_THEME_MAPPING))
+    )
+    if datasets:
+        outside = [t for t in valid_tickers if ticker_ds[t] not in datasets]
+        if outside:
+            warnings.warn(
+                f"Tickers outside `datasets={sorted(datasets)}` are not loaded: "
+                f"{_abbreviate_tickers_list(outside)}",
+                stacklevel=2,
+            )
+        valid_tickers = [t for t in valid_tickers if t not in outside]
+    file_ds = available_files_df["dataset"].str.replace("_DELTA", "")
+    available_files_df = available_files_df[
+        file_ds.isin({ticker_ds[t] for t in valid_tickers})
+    ]
     paths = sorted(available_files_df["path"])
     lf: pl.LazyFrame = _lazy_load_filtered_parquets(
         paths=paths,
@@ -3451,9 +3461,6 @@ def _lazy_load_filtered_parquets(
     dropna: bool = True,
     metrics: Optional[List[str]] = None,
 ) -> pl.LazyFrame:
-    if not paths:
-        raise ValueError("No paths provided")
-
     ticker_lazyframes_df = build_filtered_lazy_frames_df(
         paths=paths,
         tickers=tickers,

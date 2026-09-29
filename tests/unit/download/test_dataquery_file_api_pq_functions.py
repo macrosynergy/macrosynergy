@@ -920,6 +920,22 @@ class TestLazyLoadQdf(LazyLoadFixture):
         df = self.load_snapshot_only(tickers=["USD_XR"], datasets=[RETURNS_DS])
         self.assertEqual(df["xcat"].astype(str).to_list(), ["XR"])
 
+    def test_files_of_unrequested_datasets_are_ignored(self):
+        df = self.load_snapshot_only(tickers=["USD_XR"], datasets=None)
+        self.assertEqual(df["xcat"].astype(str).to_list(), ["XR"])
+
+    def test_tickers_outside_datasets_are_dropped_with_a_warning(self):
+        with self.assertWarns(UserWarning) as cm:
+            df = self.load_snapshot_only(
+                tickers=["USD_INFL", "USD_XR"], datasets=[RETURNS_DS]
+            )
+        self.assertIn("USD_INFL", str(cm.warning))
+        self.assertEqual(df["xcat"].astype(str).to_list(), ["XR"])
+
+    def test_datasets_combine_with_files_list(self):
+        df = self.load(tickers=["USD_INFL"], files_list=[self.latest_delta.name])
+        self.assertEqual(df["value"].to_list(), [9.9])
+
     def test_several_datasets_load_together(self):
         df = self.load_snapshot_only(tickers=["USD_INFL", "USD_XR"], datasets=None)
         self.assertEqual(sorted(df["xcat"].astype(str)), ["INFL", "XR"])
@@ -1347,7 +1363,11 @@ class TestLazyLoadValidation(LazyLoadFixture):
 
     def test_requested_ticker_without_a_downloaded_file_raises(self):
         with self.assertRaises(ValueError) as ctx:
-            self.load(tickers=["USD_INFL", "USD_XR"])
+            self.load(
+                tickers=["USD_XR"],
+                datasets=None,
+                files_list=[self.latest_snapshot.name],
+            )
         self.assertIn(RETURNS_DS, str(ctx.exception))
 
     def test_wide_rejects_include_source_file(self):
