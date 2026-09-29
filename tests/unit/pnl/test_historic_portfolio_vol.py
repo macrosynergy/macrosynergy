@@ -33,7 +33,6 @@ from macrosynergy.management.constants import ANNUALIZATION_FACTORS
 from macrosynergy.management.types import QuantamentalDataFrame, NoneType
 from macrosynergy.management.simulate import (
     make_test_df,
-    simulate_returns_and_signals,
     SignalsAndReturnsGenerator,
 )
 
@@ -985,14 +984,15 @@ class TestHistVolEntrypoint(unittest.TestCase):
         xr_tickers = [f"{cid}_{xcat}XR" for cid in cids for xcat in xcats]
         cs_tickers = [f"{cid}_{xcat}_CSIG_STRAT" for cid in cids for xcat in xcats]
         fids: List[str] = [f"{cid}_{ctype}" for cid in cids for ctype in ctypes]
-        df = simulate_returns_and_signals(
-            cids=cids,
-            xcat=xcats[0],
-            return_suffix="XR",
-            signal_suffix="CSIG_STRAT",
-            start=start,
-            years=5,
+        dates = pd.bdate_range(start=start, periods=252 * 5)
+        dg = SignalsAndReturnsGenerator(n_fids=len(fids))
+        dg.simulate_signals_and_returns(
+            n_periods=len(dates),
+            end_date=dates[-1].strftime("%Y-%m-%d"),
+            signal_names=cs_tickers,
+            return_names=xr_tickers,
         )
+        df = dg.quantamental_returns_and_signals()
         end = df["real_date"].max().strftime("%Y-%m-%d")
         all_args = dict(
             df=df,
