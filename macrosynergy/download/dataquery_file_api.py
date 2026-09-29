@@ -206,6 +206,7 @@ import warnings
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Union, overload
 
+import numpy as np
 import pandas as pd
 import polars as pl
 import requests
@@ -2116,6 +2117,7 @@ class DataQueryFileAPIClient:
         categorical_dataframe: bool = True,
         include_delta_files: bool = True,
         delta_treatment: str = "latest",
+        use_only_delta_files: bool = False,
         show_progress: bool = True,
         overwrite: bool = False,
         keep_n_days_old_files: Optional[int] = 0,
@@ -2180,6 +2182,11 @@ class DataQueryFileAPIClient:
             "latest" (the default) keeps the row with the newest `last_updated`,
             "earliest" the oldest, and "all" keeps every version. "all" requires
             `dropna=False`, and cannot be used with `dataframe_format="wide"`.
+        use_only_delta_files: bool
+            If True, only delta files are used when reading the data. The download will
+            retrieve all historical and intraday delta files regardless of the snapshot
+            state, and only read non-deduplicated results from the delta files.
+            Default is False.
         show_progress : bool
             If True, displays a progress bar during downloads. Default is True.
         overwrite : bool
@@ -2239,12 +2246,29 @@ class DataQueryFileAPIClient:
                         f"indicators, which live in {sorted(datasets_to_download)}."
                     )
                 datasets_to_download = narrowed
-            self.download_latest_files(
-                overwrite=overwrite,
-                show_progress=show_progress,
-                keep_n_days_old_files=keep_n_days_old_files,
-                file_group_ids=datasets_to_download,
-            )
+            files_list = None
+            if not use_only_delta_files:
+                self.download_latest_files(
+                    overwrite=overwrite,
+                    show_progress=show_progress,
+                    keep_n_days_old_files=keep_n_days_old_files,
+                    file_group_ids=datasets_to_download,
+                )
+            else:
+                datasets_to_download = [
+                    str(f).replace("_DELTA", "") + "_DELTA"
+                    for f in datasets_to_download
+                ]
+                self.download_files(
+                    since_datetime=JPMAQS_EARLIEST_FILE_DATE,
+                    include_full_snapshots=False,
+                    include_metadata=False,
+                    include_delta=True,
+                    file_group_ids=datasets_to_download,
+                )
+                files_list = self.list_downloaded_files()["file-name"].tolist()
+                files_list = [f for f in files_list if "_DELTA" in f]
+
             return self.load_dataframe(
                 tickers=tickers,
                 cids=cids,
@@ -2257,11 +2281,11 @@ class DataQueryFileAPIClient:
                 categorical_dataframe=categorical_dataframe,
                 include_delta_files=include_delta_files,
                 delta_treatment=delta_treatment,
-                keep_n_days_old_files=keep_n_days_old_files,
                 include_source_file=include_source_file,
                 dropna=dropna,
                 datasets=datasets,
                 categorical_source_file_column=categorical_source_file_column,
+                files_list=files_list,
             )
 
 
@@ -2491,7 +2515,8 @@ def transform_delta_qdf_to_versions_matrix(
         )
 
     out: pd.DataFrame = df.loc[:, cols_to_keep]
-
+    nan_entries = out[out["value"].isna()].drop(columns="value").copy()
+    out.loc[out["value"].isna(), "value"] = np.inf
     if collapse_to_eod_values:
         ts = out["last_updated"]
         ts = (
@@ -2518,7 +2543,7 @@ def transform_delta_qdf_to_versions_matrix(
     sort_cols = ["real_date", "effective_last_updated", "last_updated"]
     drop_dup_cols = ["real_date", "effective_last_updated"]
     new_last_updated_col = (
-        "jpmaqs_release_date" if collapse_to_eod_values else "jpmaqs_release_datetime"
+        "jpmaqs_version_date" if collapse_to_eod_values else "jpmaqs_version_datetime"
     )
     out: pd.DataFrame = (
         out.sort_values(by=sort_cols, kind="stable")
@@ -2530,6 +2555,8 @@ def transform_delta_qdf_to_versions_matrix(
     out = out.pivot(
         columns=new_last_updated_col, index="real_date", values=metric
     ).ffill(axis=1)
+    # replace infs with nans
+    out = out.replace(np.inf, np.nan)
     return out
 
 
@@ -2621,7 +2648,7 @@ class SegmentedFileDownloader:
             self.temp_dir.mkdir(exist_ok=True, parents=True)
 
             total_size = self._get_file_size()
-            self.log(f"File size: {total_size / (1024*1024):.2f} MB")
+            self.log(f"File size: {total_size / (1024 * 1024):.2f} MB")
 
             chunk_size = int(self.segment_size_mb * 1024 * 1024)
             chunks = range(0, total_size, chunk_size)
@@ -2759,7 +2786,7 @@ class SegmentedFileDownloader:
                 with open(part_path, "rb") as part_file:
                     shutil.copyfileobj(part_file, final_file)
         final_size = final_path.stat().st_size
-        self.log(f"Assembled file size: {final_size / (1024*1024):.2f} MB")
+        self.log(f"Assembled file size: {final_size / (1024 * 1024):.2f} MB")
         self.cleanup()
 
     def cleanup(self):
@@ -3671,16 +3698,21 @@ if __name__ == "__main__":
     )
 
     with DataQueryFileAPIClient() as dq:
+        # dq.delete_corrupt_files()
         dq.download_files(
-            since_datetime=now_datetime - datetime.timedelta(days=3),
+            to_datetime=now_datetime,
             include_full_snapshots=False,
         )
         catalog_df = dq.load_catalog()
         random_tickers = catalog_df["Ticker"].sample(n=20, random_state=42).tolist()
 
-        df = dq.load_versions_matrix(ticker="ESP_EXPORTS_SA_P1M1ML12_3MMA_ARMAS")
-        df
-        # df = dq.download(tickers=random_tickers, keep_n_days_old_files=None)
+        # df = dq.load_versions_matrix(ticker="FRF_WFORCE_NSA_P1Y1YL1")
+        # df
+        df = dq.download(
+            tickers=[random_tickers[1]],
+            keep_n_days_old_files=None,
+            use_only_delta_files=True,
+        )
         # print(df.head())
     end = time.time()
     print(f"Download completed in {end - start:.2f} seconds.")
