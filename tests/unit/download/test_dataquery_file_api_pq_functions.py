@@ -24,7 +24,11 @@ from unittest.mock import patch
 import pandas as pd
 import polars as pl
 
-from macrosynergy.compat import PYTHON_3_8_OR_LATER, PYTHON_3_8_POLARS_PIVOT
+from macrosynergy.compat import (
+    POLARS_SCAN_FILE_PATHS,
+    PYTHON_3_8_OR_LATER,
+    PYTHON_3_8_POLARS_PIVOT,
+)
 from macrosynergy.download.dataquery_file_api import (
     _apply_delta_treatment,
     _check_lazy_load_inputs,
@@ -37,8 +41,8 @@ from macrosynergy.download.dataquery_file_api import (
     _is_jpmaqs_file,
     _list_downloaded_files,
     _read_catalog,
-    _scan_and_prepare_single_parquet,
-    _scan_check_and_cast_single_parquet,
+    _scan_and_prepare_parquets,
+    _scan_check_and_cast_parquets,
     _split_jpmaqs_filename,
     _to_output_schema,
     build_filtered_lazy_frames_df,
@@ -604,7 +608,7 @@ class TestFileDeletion(TempDirCase):
 
 
 @unittest.skipUnless(PYTHON_3_8_OR_LATER, "Requires Python 3.8+")
-class TestScanCheckAndCastSingleParquet(TempDirCase):
+class TestScanCheckAndCastParquets(TempDirCase):
     """Every parquet is normalised to the ticker-based schema on scan."""
 
     def setUp(self):
@@ -616,7 +620,7 @@ class TestScanCheckAndCastSingleParquet(TempDirCase):
 
     def test_output_matches_the_expected_schema(self):
         schema = dict(
-            _scan_check_and_cast_single_parquet(self.ticker_file()).collect_schema()
+            _scan_check_and_cast_parquets(self.ticker_file()).collect_schema()
         )
         for column, dtype in get_jpmaqs_parquet_schema().items():
             with self.subTest(column=column):
@@ -635,7 +639,7 @@ class TestScanCheckAndCastSingleParquet(TempDirCase):
                 "last_updated": [LU_SNAPSHOT],
             },
         )
-        df = _scan_check_and_cast_single_parquet(path).collect()
+        df = _scan_check_and_cast_parquets(path).collect()
         self.assertEqual(df.schema["grading"], pl.Float64)
         self.assertEqual(df["grading"].to_list(), [1.5])
         self.assertEqual(df.schema["eop_lag"], pl.Float64)
@@ -645,40 +649,15 @@ class TestScanCheckAndCastSingleParquet(TempDirCase):
         path = write_parquet(
             self.path, {"ticker": ["USD_INFL"], "real_date": [D2], "value": [1.1]}
         )
-        df = _scan_check_and_cast_single_parquet(path).collect()
+        df = _scan_check_and_cast_parquets(path).collect()
         for column in ("grading", "eop_lag", "mop_lag", "last_updated"):
             with self.subTest(column=column):
                 self.assertTrue(df[column].is_null().all())
                 self.assertEqual(df.schema[column], get_jpmaqs_parquet_schema()[column])
 
-    def test_legacy_qdf_schema_is_converted_and_warns(self):
-        path = write_parquet(
-            self.path,
-            {
-                "cid": ["USD"],
-                "xcat": ["INFL"],
-                "real_date": [D2],
-                "value": [1.1],
-                "grading": [1.0],
-                "eop_lag": [0.0],
-                "mop_lag": [0.0],
-                "last_updated": [LU_SNAPSHOT],
-            },
-        )
-        with self.assertWarns(UserWarning) as cm:
-            df = _scan_check_and_cast_single_parquet(path).collect()
-        self.assertIn("modified schema", str(cm.warning))
-        self.assertIn(self.path.name, str(cm.warning))  # names the offending file
-        self.assertEqual(df["ticker"].to_list(), ["USD_INFL"])
-        self.assertNotIn("cid", df.columns)
-
     def test_unusable_schemas_raise(self):
         cases = {
-            "cid without xcat": (
-                {"cid": ["USD"], "real_date": [D2], "value": [1.1]},
-                "both 'cid' and 'xcat'",
-            ),
-            "no ticker and no cid": (
+            "no ticker": (
                 {"real_date": [D2], "value": [1.1]},
                 "ticker",
             ),
@@ -693,13 +672,13 @@ class TestScanCheckAndCastSingleParquet(TempDirCase):
                     self.tmpdir / f"{MACRO_DS}_2024010{index}.parquet", data
                 )
                 with self.assertRaises(ValueError) as ctx:
-                    _scan_check_and_cast_single_parquet(path)
+                    _scan_check_and_cast_parquets(path)
                 self.assertIn(expected, str(ctx.exception))
 
     def test_source_file_column(self):
         for categorical, dtype in [(True, pl.Categorical), (False, pl.String)]:
             with self.subTest(categorical=categorical):
-                df = _scan_check_and_cast_single_parquet(
+                df = _scan_check_and_cast_parquets(
                     self.ticker_file(),
                     include_source_file=True,
                     categorical_source_file_column=categorical,
@@ -707,16 +686,40 @@ class TestScanCheckAndCastSingleParquet(TempDirCase):
                 self.assertEqual(df["source_file"].to_list(), [f"{MACRO_DS}_20240102"])
                 self.assertEqual(df.schema["source_file"], dtype)
 
+    def test_several_files_scan_together_naming_each_row_file(self):
+        first = self.ticker_file()
+        second = write_rows(
+            self.tmpdir / "sub" / f"{MACRO_DS}_DELTA_20240102T235959.parquet",
+            ["USD_INFL"],
+            [D2],
+            [9.9],
+            [LU_DELTA],
+        )
+        # both ways of naming the source: `include_file_paths`, and per-file scans on
+        # polars < 1.2 where it does not exist
+        for file_paths in (True, False) if POLARS_SCAN_FILE_PATHS else (False,):
+            with self.subTest(include_file_paths=file_paths), patch(
+                "macrosynergy.download.dataquery_file_api.POLARS_SCAN_FILE_PATHS",
+                file_paths,
+            ):
+                df = _scan_check_and_cast_parquets(
+                    [first, second], include_source_file=True
+                ).collect()
+                self.assertEqual(
+                    sorted(zip(df["value"], df["source_file"].cast(pl.String))),
+                    [(1.1, first.stem), (9.9, second.stem)],
+                )
+
     def test_a_pre_existing_source_file_column_raises_when_requested(self):
         path = self.ticker_file(source_file=["somewhere_else"])
         with self.assertRaises(ValueError) as ctx:
-            _scan_check_and_cast_single_parquet(path, include_source_file=True)
+            _scan_check_and_cast_parquets(path, include_source_file=True)
         self.assertIn("source_file", str(ctx.exception))
 
     def test_a_pre_existing_source_file_column_is_projected_away_otherwise(self):
         path = self.ticker_file(source_file=["somewhere_else"])
-        prepared = _scan_and_prepare_single_parquet(
-            path=path,
+        prepared = _scan_and_prepare_parquets(
+            paths=path,
             tickers=["USD_INFL"],
             start_date=None,
             end_date=None,
@@ -935,6 +938,14 @@ class TestLazyLoadQdf(LazyLoadFixture):
     def test_datasets_combine_with_files_list(self):
         df = self.load(tickers=["USD_INFL"], files_list=[self.latest_delta.name])
         self.assertEqual(df["value"].to_list(), [9.9])
+
+    def test_warns_on_polars_whose_parquet_reader_retains_memory(self):
+        with patch(
+            "macrosynergy.download.dataquery_file_api."
+            "POLARS_PARQUET_READER_RETAINS_MEMORY",
+            True,
+        ), self.assertWarnsRegex(UserWarning, "keeps memory"):
+            self.load_snapshot_only(tickers=["USD_INFL"])
 
     def test_several_datasets_load_together(self):
         df = self.load_snapshot_only(tickers=["USD_INFL", "USD_XR"], datasets=None)

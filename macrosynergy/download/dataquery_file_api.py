@@ -214,6 +214,8 @@ from tqdm import tqdm
 
 from macrosynergy.compat import (
     PD_2_0_OR_LATER,
+    POLARS_PARQUET_READER_RETAINS_MEMORY,
+    POLARS_SCAN_FILE_PATHS,
     PYTHON_3_8_OR_LATER,
     PYTHON_3_8_POLARS_PIVOT,
 )
@@ -3193,6 +3195,13 @@ def lazy_load_from_parquets(
         file_ds.isin({ticker_ds[t] for t in valid_tickers})
     ]
     paths = sorted(available_files_df["path"])
+    if POLARS_PARQUET_READER_RETAINS_MEMORY:
+        warnings.warn(
+            f"polars {pl.__version__} keeps memory across the parquet files it reads, "
+            f"so loading {len(paths)} files can run out of memory. Upgrade to "
+            "polars>=1.28 (on Python 3.8, polars 1.8.2).",
+            stacklevel=2,
+        )
     lf: pl.LazyFrame = _lazy_load_filtered_parquets(
         paths=paths,
         tickers=valid_tickers,
@@ -3350,61 +3359,53 @@ def _to_output_schema(
     return lf.select(keep_cols)
 
 
-def _scan_check_and_cast_single_parquet(
-    path: str,
+def _scan_check_and_cast_parquets(
+    paths: Union[str, Path, Sequence[Union[str, Path]]],
     include_source_file: bool = False,
     categorical_source_file_column: bool = True,
 ) -> pl.LazyFrame:
-    """Scan one parquet and normalise it to `get_jpmaqs_parquet_schema()`."""
-    lf = pl.scan_parquet(path)
+    """
+    Scan one parquet, or several sharing one schema as a single scan, and normalise it
+    to `get_jpmaqs_parquet_schema()`.
+    """
+    paths = [paths] if isinstance(paths, (str, Path)) else list(paths)
+    lf = pl.scan_parquet(paths)
     schema = dict(lf.collect_schema()) if PYTHON_3_8_OR_LATER else dict(lf.schema)
-    if schema.get("grading", None) == pl.String:
-        lf = lf.with_columns(pl.col("grading").cast(pl.Float64))
     if include_source_file:
         if "source_file" in schema:
             raise ValueError(
-                f"The 'source_file' column already exists in `{path}`. JPMaQS files "
-                "never carry this column, so it was added locally; re-download the file "
-                "or load it with `include_source_file=False`."
+                f"The 'source_file' column already exists in `{paths[0]}`. JPMaQS "
+                "files never carry this column, so it was added locally; re-download "
+                "the file or load it with `include_source_file=False`."
             )
-        pth_str = Path(path).name.rsplit(".", 1)[0]
-        assert pth_str, f"Invalid path: {path}"
+        if POLARS_SCAN_FILE_PATHS:
+            # the file name without its directory or extension
+            lf = pl.scan_parquet(paths, include_file_paths="source_file").with_columns(
+                pl.col("source_file").str.extract(r"([^\\/]+)\.[^.\\/]*$")
+            )
+        else:
+            lf = pl.concat(
+                [
+                    pl.scan_parquet(p).with_columns(
+                        pl.lit(Path(p).name.rsplit(".", 1)[0]).alias("source_file")
+                    )
+                    for p in paths
+                ]
+            )
         lf = lf.with_columns(
-            pl.lit(pth_str)
-            .alias("source_file")
-            .cast(pl.Categorical if categorical_source_file_column else pl.String)
-        )
-
-    if ("cid" in schema) != ("xcat" in schema):
-        raise ValueError(
-            "Parquet file must have both 'cid' and 'xcat' columns or neither."
-        )
-
-    # this conversion is later undone in _to_output_schema() if want_qdf is True
-    # however, the cost of this conversion is small compared to the cost of maintaing
-    # a dual read schema and offers fewer code paths and less complexity.
-    # this is also why reading QDF saved by older version of the package is supported
-    # for now, but the QDF write path has been removed.
-    if "cid" in schema:
-        err_str = (
-            f"A modified schema was detected for file `{path}`. "
-            "Please update the version of the Macrosynergy Package used. "
-            "Modifying the schema of downloaded files will not be supported in future versions of the Macrosynergy Package."
-        )
-        warnings.warn(err_str)
-        if "ticker" not in schema:
-            lf = lf.with_columns(
-                ticker=pl.concat_str([pl.col("cid"), pl.lit("_"), pl.col("xcat")])
+            pl.col("source_file").cast(
+                pl.Categorical if categorical_source_file_column else pl.String
             )
-        lf = lf.drop(["cid", "xcat"])
+        )
+    if schema.get("grading", None) == pl.String:
+        lf = lf.with_columns(pl.col("grading").cast(pl.Float64))
 
-    # if now missing the ticker or real_date columns, raise an error
     schema = dict(lf.collect_schema()) if PYTHON_3_8_OR_LATER else dict(lf.schema)
     must_have_cols = ["real_date", "ticker"]
     for col in must_have_cols:
         if col not in schema:
             raise ValueError(
-                f"Parquet file {path} is missing required column: '{col}'."
+                f"Parquet file {paths[0]} is missing required column: '{col}'."
             )
 
     for col, expected_type in get_jpmaqs_parquet_schema().items():
@@ -3421,8 +3422,8 @@ def _scan_check_and_cast_single_parquet(
     return lf
 
 
-def _scan_and_prepare_single_parquet(
-    path: str,
+def _scan_and_prepare_parquets(
+    paths: Union[str, Path, Sequence[Union[str, Path]]],
     tickers: Sequence[str],
     start_date: Optional[Union[str, pd.Timestamp]],
     end_date: Optional[Union[str, pd.Timestamp]],
@@ -3430,22 +3431,31 @@ def _scan_and_prepare_single_parquet(
     include_source_file: bool = False,
     categorical_source_file_column: bool = True,
 ) -> pl.LazyFrame:
-    lf = _scan_check_and_cast_single_parquet(
-        path=path,
-        include_source_file=include_source_file,
-        categorical_source_file_column=categorical_source_file_column,
-    )
-
-    lf = _filter_lazy_frame_by_tickers(
-        lf=lf,
-        tickers=tickers,
-        start_date=start_date,
-        end_date=end_date,
-    )
-    lf = _to_output_schema(
-        lf=lf, want_qdf=return_qdf, include_source_file=include_source_file
-    )
-    return lf
+    paths = [paths] if isinstance(paths, (str, Path)) else list(paths)
+    # a scan reads every file with the first file's schema, so files are scanned
+    # together per schema: normally one group, and one scan, per dataset
+    groups: Dict[tuple, List[Union[str, Path]]] = {}
+    for p in paths:
+        groups.setdefault(tuple(pl.read_parquet_schema(p).items()), []).append(p)
+    lfs = []
+    for group in groups.values():
+        lf = _scan_check_and_cast_parquets(
+            paths=group,
+            include_source_file=include_source_file,
+            categorical_source_file_column=categorical_source_file_column,
+        )
+        lf = _filter_lazy_frame_by_tickers(
+            lf=lf,
+            tickers=tickers,
+            start_date=start_date,
+            end_date=end_date,
+        )
+        lfs.append(
+            _to_output_schema(
+                lf=lf, want_qdf=return_qdf, include_source_file=include_source_file
+            )
+        )
+    return pl.concat(lfs)
 
 
 def _lazy_load_filtered_parquets(
@@ -3672,20 +3682,16 @@ def build_filtered_lazy_frames_df(
                 f"Dataset for tickers {curr_tickers} is unknown. Skipping these tickers."
             )
             continue
-        lazy_frame: pl.LazyFrame = pl.concat(
-            [
-                _scan_and_prepare_single_parquet(
-                    path=p,
-                    tickers=curr_tickers,
-                    start_date=start_date,
-                    end_date=end_date,
-                    return_qdf=return_qdf,
-                    include_source_file=include_source_file,
-                    categorical_source_file_column=categorical_source_file_column,
-                )
-                for p in curr_paths
-            ],
-            how="vertical",
+        # one scan per dataset: a union of per-file scans holds memory in proportion to
+        # the bytes of every file read, however few rows survive the ticker filter
+        lazy_frame: pl.LazyFrame = _scan_and_prepare_parquets(
+            paths=curr_paths,
+            tickers=curr_tickers,
+            start_date=start_date,
+            end_date=end_date,
+            return_qdf=return_qdf,
+            include_source_file=include_source_file,
+            categorical_source_file_column=categorical_source_file_column,
         )
         ticker_ds_file_mapping.loc[_, "lazyframe"] = lazy_frame
 
