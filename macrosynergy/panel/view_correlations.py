@@ -26,7 +26,7 @@ def correl_matrix(
     lags_secondary: Optional[dict] = None,
     title: str = None,
     title_fontsize: Optional[int] = None,
-    size: Tuple[float] = (14, 8),
+    size: Tuple[float, float] = (14, 8),
     max_color: float = None,
     show: bool = True,
     xcat_labels: Optional[Union[List[str], Dict[str, str]]] = None,
