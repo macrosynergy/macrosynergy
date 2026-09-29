@@ -17,7 +17,7 @@ from macrosynergy.pnl.transaction_costs import (
 )
 from macrosynergy.download.transaction_costs import AVAILABLE_CATS, AVAILABLE_CTYPES
 from macrosynergy.management.types import QuantamentalDataFrame
-from macrosynergy.management.simulate import make_test_df, simulate_returns_and_signals
+from macrosynergy.management.simulate import make_test_df, SignalsAndReturnsGenerator
 
 
 def make_tx_cost_df(
@@ -90,17 +90,15 @@ class TestProxyPNLObject(unittest.TestCase):
         self.rstring = "XR"
         self.portfolio_name = "GLB"
         self.ctypes = AVAILABLE_CTYPES
-        self.df = pd.concat(
-            simulate_returns_and_signals(
-                cids=self.cids,
-                xcat=_xc,
-                return_suffix="XR",
-                signal_suffix="CSIG_STRAT",
-                years=n_years,
-                end="2025-01-01",
-            )
-            for _xc in self.ctypes
+        fids = [f"{cid}_{ctype}" for ctype in self.ctypes for cid in self.cids]
+        dg = SignalsAndReturnsGenerator(n_fids=len(fids))
+        dg.simulate_signals_and_returns(
+            n_periods=252 * n_years,
+            end_date="2025-01-01",
+            signal_names=[f"{fid}_CSIG_STRAT" for fid in fids],
+            return_names=[f"{fid}XR" for fid in fids],
         )
+        self.df = dg.quantamental_returns_and_signals()
 
     def get_proxy_pnl_args(self):
         return dict(
