@@ -1,27 +1,28 @@
-import functools
-import hashlib
-import itertools
 import json
+import os
+import shutil
 import warnings
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Union, overload
+from typing import Dict, List, Optional, Set, Union
 
 import pandas as pd
 import polars as pl
 
-from macrosynergy.compat import PD_2_0_OR_LATER
 from macrosynergy.download.dataquery_file_api import (
     JPMAQS_DATASET_THEME_MAPPING,
     JPMAQS_EARLIEST_FILE_DATE,
     JPMAQS_METRICS,
     DataQueryFileAPIClient,
+    _delete_jpmaqs_file,
+    pd_to_datetime_compat,
+    utc_now,
 )
+
+MANIFEST_NAME = "_manifest.json"
+BASE_SHARD = "base"
 
 
 class DataQueryFileAPIClientAdapter(DataQueryFileAPIClient):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
     def _get_save_dir(self) -> str:
         """
         Override the save directory to use `jpmaqs-delta-explorer` under the
@@ -31,59 +32,6 @@ class DataQueryFileAPIClientAdapter(DataQueryFileAPIClient):
         if base_dir.name != "jpmaqs-delta-explorer":
             return str(base_dir / "jpmaqs-delta-explorer")
         return str(base_dir)
-
-    def list_downloaded_files(self):
-        files_df = super().list_downloaded_files()
-        files_df = files_df["file-name"].contains()
-
-
-def _pd_to_datetime_compat(ts: str, utc: bool) -> pd.Timestamp:
-    formats = [
-        "%Y%m%d",
-        "%Y%m%dT%H%M%S",
-        "%Y-%m-%d",
-        "%Y-%m-%dT%H:%M:%S",
-        # ISO with timezone information
-        "%Y-%m-%dT%H:%M:%SZ",  # UTC with Z (e.g. 2025-09-16T12:34:56Z)
-        "%Y-%m-%dT%H:%M:%S%z",  # With numeric offset (e.g. 2025-09-16T12:34:56+02:00 or +0200)
-    ]
-    formats_str = f"[{', '.join(formats).replace('%', '').upper()}]"
-    for fmt in formats:
-        try:
-            return pd.to_datetime(ts, format=fmt, utc=utc)
-        except (ValueError, TypeError):
-            continue
-    raise ValueError(
-        f"Timestamp '{ts}' does not match expected formats. Use one of {formats_str}."
-    )
-
-
-@overload
-def pd_to_datetime_compat(
-    ts: str,
-    format: str = "mixed",
-    utc: bool = True,
-) -> pd.Timestamp: ...
-
-
-@overload
-def pd_to_datetime_compat(
-    ts: pd.Series,
-    format: str = "mixed",
-    utc: bool = True,
-) -> pd.Series: ...
-
-
-def pd_to_datetime_compat(
-    ts: Union[str, pd.Series],
-    format: str = "mixed",
-    utc: bool = True,
-) -> Union[pd.Timestamp, pd.Series]:
-    if PD_2_0_OR_LATER:
-        return pd.to_datetime(ts, format=format, utc=utc)
-    if isinstance(ts, pd.Series):
-        return ts.apply(lambda x: _pd_to_datetime_compat(x, utc=utc))
-    return _pd_to_datetime_compat(ts, utc=utc)
 
 
 def scan_individual_file(
@@ -101,7 +49,6 @@ def scan_individual_file(
     """
     Scan a single Parquet file and return a Polars LazyFrame.
     """
-    available_metrics_list = JPMAQS_METRICS.copy()
     if not Path(file_path).exists():
         raise FileNotFoundError(f"File {file_path} does not exist.")
 
@@ -119,43 +66,38 @@ def scan_individual_file(
         filename = Path(file_path).name.split(".")[0]
         lazy_df = lazy_df.with_columns(pl.lit(filename).alias("source_file"))
 
-    available_metrics_list = list(
-        (set(available_metrics_list) | set(lf_schema)) - set(key_cols)
-    )
-    if metrics is not None:
-        metrics = [m for m in metrics if m in available_metrics_list]
-    if not bool(metrics):
-        metrics = available_metrics_list
-
+    # only the metrics the file actually carries; a requested subset is honoured as given
+    available_metrics = [
+        col for col in lf_schema if col in JPMAQS_METRICS and col not in key_cols
+    ]
+    metrics = [m for m in metrics or [] if m in available_metrics] or available_metrics
     if include_source_file:
-        metrics = list(set(metrics + ["source_file"]))
+        metrics = metrics + ["source_file"]
 
-    assert set(
-        list(lf_schema.keys()) + (["source_file"] if include_source_file else [])
-    ) == set(key_cols + metrics)
-
-    expected_columns = key_cols + metrics
-    lazy_df = lazy_df.select([pl.col(c) for c in expected_columns])
-
-    # Filter by tickers if provided
+    # filter before selecting, so a projection dropping `last_updated` cannot break it
     if tickers is not None:
         lazy_df = lazy_df.filter(pl.col("ticker").is_in(tickers))
-
-    # convert start_date, end_date to date - expect YYYY-MM-DD, YYYYMMDD
     if start_date is not None:
-        start_date = pd_to_datetime_compat(start_date).date()
-        lazy_df = lazy_df.filter(pl.col("real_date") >= start_date)
+        lazy_df = lazy_df.filter(
+            pl.col("real_date") >= pd_to_datetime_compat(start_date).date()
+        )
     if end_date is not None:
-        end_date = pd_to_datetime_compat(end_date).date()
-        lazy_df = lazy_df.filter(pl.col("real_date") <= end_date)
-
-    # convert max_last_updated, min_last_updated to datetime - expect YYYY-MM-DDTHH:MM:SS, YYYYMMDDTHHMMSS
+        lazy_df = lazy_df.filter(
+            pl.col("real_date") <= pd_to_datetime_compat(end_date).date()
+        )
+    # `last_updated` is stored tz-naive in UTC, so drop the tz before comparing
     if max_last_updated is not None:
-        max_last_updated = pd_to_datetime_compat(max_last_updated)
-        lazy_df = lazy_df.filter(pl.col("last_updated") <= max_last_updated)
+        lazy_df = lazy_df.filter(
+            pl.col("last_updated")
+            <= pd_to_datetime_compat(max_last_updated).tz_localize(None)
+        )
     if min_last_updated is not None:
-        min_last_updated = pd_to_datetime_compat(min_last_updated)
-        lazy_df = lazy_df.filter(pl.col("last_updated") >= min_last_updated)
+        lazy_df = lazy_df.filter(
+            pl.col("last_updated")
+            >= pd_to_datetime_compat(min_last_updated).tz_localize(None)
+        )
+
+    lazy_df = lazy_df.select(key_cols + metrics)
 
     if categorical_ticker_column:
         lazy_df = lazy_df.with_columns(pl.col("ticker").cast(pl.Categorical))
@@ -165,14 +107,63 @@ def scan_individual_file(
     return lazy_df
 
 
+class DeltaManifest(object):
+    """
+    Record of which delta files have been compiled into which Parquet shard, and the
+    sole input to deciding what still needs downloading.
+
+    Layout under `root`::
+
+        _manifest.json
+        JPMAQS_<THEME>/base.parquet         # first run, all history in one file
+        JPMAQS_<THEME>/<YYYYMMDD>.parquet   # one shard per day thereafter
+    """
+
+    def __init__(self, root: Union[str, Path]):
+        self.root = Path(root).expanduser()
+        self.path = self.root / MANIFEST_NAME
+        self.datasets: Dict[str, Dict[str, dict]] = {}
+        if self.path.exists():
+            with open(self.path, "r", encoding="utf-8") as f:
+                self.datasets = json.load(f).get("datasets", {})
+
+    def save(self):
+        self.root.mkdir(parents=True, exist_ok=True)
+        tmp_path = self.path.with_suffix(".json.tmp")
+        with open(tmp_path, "w", encoding="utf-8") as f:
+            json.dump({"version": 1, "datasets": self.datasets}, f, indent=4)
+        os.replace(tmp_path, self.path)
+
+    def consumed(self) -> Set[str]:
+        """The names of every delta file already compiled into a shard."""
+        return {
+            file_name
+            for shards in self.datasets.values()
+            for shard in shards.values()
+            for file_name in shard["sources"]
+        }
+
+    def shard_paths(self, dataset: str) -> List[Path]:
+        shards = self.datasets.get(dataset, {})
+        keys = sorted(shards, key=lambda key: (key != BASE_SHARD, key))
+        return [self.root / shards[key]["file"] for key in keys]
+
+    def record(self, dataset: str, shard_key: str, sources: List[str], rows: int):
+        shard = self.datasets.setdefault(dataset, {}).setdefault(shard_key, {})
+        shard["file"] = f"{dataset}/{shard_key}.parquet"
+        shard["sources"] = sorted(set(shard.get("sources", [])) | set(sources))
+        shard["rows"] = rows
+        shard["updated"] = utc_now().isoformat()
+
+
 class DeltaFileLoader(object):
     def __init__(
         self,
-        files_df: pd.DataFrame,
+        manifest: DeltaManifest,
         catalog_df: pd.DataFrame,
     ):
-        self.files_df: pd.DataFrame = files_df
-        self.catalog_df: pd.DataFrame = catalog_df
+        self.manifest: DeltaManifest = manifest
+        self.catalog_df: pd.DataFrame = catalog_df.copy()
         if not "Dataset" in self.catalog_df.columns:
             self.catalog_df["Dataset"] = (
                 self.catalog_df["Theme"]
@@ -184,49 +175,28 @@ class DeltaFileLoader(object):
         )
 
     def load_ticker_data(self, ticker: str, **kwargs) -> pl.LazyFrame:
-        if "ticker" in kwargs:
-            raise ValueError("The 'ticker' argument is not allowed in kwargs.")
-        if ticker.lower() not in self.catalog_df["Ticker"].str.lower().values:
+        if "tickers" in kwargs:
+            raise ValueError("The 'tickers' argument is not allowed in kwargs.")
+        matches = self.catalog_df[
+            self.catalog_df["Ticker"].str.lower() == ticker.lower()
+        ]
+        if matches.empty:
             raise ValueError(f"Ticker {ticker} not found in catalog.")
 
-        files = self._get_files_for_ticker(ticker)
-
-        kwargs["tickers"] = [ticker] if isinstance(ticker, str) else ticker
-        lf = pl.concat(
-            [scan_individual_file(f, **kwargs) for f in files], how="vertical"
+        dataset = matches["Dataset"].iloc[0]
+        shard_paths = self.manifest.shard_paths(dataset)
+        if not shard_paths:
+            raise ValueError(
+                f"No compiled files for dataset {dataset}. "
+                "Run `JPMaQSDataExplorer.download_all_delta_files()` first."
+            )
+        kwargs["tickers"] = [matches["Ticker"].iloc[0]]
+        return pl.concat(
+            [scan_individual_file(f, **kwargs) for f in shard_paths], how="vertical"
         )
-        return lf
-
-    def _get_files_for_ticker(self, ticker: str) -> List[Path]:
-        """
-        Get the list of delta files for a specific ticker.
-        """
-        dataset_name: str = self.catalog_df[self.catalog_df["Ticker"] == ticker][
-            "Dataset"
-        ].iloc[0]
-        files_list = self.files_df[self.files_df["e-dataset"] == dataset_name][
-            "path"
-        ].tolist()
-        return list(map(Path, files_list))
 
 
-def _needs_download(func):
-    @functools.wraps(func)
-    def wrapper(self, *args, **kwargs):
-        assert isinstance(self, JPMaQSDataExplorer), (
-            "This decorator can only be used on methods of JPMaQSDataExplorer."
-        )
-        if not self._download_ran_successfully:
-            ...
-            # raise RuntimeError(
-            #     "Please run the `init()` method to initialize the data explorer"
-            # )
-        return func(self, *args, **kwargs)
-
-    return wrapper
-
-
-def transform_delta_qdf_to_vintage(
+def transform_delta_qdf_to_revisions_matrix(
     df: pd.DataFrame,
     metric: str = "value",
     collapse_to_eod_values: bool = True,
@@ -251,6 +221,7 @@ def transform_delta_qdf_to_vintage(
             if ts.dt.tz is None
             else ts.dt.tz_convert(end_of_day_tz)
         )
+        # `end_of_day_time` is the release cut-off: anything later is the next day's release
         _t = pd.Timestamp(end_of_day_time).time()
         eod_offset = pd.Timedelta(
             hours=_t.hour,
@@ -258,8 +229,10 @@ def transform_delta_qdf_to_vintage(
             seconds=_t.second,
             microseconds=_t.microsecond,
         )
-        out["effective_last_updated"] = ts.dt.normalize() + eod_offset
-        out["effective_last_updated"] = out["effective_last_updated"].dt.date
+        rolls_over = ts > (ts.dt.normalize() + eod_offset)
+        out["effective_last_updated"] = (
+            ts.dt.normalize() + rolls_over * pd.Timedelta(days=1)
+        ).dt.date
     else:
         out["effective_last_updated"] = out["last_updated"]
 
@@ -277,150 +250,70 @@ def transform_delta_qdf_to_vintage(
     )
 
     out = out.pivot(
-        columns=new_last_updated_col, index="real_date", values="value"
+        columns=new_last_updated_col, index="real_date", values=metric
     ).ffill(axis=1)
     return out
 
 
-def _get_file_hash(file_path, algo: str = "sha256") -> str:
-    _CHUNK = 8 * 1024 * 1024  # 8 MiB
-    with open(file_path, "rb") as f:
-        try:
-            return hashlib.file_digest(f, algo).hexdigest()  # 3.11+, releases GIL
-        except AttributeError:  # <3.11 fallback
-            h = hashlib.new(algo)
-            mv = memoryview(bytearray(_CHUNK))
-            while True:
-                n = f.readinto(mv)
-                if not n:
-                    break
-                h.update(mv[:n])
-
-            return h.hexdigest()
-
-
-def combine_dataset_files(
+def compile_delta_files(
     files_df: pd.DataFrame,
-    out_path: Union[str, Path],
-    file_suffix: str = "_COMBINED",
-    categorical_ticker_column: bool = True,
-    include_source_file: bool = True,
-    categorical_source_file_column: bool = True,
-    delete_source_files: bool = False,
-) -> List[Path]:
-    found_data_index = None
-    if (Path(out_path) / "_index.json").exists():
-        # found_data_index = Path(out_path) / "_index.json"
-        with open(Path(out_path) / "_index.json", "r") as f:
-            found_data_index = json.load(f)
-
-    if found_data_index:
-        # dfx = pd.DataFrame(found_data_index)
-        files_already_used = set(
-            itertools.chain.from_iterable(
-                [found_data_index[_]["source_files"] for _ in found_data_index]
-            )
-        )
-        files_df = files_df[
-            ~(
-                files_df["file-name"]
-                .apply(lambda x: str(x).split(".")[0])
-                .isin(files_already_used)
-            )
-        ]
+    manifest: DeltaManifest,
+    delete_source_files: bool = True,
+) -> DeltaManifest:
+    """
+    Fold the delta files in `files_df` into the manifest's Parquet shards, rewriting
+    each touched shard in place. A dataset with no shards yet compiles all of its
+    history into a single `base` shard; after that, deltas are sharded by the calendar
+    day of their file timestamp, so a day's shard is rewritten as its deltas arrive.
+    """
+    files_df = files_df[files_df["file-name"].str.contains("_DELTA")]
+    files_df = files_df[~files_df["file-name"].isin(manifest.consumed())]
     if files_df.empty:
-        return []
-    dfx = (
-        files_df[files_df["file-name"].str.contains("_DELTA")]
-        .groupby("e-dataset")["path"]
-        .agg(sorted)
-        .reset_index()
-    )
+        return manifest
 
-    Path(out_path).mkdir(parents=True, exist_ok=True)
-    file_suffix = "_" + file_suffix.lstrip("_").rstrip(".parquet") + ".parquet"
-    dfx["out_file_path"] = (dfx["e-dataset"] + file_suffix).apply(
-        lambda x: Path(out_path) / x
-    )
-    conflicting_dirs = dfx[dfx["out_file_path"].apply(lambda x: Path(x).is_dir())][
-        "out_file_path"
-    ].tolist()
-    if len(conflicting_dirs) > 0:
-        raise ValueError(
-            f"The following output paths are directories, which conflicts with the expected output file paths: {conflicting_dirs}. Please remove these directories or choose a different output path."
-        )
-    for _file in dfx["out_file_path"]:
-        if not Path(_file).exists():
-            continue
-        mask = dfx["path"].apply(str) == str(_file)
-        dfx.loc[mask, "path"] = dfx.loc[mask, "path"] + [_file]
-    _scan_args = dict(  # noqa: C408
-        categorical_ticker_column=categorical_ticker_column,
-        include_source_file=include_source_file,
-        categorical_source_file_column=categorical_source_file_column,
-    )
-
-    def _scan_files(paths: List[Union[str, Path]]) -> pl.LazyFrame:
-        return pl.concat(
-            [scan_individual_file(p, **_scan_args) for p in paths],
-            how="vertical",
-        )
-
-    dfx["lf"] = dfx["path"].apply(lambda x: _scan_files(x))
-
-    data_index_dict = {}
-    for _, (dataset, dataset_paths, out_file) in dfx[
-        ["e-dataset", "path", "out_file_path"]
-    ].iterrows():
-        data_index_dict[dataset] = {
-            "file_path": out_file,
-            "source_files": sorted({Path(p).name.split(".")[0] for p in dataset_paths}),
+    files_df = files_df.assign(
+        **{
+            "e-dataset": files_df["dataset"].str.replace("_DELTA", "", regex=False),
+            "shard-key": files_df["file-timestamp"].dt.strftime("%Y%m%d"),
         }
-
-    lf_out_pairs: List[Tuple[pl.LazyFrame, Path]] = dfx[
-        ["lf", "out_file_path"]
-    ].values.tolist()
-    print(f"Sinking {len(lf_out_pairs)} combined files...")
-    pl.collect_all(
-        [_lf.sink_parquet(_outx, lazy=True) for _lf, _outx in lf_out_pairs],
-        engine="streaming",
     )
-    print("Done sinking combined delta files")
+    first_run = ~files_df["e-dataset"].isin(manifest.datasets)
+    files_df.loc[first_run, "shard-key"] = BASE_SHARD
 
-    for i, (_dataset, _out_path) in enumerate(
-        dfx[["e-dataset", "out_file_path"]].values.tolist()
-    ):
-        if Path(_out_path).exists():
-            data_index_dict[_dataset]["hash"] = _get_file_hash(_out_path)
-        else:
-            warnings.warn(
-                f"Combined file for dataset '{_dataset}' was not created at {_out_path}. "
-                "Please check for errors in the previous steps."
-            )
+    for (dataset, shard_key), group in files_df.groupby(["e-dataset", "shard-key"]):
+        shard_path = manifest.root / dataset / f"{shard_key}.parquet"
+        shard_path.parent.mkdir(parents=True, exist_ok=True)
+        paths = list(map(Path, group["path"]))
+        if shard_path.exists():
+            paths.append(shard_path)
 
-    # save this in out_path/_index.json
-    index_file_path = Path(out_path) / "_index.json"
-    with open(index_file_path, "w") as f:
-        json.dump(data_index_dict, f, indent=4)
+        # collect then write: the shard is one of the sources, so it cannot be sunk into
+        shard_df = pl.concat(
+            [scan_individual_file(f) for f in paths], how="vertical"
+        ).collect(engine="streaming")
+        tmp_path = shard_path.with_suffix(".parquet.tmp")
+        shard_df.write_parquet(tmp_path)
+        os.replace(tmp_path, shard_path)
 
-    # delete all source files
-    if delete_source_files:
-        out_files = dfx["out_file_path"].apply(lambda x: Path(x).resolve()).tolist()
-        deleted_paths = []
-        for _paths in dfx["path"]:
-            for _path in _paths:
-                if Path(_path).resolve() not in out_files:
-                    Path(_path).unlink()
-                    deleted_paths.append(_path)
+        # record and delete per shard, so an interrupted run leaves no shard whose
+        # sources are unrecorded and would be folded in a second time
+        manifest.record(dataset, shard_key, group["file-name"].tolist(), shard_df.height)
+        manifest.save()
+        if delete_source_files:
+            _delete_compiled_files(group["path"])
 
-        deleted_path_folders = list(
-            set([Path(_path).parent for _path in deleted_paths])
-        )
-        for _folder in deleted_path_folders:
-            if not any(Path(_folder).iterdir()):
-                Path(_folder).rmdir()
+    return manifest
 
-    return data_index_dict
+
+def _delete_compiled_files(paths: List[Union[str, Path]]) -> None:
+    """Delete compiled delta files, then any directory they leave empty."""
+    parent_dirs = set()
+    for path in map(Path, paths):
+        if _delete_jpmaqs_file(path):
+            parent_dirs.add(path.parent)
+    for parent_dir in parent_dirs:
+        if parent_dir.is_dir() and not any(parent_dir.iterdir()):
+            parent_dir.rmdir()
 
 
 class JPMaQSDataExplorer(object):
@@ -433,32 +326,30 @@ class JPMaQSDataExplorer(object):
 
         self._data_path = Path(data_path).expanduser()
         self.downloader = DataQueryFileAPIClientAdapter(out_dir=self._data_path)
-        self._download_ran_successfully = False
-        self.combined_files_path = (
-            Path(self.downloader._get_save_dir()) / "combined-delta-files"
-        )
+        # a sibling of the download directory, so `list_downloaded_files` never scans it
+        self.manifest = DeltaManifest(self._data_path / "jpmaqs-delta-compiled")
+        legacy_dir = Path(self.downloader._get_save_dir()) / "combined-delta-files"
+        if legacy_dir.is_dir():
+            shutil.rmtree(legacy_dir)
 
     @property
-    @_needs_download
     def file_loader(self) -> DeltaFileLoader:
-        if not hasattr(self, "_file_loader") or self._file_loader is None:
+        if getattr(self, "_file_loader", None) is None:
             self._file_loader = DeltaFileLoader(
-                files_df=self.files_df,
+                manifest=self.manifest,
                 catalog_df=self.catalog_df,
             )
         return self._file_loader
 
     @property
-    @_needs_download
     def catalog_file(self) -> str:
-        if not hasattr(self, "_catalog_file") or self._catalog_file is None:
+        if getattr(self, "_catalog_file", None) is None:
             self._catalog_file = self.downloader.download_catalog_file()
         return self._catalog_file
 
     @property
-    @_needs_download
     def catalog_df(self) -> pd.DataFrame:
-        if not hasattr(self, "_catalog_df") or self._catalog_df is None:
+        if getattr(self, "_catalog_df", None) is None:
             self._catalog_df = pd.read_parquet(self.catalog_file)
             self._catalog_df["Dataset"] = (
                 self._catalog_df["Theme"]
@@ -468,25 +359,6 @@ class JPMaQSDataExplorer(object):
 
         return self._catalog_df
 
-    @property
-    @_needs_download
-    def files_df(self) -> pd.DataFrame:
-        if not hasattr(self, "_files_df") or self._files_df is None:
-            self._files_df_updater()
-        return self._files_df
-
-    def _files_df_updater(
-        self,
-    ):
-        self._files_df = self.downloader.list_downloaded_files()
-        assert "dataset" in self._files_df.columns, (
-            "The files_df must have a 'dataset' column."
-        )
-        if "e-dataset" not in self._files_df.columns:
-            self._files_df["e-dataset"] = self._files_df["dataset"].str.replace(
-                "_DELTA", "", regex=False
-            )
-
     def init(self):
         """
         Initialize the data explorer by downloading the catalog file.
@@ -494,38 +366,47 @@ class JPMaQSDataExplorer(object):
         self.download_all_delta_files()
         assert bool(self.catalog_file), "Failed to download the catalog file."
 
-    def _combine_dataset_files(self) -> List[Path]:
-        """
-        Combine all delta files for a specific dataset into a single Parquet file.
-        """
-        return combine_dataset_files(
-            files_df=self.files_df, out_path=self.combined_files_path
-        )
-
     def download_all_delta_files(
         self,
         since_datetime: str = JPMAQS_EARLIEST_FILE_DATE,
         include_metadata: bool = True,
         **kwargs,
     ):
-        if "include_full_snapshots" in kwargs:
-            raise ValueError("This utility does not support snapshot files.")
-        self.downloader.download_files(
+        if "include_full_snapshots" in kwargs or "include_delta" in kwargs:
+            raise ValueError("This utility only downloads delta files.")
+        if include_metadata:
+            # metadata files are never compiled, so their on-disk skip check still holds
+            self.downloader.download_files(
+                since_datetime=since_datetime,
+                include_full_snapshots=False,
+                include_delta=False,
+                include_metadata=True,
+                **kwargs,
+            )
+
+        available_df = self.downloader.filter_available_files_by_datetime(
             since_datetime=since_datetime,
             include_full_snapshots=False,
             include_delta=True,
-            include_metadata=include_metadata,
-            **kwargs,
+            include_metadata=False,
         )
-        self._combine_dataset_files()
-        self._files_df_updater()
-        self._download_ran_successfully = True
+        consumed = self.manifest.consumed()
+        pending = [f for f in available_df["file-name"] if str(f) not in consumed]
+        if pending:
+            # ponytail: the first run holds every delta since 2022 on disk before it
+            # compiles; batch the download by month if that peak becomes a problem
+            self.downloader.download_multiple_files(filenames=pending, **kwargs)
+
+        # any delta left on disk is either new or was compiled but not deleted (a crash
+        # between the manifest write and the delete); `compile_delta_files` skips the latter
+        compile_delta_files(self.downloader.list_downloaded_files(), self.manifest)
+        self._file_loader = None
 
     def load_ticker_data(
         self, ticker: str, collect: bool = False, as_pandas: bool = False
     ) -> Union[pl.LazyFrame, pl.DataFrame, pd.DataFrame]:
         """
-        Load the data for a specific ticker from the downloaded files.
+        Load the data for a specific ticker from the compiled files.
         """
         if as_pandas:
             collect = True
@@ -537,18 +418,17 @@ class JPMaQSDataExplorer(object):
 
         return lazy_df
 
-    def load_ticker_vintage_data(
+    def load_ticker_revision_matrix(
         self,
         ticker: str,
         metric: str = "value",
         collapse_to_eod_values: bool = True,
         end_of_day_time: str = "23:59:59",
         end_of_day_tz: str = "UTC",
-        collect: bool = True,
         as_pandas: bool = True,
-    ) -> Union[pd.DataFrame, pl.DataFrame, pl.LazyFrame]:
+    ) -> Union[pd.DataFrame, pl.DataFrame]:
         """
-        Load the vintage data for a specific ticker from the downloaded files.
+        Load the revision matrix for a specific ticker from the compiled files.
         """
         if not as_pandas:
             warnings.warn(
@@ -557,28 +437,18 @@ class JPMaQSDataExplorer(object):
                 "consuming the pandas DataFrame output for best performance."
             )
 
-        df = self.file_loader.load_ticker_data(ticker).collect().to_pandas()
-        vintage_df = transform_delta_qdf_to_vintage(
-            df,
+        vintage_df = transform_delta_qdf_to_revisions_matrix(
+            self.load_ticker_data(ticker, as_pandas=True),
             metric=metric,
             collapse_to_eod_values=collapse_to_eod_values,
             end_of_day_time=end_of_day_time,
             end_of_day_tz=end_of_day_tz,
         )
-        if not as_pandas:
-            if collect:
-                return pl.from_pandas(vintage_df)
-            else:
-                return pl.from_pandas(vintage_df).lazy()
-        return vintage_df
+        return vintage_df if as_pandas else pl.from_pandas(vintage_df)
 
 
 if __name__ == "__main__":
     explorer = JPMaQSDataExplorer(data_path="~/jpmaqs-data")
     explorer.init()
-    # explorer.init()
-    # print(explorer.files_df.head())
-    # df = explorer.load_ticker_data("USD_EQXR_NSA")
-    # print(df.head(50).collect())
-    df = explorer.load_ticker_vintage_data("USD_EQXR_NSA")
+    df = explorer.load_ticker_revision_matrix("USD_EQXR_NSA")
     print(df)
