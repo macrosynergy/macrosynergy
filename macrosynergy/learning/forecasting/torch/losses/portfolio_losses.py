@@ -21,6 +21,11 @@ class PortfolioLoss(nn.Module, BaseEstimator):
     This is a base class for loss functions based on portfolio optimization. It
     expects the model to output quantities interpretable as portfolio weights or signals. 
     """
+    # True for a loss whose `forward` requires a `vol` keyword argument (per-asset ex-ante
+    # risk, same shape as y_true) -- MLPRegressor.fit(X, y, vol=...) and its constructor-time
+    # sanity check both read this flag. False for every loss that only needs (y_pred, y_true).
+    requires_vol = False
+
     def __init__(self, reg_concentration = 0, skip_validation = True):
         super().__init__()
 
@@ -31,7 +36,7 @@ class PortfolioLoss(nn.Module, BaseEstimator):
             raise ValueError("reg_concentration must be non-negative.")
         if not isinstance(skip_validation, bool):
             raise TypeError("skip_validation must be a boolean.")
-        
+
         self.reg_concentration = reg_concentration
         self.skip_validation = skip_validation
 
@@ -279,5 +284,91 @@ class NegSharpeRatio(PortfolioLoss):
         sharpe_ratio = mean_return / (std_return + self.eps)
 
         loss = -sharpe_ratio
+
+        return loss
+
+class NegSharpeRatioExAnteVol(PortfolioLoss):
+    """
+    PyTorch loss function to maximise a Sharpe-like ratio of a portfolio whose risk term is
+    an ex-ante estimate built from each asset's own supplied volatility, rather than the
+    realised variance of this batch's own portfolio-return path -- or equivalently minimise
+    its negative.
+
+    Parameters
+    ----------
+    eps : float, optional
+        Small value to avoid division by zero. Default is 1e-8.
+    reg_concentration : float, optional
+        Regularization parameter for concentration penalty. Default is 0 (no penalty).
+    skip_validation : bool, optional
+        Whether to skip input validation checks for the `forward` method. Default is True.
+
+    Notes
+    -----
+    `NegSharpeRatio`'s risk term is the standard deviation of the *realised* portfolio
+    return path within the batch -- a quantity the optimiser can shrink by shaping weights
+    to flatten that specific historical path, independently of whether the resulting
+    weights generalise (more free parameters than months in a batch makes this cheap). This
+    loss instead estimates each period's portfolio variance from asset-level vols supplied
+    at `forward` time, assuming zero cross-asset correlation (a diagonal covariance):
+
+        risk_t = sum_n (y_pred_{t,n})^2 * (vol_{t,n})^2
+        risk   = sqrt( mean_t[ risk_t ] )
+        loss   = -mean(portfolio_returns) / (risk + eps)
+
+    `vol` must have the same shape as `y_true` and is supplied at `forward` time, not at
+    construction -- pass it to `MLPRegressor.fit(X, y, vol=...)`. A cell is masked (treated
+    as contributing zero risk and zero return) wherever either `y_true` or `vol` is
+    non-finite, so a name absent from that period's ex-ante vol estimate never contributes
+    phantom risk from a weight the network may still have assigned it.
+
+    This loss is designed for portfolio optimization tasks, meaning that it expects the
+    model to output quantities interpretable as portfolio weights or signals.
+    """
+    requires_vol = True
+
+    def __init__(self, eps=1e-8, reg_concentration=0, skip_validation=True):
+        super().__init__(reg_concentration=reg_concentration, skip_validation=skip_validation)
+        self.eps = eps
+
+    def forward(self, y_pred, y_true, vol=None):
+        """
+        Calculate loss.
+
+        Parameters
+        ----------
+        y_pred : torch.Tensor
+            Predicted portfolio weights. Dimension: (batch_size, n_assets)
+        y_true : torch.Tensor
+            True asset returns. Dimension: (batch_size, n_assets)
+        vol : torch.Tensor
+            Ex-ante per-asset volatility, same shape as `y_true`. Required -- `forward`
+            raises if it is not supplied.
+        """
+        if vol is None:
+            raise ValueError(
+                f"{type(self).__name__} requires `vol` (ex-ante per-asset volatility, same "
+                "shape as y_true), passed as a keyword argument to forward(); "
+                "MLPRegressor.fit(X, y, vol=...) supplies it during training."
+            )
+        if not self.skip_validation:
+            self._forward_checks(y_pred, y_true)
+            if not isinstance(vol, torch.Tensor):
+                raise TypeError("vol must be a torch.Tensor.")
+            if vol.shape != y_true.shape:
+                raise ValueError("vol must have the same shape as y_true.")
+
+        mask = torch.isfinite(y_true) & torch.isfinite(vol)
+        y_true_masked = torch.where(mask, y_true, torch.zeros_like(y_true))
+        vol_masked = torch.where(mask, vol, torch.zeros_like(vol))
+
+        portfolio_returns = torch.sum(y_pred * y_true_masked, dim=1)
+        mean_return = torch.mean(portfolio_returns)
+
+        per_period_variance = torch.sum((y_pred ** 2) * (vol_masked ** 2), dim=1)
+        risk = torch.sqrt(torch.mean(per_period_variance))
+
+        loss = -mean_return / (risk + self.eps)
+        loss = self._apply_reg_concentration(loss, y_pred)
 
         return loss

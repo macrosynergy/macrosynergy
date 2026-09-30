@@ -369,21 +369,34 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         self.optimizers = [self.optimizer] if not isinstance(self.optimizer, list) else self.optimizer
         self.random_states = [self.random_state] if not isinstance(self.random_state, list) else self.random_state
 
-    def fit(self, X, y):
-        # Fit checks 
-        self._check_fit_params(X, y)
+    def fit(self, X, y, vol=None):
+        """
+        Parameters
+        ----------
+        X, y : as before.
+        vol : pandas.Series or pandas.DataFrame, optional
+            Ex-ante per-asset volatility, same multi-index as `X`/`y` and covering every
+            column `y` does. Passed through to `loss_func` as `forward`'s `vol` keyword
+            argument, unscaled. Required when `loss_func.requires_vol` is True (e.g.
+            `NegSharpeRatioExAnteVol`); otherwise must be left as `None`. Only supported
+            when `patience` is `None` -- the cross-validation/early-stopping path does not
+            thread `vol` through its folds.
+        """
+        # Fit checks
+        self._check_fit_params(X, y, vol)
 
         # Copy data and initialize empty list of models to be trained, with diagnostic
         # dictionaries
         X = X.copy()
         y = y.copy()
+        vol = vol.copy() if vol is not None else None
         self.models = []
 
         self.early_stopping_dynamics = {}
         self.early_stopping_inference = {}
         self.final_model_inference = {}
 
-        # TODO: if torch_model is provided, check it has the right structure 
+        # TODO: if torch_model is provided, check it has the right structure
         # to be trained by this class by passing a batch through it
 
         # Filter assets with insufficient samples to have a head in the network
@@ -392,6 +405,8 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         self.n_targets = len(self.targets)
 
         y = y[self.targets]
+        if vol is not None:
+            vol = vol[self.targets]
 
         # Identifying information recorded alongside every epoch of every training run
         # started by this call, so that a persisted training log can be grouped back into
@@ -419,9 +434,13 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
                 x_scaler = self.x_scaler,
                 y_scaler = self.y_scaler,
             )
+            # vol is never rescaled: it is already an ex-ante risk estimate in the target's
+            # own units, not a feature or a target to be transformed like X or y
+            vol_s = [vol.to_numpy()] if vol is not None else None
             train_datasets, _ = self.make_tensor_datasets_(
                 X_trains_s = X_s,
                 y_trains_s = y_s,
+                vol_trains_s = vol_s,
             )
         else:
             # Then we are training multiple models on different train/validation splits.
@@ -561,11 +580,12 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
                     )
 
                     # Store model diagnostics on gradients and NaN/inf checks
-                    model_diagnostics = self._get_model_diagnostics(model, torch.Tensor(X_s[0]), torch.Tensor(y_s[0]))
+                    vol_eval = torch.Tensor(vol_s[0]) if vol_s is not None else None
+                    model_diagnostics = self._get_model_diagnostics(model, torch.Tensor(X_s[0]), torch.Tensor(y_s[0]), vol_eval)
                     self.final_model_inference[(optim_idx, random_state_idx)].update(model_diagnostics)
 
                     # Infer properties of the trained model
-                    model_inference = self._inspect_model(model, torch.Tensor(X_s[0]), torch.Tensor(y_s[0]))
+                    model_inference = self._inspect_model(model, torch.Tensor(X_s[0]), torch.Tensor(y_s[0]), vol_eval)
                     self.final_model_inference[(optim_idx, random_state_idx)].update(model_inference)
                     
                     self.models.append(model)
@@ -1012,15 +1032,16 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         y_trains_s,
         X_valids_s = None,
         y_valids_s = None,
+        vol_trains_s = None,
     ):
         train_datasets = []
         valid_datasets = []
 
         for i in range(len(X_trains_s)):
-            train_dataset = torch.utils.data.TensorDataset(
-                torch.Tensor(X_trains_s[i]),
-                torch.Tensor(y_trains_s[i]),
-            )
+            train_tensors = [torch.Tensor(X_trains_s[i]), torch.Tensor(y_trains_s[i])]
+            if vol_trains_s is not None:
+                train_tensors.append(torch.Tensor(vol_trains_s[i]))
+            train_dataset = torch.utils.data.TensorDataset(*train_tensors)
             if X_valids_s is not None:
                 valid_dataset = torch.utils.data.TensorDataset(
                     torch.Tensor(X_valids_s[i]),
@@ -1176,7 +1197,10 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
             # Raw head outputs of every training batch of this epoch: the weights actually
             # used in this epoch's optimiser steps, with dropout on
             epoch_preds = []
-            for X_i, y_i in train_loader:
+            for batch in train_loader:
+                # Batches carry a third element when vol is in use (MLPRegressor.fit(vol=...))
+                X_i, y_i = batch[0], batch[1]
+                vol_i = batch[2] if len(batch) > 2 else None
                 model, preds_i = self._fit_one_batch(
                     model = model,
                     X_i = X_i,
@@ -1184,7 +1208,8 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
                     optimizer = optimizer,
                     scheduler = scheduler,
                     loss_func = loss_func,
-                    reg_turnover = reg_turnover
+                    reg_turnover = reg_turnover,
+                    vol_i = vol_i,
                 )
                 epoch_preds.append(preds_i)
             
@@ -1255,12 +1280,13 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         optimizer,
         scheduler,
         loss_func,
-        reg_turnover
+        reg_turnover,
+        vol_i = None,
     ):
         optimizer.zero_grad()
         preds = model(X_i)
-        
-        loss = loss_func(preds, y_i)
+
+        loss = loss_func(preds, y_i, vol=vol_i) if vol_i is not None else loss_func(preds, y_i)
 
         if reg_turnover > 0:
             pweight_changes = preds[1:] - preds[:-1]
@@ -1340,13 +1366,15 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
 
         with torch.no_grad():
             for batch in loader:
-                # Batches carry a third element when sample weights are in use
+                # Batches carry a third element when vol is in use (MLPRegressor.fit(vol=...))
                 X_i, y_i = batch[0], batch[1]
+                vol_i = batch[2] if len(batch) > 2 else None
                 preds = model(X_i)
+                batch_loss = loss_func(preds, y_i, vol=vol_i) if vol_i is not None else loss_func(preds, y_i)
                 # Weighted by batch size rather than counting every batch equally:
                 # `aggregate_last` merges the short final batch into the previous one, so
                 # batches are not all the same size and a plain mean mis-weights them
-                total_loss += loss_func(preds, y_i).item() * X_i.shape[0]
+                total_loss += batch_loss.item() * X_i.shape[0]
                 n_samples += X_i.shape[0]
 
                 if diagnostics:
@@ -1488,7 +1516,7 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
             
         return best_score, best_state, counter
 
-    def _inspect_model(self, model, X_eval, y_eval):
+    def _inspect_model(self, model, X_eval, y_eval, vol_eval = None):
         # Set into evaluation mode
         model.eval()
         X_eval = X_eval.detach().requires_grad_(True)
@@ -1496,7 +1524,7 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
 
         # Forward pass
         preds = model(X_eval)
-        eval_loss = self.loss_func(preds, y_eval)
+        eval_loss = self.loss_func(preds, y_eval, vol=vol_eval) if vol_eval is not None else self.loss_func(preds, y_eval)
 
         eval_loss.backward(retain_graph = True)
 
@@ -1524,14 +1552,14 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
 
         return {"training_loss_sensitivity": loss_sensitivity, "training_target_sensitivities": target_sensitivities}
     
-    def _get_model_diagnostics(self, model, X_eval, y_eval):
+    def _get_model_diagnostics(self, model, X_eval, y_eval, vol_eval = None):
         # Set into evaluation mode
         model.eval()
         model.zero_grad()
 
         # Forward pass
         preds = model(X_eval)
-        eval_loss = self.loss_func(preds, y_eval)
+        eval_loss = self.loss_func(preds, y_eval, vol=vol_eval) if vol_eval is not None else self.loss_func(preds, y_eval)
 
         # Calculate derivatives
         eval_loss.backward()
@@ -1759,7 +1787,10 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         if not isinstance(loss_func, nn.Module):
             raise TypeError("loss_func must inherit from nn.Module.")
         try:
-            test_loss = loss_func(torch.rand(16,1), torch.rand(16,1))
+            if getattr(loss_func, "requires_vol", False):
+                test_loss = loss_func(torch.rand(16,1), torch.rand(16,1), vol=torch.rand(16,1))
+            else:
+                test_loss = loss_func(torch.rand(16,1), torch.rand(16,1))
         except Exception as e:
             raise ValueError(f"loss_func must be callable with signature loss_func(preds, targets). Error encountered when testing random preds and targets of batch size 16 and single outputs: {e}")
         
@@ -1886,8 +1917,8 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         if min_samples < 1:
             raise ValueError("min_samples must be at least 1.")
         
-    def _check_fit_params(self, X, y):
-        # X 
+    def _check_fit_params(self, X, y, vol=None):
+        # X
         if not isinstance(X, pd.DataFrame):
             raise TypeError("X must be a pandas DataFrame.")
         if not isinstance(X.index, pd.MultiIndex):
@@ -1914,6 +1945,31 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
             raise TypeError("The inner index of y must be datetime.date.")
         if not X.index.equals(y.index):
             raise ValueError("X and y must have the same multi-index.")
+
+        # vol
+        requires_vol = getattr(self.loss_func, "requires_vol", False)
+        if vol is None:
+            if requires_vol:
+                raise ValueError(
+                    f"{type(self.loss_func).__name__} requires `vol` to be passed to fit()."
+                )
+        else:
+            if not requires_vol:
+                raise ValueError(
+                    f"vol was passed to fit(), but {type(self.loss_func).__name__} does not "
+                    "accept it (loss_func.requires_vol is False)."
+                )
+            if self.patience is not None:
+                raise ValueError(
+                    "vol is only supported when patience is None: the cross-validation/"
+                    "early-stopping path does not thread vol through its folds."
+                )
+            if not (isinstance(vol, pd.Series) or isinstance(vol, pd.DataFrame)):
+                raise TypeError("vol must be a pandas Series or DataFrame.")
+            if not isinstance(vol.index, pd.MultiIndex):
+                raise ValueError("vol must be multi-indexed.")
+            if not X.index.equals(vol.index):
+                raise ValueError("X and vol must have the same multi-index.")
 
 if __name__ == "__main__":
     from macrosynergy.learning import (

@@ -5,6 +5,7 @@ from sklearn.base import BaseEstimator
 
 from macrosynergy.learning.forecasting.torch.losses import (
     NegSharpeRatio,
+    NegSharpeRatioExAnteVol,
     PortfolioVariance,
     NegMeanPortfolioReturn,
     NegMeanVarianceUtility,
@@ -176,3 +177,69 @@ class TestPortfolioLosses(unittest.TestCase):
             mean_portfolio_loss(y_true = y_true_sample, y_pred = y_pred_sample),
             mean_variance_loss(y_true = y_true_sample, y_pred = y_pred_sample),
         )
+
+
+class TestNegSharpeRatioExAnteVol(unittest.TestCase):
+    def test_requires_vol_flag(self):
+        self.assertTrue(NegSharpeRatioExAnteVol.requires_vol)
+        for loss in [NegSharpeRatio, PortfolioVariance, NegMeanPortfolioReturn, NegMeanVarianceUtility]:
+            self.assertFalse(loss.requires_vol)
+
+    def test_forward_requires_vol(self):
+        instance = NegSharpeRatioExAnteVol()
+        self.assertRaises(
+            ValueError, instance.forward, y_pred = torch.randn(10, 5), y_true = torch.randn(10, 5),
+        )
+
+    def test_types_forward(self):
+        instance = NegSharpeRatioExAnteVol(skip_validation = False)
+        y_pred, y_true, vol = torch.randn(10, 5), torch.randn(10, 5), torch.rand(10, 5).abs() + 0.1
+        # vol must be a tensor, same shape as y_true
+        self.assertRaises(TypeError, instance.forward, y_pred = y_pred, y_true = y_true, vol = "invalid")
+        self.assertRaises(
+            ValueError, instance.forward, y_pred = y_pred, y_true = y_true, vol = torch.rand(10, 3),
+        )
+
+    def test_valid_forward_matches_manual_formula(self):
+        instance = NegSharpeRatioExAnteVol(reg_concentration = 0.1, skip_validation = True)
+        y_pred = torch.randn(20, 5)
+        y_true = torch.randn(20, 5)
+        vol = torch.rand(20, 5).abs() + 0.1
+
+        loss_value = instance(y_pred = y_pred, y_true = y_true, vol = vol)
+
+        portfolio_returns = torch.sum(y_pred * y_true, dim=1)
+        mean_return = torch.mean(portfolio_returns)
+        risk = torch.sqrt(torch.mean(torch.sum((y_pred ** 2) * (vol ** 2), dim=1)))
+        expected = -mean_return / (risk + instance.eps) + 0.1 * torch.mean(torch.sum(y_pred ** 2, dim=1))
+
+        self.assertTrue(torch.allclose(loss_value, expected))
+
+    def test_masks_missing_return_and_missing_vol_alike(self):
+        """A cell missing either y_true or vol contributes zero return and zero risk --
+        the same way the base class's masking already treats a missing y_true alone."""
+        instance = NegSharpeRatioExAnteVol(skip_validation = True)
+        y_pred = torch.tensor([[1.0, 2.0, 3.0]])
+        y_true = torch.tensor([[0.1, float("nan"), 0.3]])
+        vol = torch.tensor([[0.2, 0.2, float("nan")]])
+
+        loss_value = instance(y_pred = y_pred, y_true = y_true, vol = vol)
+
+        # Only the first name (index 0) has both a return and a vol; the other two are
+        # masked out entirely, so this should match a single-name manual calculation
+        expected_return = 1.0 * 0.1
+        expected_risk = (1.0 ** 2 * 0.2 ** 2) ** 0.5
+        expected = -expected_return / (expected_risk + instance.eps)
+        self.assertAlmostEqual(loss_value.item(), expected, places=5)
+
+    def test_scale_invariance(self):
+        """Uniformly rescaling every weight leaves the loss unchanged (both numerator and
+        the risk term are homogeneous degree 1 in y_pred)."""
+        instance = NegSharpeRatioExAnteVol(skip_validation = True)
+        y_pred = torch.randn(20, 5)
+        y_true = torch.randn(20, 5)
+        vol = torch.rand(20, 5).abs() + 0.1
+
+        base = instance(y_pred = y_pred, y_true = y_true, vol = vol)
+        scaled = instance(y_pred = 3.0 * y_pred, y_true = y_true, vol = vol)
+        self.assertAlmostEqual(base.item(), scaled.item(), places=5)

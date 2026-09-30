@@ -8,6 +8,7 @@ from .mcr_loss import (
 
 from .portfolio_losses import (
     NegSharpeRatio,
+    NegSharpeRatioExAnteVol,
     NegMeanVarianceUtility,
     NegMeanVarianceSkewnessUtility,
     NegMeanPortfolioReturn,
@@ -36,6 +37,7 @@ __all__ = [
     "MultiOutputSharpe",
     "MultiOutputMCR",
     "NegSharpeRatio",
+    "NegSharpeRatioExAnteVol",
     "NegMeanVarianceUtility",
     "NegMeanVarianceSkewnessUtility",
     "NegMeanPortfolioReturn",

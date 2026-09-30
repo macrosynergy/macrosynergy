@@ -654,6 +654,42 @@ class TestMLPRegressor(unittest.TestCase):
         # X and y must carry the same index
         self.assertRaises(ValueError, model.fit, X=self.X, y=self.y.iloc[:-1])
 
+    def test_types_fit_vol(self):
+        """
+        Test `vol` is checked for correctness: required when loss_func.requires_vol is
+        True, rejected otherwise, and must be multi-indexed like X/y.
+        """
+        from macrosynergy.learning import NegSharpeRatioExAnteVol
+
+        vol = self.y.abs() + 0.1
+
+        # A loss that does not require vol must reject one being passed
+        plain_model = MLPRegressor(epochs=2, patience=None)
+        self.assertRaises(ValueError, plain_model.fit, X=self.X, y=self.y, vol=vol)
+
+        # A loss that requires vol must reject fit() without one
+        vol_model = MLPRegressor(
+            epochs=2, patience=None, loss_func=NegSharpeRatioExAnteVol(),
+        )
+        self.assertRaises(ValueError, vol_model.fit, X=self.X, y=self.y, vol=None)
+
+        # vol must be multi-indexed like X/y
+        self.assertRaises(
+            TypeError, vol_model.fit, X=self.X, y=self.y, vol=vol.values
+        )
+        self.assertRaises(
+            ValueError, vol_model.fit, X=self.X, y=self.y, vol=vol.reset_index()
+        )
+        self.assertRaises(
+            ValueError, vol_model.fit, X=self.X, y=self.y, vol=vol.iloc[:-1]
+        )
+
+        # vol is not supported alongside early stopping (patience is not None)
+        es_vol_model = MLPRegressor(
+            epochs=2, patience=2, loss_func=NegSharpeRatioExAnteVol(),
+        )
+        self.assertRaises(ValueError, es_vol_model.fit, X=self.X, y=self.y, vol=vol)
+
     @parameterized.expand(itertools.product(
         [None, "softmax", "longshort"], [None, "batch", "layer"], [True, False]
     ))
@@ -967,6 +1003,38 @@ class TestMLPRegressor(unittest.TestCase):
         # `predict` performs across folds and ensemble members
         pred_sums = model.predict(self.X.iloc[:, :1]).sum(axis=1).values
         np.testing.assert_allclose(pred_sums, 0, atol=1e-4)
+
+    def test_valid_fit_ex_ante_vol_loss(self):
+        """
+        Test that fitting with `NegSharpeRatioExAnteVol` and `vol=` runs end to end, the
+        resulting network has finite parameters, and the vol actually used affects the
+        fit (two very different vol panels produce different trained weights).
+        """
+        from macrosynergy.learning import NegSharpeRatioExAnteVol
+
+        low_vol = pd.DataFrame(0.1, index=self.y.index, columns=self.y.columns)
+        high_vol = pd.DataFrame(10.0, index=self.y.index, columns=self.y.columns)
+
+        model_low = MLPRegressor(
+            epochs=200, learning_rate=1e-1, patience=None, loss_func=NegSharpeRatioExAnteVol(),
+        ).fit(self.X, self.y, vol=low_vol)
+        model_high = MLPRegressor(
+            epochs=200, learning_rate=1e-1, patience=None, loss_func=NegSharpeRatioExAnteVol(),
+        ).fit(self.X, self.y, vol=high_vol)
+
+        net_low, net_high = self.first_model(model_low), self.first_model(model_high)
+        for net in (net_low, net_high):
+            for param in net.parameters():
+                self.assertFalse(torch.isnan(param).any())
+                self.assertFalse(torch.isinf(param).any())
+
+        head_low = dict(net_low.named_parameters())["head.0.weight"]
+        head_high = dict(net_high.named_parameters())["head.0.weight"]
+        self.assertFalse(torch.allclose(head_low, head_high))
+
+        # Predictions are finite too
+        preds = model_low.predict(self.X)
+        self.assertFalse(preds.isnull().values.any())
 
     def test_types_predict(self):
         model = MLPRegressor().fit(self.X, self.y)
