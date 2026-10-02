@@ -13,8 +13,11 @@ from macrosynergy.management.utils import (
     is_valid_iso_date,
     reduce_df,
     estimate_release_frequency,
+    _map_to_business_day_frequency,
 )
 import logging
+
+from macrosynergy.pnl.notional_positions import _resample_signals_to_rebal_dates
 
 logger = logging.getLogger(__name__)
 
@@ -321,7 +324,7 @@ def contract_signals(
     relative_value: bool = False,
     start: Optional[str] = None,
     end: Optional[str] = None,
-    rebal_freq: str = "M",
+    rebal_freq: Optional[str] = None,
     blacklist: Optional[dict] = None,
     sname: str = "STRAT",
     *args,
@@ -399,9 +402,18 @@ def contract_signals(
         signals are added. If the targets are relative values the hedge ratio must be
         the beta of the relative return with respect to the hedge basket return.
     start : str
-        earliest date in ISO format. Default is None and earliest date in df is used.
+        earliest date in ISO format. Default is None, in which case the start date is
+        derived as the latest first date across the categories the calculation requires:
+        `sig`, any category-valued entries in `cscales`, and, when a hedge basket is
+        used, `hedge_xcat` together with any category-valued entries in `basket_weights`.
+        Together with `end` this gives the window over which every required category
+        exists.
     end : str
-        latest date in ISO format. Default is None and latest date in df is used.
+        latest date in ISO format. Default is None, in which case the end date is derived
+        as the earliest last date across the same categories described under `start`.
+    rebal_freq : str
+        optional rebalancing frequency of the contract signals. Default is None, in
+        which case the contract signals are returned at the frequency of the inputs.
     blacklist : dict
         cross-sections with date ranges that should be excluded from the calculation of
         contract signals.
@@ -429,6 +441,7 @@ def contract_signals(
         (relative_value, "relative_value", bool),
         (start, "start", (str, NoneType)),
         (end, "end", (str, NoneType)),
+        (rebal_freq, "rebal_freq", (str, NoneType)),
         (blacklist, "blacklist", (dict, NoneType)),
         (sname, "sname", str),
     ]:
@@ -438,6 +451,9 @@ def contract_signals(
         if typex in [list, str, dict] and len(varx) == 0:
             raise ValueError(f"`{namex}` must not be an empty {str(typex)}")
 
+    if rebal_freq is not None:
+        _map_to_business_day_frequency(rebal_freq)
+
     if not isinstance(df, QuantamentalDataFrame):
         raise TypeError("`df` must be a standardised quantamental dataframe")
 
@@ -445,11 +461,49 @@ def contract_signals(
     df: pd.DataFrame = QuantamentalDataFrame(df)
     _initialized_as_categorical: bool = df.InitializedAsCategorical
 
+    ## The base signal tickers the calculation needs
+    expected_base_signals: Set[str] = set([f"{cx}_{sig}" for cx in cids])
+
     ## Check the dates
-    if start is None:
-        start: str = pd.Timestamp(df["real_date"].min()).strftime("%Y-%m-%d")
-    if end is None:
-        end: str = pd.Timestamp(df["real_date"].max()).strftime("%Y-%m-%d")
+    if start is None or end is None:
+        scale_cats: List[str] = (
+            [x for x in cscales if isinstance(x, str)] if cscales else []
+        )
+        hedge_cats: List[str] = []
+        if basket_contracts is not None:
+            if basket_weights:
+                hedge_cats += [x for x in basket_weights if isinstance(x, str)]
+            if hedge_xcat is not None:
+                hedge_cats.append(hedge_xcat)
+
+        cats: List[str] = list(dict.fromkeys([sig, *scale_cats, *hedge_cats]))
+
+        grouped_dates = (
+            df.loc[df["xcat"].isin(cats)]
+            .groupby("xcat", observed=True)["real_date"]
+        )
+
+        if grouped_dates.ngroups == 0:
+            raise ValueError(
+                "Some `cids` are missing the `sig` in the provided dataframe."
+                f"\nMissing: {expected_base_signals}"
+            )
+
+        # latest first date and earliest last date
+        derived_start: pd.Timestamp = grouped_dates.min().max()
+        derived_end: pd.Timestamp = grouped_dates.max().min()
+        if derived_start > derived_end:
+            raise ValueError(
+                "The categories required to calculate the contract signals "
+                f"({', '.join(cats)}) have no overlapping dates, so no date range can "
+                f"be derived. The latest start is {derived_start:%Y-%m-%d} and the "
+                f"earliest end is {derived_end:%Y-%m-%d}."
+            )
+
+        if start is None:
+            start: str = derived_start.strftime("%Y-%m-%d")
+        if end is None:
+            end: str = derived_end.strftime("%Y-%m-%d")
 
     for dx, nx in [(start, "start"), (end, "end")]:
         if not is_valid_iso_date(dx):
@@ -459,7 +513,6 @@ def contract_signals(
     df: pd.DataFrame = reduce_df(df=df, start=start, end=end, blacklist=blacklist)
 
     ## Check that all cid_ctype are in the dataframe
-    expected_base_signals: Set[str] = set([f"{cx}_{sig}" for cx in cids])
     found_base_signals: Set[str] = set(QuantamentalDataFrame(df).list_tickers())
     if not (expected_base_signals).issubset(found_base_signals):
         raise ValueError(
@@ -517,6 +570,16 @@ def contract_signals(
         df_wide_cs=df_contract_signals,
         df_wide_hs=df_hedge_signals,
     )
+
+    ## Hold the final contract signals between rebalance dates if requested
+    if rebal_freq is not None:
+        csig_suffix: str = "_CSIG"
+        df_out = _resample_signals_to_rebal_dates(
+            df_wide=df_out,
+            fids=[col[: -len(csig_suffix)] for col in df_out.columns],
+            sig_ident=csig_suffix,
+            rebal_freq=rebal_freq,
+        )
 
     ## Wide to quantamental
     df_out: pd.DataFrame = QuantamentalDataFrame.from_wide(df=df_out)
@@ -578,6 +641,7 @@ def multi_signal_contract_signals(
         "relative_value": bool,
         "start": (str, NoneType),
         "end": (str, NoneType),
+        "rebal_freq": (str, NoneType),
         "blacklist": (dict, NoneType),
         "sname": str,
     }

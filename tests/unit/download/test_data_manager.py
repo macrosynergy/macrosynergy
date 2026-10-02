@@ -374,6 +374,48 @@ class TestGetData(unittest.TestCase):
         self.assertEqual(data_call[1]["end"], "0D")
         self.assertEqual(data_call[1]["freq"], "W")
 
+    def test_single_ticker_multi_field_sends_unwrapped_ticker(self):
+        # Regression for the '<TICKER>' bug: a single ticker requesting
+        # multiple fields must be sent unwrapped, since DSWS's JSON client
+        # never interprets the angle-bracket syntax.
+        df = _timeseries_df(["2024-01-01"], ["923580"], ["MV", "MVFF"])
+        mgr, mock_ds = _make_manager(get_data_return=df)
+        result = mgr.get_data(["923580"], fields=["MV", "MVFF"])
+        self.assertEqual(mock_ds.get_data.call_args[1]["tickers"], "923580")
+        self.assertIsInstance(result.columns, pd.MultiIndex)
+        self.assertIn(("923580", "MV", "USD"), result.columns)
+        self.assertIn(("923580", "MVFF", "USD"), result.columns)
+
+    def test_error_payload_raises_value_error(self):
+        # Regression: an '$$ER:'-marked error payload (e.g. from a rejected
+        # instrument/datatype combination) must raise rather than being
+        # returned in a shape indistinguishable from empty/no data.
+        error_df = pd.DataFrame(
+            {
+                "Instrument": ["<923580>", "<923580>"],
+                "Datatype": ["MV", "MVFF"],
+                "Value": [
+                    "$$ER: E100,INVALID CODE OR EXPRESSION ENTERED",
+                    "$$ER: E100,INVALID CODE OR EXPRESSION ENTERED",
+                ],
+                "Currency": ["NA", "NA"],
+            }
+        )
+        mgr, _ = _make_manager(get_data_return=error_df)
+        with self.assertRaises(ValueError):
+            mgr.get_data(["923580"], fields=["MV", "MVFF"])
+
+    def test_string_error_response_raises_value_error(self):
+        # DS_Response._format_Response can return a bare error string
+        # (instead of a DataFrame) when the JSON response lacks a 'Dates'
+        # field, e.g. for a malformed request.
+        mgr, mock_ds = _make_manager()
+        mock_ds.get_data.return_value = (
+            "Error - please check instruments and parameters (time series or static)"
+        )
+        with self.assertRaises(ValueError):
+            mgr.get_data(["VOD"], fields=["P"])
+
     def test_usage_stats_called_once_when_flag_true(self):
         df = _timeseries_df(["2024-01-01"], ["VOD"], ["P"])
         mgr, mock_ds = _make_manager(get_data_return=df, show_usage_stats=True)
@@ -443,28 +485,49 @@ class TestValidateInputs(unittest.TestCase):
 
 
 class TestFormatTickersArg(unittest.TestCase):
-    def test_single_ticker_single_field(self):
-        self.assertEqual(
-            DatastreamDataManager._format_tickers_arg(["VOD"], multi_field=False), "VOD"
-        )
+    def test_single_ticker(self):
+        self.assertEqual(DatastreamDataManager._format_tickers_arg(["VOD"]), "VOD")
 
-    def test_single_ticker_multi_field_wrapped(self):
-        self.assertEqual(
-            DatastreamDataManager._format_tickers_arg(["VOD"], multi_field=True),
-            "<VOD>",
-        )
+    def test_single_ticker_not_bracket_wrapped(self):
+        # Regression: a single ticker must never be wrapped in angle brackets,
+        # regardless of how many fields are requested alongside it. DSWS's
+        # JSON/REST client (DS_Response.post_user_request) never strips or
+        # interprets '<...>' — it is passed straight through as a literal,
+        # invalid instrument code.
+        self.assertEqual(DatastreamDataManager._format_tickers_arg(["923580"]), "923580")
 
     def test_multi_ticker_comma_joined(self):
         self.assertEqual(
-            DatastreamDataManager._format_tickers_arg(["VOD", "BP"], multi_field=False),
+            DatastreamDataManager._format_tickers_arg(["VOD", "BP"]),
             "VOD,BP",
         )
 
-    def test_multi_ticker_multi_field_comma_joined(self):
-        self.assertEqual(
-            DatastreamDataManager._format_tickers_arg(["VOD", "BP"], multi_field=True),
-            "VOD,BP",
+
+class TestRaiseIfErrorResponse(unittest.TestCase):
+    def test_no_value_column_does_not_raise(self):
+        df = pd.DataFrame({"foo": [1, 2]})
+        DatastreamDataManager._raise_if_error_response(df, "VOD", ["P"])
+
+    def test_normal_values_do_not_raise(self):
+        df = pd.DataFrame({"Value": ["1.23", "4.56"]})
+        DatastreamDataManager._raise_if_error_response(df, "VOD", ["P"])
+
+    def test_error_marker_raises_value_error(self):
+        df = pd.DataFrame(
+            {
+                "Instrument": ["<923580>", "<923580>"],
+                "Datatype": ["MV", "MVFF"],
+                "Value": [
+                    "$$ER: E100,INVALID CODE OR EXPRESSION ENTERED",
+                    "$$ER: E100,INVALID CODE OR EXPRESSION ENTERED",
+                ],
+                "Currency": ["NA", "NA"],
+            }
         )
+        with self.assertRaises(ValueError):
+            DatastreamDataManager._raise_if_error_response(
+                df, "923580", ["MV", "MVFF"]
+            )
 
 
 class TestFormatDate(unittest.TestCase):
