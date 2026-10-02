@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from numbers import Number
 from typing import Any, Dict, List, Set, Union
 
 import numpy as np
@@ -8,9 +9,6 @@ from sklearn.covariance import LedoitWolf
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.utils.validation import check_is_fitted
 
-DATE_INDEX_NAME = "real_date"
-CIDS_INDEX_NAME = "cid"
-
 
 class BaseImputer(BaseEstimator, TransformerMixin, ABC):
     """
@@ -18,12 +16,9 @@ class BaseImputer(BaseEstimator, TransformerMixin, ABC):
 
     Parameters
     ----------
-    missing_values : int, float, str, np.nan, None or pandas.NA, default=np.nan
-        The placeholder for the missing values. All occurrences of
-        `missing_values` will be imputed. For pandas' dataframes with
-        nullable integer dtypes with missing values, `missing_values`
-        can be set to either `np.nan` or `pd.NA`.
-    nan_threshold : float, default=1.0
+    missing_values : Union[Number, str, None, np.nan, pd.NA], optional, default=np.nan
+        The placeholder for the missing values
+    nan_threshold : float, optional, default=1.0
         If the proportion of NaNs in column is greater than this, we get rid of
         the column.
 
@@ -45,7 +40,7 @@ class BaseImputer(BaseEstimator, TransformerMixin, ABC):
 
     def __init__(
         self,
-        missing_values=np.nan,
+        missing_values: Union[Number, str, None] = np.nan,
         nan_threshold: float = 1.0,
     ):
         self.missing_values = missing_values
@@ -61,7 +56,7 @@ class BaseImputer(BaseEstimator, TransformerMixin, ABC):
         # compute useful reporting / diagnostic info
         nan_mask = X_nan.isna()
         self.missing_fraction_by_col_ = nan_mask.mean(axis=0)
-        self.missing_fraction_by_cid_and_col_ = nan_mask.groupby(CIDS_INDEX_NAME).mean()
+        self.missing_fraction_by_cid_and_col_ = nan_mask.groupby(level=0).mean()
 
         # identify columns violating nan threshold
         violations = self.missing_fraction_by_col_ >= self.nan_threshold
@@ -92,13 +87,11 @@ class BaseImputer(BaseEstimator, TransformerMixin, ABC):
         # replace missing_values with np.nan for convenience
         X = X.replace(self.missing_values, np.nan)
 
-        incoming_cols = list(X.columns)
-        expected_cols = list(self.feature_names_in_)
-        if incoming_cols != expected_cols:
+        if not all(X.columns == self.feature_names_in_):
             raise ValueError(
                 f"Input columns differ from fit-time columns.\n"
-                f"Expected: {expected_cols}\n"
-                f"Got: {incoming_cols}"
+                f"Expected: {self.feature_names_in_}\n"
+                f"Got: {X.columns}"
             )
 
         # let subclass do the rest on data with all nan cols removed
@@ -125,12 +118,6 @@ class BaseImputer(BaseEstimator, TransformerMixin, ABC):
         if not isinstance(X, pd.DataFrame):
             raise TypeError(f"Expected a pandas.DataFrame not {type(X)}")
 
-        expected_idx_names = {CIDS_INDEX_NAME, DATE_INDEX_NAME}
-        if set(X.index.names) - expected_idx_names:
-            raise ValueError(
-                f"Input dataframe must have index names {expected_idx_names}"
-            )
-
         return X
 
 
@@ -140,14 +127,11 @@ class ConstantImputer(BaseImputer):
 
     Parameters
     ----------
-    fill_value :
-        Value to replace missing values with. Default is 0.
-    missing_values : int, float, str, np.nan, None or pandas.NA, default=np.nan
-        The placeholder for the missing values. All occurrences of
-        `missing_values` will be imputed. For pandas' dataframes with
-        nullable integer dtypes with missing values, `missing_values`
-        can be set to either `np.nan` or `pd.NA`.
-    nan_threshold : float, default=1.0
+    fill_value : Number, optional, default=0
+        Value to replace missing values with.
+    missing_values : Union[Number, str, None, np.nan, pd.NA], optional, default=np.nan
+        The placeholder for the missing values.
+    nan_threshold : float, optional, default=1.0
         If the proportion of NaNs in column is greater than this, we get rid of
         the column.
 
@@ -167,7 +151,12 @@ class ConstantImputer(BaseImputer):
         Number of features left after transforming
     """
 
-    def __init__(self, fill_value=0, nan_threshold=1.0, missing_values=np.nan):
+    def __init__(
+        self,
+        fill_value: Number = 0,
+        nan_threshold: float = 1.0,
+        missing_values: Union[Number, str, None] = np.nan,
+    ):
         super().__init__(
             nan_threshold=nan_threshold,
             missing_values=missing_values,
@@ -186,27 +175,25 @@ class ConstantImputer(BaseImputer):
 
 class CrossSectionalImputer(BaseImputer):
     """
-    Impute missing values using the cross-sectional mean across *configured peers*
-    at the same real_date (per feature).
+    Impute missing values using the cross-sectional mean across a set of configured
+    peers at the same date.
 
     Parameters
     ----------
-    peer_map : dict[str, list[str]] or None
-        Mapping from target cid -> list of peer cids to use for imputation.
-        Example:
-            {"CAD": ["USD", "GBP", "EUR"], "USD": ["CAD", "GBP", "EUR"]}
-
-        If None, peers default to "all other cids" (unless default_peers="none").
-    default_peers : {"all", "none"}
-        Behaviour for cids not present in peer_map:
-          - "all": use all other cids as peers
-          - "none": do not impute for that cid (unless fallback kicks in)
-    fallback : {"none", "zero", "mean"}
-        If "mean", any values still missing after peer-based imputation
-        are filled with the global mean per feature computed at fit time. If
-        "zero" values are filled with 0.
-    missing_values : scalar
+    peer_map : dict[str, list[str]], optional, default=None
+        Mapping from each asset to a list of peer assets used for imputation.
+        If None, peers are determined according to `default_peers`.
+    default_peers : str, optional, default="all"
+        Behaviour for cids not present in peer_map. `all` uses all other cids as peers;
+        `None` leaves those cids unimputed.
+    fallback : str, optional, default="mean"
+        Strategy for handling missing values that remain after applying `peer_map`.
+        Valid options are "all_peer_mean", "mean", "zero", and None.
+    missing_values : Union[Number, str, None, np.nan, pd.NA], optional, default=np.nan
         Value to treat as missing (converted to np.nan internally).
+    nan_threshold : float, optional, default=1.0
+        Proportion of NaNs allowed in a column. Surpassing this threshold results in
+        the column being dropped from the data
 
     Attributes
     ----------
@@ -222,26 +209,49 @@ class CrossSectionalImputer(BaseImputer):
         Names of features that are not dropped
     n_features_out_ : Integral
         Number of features left after transforming
+
+    Notes
+    -----
+    Cross-sectional imputation uses the mean value of peer assets on a given date
+    to fill missing values for a target asset.
+
+    For example, if
+
+    .. code-block:: python
+
+        peer_map = {"CAD": ["USD", "GBP", "EUR"]}
+
+    then missing values for CAD on a given date are imputed using the mean of
+    USD, GBP, and EUR on that date.
+
+    When missing values remain after applying the peer_map (peers are also missing)
+    we employ fallback strategies. If fallback="all_peer_mean", values are imputed using
+    all available peers on that date regardless of what was specified in the peer_map.
+    If fallback="mean", values are filled with the mean per feature computed at
+    fit time. fallback="zero" fills missing values with 0 and fallback=None leaves
+    missing values as is.
     """
 
     def __init__(
         self,
-        peer_map: Union[dict, None] = None,
-        default_peers: str = "all",
-        fallback: str = "mean",
-        missing_values=np.nan,
-        nan_threshold=1.0,
+        peer_map: Union[Dict[str, List[str]], None] = None,
+        default_peers: Union[str, None] = "all",
+        fallback: Union[str, None] = "mean",
+        missing_values: Union[Number, str, None] = np.nan,
+        nan_threshold: float = 1.0,
     ):
         super().__init__(
             missing_values=missing_values,
             nan_threshold=nan_threshold,
         )
 
-        if default_peers not in {"all", "none"}:
-            raise ValueError("default_peers must be one of {'all', 'none'}")
+        if default_peers not in {"all", None}:
+            raise ValueError("default_peers must be one of {'all', None}")
 
-        if fallback not in {"mean", "none", "zero"}:
-            raise ValueError("fallback must be one of {'mean', 'none', 'zero'}")
+        if fallback not in {"mean", None, "zero", "all_peer_mean"}:
+            raise ValueError(
+                "fallback must be one of {'mean', None, 'zero', 'all_peer_mean'}"
+            )
 
         self.peer_map = peer_map
         self.default_peers = default_peers
@@ -257,7 +267,7 @@ class CrossSectionalImputer(BaseImputer):
         if isinstance(self.peer_map, dict) and target_cid in self.peer_map:
             peers = list(self.peer_map[target_cid] or [])
         else:
-            if self.default_peers == "none":
+            if self.default_peers is None:
                 peers = []
             else:
                 peers = [c for c in all_cids if c != target_cid]
@@ -270,7 +280,7 @@ class CrossSectionalImputer(BaseImputer):
         X_filled = X.copy()
 
         # universe of cids present in this transform call
-        all_cids = set(X.index.get_level_values(CIDS_INDEX_NAME).unique())
+        all_cids = set(X.index.get_level_values(level=0).unique())
 
         # impute cid-by-cid using its peer set
         for target_cid in all_cids:
@@ -279,19 +289,19 @@ class CrossSectionalImputer(BaseImputer):
                 continue  # nothing to use for this cid
 
             # rows for this target cid
-            target_mask = X_filled.index.get_level_values(CIDS_INDEX_NAME) == target_cid
+            target_mask = X_filled.index.get_level_values(level=0) == target_cid
             if not target_mask.any():
                 continue
 
             target_rows = X_filled.loc[target_mask]
-            target_dates = target_rows.index.get_level_values(DATE_INDEX_NAME)
+            target_dates = target_rows.index.get_level_values(level=1)
 
             # pull peer rows only, compute mean by date (per feature)
-            peer_rows = X.loc[X.index.get_level_values(CIDS_INDEX_NAME).isin(peers)]
+            peer_rows = X.loc[X.index.get_level_values(level=0).isin(peers)]
             if peer_rows.empty:
                 continue
 
-            peer_date_means = peer_rows.groupby(level=DATE_INDEX_NAME).mean()
+            peer_date_means = peer_rows.groupby(level=1).mean()
 
             # Align each target row with its date's peer mean
             aligned_means = peer_date_means.reindex(target_dates).set_index(
@@ -305,7 +315,9 @@ class CrossSectionalImputer(BaseImputer):
             X_filled.loc[target_mask] = filled_target
 
         # handle values still missing
-        if self.fallback == "mean":
+        if self.fallback == "all_peer_mean":
+            X_filled = X_filled.fillna(X_filled.groupby(level=1).mean())
+        elif self.fallback == "mean":
             X_filled = X_filled.fillna(self.global_means_)
         elif self.fallback == "zero":
             X_filled = X_filled.fillna(0)
@@ -325,25 +337,24 @@ class EstimatorImputer(BaseImputer):
 
     Parameters
     ----------
-    estimator : BaseEstimator or None, default=None
+    estimator : BaseEstimator, optional, default=None
         Any sklearn-compatible estimator (e.g. RandomForestRegressor,
         LinearRegression, Pipeline). If None, defaults to
         RandomForestRegressor().
-    fallback : str, default="none"
+    fallback : str, optional, default=None
         Strategy for handling values still missing after model-based imputation.
-        - "mean": fill with column means
-        - "zero": fill with zeros
-        - "none": leave remaining NaNs in place
-    missing_values : scalar, default=np.nan
+        ``"mean"`` fills values with column means. ``"zero"`` fills values with 0.
+        If None, values are left as is.
+    missing_values : Union[Number, str, None, np.nan, pd.NA], optional, default=np.nan
         Value to treat as missing (converted to np.nan internally).
-    nan_threshold : float, default=1.0
+    nan_threshold : float, optional, default=1.0
         If the proportion of NaNs in a column exceeds this threshold, the
         column is dropped entirely.
-    complete_rows_only : bool, default=True
+    complete_rows_only : bool, optional, default=True
         If True, each per-feature model is trained only on rows where all
         predictor columns are also non-NaN. This allows any sklearn estimator
         to be used, not just those that handle NaN natively.
-    predictor_fill_value : str, float, int, or None, default="mean"
+    predictor_fill_value : Union[str, Number, None], optional, default="mean"
         How to handle NaN predictor values at transform time. "mean" fills
         with per-column means from fit time, a numeric scalar fills with that
         constant, "skip" skips prediction for rows with NaN predictors
@@ -363,8 +374,8 @@ class EstimatorImputer(BaseImputer):
         Names of features retained after thresholding.
     n_features_out_ : int
         Number of features remaining after transform.
-    models_ : dict[str, Predictor]
-        Mapping from feature name -> fitted estimator.
+    models_ : dict[str, BaseEstimator]
+        Dictionary that maps feature names to their fitted models.
         Only populated for features that had at least one missing value during
         fit and had enough observed rows to train a model.
     predictor_means_ : pd.Series
@@ -373,16 +384,16 @@ class EstimatorImputer(BaseImputer):
     """
 
     _VALID_FILL_VALUES = {"mean", "skip"}
-    _VALID_FALLBACKS = {"mean", "zero", "none"}
+    _VALID_FALLBACKS = {"mean", "zero", None}
 
     def __init__(
         self,
         estimator: Union[BaseEstimator, None] = None,
-        fallback: str = "mean",
-        missing_values=np.nan,
+        fallback: Union[str, None] = "mean",
+        missing_values: Union[Number, str, None] = np.nan,
         nan_threshold: float = 1.0,
         complete_rows_only: bool = True,
-        predictor_fill_value: Union[str, float, int, None] = "mean",
+        predictor_fill_value: Union[str, Number, None] = "mean",
     ):
         super().__init__(
             missing_values=missing_values,
@@ -501,34 +512,36 @@ class GaussianConditionalImputer(BaseImputer):
     """
     Impute missing values using the closed-form Gaussian conditional mean.
 
+    Notes
+    -----
     For each row with missing values, the imputer partitions the feature
     vector into observed (o) and missing (m) components and computes:
 
-        mu_{m|o} = mu_m + Sigma_{mo} @ Sigma_{oo}^{-1} @ (x_o - mu_o)
+    .. math::
+        \mu_{m|o} = \mu_m + \Sigma_{mo} @ \Sigma_{oo}^{-1} @ (x_o - \mu_o)
 
     A single global Gaussian (mean + Ledoit-Wolf covariance) is fitted on
     all complete rows across all cross-section identifiers.
 
     Parameters
     ----------
-    fallback : {"mean", "zero", "none"}, default="mean"
-        Strategy for any values still missing after conditional imputation:
-        - "mean": fill with column means
-        - "zero": fill with zeros
-        - "none": leave remaining NaNs in place
-    missing_values : scalar, default=np.nan
+    fallback : str, optional, default="mean"
+        Strategy for any values still missing after conditional imputation: ``"mean"``
+        fills missing values with column means. ``"zero"`` fills values with 0. If None,
+        missing values are left as is.
+    missing_values : Union[Number, str, None, np.nan, pd.NA], optional, default=np.nan
         Value to treat as missing (converted to np.nan internally).
-    nan_threshold : float, default=1.0
+    nan_threshold : float, optional, default=1.0
         If the proportion of NaNs in a column exceeds this threshold, the
         column is dropped entirely.
     """
 
-    _VALID_FALLBACKS = {"mean", "zero", "none"}
+    _VALID_FALLBACKS = {"mean", "zero", None}
 
     def __init__(
         self,
-        fallback: str = "mean",
-        missing_values=np.nan,
+        fallback: Union[str, None] = "mean",
+        missing_values: Union[Number, str, None] = np.nan,
         nan_threshold: float = 1.0,
     ):
         if fallback not in self._VALID_FALLBACKS:

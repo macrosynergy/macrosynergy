@@ -3,11 +3,7 @@ import pandas as pd
 import pytest
 from sklearn.exceptions import NotFittedError
 
-from macrosynergy.learning.preprocessing.imputers.imputers import (
-    ConstantImputer,
-    DATE_INDEX_NAME,
-    CIDS_INDEX_NAME,
-)
+from macrosynergy.learning.preprocessing.imputers.imputers import ConstantImputer
 
 
 @pytest.fixture
@@ -27,7 +23,7 @@ def _panel_df(values_by_cid, dates, columns):
             tuples.append((cid, d))
             rows.append(row)
 
-    idx = pd.MultiIndex.from_tuples(tuples, names=[CIDS_INDEX_NAME, DATE_INDEX_NAME])
+    idx = pd.MultiIndex.from_tuples(tuples, names=["cid", "real_date"])
     return pd.DataFrame(rows, index=idx, columns=list(columns))
 
 
@@ -150,19 +146,6 @@ def test_validate_input_requires_dataframe(dates):
     imp = ConstantImputer()
     with pytest.raises(TypeError):
         imp.fit([1, 2, 3])  # not a DataFrame
-
-
-def test_validate_input_requires_expected_index_names(dates):
-    # wrong index names -> should raise :contentReference[oaicite:6]{index=6}
-    idx = pd.MultiIndex.from_product(
-        [["A", "B"], dates],
-        names=["WRONG_CID", "WRONG_DATE"],
-    )
-    X = pd.DataFrame({"x": [1.0, 2.0, 3.0, 4.0]}, index=idx)
-
-    imp = ConstantImputer()
-    with pytest.raises(ValueError, match="Input dataframe must have index names"):
-        imp.fit(X)
 
 
 def test_fit_transform_returns_only_kept_features(dates):
