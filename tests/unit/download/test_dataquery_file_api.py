@@ -2319,6 +2319,19 @@ class TestSnapshotRetentionWindow(unittest.TestCase):
         self.run_snapshot(["20260814", "20260815", "20260816"], keep=2)
         self.assertEqual(self.on_disk_dates(), ["20260814", "20260815", "20260816"])
 
+    def test_keep_none_deletes_nothing_not_even_old_deltas(self):
+        self.put_on_disk("20260814")
+        delta = (
+            self.save_dir
+            / "2026-08-14"
+            / ("JPMAQS_GENERIC_RETURNS_DELTA_20260814T060000.parquet")
+        )
+        delta.write_bytes(b"x")
+        # the 16th is the latest upstream; the 14th's files, delta included, must stay
+        self.run_snapshot(["20260814", "20260816"], keep=None)
+        self.assertEqual(self.on_disk_dates(), ["20260814"])
+        self.assertTrue(delta.exists())
+
     def test_warns_when_the_retained_history_is_not_on_disk(self):
         # the user asked to keep one publication beyond the latest, but never downloaded
         # Saturday's, so the Friday they do hold falls outside the window and is deleted
@@ -2482,6 +2495,114 @@ class TestDownloadForwardsLoadOptions(unittest.TestCase):
     def test_include_delta_files_defaults_to_true(self):
         _, load_kwargs, _ = self._download()
         self.assertTrue(load_kwargs["include_delta_files"])
+
+    def test_delta_only_forwards_download_options_and_lists_no_files(self):
+        c = self.client
+        catalog = str(Path(self.temp_dir.name) / "catalog.parquet")
+        with patch.object(
+            c, "get_datasets_for_indicators", return_value=self.datasets
+        ), patch.object(c, "download_catalog_file", return_value=catalog), patch.object(
+            c, "download_files", return_value=[]
+        ) as mock_deltas, patch.object(c, "list_downloaded_files") as mock_list, patch(
+            "macrosynergy.download.dataquery_file_api.lazy_load_from_parquets",
+            return_value="LOADED",
+        ) as mock_load:
+            c.download(
+                tickers=["USD_INFL"],
+                use_only_delta_files=True,
+                overwrite=True,
+                show_progress=False,
+            )
+        delta_kwargs = mock_deltas.call_args[1]
+        self.assertTrue(delta_kwargs["overwrite"])
+        self.assertFalse(delta_kwargs["show_progress"])
+        self.assertEqual(
+            delta_kwargs["file_group_ids"], [d + "_DELTA" for d in self.datasets]
+        )
+        # the loader picks the delta files itself, from its own single listing
+        self.assertTrue(mock_load.call_args[1]["use_only_delta_files"])
+        self.assertIsNone(mock_load.call_args[1]["files_list"])
+        mock_list.assert_not_called()
+
+    def test_only_deltas_without_deltas_raises_before_anything_is_fetched(self):
+        c = self.client
+        with patch.object(c, "download_catalog_file") as mock_catalog, patch.object(
+            c, "download_files"
+        ) as mock_deltas, patch.object(
+            c, "download_latest_files"
+        ) as mock_snapshot, self.assertRaises(ValueError):
+            c.download(
+                tickers=["USD_INFL"],
+                use_only_delta_files=True,
+                include_delta_files=False,
+            )
+        for mock in (mock_catalog, mock_deltas, mock_snapshot):
+            mock.assert_not_called()
+
+    def _download_with_a_real_catalog(self, snapshot_side_effect=None, **kwargs):
+        """`download` with a catalog on disk, so the datasets resolve from it."""
+        theme = next(
+            k for k, v in JPMAQS_DATASET_THEME_MAPPING.items() if v == self.datasets[0]
+        )
+        catalog = Path(self.temp_dir.name) / "JPMAQS_METADATA_CATALOG_20260924.parquet"
+        pd.DataFrame({"Ticker": ["USD_INFL"], "Theme": [theme]}).to_parquet(catalog)
+        c = self.client
+        with patch.object(
+            c, "download_catalog_file", return_value=str(catalog)
+        ) as mock_catalog, patch.object(c, "download_files"), patch.object(
+            c, "download_latest_files", side_effect=snapshot_side_effect
+        ), patch(
+            "macrosynergy.download.dataquery_file_api.lazy_load_from_parquets"
+        ) as mock_load:
+            c.download(tickers=["USD_INFL"], **kwargs)
+        return mock_catalog, mock_load.call_args[1], catalog
+
+    def test_the_catalog_is_requested_once(self):
+        for delta_only in (False, True):
+            with self.subTest(use_only_delta_files=delta_only):
+                mock_catalog, load_kwargs, catalog = self._download_with_a_real_catalog(
+                    use_only_delta_files=delta_only
+                )
+                self.assertEqual(mock_catalog.call_count, 1)
+                self.assertEqual(Path(load_kwargs["catalog_path"]), catalog)
+                self.assertEqual(load_kwargs["datasets"], self.datasets)
+
+    def test_load_versions_matrix_requests_the_catalog_once(self):
+        theme = next(
+            k for k, v in JPMAQS_DATASET_THEME_MAPPING.items() if v == self.datasets[0]
+        )
+        catalog = Path(self.temp_dir.name) / "JPMAQS_METADATA_CATALOG_20260924.parquet"
+        pd.DataFrame({"Ticker": ["USD_INFL"], "Theme": [theme]}).to_parquet(catalog)
+        name = f"{self.datasets[0]}_DELTA_20260924T060000.parquet"
+        delta = pd.DataFrame({"file-name": [name]})
+        c = self.client
+        with patch.object(
+            c, "download_catalog_file", return_value=str(catalog)
+        ) as mock_catalog, patch.object(
+            c, "list_available_files", return_value=delta
+        ) as mock_upstream, patch.object(
+            c, "list_downloaded_files", return_value=delta
+        ), patch(
+            "macrosynergy.download.dataquery_file_api.lazy_load_from_parquets"
+        ) as mock_load, patch(
+            "macrosynergy.download.dataquery_file_api."
+            "transform_delta_qdf_to_versions_matrix",
+            return_value="MATRIX",
+        ):
+            self.assertEqual(c.load_versions_matrix("USD_INFL"), "MATRIX")
+            # a ticker missing from the catalog still raises
+            with self.assertRaises(ValueError):
+                c.load_versions_matrix("XXX_NOPE")
+        self.assertEqual(mock_catalog.call_count, 2)  # once per call above
+        self.assertEqual(Path(mock_load.call_args[1]["catalog_path"]), catalog)
+        mock_upstream.assert_called_once_with(file_group_id=f"{self.datasets[0]}_DELTA")
+
+    def test_a_catalog_pruned_by_the_cleanup_is_requested_again(self):
+        catalog = Path(self.temp_dir.name) / "JPMAQS_METADATA_CATALOG_20260924.parquet"
+        mock_catalog, _, _ = self._download_with_a_real_catalog(
+            snapshot_side_effect=lambda **kw: catalog.unlink()
+        )
+        self.assertEqual(mock_catalog.call_count, 2)
 
     def test_snapshot_download_is_scoped_to_the_resolved_datasets(self):
         _, _, snapshot_kwargs = self._download(overwrite=True, show_progress=False)

@@ -1138,14 +1138,11 @@ class DataQueryFileAPIClient:
         latest_filename = latest_catalog["file-name"]
         logger.info(f"Latest catalog file identified: {latest_filename}")
 
-        # check if file already exists
+        # look the one file up by name, rather than listing every downloaded file
         file_path = None
-        existing_files = self.list_downloaded_files()
-        if not overwrite and not existing_files.empty:
-            if latest_filename in sorted(existing_files["file-name"]):
-                file_path = existing_files[
-                    existing_files["file-name"] == latest_filename
-                ]["path"].values[0]
+        if not overwrite:
+            matches = Path(self._get_save_dir()).glob(f"**/{latest_filename}")
+            file_path = next(matches, None)
 
         if file_path is None:
             file_path = self.download_file(
@@ -1171,6 +1168,7 @@ class DataQueryFileAPIClient:
         xcats: Optional[List[str]] = None,
         case_sensitive: bool = False,
         as_dict: bool = False,
+        catalog_path: Optional[Union[str, Path]] = None,
     ) -> Union[List[str], Dict[str, List[str]]]:
         """
         Returns a list of datasets (or a dictionary mapping datasets to tickers) that
@@ -1189,6 +1187,9 @@ class DataQueryFileAPIClient:
         as_dict : bool
             If True, returns a dictionary mapping datasets to lists of tickers. Defaults
             to False, which returns a list of datasets.
+        catalog_path : Optional[Union[str, Path]]
+            A catalog already downloaded with `download_catalog_file`. If None
+            (default), the latest catalog is looked up and downloaded if missing.
 
         Returns
         -------
@@ -1226,7 +1227,7 @@ class DataQueryFileAPIClient:
         if not tickers or not any(t.strip() for t in tickers):
             raise ValueError("No valid tickers to search for.")
 
-        catalog_file = self.download_catalog_file()
+        catalog_file = catalog_path or self.download_catalog_file()
 
         catalog_df = pd.read_parquet(catalog_file)
         catalog_df["Dataset"] = (
@@ -1875,6 +1876,12 @@ class DataQueryFileAPIClient:
             weekends do not consume the allowance. If None or negative, no files are
             deleted.
             See :func:`DataQueryFileAPIClient.cleanup_old_files` for more details.
+
+            .. warning::
+                The cleanup deletes delta files too. At the default of 0, every delta
+                file older than the latest snapshot is removed, including a delta
+                history downloaded with `download(use_only_delta_files=True)`. Pass
+                None to keep it.
         overwrite : bool
             If True, overwrites files if they already exist. Default is False.
         chunk_size : Optional[int]
@@ -1983,33 +1990,40 @@ class DataQueryFileAPIClient:
         end_of_day_time: str = "23:59:59",
         end_of_day_tz: str = "UTC",
     ) -> pd.DataFrame:
-        if ticker.lower() not in map(str.lower, self.list_all_tickers()):
-            raise ValueError(f"Ticker '{ticker}' is not available.")
-        jobs = [self.list_available_files, self.list_downloaded_files]
+        """
+        Build a versions matrix for one ticker from its dataset's delta files: one row
+        per `real_date`, one column per JPMaQS version, holding `metric` ("value" by
+        default; any of "grading", "eop_lag" or "mop_lag" otherwise) as it stood in that
+        version. Missing delta files of that dataset are downloaded first.
+        """
+        # one catalog lookup for the whole call; a ticker not in it raises ValueError
+        catalog_path = self.download_catalog_file()
+        rel_datasets = self.get_datasets_for_indicators(
+            [ticker], catalog_path=catalog_path
+        )
+        if not rel_datasets:
+            raise ValueError(f"No dataset found for ticker '{ticker}'.")
+        rel_dataset = rel_datasets[0]
+        # only this dataset's deltas are listed and fetched, not every dataset's
+        delta_group = rel_dataset + "_DELTA"
+        jobs = [
+            lambda: self.list_available_files(file_group_id=delta_group),
+            self.list_downloaded_files,
+        ]
         with cf.ThreadPoolExecutor() as executor:
             futures = [executor.submit(job) for job in jobs]
             results = [f.result() for f in futures]
             all_upstream_files: pd.DataFrame = results[0]
             downloaded_files: pd.DataFrame = results[1]
         # check that all delta files are downloaded
-        rel_datasets = self.get_datasets_for_indicators([ticker])
-        if not rel_datasets:
-            raise ValueError(f"No dataset found for ticker '{ticker}'.")
-        rel_dataset = rel_datasets[0]
-        upstream_delta_files = all_upstream_files[
-            all_upstream_files["file-name"].str.contains(
-                rel_dataset + "_DELTA", regex=False
-            )
-        ]["file-name"]
+        upstream_delta_files = all_upstream_files["file-name"]
         if not len(upstream_delta_files):
             raise ValueError(
                 f"No upstream delta files found for dataset '{rel_dataset}' "
                 f"(ticker '{ticker}'). A revisions matrix needs delta files."
             )
         downloaded_delta_files = downloaded_files[
-            downloaded_files["file-name"].str.contains(
-                rel_dataset + "_DELTA", regex=False
-            )
+            downloaded_files["file-name"].str.contains(delta_group, regex=False)
         ]["file-name"]
         # only a missing against upstream matters - extra local files are harmless
         extra_files = set(downloaded_delta_files) - set(upstream_delta_files)
@@ -2029,12 +2043,11 @@ class DataQueryFileAPIClient:
                 include_delta=True,
                 include_metadata=False,
                 since_datetime=JPMAQS_EARLIEST_FILE_DATE,
+                file_group_ids=[delta_group],
             )
             downloaded_files = self.list_downloaded_files()
             downloaded_delta_files = downloaded_files[
-                downloaded_files["file-name"].str.contains(
-                    rel_dataset + "_DELTA", regex=False
-                )
+                downloaded_files["file-name"].str.contains(delta_group, regex=False)
             ]["file-name"]
             missing_files = set(upstream_delta_files) - set(downloaded_delta_files)
             if missing_files:
@@ -2055,6 +2068,7 @@ class DataQueryFileAPIClient:
             dropna=False,
             files_list=sorted(set(downloaded_delta_files)),
             include_source_file=True,
+            catalog_path=catalog_path,
         )
         return transform_delta_qdf_to_versions_matrix(
             df=df,
@@ -2082,9 +2096,11 @@ class DataQueryFileAPIClient:
         datasets: Optional[List[str]] = None,
         categorical_source_file_column: bool = True,
         files_list: Optional[List[str]] = None,
+        use_only_delta_files: bool = False,
+        catalog_path: Optional[Union[str, Path]] = None,
     ) -> Union[pd.DataFrame, pl.DataFrame, pl.LazyFrame]:
         out_dir = self._get_save_dir()
-        catalog_path = Path(self.download_catalog_file())
+        catalog_path = Path(catalog_path or self.download_catalog_file())
         return lazy_load_from_parquets(
             files_dir=out_dir,
             tickers=tickers,
@@ -2104,6 +2120,7 @@ class DataQueryFileAPIClient:
             dropna=dropna,
             categorical_source_file_column=categorical_source_file_column,
             files_list=files_list,
+            use_only_delta_files=use_only_delta_files,
         )
 
     def download(
@@ -2185,10 +2202,16 @@ class DataQueryFileAPIClient:
             "earliest" the oldest, and "all" keeps every version. "all" requires
             `dropna=False`, and cannot be used with `dataframe_format="wide"`.
         use_only_delta_files: bool
-            If True, only delta files are used when reading the data. The download will
-            retrieve all historical and intraday delta files regardless of the snapshot
-            state, and only read non-deduplicated results from the delta files.
-            Default is False.
+            If True, the data is loaded from every delta file of the relevant datasets,
+            their full published history, instead of from the latest full snapshot plus
+            its delta files. Every missing delta file since the start of JPMaQS is
+            downloaded first; full snapshots are neither downloaded nor read, and
+            `keep_n_days_old_files` is ignored. Rows are still resolved by
+            `delta_treatment` and `dropna`: pass `delta_treatment="all"` and
+            `dropna=False` to get every published version of every row. As the history
+            is rebuilt from the deltas, it can hold early rows that upstream has since
+            cut from the full snapshot without publishing an expiry for them.
+            Cannot be combined with `include_delta_files=False`. Default is False.
         show_progress : bool
             If True, displays a progress bar during downloads. Default is True.
         overwrite : bool
@@ -2200,6 +2223,12 @@ class DataQueryFileAPIClient:
             weekends do not consume the allowance. If None or negative, no files are
             deleted.
             See :func:`DataQueryFileAPIClient.cleanup_old_files` for more details.
+
+            .. warning::
+                The cleanup deletes delta files too. At the default of 0, every delta
+                file older than the latest snapshot is removed, including a delta
+                history downloaded with `download(use_only_delta_files=True)`. Pass
+                None to keep it.
         include_source_file : bool
             If True, the returned DataFrame will include a column indicating the source
             file from which each row was loaded. As this loads a large amount of string
@@ -2235,8 +2264,11 @@ class DataQueryFileAPIClient:
             A DataFrame containing the requested data.
         """
         with _suppressed_warnings(suppress_warning):
+            _check_delta_file_flags(include_delta_files, use_only_delta_files)
+            # one catalog lookup serves both the dataset resolution and the load
+            catalog_path = self.download_catalog_file()
             datasets_to_download = self.get_datasets_for_indicators(
-                tickers=tickers, cids=cids, xcats=xcats
+                tickers=tickers, cids=cids, xcats=xcats, catalog_path=catalog_path
             )
             if datasets is not None:
                 # narrow rather than replace: downloading a dataset that holds none of
@@ -2248,7 +2280,6 @@ class DataQueryFileAPIClient:
                         f"indicators, which live in {sorted(datasets_to_download)}."
                     )
                 datasets_to_download = narrowed
-            files_list = None
             if not use_only_delta_files:
                 self.download_latest_files(
                     overwrite=overwrite,
@@ -2259,13 +2290,15 @@ class DataQueryFileAPIClient:
             else:
                 self.download_files(
                     since_datetime=JPMAQS_EARLIEST_FILE_DATE,
+                    overwrite=overwrite,
                     include_full_snapshots=False,
                     include_metadata=False,
                     include_delta=True,
                     file_group_ids=[f"{d}_DELTA" for d in datasets_to_download],
+                    show_progress=show_progress,
                 )
-                files_list = self.list_downloaded_files()["file-name"].tolist()
-                files_list = [f for f in files_list if "_DELTA" in f]
+            if not Path(catalog_path).exists():  # pruned by the snapshot cleanup
+                catalog_path = self.download_catalog_file()
 
             return self.load_dataframe(
                 tickers=tickers,
@@ -2283,7 +2316,8 @@ class DataQueryFileAPIClient:
                 dropna=dropna,
                 datasets=datasets_to_download,
                 categorical_source_file_column=categorical_source_file_column,
-                files_list=files_list,
+                use_only_delta_files=use_only_delta_files,
+                catalog_path=catalog_path,
             )
 
 
@@ -2502,7 +2536,8 @@ def transform_delta_qdf_to_versions_matrix(
     cols_to_keep = ["real_date", "last_updated", metric]
     if all(c in df.columns for c in ["cid", "xcat"]):
         warnings.warn("Creating 'ticker' column from 'cid' and 'xcat'")
-        df["ticker"] = df["cid"] + "_" + df["xcat"]
+        # a new frame: the caller's `df` is left as it was
+        df = df.assign(ticker=df["cid"] + "_" + df["xcat"])
         df = df.drop(columns=["cid", "xcat"])
     missing = [c for c in cols_to_keep + ["ticker"] if c not in df.columns]
     if missing:
@@ -2512,9 +2547,8 @@ def transform_delta_qdf_to_versions_matrix(
             "The DataFrame contains multiple tickers. Please filter to a single ticker."
         )
 
-    out: pd.DataFrame = df.loc[:, cols_to_keep]
-    nan_entries = out[out["value"].isna()].drop(columns="value").copy()
-    out.loc[out["value"].isna(), "value"] = np.inf
+    out: pd.DataFrame = df.loc[:, cols_to_keep].copy()
+    out.loc[out[metric].isna(), metric] = np.inf
     if collapse_to_eod_values:
         ts = out["last_updated"]
         ts = (
@@ -2818,8 +2852,8 @@ def _check_lazy_load_inputs(
         raise ValueError("`file_format` must be one of 'parquet' or 'csv'.")
     if file_format == "csv":
         raise NotImplementedError("CSV file format is not yet supported.")
-    # check whether or not there are any parquet files in the glob directory -recursive
-    if not _list_downloaded_files(files_dir, file_format):
+    # any JPMaQS file will do: stop at the first rather than listing them all
+    if not any(map(_is_jpmaqs_file, files_dir.glob(f"**/*.{file_format}"))):
         raise FileNotFoundError(
             f"No {file_format} files found in directory: {files_dir}"
         )
@@ -2936,13 +2970,15 @@ def _list_downloaded_files(files_dir: Path, file_format: str = "parquet") -> Lis
     assert files_dir.is_dir(), f"No such directory: {files_dir}"
     if file_format not in ["parquet", "csv", "json"]:
         raise ValueError("`file_format` must be one of 'parquet', 'csv', or 'json'.")
-    files = sorted(files_dir.glob(f"**/*.{file_format}"))
-    for f in files:
-        if not _is_jpmaqs_file(f):
+    jpmaqs_files = []
+    for f in sorted(files_dir.glob(f"**/*.{file_format}")):
+        if _is_jpmaqs_file(f):
+            jpmaqs_files.append(f)
+        else:
             logger.warning(
                 f"File is not a JPMaQS file and is not meant to be here: {f}"
             )
-    return [f for f in files if _is_jpmaqs_file(f)]
+    return jpmaqs_files
 
 
 def _downloaded_files_df(
@@ -2952,15 +2988,15 @@ def _downloaded_files_df(
 ) -> pd.DataFrame:
     if not Path(files_dir).is_dir():
         return pd.DataFrame(columns=["path", "file-name", "file-type", "dataset"])
-    files_list = _list_downloaded_files(files_dir, file_format)
+    # resolve the directory, not every file: per-file `resolve()` dominated the listing
+    files_list = _list_downloaded_files(Path(files_dir).resolve(), file_format)
     df = pd.DataFrame({"path": files_list})
     if df.empty:
         return df
-    df["path"] = df["path"].apply(lambda x: Path(x).resolve())
-    df["file-name"] = df["path"].apply(lambda x: Path(x).name)
+    df["file-name"] = df["path"].apply(lambda x: x.name)
     if not include_metadata_files:
         df = df[~df["file-name"].str.contains("_METADATA")].copy()
-    df["file-type"] = df["path"].apply(lambda x: Path(x).suffix.split(".")[-1])
+    df["file-type"] = df["path"].apply(lambda x: x.suffix.split(".")[-1])
 
     df["dataset"] = df["file-name"].apply(
         lambda x: str(x).split(".")[0].rsplit("_", 1)[0]
@@ -2970,13 +3006,13 @@ def _downloaded_files_df(
         lambda x: str(x).split(".")[0].rsplit("_", 1)[-1]
     )
 
-    def _dt_or_none(x):
-        try:
-            return pd_to_datetime_compat(x)
-        except Exception:
-            return None
-
-    df["file-timestamp"] = df["file-datetime"].apply(lambda x: _dt_or_none(x))
+    # one vectorised parse; names that are not timestamps become NaT and are dropped
+    df["file-timestamp"] = pd.to_datetime(
+        df["file-datetime"],
+        utc=True,
+        errors="coerce",
+        **({"format": "mixed"} if PD_2_0_OR_LATER else {}),
+    )
     df = df[~df["file-timestamp"].isnull()]
     df = df.reset_index(drop=True)
     return df
@@ -3037,6 +3073,7 @@ def lazy_load_from_parquets(
     categorical_source_file_column: bool = True,
     dropna: bool = True,
     files_list: Optional[List[str]] = None,
+    use_only_delta_files: bool = False,
 ) -> Union[pd.DataFrame, pl.DataFrame, pl.LazyFrame]:
     """
     Loads previously downloaded JPMaQS files into a single DataFrame.
@@ -3044,8 +3081,10 @@ def lazy_load_from_parquets(
     Scans the files of the latest snapshot found under `files_dir`, applies the ticker,
     date and metric filters while scanning, and only then materialises the result. The
     files on disk are never modified. Delta files are folded into the snapshot unless
-    `include_delta_files=False`. Metadata files are never read as data: the catalog is
-    passed separately as `catalog_path`, and the notification JSONs are served by
+    `include_delta_files=False`. `use_only_delta_files=True` instead reads every delta
+    file on disk, the full published history, and no snapshot. Metadata files are
+    never read as data: the catalog is passed separately as `catalog_path`, and the
+    notification JSONs are served by
     :func:`DataQueryFileAPIClient.get_missing_data_notifications` and
     :func:`DataQueryFileAPIClient.get_revisions_notifications`.
 
@@ -3094,6 +3133,7 @@ def lazy_load_from_parquets(
             "`catalog_path` is required. Use "
             "`DataQueryFileAPIClient.download_catalog_file()` to obtain one."
         )
+    _check_delta_file_flags(include_delta_files, use_only_delta_files)
     for flag, flag_name in [
         (include_source_file, "include_source_file"),
         (categorical_source_file_column, "categorical_source_file_column"),
@@ -3131,6 +3171,10 @@ def lazy_load_from_parquets(
             available_files_df["path"]
             .apply(_clean_str)
             .isin(map(_clean_str, files_list))
+        ]
+    elif use_only_delta_files:
+        available_files_df = available_files_df[
+            available_files_df["dataset"].str.endswith("_DELTA")
         ]
     else:
         available_files_df: pd.DataFrame = _filter_to_latest_files(
@@ -3536,6 +3580,15 @@ def _collect_naming_paths(
         if len(paths) > MAX_PATHS_IN_ERROR:
             shown.append(f"... and {len(paths) - MAX_PATHS_IN_ERROR} more")
         raise ValueError(f"Failed to load data from {shown}: {e}") from e
+
+
+def _check_delta_file_flags(include_delta_files: bool, use_only_delta_files: bool):
+    """Reading only the delta files and excluding them contradict each other."""
+    if use_only_delta_files and not include_delta_files:
+        raise ValueError(
+            "`use_only_delta_files=True` reads only the delta files, so it cannot be "
+            "combined with `include_delta_files=False`."
+        )
 
 
 def _delta_treatment_error() -> str:

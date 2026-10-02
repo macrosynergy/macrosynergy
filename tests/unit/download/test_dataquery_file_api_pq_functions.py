@@ -48,6 +48,7 @@ from macrosynergy.download.dataquery_file_api import (
     build_filtered_lazy_frames_df,
     get_jpmaqs_parquet_schema,
     lazy_load_from_parquets,
+    transform_delta_qdf_to_versions_matrix,
 )
 from macrosynergy.management.constants import JPMAQS_METRICS
 
@@ -939,6 +940,31 @@ class TestLazyLoadQdf(LazyLoadFixture):
         df = self.load(tickers=["USD_INFL"], files_list=[self.latest_delta.name])
         self.assertEqual(df["value"].to_list(), [9.9])
 
+    def test_use_only_delta_files_reads_every_delta_and_no_snapshot(self):
+        # a delta older than the latest snapshot, which a snapshot load leaves out
+        write_rows(
+            self.tmpdir / f"{MACRO_DS}_DELTA_20231231T235959.parquet",
+            ["USD_INFL"],
+            [D1],
+            [7.7],
+            [datetime.datetime(2023, 12, 31, 23)],
+        )
+        df = self.load(
+            tickers=["USD_INFL"],
+            use_only_delta_files=True,
+            delta_treatment="all",
+            dropna=False,
+        )
+        self.assertEqual(df["value"].to_list(), [7.7, 9.9])
+
+    def test_use_only_delta_files_with_include_delta_files_false_raises(self):
+        with self.assertRaises(ValueError):
+            self.load(
+                tickers=["USD_INFL"],
+                use_only_delta_files=True,
+                include_delta_files=False,
+            )
+
     def test_warns_on_polars_whose_parquet_reader_retains_memory(self):
         with patch(
             "macrosynergy.download.dataquery_file_api."
@@ -1401,6 +1427,35 @@ class TestLazyLoadValidation(LazyLoadFixture):
         self.assertEqual(tickers, ["USD_INFL"])
         self.assertEqual(metrics, ["value", "source_file"])
         self.assertEqual(JPMAQS_METRICS, constant)
+
+
+class TestVersionsMatrix(unittest.TestCase):
+    def setUp(self):
+        v1, v2 = pd.Timestamp("2024-01-01 10:00"), pd.Timestamp("2024-01-02 10:00")
+        self.df = pd.DataFrame(
+            {
+                "cid": ["USD"] * 3,
+                "xcat": ["INFL"] * 3,
+                "real_date": [D1, D1, D2],
+                "last_updated": [v1, v2, v2],
+                "value": [1.0, 1.5, 2.0],
+                "grading": [1.0, 2.0, None],
+            }
+        )
+
+    def test_any_metric_and_the_callers_frame_is_left_alone(self):
+        before = self.df.copy()
+        with self.assertWarns(UserWarning):
+            m = transform_delta_qdf_to_versions_matrix(self.df, metric="grading")
+        pd.testing.assert_frame_equal(self.df, before)
+        self.assertEqual(m.loc[D1].to_list(), [1.0, 2.0])
+        self.assertTrue(m.loc[D2].isna().all())
+
+    def test_value_is_the_default_metric(self):
+        with self.assertWarns(UserWarning):
+            m = transform_delta_qdf_to_versions_matrix(self.df)
+        self.assertEqual(m.loc[D1].to_list(), [1.0, 1.5])
+        self.assertEqual(m.loc[D2].to_list()[-1], 2.0)
 
 
 if __name__ == "__main__":
