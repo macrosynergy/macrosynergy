@@ -227,7 +227,11 @@ def _costs_heatmap(
     if show_as_bps:
         cbar_unit, annot, fmt = "bps", True, ".3f"
     else:
-        cbar_unit, annot, fmt = "% of trade size", data.map(lambda x: f"{x:.4f}%"), ""
+        cbar_unit, annot, fmt = (
+            "% of trade size",
+            data.apply(lambda col: col.map("{:.4f}%".format)),
+            "",
+        )
 
     sns.heatmap(
         data,
@@ -572,6 +576,7 @@ class TransactionCostsDictAdapter:
         title: str = "Implied bidoffer costs by ticket size",
         xlabel: str = "Fid",
         ylabel: str = "Ticket size (USD millions)",
+        fids: Optional[List[str]] = None,
         fid_names: Optional[Dict[str, str]] = None,
         figsize: Tuple[float, float] = (10, 5),
         show_as_bps: bool = False,
@@ -579,7 +584,7 @@ class TransactionCostsDictAdapter:
     ) -> None:
         _costs_heatmap(
             cost_calculator=self.bidoffer,
-            fids=self.fids,
+            fids=self.fids if fids is None else fids,
             trade_sizes=trade_sizes,
             fid_names=fid_names,
             title=title,
@@ -596,6 +601,7 @@ class TransactionCostsDictAdapter:
         title: str = "Implied roll costs by size",
         xlabel: str = "Fid",
         ylabel: str = "Roll size (USD millions)",
+        fids: Optional[List[str]] = None,
         fid_names: Optional[Dict[str, str]] = None,
         figsize: Tuple[float, float] = (10, 5),
         show_as_bps: bool = False,
@@ -603,7 +609,7 @@ class TransactionCostsDictAdapter:
     ) -> None:
         _costs_heatmap(
             cost_calculator=self.rollcost,
-            fids=self.fids,
+            fids=self.fids if fids is None else fids,
             trade_sizes=trade_sizes,
             fid_names=fid_names,
             title=title,
