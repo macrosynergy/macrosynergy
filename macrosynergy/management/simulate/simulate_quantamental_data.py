@@ -16,6 +16,10 @@ from macrosynergy.management.utils import (
     get_cid,
     get_xcat,
 )
+from macrosynergy.management.decorators import deprecate
+from macrosynergy.management.simulate.signals_and_returns import (
+    SignalsAndReturnsGenerator,
+)
 import contextlib
 import random
 
@@ -491,6 +495,14 @@ def make_test_df(
     return pd.concat(df_list).reset_index(drop=True)
 
 
+@deprecate(
+    new_func=SignalsAndReturnsGenerator,
+    deprecate_version="1.8.1",
+    message=(
+        "{old_method} was deprecated in version {deprecate_version} and will be "
+        "removed in a future release. Use {new_method} instead."
+    ),
+)
 def simulate_returns_and_signals(
     # n_cids: int = 4,
     cids=["AUD", "CAD", "GBP", "USD"],
