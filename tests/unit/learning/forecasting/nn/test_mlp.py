@@ -1036,6 +1036,103 @@ class TestMLPRegressor(unittest.TestCase):
         preds = model_low.predict(self.X)
         self.assertFalse(preds.isnull().values.any())
 
+    def test_types_fit_side(self):
+        """
+        Test `side` is checked for correctness: required when loss_func.side_inputs is
+        non-empty, rejected otherwise, and must be a multi-indexed frame like X carrying the
+        declared columns.
+        """
+        from macrosynergy.learning import NegThreeComponentLoss
+
+        side = pd.DataFrame({"disp_forecast": 1.0}, index=self.X.index)
+
+        # A loss that declares no side inputs must reject one being passed
+        plain_model = MLPRegressor(epochs=2, patience=None)
+        self.assertRaises(ValueError, plain_model.fit, X=self.X, y=self.y, side=side)
+
+        # A loss that declares side inputs must reject fit() without them
+        side_model = MLPRegressor(
+            epochs=2, patience=None, loss_func=NegThreeComponentLoss(dispersion_exponent=-1),
+        )
+        self.assertRaises(ValueError, side_model.fit, X=self.X, y=self.y)
+        self.assertRaises(ValueError, side_model.fit, X=self.X, y=self.y, side=None)
+
+        # side must be a frame, multi-indexed like X, carrying every declared column
+        self.assertRaises(TypeError, side_model.fit, X=self.X, y=self.y, side=side.values)
+        self.assertRaises(ValueError, side_model.fit, X=self.X, y=self.y, side=side.reset_index())
+        self.assertRaises(ValueError, side_model.fit, X=self.X, y=self.y, side=side.iloc[:-1])
+        self.assertRaises(
+            ValueError, side_model.fit, X=self.X, y=self.y, side=side.rename(columns={"disp_forecast": "other"})
+        )
+
+        # side is not supported alongside early stopping (patience is not None)
+        es_model = MLPRegressor(
+            epochs=2, patience=2, loss_func=NegThreeComponentLoss(dispersion_exponent=-1),
+        )
+        self.assertRaises(ValueError, es_model.fit, X=self.X, y=self.y, side=side)
+
+    def test_valid_fit_hands_vol_and_side_to_the_loss(self):
+        """
+        Test that `fit` hands the loss the `vol` tensor and a `side` tensor holding exactly the
+        declared columns in the declared order, whatever order and extra columns the frame
+        carries, batch-aligned with y.
+        """
+        seen = {}
+
+        class Recorder(nn.Module):
+            requires_vol = True
+            side_inputs = ("second", "first")
+
+            def forward(self, y_pred, y_true, vol=None, side=None):
+                seen.setdefault("shapes", set()).add((tuple(y_true.shape), tuple(vol.shape), tuple(side.shape)))
+                seen.setdefault("side", []).append(side.detach().clone())
+                return (y_pred ** 2).mean()
+
+        rng = np.random.default_rng(0)
+        side = pd.DataFrame(
+            {"first": rng.normal(size=len(self.X)) + 10, "second": rng.normal(size=len(self.X)) - 10, "extra": 0.0},
+            index=self.X.index,
+        )[["extra", "first", "second"]]
+        vol = self.y.abs() + 0.1
+        MLPRegressor(epochs=1, patience=None, loss_func=Recorder(), batch_size=len(self.X)).fit(
+            self.X, self.y, vol=vol, side=side
+        )
+        (y_shape, vol_shape, side_shape), = {shape for shape in seen["shapes"] if shape[0][0] == len(self.X)}
+        self.assertEqual(y_shape, vol_shape)
+        self.assertEqual(side_shape, (len(self.X), 2))
+        # Column 0 is "second" (about -10), column 1 is "first" (about +10): declared order, not the frame's
+        full = max(seen["side"], key=lambda t: t.shape[0])
+        self.assertLess(float(full[:, 0].mean()), -5)
+        self.assertGreater(float(full[:, 1].mean()), 5)
+
+    def test_valid_fit_side_inputs_change_the_fit(self):
+        """
+        Test that fitting with `NegThreeComponentLoss` and `side=` runs end to end with finite
+        parameters, and that the side series actually used affects the fit: months sized very
+        differently train a different head from months sized alike.
+        """
+        from macrosynergy.learning import NegThreeComponentLoss
+
+        rng = np.random.default_rng(3)
+        flat = pd.DataFrame({"disp_forecast": 1.0}, index=self.X.index)
+        varied = pd.DataFrame({"disp_forecast": np.exp(rng.normal(size=len(self.X)) * 2)}, index=self.X.index)
+        vol = self.y.abs() + 0.1
+
+        def fit(side):
+            return MLPRegressor(
+                epochs=60, learning_rate=1e-1, patience=None, random_state=1, batch_size=len(self.X),
+                loss_func=NegThreeComponentLoss(vol_exponent=1, dispersion_exponent=1, min_names=2),
+            ).fit(self.X, self.y, vol=vol, side=side)
+
+        model_flat, model_varied = fit(flat), fit(varied)
+        for model in (model_flat, model_varied):
+            for param in self.first_model(model).parameters():
+                self.assertFalse(torch.isnan(param).any())
+        head_flat = dict(self.first_model(model_flat).named_parameters())["head.0.weight"]
+        head_varied = dict(self.first_model(model_varied).named_parameters())["head.0.weight"]
+        self.assertFalse(torch.allclose(head_flat, head_varied))
+        self.assertFalse(model_flat.predict(self.X).isnull().values.any())
+
     def test_types_predict(self):
         model = MLPRegressor().fit(self.X, self.y)
         # Test type of 'X' parameter

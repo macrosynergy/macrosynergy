@@ -10,12 +10,14 @@ from .portfolio_losses import (
     NegSharpeRatio,
     NegSharpeRatioExAnteVol,
     NegMeanVarianceUtility,
+    NegMeanVarianceExAnteVol,
     NegMeanVarianceSkewnessUtility,
     NegMeanPortfolioReturn,
     PortfolioVariance,
 )
 
 from .bagging_losses import AssetBaggingLoss
+from .component_losses import NegThreeComponentLoss
 from .ranking_losses import (
     NegCrossSectionalIC,
     NegRankIC,
@@ -39,12 +41,14 @@ __all__ = [
     "NegSharpeRatio",
     "NegSharpeRatioExAnteVol",
     "NegMeanVarianceUtility",
+    "NegMeanVarianceExAnteVol",
     "NegMeanVarianceSkewnessUtility",
     "NegMeanPortfolioReturn",
     "PortfolioVariance",
     "AssetBaggingLoss",
     "NegCrossSectionalIC",
     "NegRankIC",
+    "NegThreeComponentLoss",
     "RankingRiskLoss",
     "GaussianNLL",
     "ActiveWeightModule",
