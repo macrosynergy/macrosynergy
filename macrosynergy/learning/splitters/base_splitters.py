@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import datetime
 
+from pandas.core.dtypes.common import is_datetime64_any_dtype
 from sklearn.model_selection import (
     BaseCrossValidator,
 )
@@ -333,11 +334,12 @@ class BasePanelSplit(BaseCrossValidator, ABC):
                 raise ValueError(
                     "The input data must have string outer index representing panel cross-sections."
                 )
-            if X.index.get_level_values(1).dtype != "datetime64[ns]":
+            inner_index = X.index.get_level_values(1)
+            if not is_datetime64_any_dtype(inner_index.dtype):
                 raise ValueError(
-                    "The input data must have datetime inner index representing timestamps as datetime64[ns]."
+                    "The input data must have a datetime inner index representing "
+                    "timestamps."
                 )
-
 
 class WalkForwardPanelSplit(BasePanelSplit, ABC):
     """

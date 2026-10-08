@@ -4,6 +4,7 @@ import pandas as pd
 from sklearn.base import BaseEstimator, RegressorMixin, clone 
 from sklearn.model_selection import GridSearchCV
 from sklearn.metrics import r2_score, make_scorer, check_scoring
+from sklearn.pipeline import Pipeline
 from sklearn.utils.validation import check_X_y, check_array, check_is_fitted
 from sklearn.model_selection import BaseCrossValidator
 
@@ -59,7 +60,13 @@ class ModelAveragingRegressor(BaseEstimator, RegressorMixin):
     detrimental trading signals, simply by flickering between similar models across time 
     periods, even if those models have very similar out-of-sample performance. The dynamics
     caused by this model selection overfitting impacts the stability of the trading signal,
-    not to mention transaction costs. 
+    not to mention transaction costs.
+
+    If every model with positive weight exposes a `coef_` attribute, the ensemble's
+    `coef_` is the weighted average of these coefficients. Similarly, if every such
+    model exposes a `feature_importances_` attribute, the ensemble's
+    `feature_importances_` is their weighted average. For pipelines, the attribute of
+    the final estimator is used, with features dropped by earlier steps assigned zero.
     """
     def __init__(
         self,
@@ -126,7 +133,8 @@ class ModelAveragingRegressor(BaseEstimator, RegressorMixin):
             self.multi_output_ = False
             self.targets_ = None
 
-        # TODO: feature importances should be the weighted average of the feature importances of each model, if available. 
+        # Coefficients and feature importances are weighted averages over the models
+        self._set_feature_importances(X)
 
         return self
     
@@ -216,7 +224,74 @@ class ModelAveragingRegressor(BaseEstimator, RegressorMixin):
             adjusted_weights = weights
 
         return dict(zip(self.model_names_, adjusted_weights))
-    
+
+    def _set_feature_importances(self, X):
+        """
+        Set coef_ and feature_importances_ as the weighted averages of the
+        corresponding attributes of the models. Each attribute is only set
+        when every model provides it.
+        """
+        # Remove values from a previous fit
+        for attr in ["coef_", "feature_importances_"]:
+            self.__dict__.pop(attr, None)
+
+        if isinstance(X, pd.DataFrame):
+            feature_names = X.columns.tolist()
+        else:
+            feature_names = [f"x{i}" for i in range(X.shape[1])]
+
+        active_models = [name for name in self.model_names_ if self.weights_[name] > 0]
+        if len(active_models) == 0:
+            return
+
+        weights = np.array([self.weights_[name] for name in active_models])
+
+        for attr in ["coef_", "feature_importances_"]:
+            values = [
+                self._get_aligned_attr(self.best_estimators_[name], attr, feature_names)
+                for name in active_models
+            ]
+            if any(value is None for value in values):
+                continue
+            if len(set(value.shape for value in values)) > 1:
+                continue
+
+            setattr(self, attr, np.average(np.stack(values), axis=0, weights=weights))
+
+    def _get_aligned_attr(self, estimator, attr, feature_names):
+        """
+        Return the attribute `attr` of a fitted model, aligned to the features the
+        ensemble was fit on. Features dropped within a pipeline are assigned zero.
+        Returns None if the attribute is unavailable or cannot be aligned.
+        """
+        if isinstance(estimator, Pipeline) and len(estimator) > 1:
+            final_estimator = estimator[-1]
+            feature_names_getter = getattr(estimator[-2], "get_feature_names_out", None)
+            if feature_names_getter is None:
+                return None
+            model_features = list(feature_names_getter())
+        elif isinstance(estimator, Pipeline):
+            final_estimator = estimator[-1]
+            model_features = feature_names
+        else:
+            final_estimator = estimator
+            model_features = feature_names
+
+        value = getattr(final_estimator, attr, None)
+        if value is None:
+            return None
+
+        value = np.asarray(value, dtype=float)
+        if value.ndim == 0 or value.shape[-1] != len(model_features):
+            return None
+        if not set(model_features).issubset(feature_names):
+            return None
+
+        aligned = np.zeros(value.shape[:-1] + (len(feature_names),))
+        aligned[..., [feature_names.index(ftr) for ftr in model_features]] = value
+
+        return aligned
+
     def _check_init_params(
         self,
         estimators,
@@ -256,8 +331,9 @@ class ModelAveragingRegressor(BaseEstimator, RegressorMixin):
                     "hyperparameters for GridSearchCV. Got {} instead.".format(type(param_grid))
                 )
             # check param_grid keys are valid for the estimator
-            for param in param_grid.keys():
-                if not hasattr(estimator, param):
+            valid_params = estimator.get_params(deep=True)
+            for param in param_grid:
+                if param not in valid_params:
                     raise ValueError(
                         "The hyperparameter '{}' is not valid for the estimator '{}'. "
                         "Check the estimator's documentation.".format(param, name)
