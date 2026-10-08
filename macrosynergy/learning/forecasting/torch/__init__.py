@@ -18,6 +18,7 @@ from .losses import (
 )
 from .modules import (
     LongShortModule,
+    ConstrainedLongOnlyModule,
     SwiGLU
 )
 
@@ -35,5 +36,6 @@ __all__ = [
     "NegSharpeRatio",
     # modules
     "LongShortModule",
+    "ConstrainedLongOnlyModule",
     "SwiGLU",
 ]

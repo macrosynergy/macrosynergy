@@ -50,6 +50,7 @@ def __getattr__(name):
         "NegMeanPortfolioReturn",
         "NegSharpeRatio",
         "LongShortModule",
+        "ConstrainedLongOnlyModule",
     }
     _nn_names = {
         "MLPRegressor",
@@ -65,6 +66,7 @@ def __getattr__(name):
             NegMeanPortfolioReturn,
             NegSharpeRatio,
             LongShortModule,
+            ConstrainedLongOnlyModule,
             SwiGLU,
         )
         return locals()[name]
@@ -108,6 +110,7 @@ __all__ = [
     "NegSharpeRatio",
     "MLPRegressor",
     "LongShortModule",
+    "ConstrainedLongOnlyModule",
     "SwiGLU",
     "LarsSurrogateModel",
 ]

@@ -88,6 +88,7 @@ def __getattr__(name):
         "NegSharpeRatio",
         "MLPRegressor",
         "LongShortModule",
+        "ConstrainedLongOnlyModule",
         "SwiGLU",
     }
     if name in _torch_names:
@@ -185,6 +186,7 @@ __all__ = [
     "NegMeanVarianceUtility",
     "NegSharpeRatio",
     "LongShortModule",
+    "ConstrainedLongOnlyModule",
     "SwiGLU",
     # model selection
     "ModelAveragingRegressor",
