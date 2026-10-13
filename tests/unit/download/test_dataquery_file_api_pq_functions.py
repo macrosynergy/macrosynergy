@@ -1287,8 +1287,17 @@ class TestLazyLoadExpiredRows(LazyLoadFixture):
 
     def test_all_with_dropna_raises_rather_than_resurrecting_the_stale_row(self):
         with self.assertRaises(ValueError) as ctx:
-            self.load(tickers=["EUR_INFL"], delta_treatment="all")
+            self.load(tickers=["EUR_INFL"], delta_treatment="all", dropna=True)
         self.assertIn("stale value", str(ctx.exception))
+
+    def test_dropna_defaults_to_false_under_all_and_true_otherwise(self):
+        self.expire(["EUR_INFL"])
+        pd.testing.assert_frame_equal(
+            self.load(tickers=["EUR_INFL"], delta_treatment="all"),
+            self.load(tickers=["EUR_INFL"], delta_treatment="all", dropna=False),
+        )
+        # the expiry is the surviving "latest" row, and the default drops it
+        self.assertEqual(len(self.load(tickers=["EUR_INFL"])), 0)
 
     def test_wide_rejects_all_even_when_no_delta_makes_it_fail_yet(self):
         # without a delta the pivot would succeed, so the guard has to be unconditional:
