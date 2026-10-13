@@ -95,7 +95,6 @@ published one. `delta_treatment="all"` keeps every version instead, so the same
             cids=["AUD", "CAD"],
             xcats=["EQXR_NSA"],
             delta_treatment="all",
-            dropna=False,
         )
 
 
@@ -118,8 +117,8 @@ Reading that output:
 - Rows 4 and 5 have one version each, and look exactly as they do by default.
 
 Rows are ordered by `cid`, `xcat` (or `ticker`), `real_date`, then `last_updated`, so each
-observation reads oldest first. `dropna=False` is required here, as the all-NaN metrics
-rows are the record of removal.
+observation reads oldest first. With "all", `dropna` defaults to False, as the all-NaN
+metrics rows are the record of removal; passing `dropna=True` with "all" raises.
 
 
 **Example 4: Download all new or updated delta-files since a specific date/time.**
@@ -2092,7 +2091,7 @@ class DataQueryFileAPIClient:
         include_delta_files: bool = True,
         delta_treatment: str = "latest",
         include_source_file: bool = False,
-        dropna: bool = True,
+        dropna: Optional[bool] = None,
         datasets: Optional[List[str]] = None,
         categorical_source_file_column: bool = True,
         files_list: Optional[List[str]] = None,
@@ -2141,7 +2140,7 @@ class DataQueryFileAPIClient:
         overwrite: bool = False,
         keep_n_days_old_files: Optional[int] = 0,
         include_source_file: bool = False,
-        dropna: bool = True,
+        dropna: Optional[bool] = None,
         datasets: Optional[List[str]] = None,
         categorical_source_file_column: bool = True,
         suppress_warning: bool = False,
@@ -2199,16 +2198,16 @@ class DataQueryFileAPIClient:
         delta_treatment : str
             How rows restated by a delta file are resolved, per (ticker, real_date):
             "latest" (the default) keeps the row with the newest `last_updated`,
-            "earliest" the oldest, and "all" keeps every version. "all" requires
-            `dropna=False`, and cannot be used with `dataframe_format="wide"`.
+            "earliest" the oldest, and "all" keeps every version. "all" keeps the
+            nulls too (see `dropna`), and cannot be used with `dataframe_format="wide"`.
         use_only_delta_files: bool
             If True, the data is loaded from every delta file of the relevant datasets,
             their full published history, instead of from the latest full snapshot plus
             its delta files. Every missing delta file since the start of JPMaQS is
             downloaded first; full snapshots are neither downloaded nor read, and
             `keep_n_days_old_files` is ignored. Rows are still resolved by
-            `delta_treatment` and `dropna`: pass `delta_treatment="all"` and
-            `dropna=False` to get every published version of every row. As the history
+            `delta_treatment` and `dropna`: pass `delta_treatment="all"` to get every
+            published version of every row. As the history
             is rebuilt from the deltas, it can hold early rows that upstream has since
             cut from the full snapshot without publishing an expiry for them.
             Cannot be combined with `include_delta_files=False`. Default is False.
@@ -2236,8 +2235,12 @@ class DataQueryFileAPIClient:
             (default), no source file information is included.
 
             Default is False.
-        dropna : bool
-            If True (the default), no null reaches the output: a row is kept only where
+        dropna : Optional[bool]
+            If None (the default), resolves to True, except under
+            `delta_treatment="all"`, where it resolves to False: there the all-null
+            expiry rows are the record of what was withdrawn. Passing `dropna=True`
+            together with `delta_treatment="all"` raises a ValueError.
+            If True, no null reaches the output: a row is kept only where
             every requested metric is populated. That drops expiry rows - JPMaQS withdraws
             a (ticker, real_date) observation by publishing one whose metrics are all null,
             which under `delta_treatment="latest"` is the row that survives - and equally
@@ -2924,8 +2927,8 @@ def _check_lazy_load_inputs(
         raise ValueError(
             "`dropna=True` cannot be combined with `delta_treatment='all'`: dropping "
             "the expiry rows would leave the very rows they expire, so an expired "
-            "observation would reappear with its stale value. Pass `dropna=False` to "
-            "keep the full restatement history."
+            "observation would reappear with its stale value. Leave `dropna` unset, "
+            "or pass `dropna=False`, to keep the full restatement history."
         )
 
 
@@ -3071,7 +3074,7 @@ def lazy_load_from_parquets(
     catalog_path: Optional[Union[str, Path]] = None,
     include_source_file: bool = False,
     categorical_source_file_column: bool = True,
-    dropna: bool = True,
+    dropna: Optional[bool] = None,
     files_list: Optional[List[str]] = None,
     use_only_delta_files: bool = False,
 ) -> Union[pd.DataFrame, pl.DataFrame, pl.LazyFrame]:
@@ -3100,13 +3103,15 @@ def lazy_load_from_parquets(
     "latest" (default) keeps the newest `last_updated`; "earliest" the first print, which
     skips expiry rows, a withdrawal not being a print; "all" keeps every version.
 
-    `dropna=True` (default) means no null reaches the output: a row survives only where
+    `dropna=None` (default) resolves to True, except under "all", where it resolves to
+    False. `dropna=True` means no null reaches the output: a row survives only where
     every requested metric is populated. That covers expiry rows - an observation is
     withdrawn by publishing one whose metrics are all null - and any other row null in a
     requested metric. It is applied after delta resolution, so an expiry still supersedes
-    the row it withdraws. "all" requires `dropna=False`, as dropping the nulls while keeping
-    the rows they expire would resurrect stale values, and cannot be combined with
-    `dataframe_format="wide"`, which has only one cell per (ticker, real_date).
+    the row it withdraws. "all" with an explicit `dropna=True` raises, as dropping the
+    nulls while keeping the rows they expire would resurrect stale values. "all" cannot
+    be combined with `dataframe_format="wide"`, which has only one cell per
+    (ticker, real_date).
 
     `dataframe_format` chooses the shape:
 
@@ -3134,6 +3139,10 @@ def lazy_load_from_parquets(
             "`DataQueryFileAPIClient.download_catalog_file()` to obtain one."
         )
     _check_delta_file_flags(include_delta_files, use_only_delta_files)
+    # None drops the nulls, except under "all", whose expiry rows are its record
+    # of removal. Only an explicit `dropna=True` with "all" is an error
+    if dropna is None:
+        dropna = delta_treatment != "all"
     for flag, flag_name in [
         (include_source_file, "include_source_file"),
         (categorical_source_file_column, "categorical_source_file_column"),
