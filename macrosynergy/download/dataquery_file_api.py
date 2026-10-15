@@ -252,7 +252,7 @@ JPMAQS_DATASET_THEME_MAPPING = {
 }
 
 
-JPMAQS_EARLIEST_FILE_DATE = "20220101"
+JPMAQS_EARLIEST_FILE_DATE = "20230101"
 
 logger = logging.getLogger(__name__)
 
@@ -486,9 +486,10 @@ class DataQueryFileAPIClient:
         """
         url = f"{self.base_url}{endpoint}"
         headers = self.oauth.get_headers()
-        for _ in range(retries):
+        request = f"GET {endpoint} with params {params}"
+        for attempt in range(1, retries + 1):
             try:
-                return request_wrapper(
+                payload = request_wrapper(
                     method="GET",
                     url=url,
                     headers=headers,
@@ -498,12 +499,32 @@ class DataQueryFileAPIClient:
                     api_delay=DQ_FILE_API_DELAY_PARAM,
                     verify_ssl=self.verify_ssl,
                 )
+                break
             except Exception as e:
-                logger.error(f"Error occurred during GET request: {e}")
-                if _ == retries - 1:
-                    raise
-                logger.info(f"Retrying... ({_ + 1}/{retries})")
-                time.sleep(2**_)
+                # e.g. "HTTP 504" or "ReadTimeout"; request_wrapper chains the original
+                status = getattr(
+                    getattr(e.__cause__, "response", None), "status_code", None
+                )
+                kind = f"HTTP {status}" if status else type(e.__cause__ or e).__name__
+                if attempt == retries:
+                    raise DownloadError(
+                        f"{request} failed with {kind} after {retries} attempts. "
+                        f"Last error: {e}"
+                    ) from e
+                logger.warning(
+                    f"{request} failed with {kind} (attempt {attempt}/{retries}); "
+                    "retrying."
+                )
+                time.sleep(2 ** (attempt - 1))
+        # the API can report a rejected request in a 200 response body
+        if isinstance(payload, dict) and payload.get("errors"):
+            errors = "; ".join(
+                f"{e.get('code')}: {e.get('message')}" for e in payload["errors"]
+            )
+            raise InvalidResponseError(
+                f"DataQuery File API rejected {request}: {errors}"
+            )
+        return payload
 
     def list_groups(self) -> pd.DataFrame:
         """
@@ -614,6 +635,7 @@ class DataQueryFileAPIClient:
             The start date for the search in "YYYYMMDD" format.
         end_date : str
             The end date for the search in "YYYYMMDD" format. Defaults to today.
+            Ranges longer than 365 days are fetched as concurrent 365-day windows.
         convert_metadata_timestamps : bool
             If True, convert timestamp columns to datetime objects.
         include_unavailable : bool
@@ -626,17 +648,38 @@ class DataQueryFileAPIClient:
         """
         if end_date is None:
             end_date = utc_now().strftime("%Y%m%d")
+        start, end = (pd_to_datetime_compat(d).date() for d in (start_date, end_date))
         endpoint = "/group/files/available-files"
-        params = {
-            "group-id": group_id,
-            "start-date": start_date,
-            "end-date": end_date,
-        }
+        params = {"group-id": group_id}
         if file_group_id is not None:
             params["file-group-id"] = file_group_id
-        _wait_for_api_call(1)
-        payload = self._get(endpoint, params)
-        df = pd.json_normalize(payload, record_path=["available-files"])
+
+        def _list_files_in_window(
+            window: Tuple[datetime.date, datetime.date],
+        ) -> List[Dict]:
+            from_date, to_date = (d.strftime("%Y%m%d") for d in window)
+            _wait_for_api_call(1)
+            payload = self._get(
+                endpoint, {**params, "start-date": from_date, "end-date": to_date}
+            )
+            return payload["available-files"]
+
+        # no request may span the earliest file date: DQ drops the dates before it
+        earliest_file_date = pd_to_datetime_compat(JPMAQS_EARLIEST_FILE_DATE).date()
+        request_windows = _split_date_range(
+            start, min(end, earliest_file_date - datetime.timedelta(days=1))
+        ) + _split_date_range(max(start, earliest_file_date), end)
+        with cf.ThreadPoolExecutor() as executor:
+            records = [
+                file
+                for files in executor.map(_list_files_in_window, request_windows)
+                for file in files
+            ]
+        if not records:  # an empty range is valid; return an empty listing
+            return pd.DataFrame(
+                columns=["file-group-id", "file-name", "file-datetime", "last-modified"]
+            )
+        df = pd.json_normalize(records)
 
         if "file-datetime" not in df.columns:
             raise InvalidResponseError(
@@ -807,8 +850,9 @@ class DataQueryFileAPIClient:
         filter_date = since_ts.normalize()
 
         # Using DQ's internal filtering does not work as expected for JPMaQS end users,
-        # hence filtering is done locally instead of passing API parameters.
+        # hence filtering is done locally; `start_date` only trims dates it would drop.
         files_df = self.list_available_files_for_all_file_groups(
+            start_date=filter_date.strftime("%Y%m%d"),
             include_full_snapshots=include_full_snapshots,
             include_delta=include_delta,
             include_metadata=include_metadata,
@@ -1126,7 +1170,11 @@ class DataQueryFileAPIClient:
         timeout: Optional[float] = DQ_FILE_API_TIMEOUT,
     ) -> str:
         """Downloads the latest JPMaQS metadata catalog file and returns its path."""
-        available_catalogs = self.list_available_files(self.catalog_file_group_id)
+        # a catalog is listed for every date and each serves the current one
+        available_catalogs = self.list_available_files(
+            self.catalog_file_group_id,
+            start_date=(utc_now() - pd.Timedelta(31, unit="D")).strftime("%Y%m%d"),
+        )
         if available_catalogs.empty:
             raise DownloadError("No catalog files available for download.")
         latest_catalog = available_catalogs.sort_values(
@@ -1886,9 +1934,11 @@ class DataQueryFileAPIClient:
         List[str]
             The list of files downloaded.
         """
+        # a month, or 2 calendar days per retained snapshot to span weekends and holidays
+        lookback_days = max(31, 2 * (keep_n_days_old_files or 0))
         files_df = self._add_snap_date_column(
             self.filter_available_files_by_datetime(
-                since_datetime=JPMAQS_EARLIEST_FILE_DATE,
+                since_datetime=utc_now() - pd.Timedelta(lookback_days, unit="D"),
                 include_delta=True,
                 include_full_snapshots=True,
                 include_metadata=True,
@@ -2284,6 +2334,20 @@ def large_delta_file_datetimes(as_str: bool = True) -> List[str]:
     return [d.strftime("%Y%m%dT%H%M%S") for d in dt_list]
 
 
+def _split_date_range(
+    start: datetime.date, end: datetime.date, max_days: int = 365
+) -> List[Tuple[datetime.date, datetime.date]]:
+    """
+    Split `start`..`end` (inclusive) into consecutive windows of at most `max_days`
+    dates, the longest range the DataQuery File API accepts in one request.
+    """
+    day = datetime.timedelta(days=1)
+    return [
+        (start + d * day, min(start + (d + max_days - 1) * day, end))
+        for d in range(0, (end - start).days + 1, max_days)
+    ]
+
+
 def _ordered_date_range(
     start_date: Optional[Union[str, pd.Timestamp]],
     end_date: Optional[Union[str, pd.Timestamp]],
@@ -2437,7 +2501,7 @@ class SegmentedFileDownloader:
             self.temp_dir.mkdir(exist_ok=True, parents=True)
 
             total_size = self._get_file_size()
-            self.log(f"File size: {total_size / (1024*1024):.2f} MB")
+            self.log(f"File size: {total_size / (1024 * 1024):.2f} MB")
 
             chunk_size = int(self.segment_size_mb * 1024 * 1024)
             chunks = range(0, total_size, chunk_size)
@@ -2575,7 +2639,7 @@ class SegmentedFileDownloader:
                 with open(part_path, "rb") as part_file:
                     shutil.copyfileobj(part_file, final_file)
         final_size = final_path.stat().st_size
-        self.log(f"Assembled file size: {final_size / (1024*1024):.2f} MB")
+        self.log(f"Assembled file size: {final_size / (1024 * 1024):.2f} MB")
         self.cleanup()
 
     def cleanup(self):
