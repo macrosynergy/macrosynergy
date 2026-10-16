@@ -1,3 +1,4 @@
+import datetime
 import os
 import unittest
 import warnings
@@ -19,6 +20,7 @@ from macrosynergy.download.dataquery_file_api import (
     InvalidResponseError,
     DQ_FILE_API_SCOPE,
     _resolve_base_url,
+    _split_date_range,
     DQ_FILE_API_BASE_URL,
     DQ_FILE_API_FALLBACK_BASE_URL,
 )
@@ -74,6 +76,52 @@ class TestStandaloneFunctions(unittest.TestCase):
 
         mock_getenv.side_effect = lambda key: None
         self.assertEqual(get_client_id_secret(), (None, None))
+
+
+class TestSplitDateRange(unittest.TestCase):
+    """The DataQuery File API accepts at most 365 dates per available-files request."""
+
+    D = datetime.date
+
+    def test_single_day(self):
+        d = self.D(2024, 1, 1)
+        self.assertEqual(_split_date_range(d, d), [(d, d)])
+
+    def test_reversed_range_is_empty(self):
+        self.assertEqual(_split_date_range(self.D(2024, 1, 2), self.D(2024, 1, 1)), [])
+
+    def test_windows_hold_at_most_max_days_dates(self):
+        self.assertEqual(
+            _split_date_range(self.D(2024, 1, 1), self.D(2024, 1, 7), max_days=3),
+            [
+                (self.D(2024, 1, 1), self.D(2024, 1, 3)),
+                (self.D(2024, 1, 4), self.D(2024, 1, 6)),
+                (self.D(2024, 1, 7), self.D(2024, 1, 7)),
+            ],
+        )
+
+    def test_365_dates_fit_one_window_but_a_leap_year_does_not(self):
+        self.assertEqual(
+            _split_date_range(self.D(2023, 1, 1), self.D(2023, 12, 31)),
+            [(self.D(2023, 1, 1), self.D(2023, 12, 31))],
+        )
+        self.assertEqual(
+            _split_date_range(self.D(2024, 1, 1), self.D(2024, 12, 31)),
+            [
+                (self.D(2024, 1, 1), self.D(2024, 12, 30)),
+                (self.D(2024, 12, 31), self.D(2024, 12, 31)),
+            ],
+        )
+
+    def test_windows_tile_a_long_range_without_gaps_or_overlaps(self):
+        start, end = self.D(2022, 1, 1), self.D(2026, 10, 13)
+        windows = _split_date_range(start, end)
+        self.assertEqual(windows[0][0], start)
+        self.assertEqual(windows[-1][1], end)
+        for (_, prev_end), (next_start, _) in zip(windows, windows[1:]):
+            self.assertEqual(next_start - prev_end, datetime.timedelta(days=1))
+        for window_start, window_end in windows:
+            self.assertLessEqual((window_end - window_start).days + 1, 365)
 
 
 class TestDataQueryFileAPIClient(unittest.TestCase):
@@ -155,10 +203,28 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
         self.assertEqual(response, {"key": "value"})
         self.assertEqual(mock_request_wrapper.call_count, 2)
 
-        mock_request_wrapper.side_effect = [Exception("API error")] * 2
-        with self.assertRaises(Exception):
-            client._get("/test", retries=2)
+        # request_wrapper raises a plain Exception chained to the HTTPError
+        http_error = requests.exceptions.HTTPError(response=MagicMock(status_code=504))
+        timeout = Exception("API error")
+        timeout.__cause__ = http_error
+        mock_request_wrapper.side_effect = [timeout] * 2
+        with self.assertRaisesRegex(
+            DownloadError,
+            r"GET /test with params \{'start-date': '20220101'\} failed with "
+            "HTTP 504 after 2 attempts",
+        ):
+            client._get("/test", {"start-date": "20220101"}, retries=2)
         self.assertEqual(mock_request_wrapper.call_count, 4)
+
+        # a rejected request comes back as a 200 with an "errors" body: no retry
+        mock_request_wrapper.side_effect = [
+            {"errors": [{"code": "400", "message": "start-date must be yyyyMMdd"}]}
+        ]
+        with self.assertRaisesRegex(
+            InvalidResponseError, "/test.*400: start-date must be yyyyMMdd"
+        ):
+            client._get("/test", retries=2)
+        self.assertEqual(mock_request_wrapper.call_count, 5)
 
     @patch.object(DataQueryFileAPIClient, "_get")
     def test_list_and_search_groups(self, mock_get):
@@ -250,7 +316,9 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
             ]
         }
         client.list_available_files(file_group_id="test_id")
-        self.assertEqual(mock_get.call_args[0][1]["end-date"], "20230102")
+        # windows are requested concurrently, so do not rely on call order
+        end_dates = [c[0][1]["end-date"] for c in mock_get.call_args_list]
+        self.assertEqual(max(end_dates), "20230102")
 
     @patch.object(DataQueryFileAPIClient, "_get")
     def test_list_available_files_include_unavailable(self, mock_get):
@@ -271,17 +339,20 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
                 },
             ]
         }
+        # a one-day range is a single request, so the mocked page is not repeated
+        one_day = dict(start_date="20230102", end_date="20230102")
         df = client.list_available_files(
-            file_group_id="test_id", include_unavailable=True
+            file_group_id="test_id", include_unavailable=True, **one_day
         )
         self.assertEqual(len(df), 2)
         df_available = client.list_available_files(
-            file_group_id="test_id", include_unavailable=False
+            file_group_id="test_id", include_unavailable=False, **one_day
         )
         self.assertEqual(len(df_available), 1)
 
+    @patch("macrosynergy.download.dataquery_file_api._wait_for_api_call")
     @patch.object(DataQueryFileAPIClient, "_get")
-    def test_list_available_files_invalid_response(self, mock_get):
+    def test_list_available_files_invalid_response(self, mock_get, _):
         client = DataQueryFileAPIClient(
             client_id="id", client_secret="secret", out_dir=self.test_dir
         )
@@ -298,6 +369,76 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
         with self.assertRaises(InvalidResponseError):
             # missing "last-modified"
             client.list_available_files(file_group_id="test_id")
+
+    @patch("macrosynergy.download.dataquery_file_api._wait_for_api_call")
+    @patch.object(DataQueryFileAPIClient, "_get")
+    def test_list_available_files_sweeps_long_ranges(self, mock_get, _):
+        def one_file_per_window(endpoint, params):
+            d = params["start-date"]
+            return {
+                "available-files": [
+                    {
+                        "file-name": f"FG_{d}.parquet",
+                        "file-datetime": d,
+                        "last-modified": f"{d}T070000",
+                        "is-available": True,
+                    }
+                ]
+            }
+
+        mock_get.side_effect = one_file_per_window
+        client = _make_client(self.test_dir)
+        df = client.list_available_files(
+            file_group_id="FG", start_date="20210601", end_date="20241231"
+        )
+        params = [c[0][1] for c in mock_get.call_args_list]
+        # 365-day windows, with a break at 2023-01-01 that no window may cross
+        self.assertEqual(
+            sorted((p["start-date"], p["end-date"]) for p in params),
+            [
+                ("20210601", "20220531"),
+                ("20220601", "20221231"),
+                ("20230101", "20231231"),
+                ("20240101", "20241230"),
+                ("20241231", "20241231"),
+            ],
+        )
+        self.assertEqual({p["file-group-id"] for p in params}, {"FG"})
+        # pages are merged and sorted newest first, whatever order they arrived in
+        self.assertEqual(
+            df["file-datetime"].dt.strftime("%Y%m%d").tolist(),
+            ["20241231", "20240101", "20230101", "20220601", "20210601"],
+        )
+
+        # ranges on one side of 2023-01-01 are not split there
+        for start, end in [("20220301", "20221231"), ("20230101", "20230301")]:
+            mock_get.reset_mock()
+            client.list_available_files(
+                file_group_id="FG", start_date=start, end_date=end
+            )
+            (call,) = mock_get.call_args_list
+            self.assertEqual(
+                (call[0][1]["start-date"], call[0][1]["end-date"]), (start, end)
+            )
+
+    @suppress_logging
+    @patch("macrosynergy.download.dataquery_file_api._wait_for_api_call")
+    @patch.object(DataQueryFileAPIClient, "_get", return_value={"available-files": []})
+    def test_empty_listing_is_not_an_error(self, mock_get, _):
+        # e.g. asking for today's files before they are published
+        client = _make_client(self.test_dir)
+        df = client.list_available_files(start_date="20230101", end_date="20230101")
+        self.assertTrue(df.empty)
+        self.assertLessEqual(
+            {"file-name", "file-group-id", "file-datetime", "last-modified"},
+            set(df.columns),
+        )
+        # and the callers that narrow the range cope with it
+        self.assertTrue(
+            client.filter_available_files_by_datetime(since_datetime="20230101").empty
+        )
+        self.assertEqual(client.download_files(show_progress=False), [])
+        self.assertEqual(client.download_latest_files(show_progress=False), [])
 
     @patch.object(DataQueryFileAPIClient, "list_available_files")
     @patch.object(DataQueryFileAPIClient, "list_group_files")
@@ -361,6 +502,8 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
         )
         self.assertEqual(filtered_df["file-name"].tolist(), ["f3", "f2"])
         mock_list_all_files.assert_called_once()
+        # the listing is only requested from the first date the filter keeps
+        self.assertEqual(mock_list_all_files.call_args[1]["start_date"], "20230102")
 
     @patch("macrosynergy.download.dataquery_file_api.logger")
     @patch("macrosynergy.download.dataquery_file_api.utc_now")
@@ -382,6 +525,8 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
         )
         mock_logger.warning.assert_called_once()
         self.assertIn("Swapping values", mock_logger.warning.call_args[0][0])
+        # the listing starts from the earlier bound, after the swap
+        self.assertEqual(mock_list_all_files.call_args[1]["start_date"], "20230102")
 
     @patch.object(DataQueryFileAPIClient, "_get")
     def test_check_file_availability(self, mock_get):
@@ -619,9 +764,13 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
             )
         mock_executor.shutdown.assert_called_once_with(wait=False, cancel_futures=True)
 
+    @patch(
+        "macrosynergy.download.dataquery_file_api.utc_now",
+        return_value=pd.Timestamp("2025-03-01", tz="UTC"),
+    )
     @patch.object(DataQueryFileAPIClient, "download_file")
     @patch.object(DataQueryFileAPIClient, "list_available_files")
-    def test_download_catalog_file(self, mock_list_files, mock_download):
+    def test_download_catalog_file(self, mock_list_files, mock_download, _):
         client = DataQueryFileAPIClient(
             client_id="id", client_secret="secret", out_dir=self.test_dir
         )
@@ -640,6 +789,8 @@ class TestDataQueryFileAPIClient(unittest.TestCase):
         # The catalog is downloaded as-is; nothing is read/converted/mutated on disk.
         path = client.download_catalog_file(overwrite=True)
         self.assertEqual(path, fake_path_str)
+        # only the last month is listed, not every date back to 2023
+        self.assertEqual(mock_list_files.call_args[1]["start_date"], "20250129")
         mock_download.assert_called_once_with(
             filename="CATALOG_20230102.parquet",
             overwrite=True,
@@ -2130,6 +2281,30 @@ class TestDownloadLatestSnapshot(unittest.TestCase):
         self.assertEqual(res, [])
         mdl.assert_not_called()
         mclean.assert_not_called()
+
+    @suppress_logging
+    @patch(
+        "macrosynergy.download.dataquery_file_api.utc_now",
+        return_value=pd.Timestamp("2026-10-13T08:00:00Z"),
+    )
+    def test_lookback_reaches_the_retained_snapshots(self, mock_now):
+        # a month, or 2 calendar days per retained snapshot once that is longer;
+        # None or negative retains nothing extra
+        empty = pd.DataFrame(columns=["file-name", "file-group-id", "file-datetime"])
+        for keep, days in [(None, 31), (-1, 31), (0, 31), (2, 31), (16, 32), (40, 80)]:
+            with self.subTest(keep_n_days_old_files=keep):
+                with patch.object(
+                    self.client,
+                    "filter_available_files_by_datetime",
+                    return_value=empty,
+                ) as mfilter:
+                    self.client.download_latest_files(
+                        keep_n_days_old_files=keep, show_progress=False
+                    )
+                self.assertEqual(
+                    mfilter.call_args[1]["since_datetime"],
+                    mock_now.return_value - pd.Timedelta(days, unit="D"),
+                )
 
 
 class TestDownloadLatestSnapshotPrune(unittest.TestCase):
