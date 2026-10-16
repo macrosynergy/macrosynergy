@@ -1,5 +1,7 @@
+import importlib
 import inspect as _inspect_st
 import unittest
+from unittest import mock
 import unittest as _ut_st
 import pandas as pd
 import warnings
@@ -35,6 +37,7 @@ from macrosynergy.management.utils import (
     estimate_release_frequency,
     Timer,
     rotate_cid_xcat,
+    global_skip_visuals_flag,
 )
 from macrosynergy.management.utils.core import split_ticker as _split_ticker
 from macrosynergy.management.utils.df_utils import (
@@ -42,7 +45,7 @@ from macrosynergy.management.utils.df_utils import (
     _wide_to_long,
     concat_categorical,
 )
-from macrosynergy.management.constants import FREQUENCY_MAP
+from macrosynergy.management.constants import FREQUENCY_MAP, SKIP_VISUALS_ENV_VAR
 from macrosynergy.management.utils.math import expanding_mean_with_nan
 from macrosynergy.compat import PD_NEW_DATE_FREQ
 from tests.simulate import make_qdf
@@ -2074,6 +2077,51 @@ class TestConcatCategorical(unittest.TestCase):
         self.assertEqual(set(result["xcat"].unique()), {"XR", "CRY"})
         for col in ["cid", "xcat"]:
             self.assertEqual(result[col].dtype.name, "category")
+
+
+class TestSkipVisuals(unittest.TestCase):
+    def test_flag(self):
+        with mock.patch.dict("os.environ", clear=True):
+            self.assertFalse(global_skip_visuals_flag())
+        for val, expected in [("true", True), (" TRUE ", True), ("false", False)]:
+            with mock.patch.dict("os.environ", {SKIP_VISUALS_ENV_VAR: val}):
+                with mock.patch("builtins.print") as mock_print:
+                    self.assertEqual(global_skip_visuals_flag(), expected)
+                self.assertEqual(mock_print.called, expected)
+
+    @parameterized.expand(
+        [
+            ("macrosynergy.visuals", "timelines"),
+            ("macrosynergy.visuals", "view_panel_dates"),
+            ("macrosynergy.visuals", "view_grades"),
+            ("macrosynergy.visuals", "view_metrics"),
+            ("macrosynergy.visuals", "view_ranges"),
+            ("macrosynergy.visuals", "view_availability"),
+            ("macrosynergy.visuals", "view_table"),
+            ("macrosynergy.visuals", "view_weights"),
+            ("macrosynergy.management", "check_availability"),
+            ("macrosynergy.management", "visual_paneldates"),
+            ("macrosynergy.panel", "view_timelines"),
+            ("macrosynergy.panel", "view_metrics"),
+            # wrapper uses `len(xcats)` before delegating to msv.view_ranges
+            ("macrosynergy.panel", "view_ranges", {"xcats": ["XR"]}),
+            ("macrosynergy.panel.view_grades", "heatmap_grades"),
+        ]
+    )
+    def test_short_path(self, module, name, overrides=None):
+        # All required args are None: only the skip short-path can return cleanly.
+        func = getattr(importlib.import_module(module), name)
+        kwargs = {
+            k: None
+            for k, v in _inspect_st.signature(func).parameters.items()
+            if v.default is _inspect_st.Parameter.empty
+        }
+        kwargs.update(overrides or {})
+        with mock.patch.dict("os.environ", {SKIP_VISUALS_ENV_VAR: "true"}):
+            with mock.patch("builtins.print") as mock_print:
+                self.assertIsNone(func(**kwargs))
+        mock_print.assert_called_once()
+        self.assertIn(SKIP_VISUALS_ENV_VAR, mock_print.call_args[0][0])
 
 
 if __name__ == "__main__":

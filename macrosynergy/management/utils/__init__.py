@@ -13,6 +13,7 @@ from .core import (
     rec_search_dict,
     Timer,
     check_package_version,
+    global_skip_visuals_flag,
 )
 
 
@@ -127,4 +128,5 @@ __all__ = [
     "forward_fill_wide_df",
     # Frequency
     "infer_release_frequency",
+    "global_skip_visuals_flag",
 ]
