@@ -112,8 +112,11 @@ class RandomEffects(BaseEstimator):
         neffects = alpha.shape[0]
         nvars = df_x.shape[1]
 
-        # Idiosyncratic variance
-        sigma2_e = float(np.squeeze(eps.T @ eps)) / (nobs - nvars - neffects + 1)
+        # Idiosyncratic variance. The within regression estimates no coefficient for
+        # the constant, so it only uses up a degree of freedom without one.
+        sigma2_e = float(np.squeeze(eps.T @ eps)) / (
+            nobs - nvars - neffects + int(self.fit_intercept)
+        )
 
         obs_counts = np.asarray(df_y.groupby(level=self.group_col).count())
         obs_harmonic_mean = neffects / ((1.0 / obs_counts)).sum()

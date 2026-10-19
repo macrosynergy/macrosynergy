@@ -3,9 +3,9 @@ name: Run Notebooks
 on:
   workflow_dispatch:
 
-  pull_request:
-    branches:
-      - main
+  # pull_request:
+  #   branches:
+  #     - main
 
 permissions:
   id-token: write # This is required for aws oidc connection
