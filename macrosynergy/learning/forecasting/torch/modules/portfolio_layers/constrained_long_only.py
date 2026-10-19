@@ -19,6 +19,11 @@ class ConstrainedLongOnlyModule(nn.Module):
     Whilst this can be used as a standalone layer, this has been designed to be used as
     the final layer of a neural network to ensure that the outputs can be interpreted as 
     fractions of capital allocated to a collection of assets.
+
+    Future work
+    -----------
+    - Add a cardinality constraint
+    - Possible differentiable surrogate for easier optimization
     """
     def __init__(self, concentration_bound = 0.2):
         super().__init__()
