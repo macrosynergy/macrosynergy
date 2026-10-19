@@ -37,10 +37,33 @@ class TestConstrainedLongOnly(unittest.TestCase):
         try:
             module = ConstrainedLongOnlyModule(concentration_bound=0.5)
         except Exception as e:
-            self.fail(f"Initialization failed with exception: {e}")
+            self.fail(f"Initialization failed with dexception: {e}")
 
         self.assertIsInstance(module, ConstrainedLongOnlyModule)
         self.assertEqual(module.concentration_bound, 0.5)
 
     def test_valid_forward(self):
-        pass
+        """
+        Test that the forward pass produces valid portfolio weights.
+        """
+        # Default initialization
+        module = ConstrainedLongOnlyModule()
+        x = torch.randn(10, 6)  # batch of 10 samples, 6 assets
+        weights = module(x)
+        self.assertTrue(torch.all(weights >= 0))
+        self.assertTrue(torch.all(weights <= module.concentration_bound))
+        self.assertTrue(torch.allclose(weights.sum(dim=-1), torch.ones(10)))
+
+        # Custom initialization
+        module = ConstrainedLongOnlyModule(concentration_bound=0.5)
+        x = torch.randn(10, 5)  # batch of 10 samples, 5 assets
+        weights = module(x)
+        self.assertTrue(torch.all(weights >= 0))
+        self.assertTrue(torch.all(weights <= module.concentration_bound))
+        self.assertTrue(torch.allclose(weights.sum(dim=-1), torch.ones(10)))
+
+        # If the concentration bound is too small for the number of assets, it should raise a ValueError
+        with self.assertRaises(ValueError):
+            module = ConstrainedLongOnlyModule(concentration_bound=0.1)
+            x = torch.randn(10, 5)
+            weights = module(x)
