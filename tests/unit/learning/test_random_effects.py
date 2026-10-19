@@ -1,8 +1,10 @@
 import unittest
 
+import linearmodels
 import numpy as np
 import pandas as pd
 from linearmodels.panel import RandomEffects as lm_RandomEffects
+from packaging.version import Version
 from scipy.stats import expon
 from sklearn.base import BaseEstimator
 from statsmodels.tools.tools import add_constant
@@ -97,6 +99,10 @@ class TestRandomEffects(unittest.TestCase):
             re.fit(X, self.y)
 
 
+    @unittest.skipIf(
+        Version(linearmodels.__version__) < Version("7.1"),
+        "linearmodels < 7.1 overcounts the within degrees of freedom without a constant",
+    )
     def test_fit_no_intercept(self):
         """Test fit method with no intercept against linearmodels implementation"""
         re = RandomEffects(fit_intercept=False, group_col="real_date")
@@ -110,7 +116,14 @@ class TestRandomEffects(unittest.TestCase):
         self.assertTrue(np.allclose(re.residuals, lm_re._resids, atol=1e-3))
         self.assertTrue(np.allclose(re.std_errors.values, lm_re.std_errors.values, atol=1e-3))
 
-        
+    def test_fit_no_intercept_true_params(self):
+        """Test fit method with no intercept recovers the true coefficients"""
+        re = RandomEffects(fit_intercept=False, group_col="real_date")
+        re.fit(self.X, self.y)
+
+        self.assertTrue(np.allclose(re.params.values, [1, 2, -1], atol=0.1))
+        self.assertTrue(np.all(np.isfinite(re.std_errors.values)))
+
     def test_fit_with_intercept(self):
         """Test fit method with intercept against linearmodels implementation"""
         re = RandomEffects(fit_intercept=True, group_col="real_date")
