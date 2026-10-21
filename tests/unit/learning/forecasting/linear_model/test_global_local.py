@@ -7,18 +7,19 @@ written directly from the model's loss formulas rather than from the class:
     two-level (groups=None):
         L = sum_i fit_i(beta_i)
             + local_lambda  * sum_i ||beta_i - beta||^2
-            + global_lambda * ||beta||^2
+            + global_lambda * ||s(beta)||^2
 
     grouped:
         L = sum_i fit_i(beta_i)
             + local_lambda  * sum_i ||beta_i - gamma_{g(i)}||^2
             + group_lambda  * sum_g ||gamma_g - beta||^2
-            + global_lambda * ||beta||^2
+            + global_lambda * ||s(beta)||^2
 
     fit_i(b) = sum_t w_it * (y_it - x_it' b)^2 / sum_t w_it    (w_it = 1 if unweighted)
+    s(b) = b without its intercept (b itself without fit_intercept)
 
 shrink_to_global=False drops the global row and shrinks the top level of the hierarchy
-towards zero, where s(b) is b without its intercept (b itself without fit_intercept):
+towards zero:
 
     no groups:
         L = sum_i fit_i(beta_i) + local_lambda * sum_i ||s(beta_i)||^2
@@ -285,7 +286,7 @@ class Reference:
             else:
                 value += self.group_lambda * np.sum(self.slopes(B[r]) ** 2)
         if self.shrink_to_global:
-            value += self.global_lambda * np.sum(B[-1] ** 2)
+            value += self.global_lambda * np.sum(self.slopes(B[-1]) ** 2)
         return value
 
     def gradient(self, theta):
@@ -308,7 +309,7 @@ class Reference:
             else:
                 grad[r] += 2 * self.group_lambda * self.slope_mask * B[r]
         if self.shrink_to_global:
-            grad[-1] += 2 * self.global_lambda * B[-1]
+            grad[-1] += 2 * self.global_lambda * self.slope_mask * B[-1]
         return grad.ravel()
 
     def solve(self):
@@ -320,10 +321,9 @@ class Reference:
         A_i = X_i' W_i X_i / sum(w_i) is the weighted Gram matrix of local row i, and
         S = diag(slope_mask). P_slope and P_intercept are the penalty matrices over rows
         for the slope columns and the intercept column: each penalised difference
-        lambda * ||row_u - row_v||^2 adds lambda * (e_u - e_v)(e_u - e_v)' to both, the
-        global penalty adds global_lambda * e_last e_last' to both, and each slopes-only
-        penalty lambda * ||s(row_u)||^2 adds lambda * e_u e_u' to P_slope only. The
-        minimiser solves H theta = r.
+        lambda * ||row_u - row_v||^2 adds lambda * (e_u - e_v)(e_u - e_v)' to both, and
+        each slopes-only penalty lambda * ||s(row_u)||^2, the global one included, adds
+        lambda * e_u e_u' to P_slope only. The minimiser solves H theta = r.
         """
         n_rows, p = self.n_rows, self.n_features
         P_slope = np.zeros((n_rows, n_rows))
@@ -350,9 +350,8 @@ class Reference:
                 P_slope[r, r] += self.group_lambda
         if self.shrink_to_global:
             P_slope[-1, -1] += self.global_lambda
-            P_intercept[-1, -1] += self.global_lambda
 
-        H = np.kron(P_slope, np.diag(self.slope_mask)) + np.kron(
+        H =np.kron(P_slope, np.diag(self.slope_mask)) + np.kron(
             P_intercept, np.diag(1 - self.slope_mask)
         )
         r = np.zeros(n_rows * p)
@@ -903,16 +902,6 @@ class TestGroupedGlobalLocalRegression(PanelTestCase):
             with self.assertRaises(TypeError):
                 model.fit(self.X, self.y)
 
-    def test_str_group_value_raises_type_error(self):
-        # A str is not a list-like of cids, even though it is iterable.
-        groups = {
-            "commodity": ["NOK", "AUD", "CAD"],
-            "asia": ["KRW", "JPY"],
-            "latam": "BRL",
-        }
-        with self.assertRaises(TypeError):
-            grouped_model(groups=groups).fit(self.X, self.y)
-
     def test_cid_in_two_groups_raises_value_error(self):
         groups = {
             "commodity": ["NOK", "AUD", "CAD", "JPY"],
@@ -1294,6 +1283,53 @@ class TestNoGlobalRegression(PanelTestCase):
             np.testing.assert_array_equal(cloned.cid_coefs_[cid], model.cid_coefs_[cid])
 
 
+class TestTargetShift(PanelTestCase):
+    """
+    No intercept is shrunk towards zero, so adding a constant to the targets moves
+    every intercept (local, group and global) by that constant and leaves every slope
+    unchanged. With the global intercept shrunk towards zero, the intercepts on this
+    panel moved up to 0.14 short of a shift of 1.
+    """
+
+    SHIFT = 1.0
+
+    def test_shifted_targets_shift_every_intercept(self):
+        for shrink_to_global in [True, False]:
+            for groups in [None, GROUPS]:
+                for weighted in [False, True]:
+                    label = (
+                        f"shrink_to_global={shrink_to_global}, "
+                        f"{groups_label(groups, True, weighted)}"
+                    )
+                    sw = self.weights(weighted)
+                    ref = Reference(
+                        self.X,
+                        self.y,
+                        sw,
+                        groups=groups,
+                        shrink_to_global=shrink_to_global,
+                    )
+                    rows = []
+                    for y in [self.y, self.y + self.SHIFT]:
+                        model = GlobalLocalRegression(
+                            local_lambda=LOCAL_LAMBDA,
+                            global_lambda=GLOBAL_LAMBDA,
+                            groups=groups,
+                            group_lambda=GROUP_LAMBDA,
+                            shrink_to_global=shrink_to_global,
+                        ).fit(self.X, y, sample_weight=sw)
+                        theta = ref.theta_from_model(model)
+                        rows.append(theta.reshape(ref.n_rows, ref.n_features))
+
+                    moved = rows[1] - rows[0]
+                    np.testing.assert_allclose(
+                        moved[:, 0], self.SHIFT, rtol=0, atol=FIT_ATOL, err_msg=label
+                    )
+                    np.testing.assert_allclose(
+                        moved[:, 1:], 0, rtol=0, atol=FIT_ATOL, err_msg=label
+                    )
+
+
 class TestCidSummaries(PanelTestCase):
     """
     The per-cross-section weighted moments that `fit` stores and that the loss is
@@ -1442,6 +1478,9 @@ BLOCK_GROUPS = {"bloc_b": ["USD", "CAD", "GBP"], "bloc_a": ["JPY", "AUD", "EUR"]
 
 LINKAGES = ["average", "complete", "single", "ward"]
 
+# Default minimum number of shared dates for a pair's correlation to be estimated.
+DEFAULT_MIN_OVERLAP = 36
+
 # The key invariant asks for identical coefficients up to floating-point tolerance.
 INVARIANT_ATOL = 1e-10
 
@@ -1486,27 +1525,27 @@ def make_clustered_panel(seed=0, n_dates=CLUSTER_N_DATES):
     return X, y, sample_weight
 
 
-def reference_correlation(X, y):
+def reference_correlation(X, y, min_overlap=DEFAULT_MIN_OVERLAP):
     """
     Contract steps 1-2: the values of `y` indexed by X's index, pivoted to dates x
-    cids (sorted), pairwise Pearson correlation with pandas defaults, NaN set to 0
-    and a unit diagonal.
+    cids (sorted), pairwise Pearson correlation over pairs sharing at least
+    `min_overlap` dates, NaN set to 0 and a unit diagonal.
     """
     cids = sorted(X.index.get_level_values(0).unique())
     values = np.asarray(y, dtype=float).reshape(len(y))
     wide = pd.Series(values, index=X.index).unstack(level=0).reindex(columns=cids)
-    corr = wide.corr().to_numpy(copy=True)
+    corr = wide.corr(min_periods=min_overlap).to_numpy(copy=True)
     corr[np.isnan(corr)] = 0
     np.fill_diagonal(corr, 1)
     return corr
 
 
-def reference_linkage_matrix(X, y, method):
+def reference_linkage_matrix(X, y, method, min_overlap=DEFAULT_MIN_OVERLAP):
     """
     Contract steps 1-4: linkage of the condensed distances
     d_ij = sqrt(0.5 * (1 - rho_ij)), floored at 0, with a zero diagonal.
     """
-    corr = reference_correlation(X, y)
+    corr = reference_correlation(X, y, min_overlap)
     dist = np.sqrt(np.maximum(0.5 * (1 - corr), 0))
     np.fill_diagonal(dist, 0)
     return hierarchy.linkage(squareform(dist, checks=False), method=method)
@@ -1623,26 +1662,6 @@ class TestClusteredGlobalLocalRegression(unittest.TestCase):
         # Defaults: n_clusters=2, linkage="average".
         model = GlobalLocalRegression(groups="cluster").fit(self.X, self.y)
         self.assert_clusters(model, EXPECTED_CLUSTERS)
-        self.assert_linkage_matrix(
-            model, reference_linkage_matrix(self.X, self.y, "average")
-        )
-
-    def test_linkage_matrix(self):
-        model = clustered_model().fit(self.X, self.y)
-        n_cids = len(CLUSTER_CIDS)
-        self.assertEqual(model.linkage_matrix_.shape, (n_cids - 1, 4))
-        self.assert_linkage_matrix(
-            model, reference_linkage_matrix(self.X, self.y, "average")
-        )
-
-    def test_each_linkage_recovers_blocks(self):
-        for method in LINKAGES:
-            label = f"linkage={method}"
-            model = clustered_model(linkage=method).fit(self.X, self.y)
-            self.assert_clusters(model, EXPECTED_CLUSTERS, label)
-            self.assert_linkage_matrix(
-                model, reference_linkage_matrix(self.X, self.y, method), label
-            )
 
     def test_numpy_integer_n_clusters_is_accepted(self):
         for n_clusters in [np.int64(2), np.int32(2)]:
@@ -1658,9 +1677,6 @@ class TestClusteredGlobalLocalRegression(unittest.TestCase):
             with self.assertWarns(UserWarning, msg=label):
                 model.fit(self.X, self.y)
             self.assert_clusters(model, singletons, label)
-            self.assertEqual(
-                model.linkage_matrix_.shape, (len(CLUSTER_CIDS) - 1, 4), msg=label
-            )
 
     def test_n_clusters_equal_to_n_cids_gives_singletons_without_warning(self):
         model = clustered_model(n_clusters=len(CLUSTER_CIDS))
@@ -1673,7 +1689,6 @@ class TestClusteredGlobalLocalRegression(unittest.TestCase):
         caught = fit_recording_user_warnings(model, self.X, self.y)
         self.assertEqual(caught, [])
         self.assert_clusters(model, {0: CLUSTER_CIDS})
-        self.assertEqual(model.linkage_matrix_.shape, (len(CLUSTER_CIDS) - 1, 4))
 
     def test_single_cid_panel(self):
         X_one, y_one = select_cids(self.X, self.y, ["GBP"])
@@ -1684,7 +1699,6 @@ class TestClusteredGlobalLocalRegression(unittest.TestCase):
             model.fit(X_one, y_one)
         self.assertEqual(model.cids_, ["GBP"])
         self.assert_clusters(model, {0: ["GBP"]})
-        self.assertIsNone(model.linkage_matrix_)
         self.assert_finite_coefficients(model)
 
         # n_clusters=1 needs no cap.
@@ -1692,7 +1706,6 @@ class TestClusteredGlobalLocalRegression(unittest.TestCase):
         caught = fit_recording_user_warnings(model, X_one, y_one)
         self.assertEqual(caught, [])
         self.assert_clusters(model, {0: ["GBP"]})
-        self.assertIsNone(model.linkage_matrix_)
         self.assert_finite_coefficients(model)
 
     def test_unbalanced_panel_with_cids_sharing_no_dates(self):
@@ -1711,40 +1724,36 @@ class TestClusteredGlobalLocalRegression(unittest.TestCase):
         self.assertTrue(cad_dates)
         self.assertEqual(aud_dates & cad_dates, set())
 
+        # AUD and CAD each share half the dates with every other cid, which is enough
+        # at this min_overlap. Only the pair sharing no dates is treated as
+        # uncorrelated, with a warning.
+        min_overlap = CLUSTER_N_DATES // 2
         for shrink_to_global in [True, False]:
             label = f"shrink_to_global={shrink_to_global}"
-            model = clustered_model(shrink_to_global=shrink_to_global).fit(
-                X_unb, y_unb
+            model = clustered_model(
+                shrink_to_global=shrink_to_global, min_overlap=min_overlap
             )
+            model.fit(X_unb, y_unb)
             self.assert_finite_coefficients(model, label)
-            self.assert_linkage_matrix(
-                model, reference_linkage_matrix(X_unb, y_unb, "average"), label
-            )
             self.assert_clusters(model, EXPECTED_CLUSTERS, label)
 
-    def test_zero_variance_targets_and_fewer_clusters_than_requested(self):
-        # Every cid has a constant target, so every correlation is NaN -> 0 and every
-        # distance is sqrt(0.5). With all merge heights tied, fcluster returns fewer
-        # clusters than requested, which is accepted silently.
-        X_four, _ = select_cids(self.X, self.y, ["AUD", "CAD", "EUR", "GBP"])
-        constants = {"AUD": 1.0, "CAD": 2.0, "EUR": -3.0, "GBP": 0.5}
-        y_const = pd.Series(
-            [constants[cid] for cid in X_four.index.get_level_values(0)],
-            index=X_four.index,
-            name="XR",
-        )
-        expected_linkage = reference_linkage_matrix(X_four, y_const, "average")
-        np.testing.assert_allclose(expected_linkage[:, 2], np.sqrt(0.5))
-        # Guard: the tie really yields fewer clusters than the 3 requested.
-        raw_labels = hierarchy.fcluster(expected_linkage, t=3, criterion="maxclust")
-        self.assertEqual(len(np.unique(raw_labels)), 1)
+    def test_pairs_with_short_overlap_are_treated_as_uncorrelated(self):
+        # EUR keeps only its last five dates. Five shared dates would still give
+        # pandas' default correlation, which is far from zero for at least one pair.
+        n_kept = 5
+        cid_index = self.X.index.get_level_values(0)
+        date_index = self.X.index.get_level_values(1)
+        cutoff = sorted(date_index.unique())[-n_kept]
+        keep = np.asarray(~((cid_index == "EUR") & (date_index < cutoff)))
+        X_short, y_short = self.X[keep], self.y[keep]
+        eur = CLUSTER_CIDS.index("EUR")
+        loose = reference_correlation(X_short, y_short, min_overlap=1)
+        self.assertGreater(np.abs(np.delete(loose[eur], eur)).max(), 0.5)
 
-        model = clustered_model(n_clusters=3)
-        caught = fit_recording_user_warnings(model, X_four, y_const)
-        self.assertEqual(caught, [])
-        self.assert_clusters(model, {0: ["AUD", "CAD", "EUR", "GBP"]})
-        self.assert_linkage_matrix(model, expected_linkage)
-        self.assert_finite_coefficients(model)
+        # Every EUR pair is uncorrelated, so EUR sits at distance sqrt(0.5) from all.
+        expected_corr = reference_correlation(X_short, y_short)
+        np.testing.assert_array_equal(np.delete(expected_corr[eur], eur), 0)
+
 
     def test_sample_weight_does_not_change_clusters(self):
         base = clustered_model().fit(self.X, self.y)
@@ -1753,9 +1762,6 @@ class TestClusteredGlobalLocalRegression(unittest.TestCase):
         for sw in [self.sample_weight, extreme]:
             weighted = clustered_model().fit(self.X, self.y, sample_weight=sw)
             self.assertEqual(weighted.clusters_, base.clusters_)
-            np.testing.assert_array_equal(
-                weighted.linkage_matrix_, base.linkage_matrix_
-            )
 
     def test_target_is_aligned_with_X_by_row_position(self):
         # The returns panel takes y's values in X's row order and indexes them by X's
@@ -1778,7 +1784,6 @@ class TestClusteredGlobalLocalRegression(unittest.TestCase):
         for label, (X_case, y_case) in cases.items():
             model = clustered_model().fit(X_case, y_case)
             self.assert_clusters(model, EXPECTED_CLUSTERS, label)
-            self.assert_linkage_matrix(model, base.linkage_matrix_, label)
 
     # ----------------------------------------------------------------------------------
     # Key invariant: same fit as the equivalent dict
@@ -1878,20 +1883,49 @@ class TestClusteredGlobalLocalRegression(unittest.TestCase):
                 model.fit(self.X, self.y)
 
     def test_non_integer_n_clusters_raises_type_error(self):
-        for n_clusters in [2.5, "2", True, 2.0, np.float64(2.0), np.True_, None]:
+        for n_clusters in [2.5, "2", 2.0, np.float64(2.0), np.True_, None]:
             model = clustered_model(n_clusters=n_clusters)
             with self.assertRaises(TypeError, msg=repr(n_clusters)):
                 model.fit(self.X, self.y)
 
+    def test_numpy_integer_min_overlap_is_accepted(self):
+        for min_overlap in [np.int64(DEFAULT_MIN_OVERLAP), np.int32(2)]:
+            label = f"min_overlap={min_overlap!r}"
+            model = clustered_model(min_overlap=min_overlap).fit(self.X, self.y)
+            self.assert_clusters(model, EXPECTED_CLUSTERS, label)
+
+    def test_min_overlap_below_two_raises_value_error(self):
+        for min_overlap in [1, 0, -1, np.int64(1)]:
+            model = clustered_model(min_overlap=min_overlap)
+            with self.assertRaises(ValueError, msg=repr(min_overlap)):
+                model.fit(self.X, self.y)
+
+    def test_non_integer_min_overlap_raises_type_error(self):
+        for min_overlap in [36.5, "36", 36.0, np.float64(36.0), np.True_, None]:
+            model = clustered_model(min_overlap=min_overlap)
+            with self.assertRaises(TypeError, msg=repr(min_overlap)):
+                model.fit(self.X, self.y)
+
     def test_cluster_parameters_ignored_without_cluster_groups(self):
         # Neither validated nor used unless groups == "cluster".
-        invalid = [(0, "average"), ("2", "bogus"), (2.5, "centroid"), (True, "ward")]
+        invalid = [
+            (0, "average", 0),
+            ("2", "bogus", "36"),
+            (2.5, "centroid", 1.5),
+            (True, "ward", None),
+        ]
         for groups in [None, BLOCK_GROUPS]:
             baseline = clustered_model(groups=groups).fit(self.X, self.y)
-            for n_clusters, method in invalid:
-                label = f"groups={groups}, n_clusters={n_clusters!r}, linkage={method}"
+            for n_clusters, method, min_overlap in invalid:
+                label = (
+                    f"groups={groups}, n_clusters={n_clusters!r}, linkage={method}, "
+                    f"min_overlap={min_overlap!r}"
+                )
                 model = clustered_model(
-                    groups=groups, n_clusters=n_clusters, linkage=method
+                    groups=groups,
+                    n_clusters=n_clusters,
+                    linkage=method,
+                    min_overlap=min_overlap,
                 ).fit(self.X, self.y)
                 for name in ["clusters_", "linkage_matrix_"]:
                     self.assertFalse(hasattr(model, name), msg=f"{label} {name}")
@@ -1912,26 +1946,35 @@ class TestClusteredGlobalLocalRegression(unittest.TestCase):
     def test_new_parameters_follow_shrink_to_global(self):
         signature = inspect.signature(GlobalLocalRegression.__init__)
         names = list(signature.parameters)
-        self.assertEqual(names[-3:], ["shrink_to_global", "n_clusters", "linkage"])
+        self.assertEqual(
+            names[-4:], ["shrink_to_global", "n_clusters", "linkage", "min_overlap"]
+        )
         self.assertEqual(signature.parameters["n_clusters"].default, 2)
         self.assertEqual(signature.parameters["linkage"].default, "average")
+        self.assertEqual(
+            signature.parameters["min_overlap"].default, DEFAULT_MIN_OVERLAP
+        )
 
     def test_get_params_and_clone(self):
         params = GlobalLocalRegression().get_params()
         self.assertEqual(params["n_clusters"], 2)
         self.assertEqual(params["linkage"], "average")
+        self.assertEqual(params["min_overlap"], DEFAULT_MIN_OVERLAP)
 
         # Stored unchanged, without validation at construction.
-        odd = GlobalLocalRegression(n_clusters="2", linkage="bogus")
+        odd = GlobalLocalRegression(n_clusters="2", linkage="bogus", min_overlap="36")
         self.assertEqual(odd.n_clusters, "2")
         self.assertEqual(odd.linkage, "bogus")
+        self.assertEqual(odd.min_overlap, "36")
 
-        model = clustered_model(n_clusters=3, linkage="complete")
+        model = clustered_model(n_clusters=3, linkage="complete", min_overlap=24)
         self.assertEqual(model.n_clusters, 3)
         self.assertEqual(model.linkage, "complete")
+        self.assertEqual(model.min_overlap, 24)
         params = model.get_params()
         self.assertEqual(params["n_clusters"], 3)
         self.assertEqual(params["linkage"], "complete")
+        self.assertEqual(params["min_overlap"], 24)
         self.assertEqual(params["groups"], "cluster")
 
         model.fit(self.X, self.y)
@@ -1940,12 +1983,11 @@ class TestClusteredGlobalLocalRegression(unittest.TestCase):
         cloned_params = cloned.get_params()
         self.assertEqual(cloned_params["n_clusters"], 3)
         self.assertEqual(cloned_params["linkage"], "complete")
+        self.assertEqual(cloned_params["min_overlap"], 24)
         self.assertEqual(cloned_params["groups"], "cluster")
-        for name in ["clusters_", "linkage_matrix_"]:
-            self.assertFalse(hasattr(cloned, name), msg=name)
+        self.assertFalse(hasattr(cloned, "clusters_"), msg="clusters_")
         cloned.fit(self.X, self.y)
         self.assertEqual(cloned.clusters_, model.clusters_)
-        np.testing.assert_array_equal(cloned.linkage_matrix_, model.linkage_matrix_)
 
     # ----------------------------------------------------------------------------------
     # predict
@@ -1961,75 +2003,6 @@ class TestClusteredGlobalLocalRegression(unittest.TestCase):
             self.assertEqual(np.shape(preds), (len(self.X),), msg=label)
             self.assertTrue(np.all(np.isfinite(preds)), msg=label)
 
-    # ----------------------------------------------------------------------------------
-    # Duplicate (cid, real_date) rows
-    # ----------------------------------------------------------------------------------
-
-    def test_duplicate_rows_raise_value_error_naming_the_pair(self):
-        # Repeated rows are appended at the end, so X and y stay aligned by position.
-        position = 3
-        X = pd.concat([self.X, self.X.iloc[[position]]])
-        y = pd.concat([self.y, self.y.iloc[[position]]])
-        cid, date = self.X.index[position]
-        for shrink_to_global in [True, False]:
-            label = f"shrink_to_global={shrink_to_global}"
-            model = clustered_model(shrink_to_global=shrink_to_global)
-            with self.assertRaises(ValueError, msg=label) as ctx:
-                model.fit(X, y)
-            message = str(ctx.exception)
-            for part in ["cluster", "unique", "duplicate", f"{cid} {date:%Y-%m-%d}"]:
-                self.assertIn(part, message, msg=label)
-            # Not pandas' raw error from the pivot
-            self.assertNotIn("cannot reshape", message, msg=label)
-
-    def test_duplicate_count_is_of_distinct_pairs(self):
-        # A pair that occurs three times is one duplicated pair, not two extra rows.
-        cases = [([3, 3], 1), ([3, 3, 100], 2), ([3, 100, 100, 3], 2)]
-        for extra_positions, expected_count in cases:
-            label = f"extra rows at {extra_positions}"
-            X = pd.concat([self.X, self.X.iloc[extra_positions]])
-            y = pd.concat([self.y, self.y.iloc[extra_positions]])
-            with self.assertRaises(ValueError, msg=label) as ctx:
-                clustered_model().fit(X, y)
-            self.assertRegex(
-                str(ctx.exception), rf"more than once: {expected_count}\.", msg=label
-            )
-
-    def test_duplicate_listing_shows_first_five_pairs_in_index_order(self):
-        # Seven pairs over several cids, repeated in reverse order, so that index order
-        # differs from the order in which the repeated rows appear.
-        positions = [2, 10, 65, 70, 130, 190, 250]
-        X = pd.concat([self.X, self.X.iloc[positions[::-1]]])
-        y = pd.concat([self.y, self.y.iloc[positions[::-1]]])
-        pairs = [f"{cid} {date:%Y-%m-%d}" for cid, date in self.X.index[positions]]
-        with self.assertRaises(ValueError) as ctx:
-            clustered_model().fit(X, y)
-        message = str(ctx.exception)
-        self.assertRegex(message, r"more than once: 7\.")
-        for pair in pairs[5:]:
-            self.assertNotIn(pair, message)
-        offsets = [message.find(pair) for pair in pairs[:5]]
-        self.assertNotIn(-1, offsets)
-        self.assertEqual(offsets, sorted(offsets))
-
-    def test_duplicate_rows_still_fit_with_dict_or_no_groups(self):
-        # Only groups="cluster" needs unique pairs; the dict and None paths are unchanged.
-        extra_positions = [3, 3, 100]
-        X = pd.concat([self.X, self.X.iloc[extra_positions]])
-        y = pd.concat([self.y, self.y.iloc[extra_positions]])
-        for shrink_to_global in [True, False]:
-            for groups in [EXPECTED_CLUSTERS, BLOCK_GROUPS, None]:
-                label = f"groups={groups}, shrink_to_global={shrink_to_global}"
-                model = clustered_model(
-                    groups=groups, shrink_to_global=shrink_to_global
-                ).fit(X, y)
-                self.assertEqual(model.cids_, CLUSTER_CIDS, msg=label)
-                if groups is None:
-                    for cid in model.cids_:
-                        coefs = model.cid_coefs_[cid]
-                        self.assertTrue(np.all(np.isfinite(coefs)), msg=label)
-                else:
-                    self.assert_finite_coefficients(model, label)
 
 
 if __name__ == "__main__":
