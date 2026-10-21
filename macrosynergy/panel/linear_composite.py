@@ -40,7 +40,7 @@ def linear_composite(
     rebal_freq: str = "D",
     thresh: Optional[float] = None,
     ffill_limit: Optional[int] = None,
-    min_coverage: Optional[float] = None,
+    nan_tolerance: Optional[float] = None,
 ):
     """
     Weighted linear combinations of cross sections or categories
@@ -127,14 +127,17 @@ def linear_composite(
         A constituent is never filled before its first observation. When `weights` is a
         category string, the weights are carried forward with the same limit. Default is
         None (no forward filling).
-    min_coverage : float, optional
-        Minimum share, in (0, 1], of the total absolute weight of the constituents that
-        must be available on a date for the composite to be calculated; on dates below
-        the threshold the composite is NaN. Coverage is measured after any forward
-        filling by `ffill_limit`, and the total includes every constituent with a weight
-        on that date, whether or not it has data. Note that constituents whose history
-        starts later count as missing on earlier dates, so a high threshold can also
-        remove early history. Default is None (any available constituents are used).
+    nan_tolerance : float, optional
+        maximum share, between 0 and 1 inclusive, of the total absolute weight that may
+        belong to constituents with missing (NaN) values on a date; if exceeded, the
+        composite for that date is set to NaN. E.g. `nan_tolerance=0.1` requires
+        constituents carrying at least 90% of the weight to be available, and
+        `nan_tolerance=0` requires all of them. Missing values are counted after any
+        forward filling by `ffill_limit`, and the total weight includes every
+        constituent with a weight on that date, whether or not it has data. Note that
+        constituents whose history starts later count as missing on earlier dates, so a
+        low tolerance can also remove early history. Default is None (any available
+        constituents are used).
 
     Returns
     -------
@@ -161,7 +164,7 @@ def linear_composite(
         rebal_freq,
         thresh,
         ffill_limit,
-        min_coverage,
+        nan_tolerance,
         _xcat_agg,
         mode,
     ) = _check_args(
@@ -182,7 +185,7 @@ def linear_composite(
         rebal_freq=rebal_freq,
         thresh=thresh,
         ffill_limit=ffill_limit,
-        min_coverage=min_coverage,
+        nan_tolerance=nan_tolerance,
     )
 
     # update local variables
@@ -233,7 +236,7 @@ def linear_composite(
             new_xcat=new_xcat,
             thresh=thresh,
             ffill_limit=ffill_limit,
-            min_coverage=min_coverage,
+            nan_tolerance=nan_tolerance,
         )
 
     else:  # mode == "cid_agg" -- single xcat
@@ -254,7 +257,7 @@ def linear_composite(
             rebal_freq=rebal_freq,
             thresh=thresh,
             ffill_limit=ffill_limit,
-            min_coverage=min_coverage,
+            nan_tolerance=nan_tolerance,
         )
 
     return QuantamentalDataFrame(result_df, categorical=result_as_categorical)
@@ -310,17 +313,17 @@ def _linear_composite_basic(
     normalize_weights: bool = True,
     complete: bool = False,
     mode: str = "xcat_agg",
-    min_coverage: Optional[float] = None,
+    nan_tolerance: Optional[float] = None,
 ):
     """Main calculation function for linear_composite()"""
 
     # Create a boolean mask to help us work out the calcs
     nan_mask: pd.DataFrame = data_df.isna() | weights_df.isna()
 
-    # Share of the total absolute weight carried by constituents with data
-    if min_coverage is not None:
+    # Share of the total absolute weight carried by constituents with missing data
+    if nan_tolerance is not None:
         abs_weights = weights_df.abs()
-        coverage = abs_weights[~nan_mask].sum(axis=1) / abs_weights.sum(axis=1)
+        nan_share = abs_weights[nan_mask].sum(axis=1) / abs_weights.sum(axis=1)
 
     # Normalize weights (if requested)
     if normalize_weights:
@@ -346,9 +349,9 @@ def _linear_composite_basic(
     if complete:
         out_df[nan_mask.any(axis="columns")] = np.nan
 
-    # Remove periods where the available constituents carry too little weight
-    if min_coverage is not None:
-        out_df[~(coverage >= min_coverage - 1e-12)] = np.nan
+    # Remove periods where missing constituents carry too much weight
+    if nan_tolerance is not None:
+        out_df[~(nan_share <= nan_tolerance + 1e-12)] = np.nan
 
     # put NaNs back in, as sum() removes them
     out_df[nan_mask.all(axis="columns")] = np.nan
@@ -444,7 +447,7 @@ def linear_composite_cid_agg(
     rebal_freq: str = "D",
     thresh: Optional[float] = None,
     ffill_limit: Optional[int] = None,
-    min_coverage: Optional[float] = None,
+    nan_tolerance: Optional[float] = None,
 ):
     """Linear composite of various cids for a given category across all periods."""
     if isinstance(weights, str):
@@ -521,7 +524,7 @@ def linear_composite_cid_agg(
         normalize_weights=normalize_weights,
         complete=complete_cids,
         mode="cid_agg",
-        min_coverage=min_coverage,
+        nan_tolerance=nan_tolerance,
     )
 
     if df.is_categorical():
@@ -545,7 +548,7 @@ def linear_composite_xcat_agg(
     new_xcat="NEW",
     thresh: Optional[float] = None,
     ffill_limit: Optional[int] = None,
-    min_coverage: Optional[float] = None,
+    nan_tolerance: Optional[float] = None,
 ):
     """Linear composite of various xcats across all cids and periods"""
 
@@ -578,7 +581,7 @@ def linear_composite_xcat_agg(
         normalize_weights=normalize_weights,
         complete=complete_xcats,
         mode="xcat_agg",
-        min_coverage=min_coverage,
+        nan_tolerance=nan_tolerance,
     )
     if df.is_categorical():
         # add a new column called xcat with the new_xcat value
@@ -720,7 +723,7 @@ def _check_args(
     rebal_freq: str = "D",
     thresh: Optional[float] = None,
     ffill_limit: Optional[int] = None,
-    min_coverage: Optional[float] = None,
+    nan_tolerance: Optional[float] = None,
 ):
     """
     Check the arguments of linear_composite()
@@ -910,12 +913,12 @@ def _check_args(
         if ffill_limit < 1:
             raise ValueError("`ffill_limit` must be a positive integer.")
 
-    # Validate min_coverage
-    if min_coverage is not None:
-        if not isinstance(min_coverage, (int, float)) or isinstance(min_coverage, bool):
-            raise TypeError("`min_coverage` must be a numeric value or None.")
-        if not 0 < min_coverage <= 1:
-            raise ValueError("`min_coverage` must be in the interval (0, 1].")
+    # Validate nan_tolerance
+    if nan_tolerance is not None:
+        if not isinstance(nan_tolerance, (int, float)) or isinstance(nan_tolerance, bool):
+            raise TypeError("`nan_tolerance` must be a numeric value or None.")
+        if not 0 <= nan_tolerance <= 1:
+            raise ValueError("`nan_tolerance` must be between 0 and 1.")
 
     return (
         df,
@@ -935,7 +938,7 @@ def _check_args(
         rebal_freq,
         thresh,
         ffill_limit,
-        min_coverage,
+        nan_tolerance,
         _xcat_agg,
         mode,
     )

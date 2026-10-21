@@ -1124,38 +1124,47 @@ class TestAll(unittest.TestCase):
         self.assertAlmostEqual(out["value"].iloc[0], (0.5 + 0.6) / 0.8)
         self.assertTrue(np.allclose(out["value"].iloc[1:], 1.9))
 
-    def test_min_coverage_cid_agg(self):
-        """`min_coverage` blanks dates whose available weight share is too low"""
+    def test_nan_tolerance_cid_agg(self):
+        """`nan_tolerance` blanks dates whose missing weight share is too high"""
         df = self._partial_panel()
         cids = ["AUD", "CAD", "GBP"]
 
         for weights in ([0.5, 0.3, 0.2], "WGT"):
             out = linear_composite(
-                df=df, xcats="XR", cids=cids, weights=weights, min_coverage=0.8
+                df=df, xcats="XR", cids=cids, weights=weights, nan_tolerance=0.2
             )
             vals = out.set_index("real_date")["value"]
-            # coverage per date: 1.0, 1.0, 0.8, 0.5
+            # missing weight share per date: 0.0, 0.0, 0.2, 0.5
             self.assertTrue(np.allclose(vals.iloc[:3], [1.9, 1.9, (0.5 + 0.6) / 0.8]))
             self.assertTrue(np.isnan(vals.iloc[3]))
 
-        out = linear_composite(
-            df=df, xcats="XR", cids=cids, weights=[0.5, 0.3, 0.2], min_coverage=0.9
-        )
-        self.assertTrue(out["value"].iloc[2:].isna().all())
-        self.assertTrue(np.allclose(out["value"].iloc[:2], 1.9))
+        for tol in (0.1, 0):
+            out = linear_composite(
+                df=df, xcats="XR", cids=cids, weights=[0.5, 0.3, 0.2], nan_tolerance=tol
+            )
+            self.assertTrue(out["value"].iloc[2:].isna().all())
+            self.assertTrue(np.allclose(out["value"].iloc[:2], 1.9))
 
-    def test_min_coverage_after_ffill(self):
-        """Coverage is measured after forward filling"""
+        # a tolerance of one never blanks a date
+        out = linear_composite(
+            df=df, xcats="XR", cids=cids, weights=[0.5, 0.3, 0.2], nan_tolerance=1
+        )
+        pd.testing.assert_frame_equal(
+            out, linear_composite(df=df, xcats="XR", cids=cids, weights=[0.5, 0.3, 0.2])
+        )
+
+    def test_nan_tolerance_after_ffill(self):
+        """Missing values are counted after forward filling"""
         df = self._partial_panel()
         out = linear_composite(
             df=df, xcats="XR", cids=["AUD", "CAD", "GBP"], weights=[0.5, 0.3, 0.2],
-            ffill_limit=1, min_coverage=0.9,
+            ffill_limit=1, nan_tolerance=0.1,
         )
         vals = out.set_index("real_date")["value"]
         self.assertTrue(np.allclose(vals.iloc[:3], [1.9] * 3))
         self.assertTrue(np.isnan(vals.iloc[3]))
 
-    def test_ffill_limit_and_min_coverage_xcat_agg(self):
+    def test_ffill_limit_and_nan_tolerance_xcat_agg(self):
         """Both options apply per cid when aggregating over categories"""
         df = self._partial_panel()
         panel = pd.DataFrame(df[df["cid"] == "AUD"])
@@ -1173,30 +1182,30 @@ class TestAll(unittest.TestCase):
         filled = linear_composite(**kwargs, ffill_limit=1)
         self.assertTrue(np.allclose(filled["value"], 0.75))
 
-        gated = linear_composite(**kwargs, min_coverage=0.6)
+        gated = linear_composite(**kwargs, nan_tolerance=0.4)
         self.assertTrue(np.isnan(gated["value"].iloc[-1]))
         self.assertTrue(np.allclose(gated["value"].iloc[:-1], 0.75))
 
-    def test_ffill_limit_min_coverage_defaults(self):
+    def test_ffill_limit_nan_tolerance_defaults(self):
         """The defaults leave results unchanged"""
         df = self.dfd
         for kwargs in (dict(xcats="XR", cids=self.cids), dict(xcats=["XR", "CRY"])):
             base = linear_composite(df=df, **kwargs)
-            explicit = linear_composite(df=df, **kwargs, ffill_limit=None, min_coverage=None)
+            explicit = linear_composite(df=df, **kwargs, ffill_limit=None, nan_tolerance=None)
             pd.testing.assert_frame_equal(base, explicit)
 
-    def test_ffill_limit_min_coverage_validation(self):
-        """Argument checks for `ffill_limit` and `min_coverage`"""
+    def test_ffill_limit_nan_tolerance_validation(self):
+        """Argument checks for `ffill_limit` and `nan_tolerance`"""
         df = self._partial_panel()
         base = dict(df=df, xcats="XR", cids=["AUD", "CAD", "GBP"])
-        for kwargs in ({"ffill_limit": 1.5}, {"ffill_limit": True}, {"min_coverage": "0.9"}):
+        for kwargs in ({"ffill_limit": 1.5}, {"ffill_limit": True}, {"nan_tolerance": "0.9"}):
             with self.assertRaises(TypeError):
                 linear_composite(**base, **kwargs)
         for kwargs in (
             {"ffill_limit": 0},
             {"ffill_limit": -1},
-            {"min_coverage": 0},
-            {"min_coverage": 1.5},
+            {"nan_tolerance": -0.1},
+            {"nan_tolerance": 1.5},
         ):
             with self.assertRaises(ValueError):
                 linear_composite(**base, **kwargs)
