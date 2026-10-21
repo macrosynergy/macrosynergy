@@ -40,11 +40,14 @@ existing two-level class before it is used to judge the grouped mode.
 
 import inspect
 import unittest
+import warnings
 from unittest import mock
 
 import numpy as np
 import pandas as pd
+from scipy.cluster import hierarchy
 from scipy.optimize import minimize
+from scipy.spatial.distance import squareform
 from sklearn.base import clone
 from sklearn.linear_model import Ridge
 
@@ -1409,6 +1412,624 @@ class TestCidSummaries(PanelTestCase):
         y_two = pd.concat([self.y, self.y], axis=1)
         with self.assertRaises(ValueError):
             GlobalLocalRegression().fit(self.X, y_two)
+
+
+# --------------------------------------------------------------------------------------
+# Correlation-clustered groups (groups="cluster")
+# --------------------------------------------------------------------------------------
+
+# Block of each cid. Every cid's target is its block's common factor plus small noise,
+# and the two factors are independent. The blocks interleave in sorted-cid order, so
+# labels that do not follow first appearance along the sorted cids show up.
+CLUSTER_BLOCKS = {"AUD": 0, "CAD": 1, "EUR": 0, "GBP": 1, "JPY": 0, "USD": 1}
+CLUSTER_CIDS = sorted(CLUSTER_BLOCKS)
+CLUSTER_FEATURES = ["CRY", "GROWTH"]
+CLUSTER_N_DATES = 60
+
+# Group 0 is the block holding cids_[0] ("AUD"); members are listed in cids_ order.
+EXPECTED_CLUSTERS = {0: ["AUD", "EUR", "JPY"], 1: ["CAD", "GBP", "USD"]}
+EXPECTED_CID_TO_GROUP = {
+    "AUD": 0,
+    "CAD": 1,
+    "EUR": 0,
+    "GBP": 1,
+    "JPY": 0,
+    "USD": 1,
+}
+
+# The same partition as a user-supplied dict with string group names.
+BLOCK_GROUPS = {"bloc_b": ["USD", "CAD", "GBP"], "bloc_a": ["JPY", "AUD", "EUR"]}
+
+LINKAGES = ["average", "complete", "single", "ward"]
+
+# The key invariant asks for identical coefficients up to floating-point tolerance.
+INVARIANT_ATOL = 1e-10
+
+# Linkage matrices recomputed from the contract's recipe agree up to rounding in the
+# distances; merge order and cluster sizes agree exactly on this panel.
+LINKAGE_RTOL = 1e-10
+LINKAGE_ATOL = 1e-12
+
+
+def make_clustered_panel(seed=0, n_dates=CLUSTER_N_DATES):
+    """
+    Build a small balanced panel whose targets follow CLUSTER_BLOCKS.
+
+    Returns
+    -------
+    X : pd.DataFrame
+        Features, multi-indexed by `cid` and `real_date`, sorted by cid. "CRY" is a
+        noisy copy of the cid's block factor, "GROWTH" is pure noise.
+    y : pd.Series
+        Targets with the same index as X: block factor + N(0, 0.2^2) noise.
+    sample_weight : np.ndarray
+        Strictly positive sample weights, one per row of X.
+    """
+    rng = np.random.default_rng(seed)
+    dates = pd.bdate_range(end="2023-12-29", periods=n_dates)
+    factors = rng.normal(size=(n_dates, 2))
+    X_blocks = []
+    y_blocks = []
+    for cid in CLUSTER_CIDS:
+        factor = factors[:, CLUSTER_BLOCKS[cid]]
+        index = pd.MultiIndex.from_product([[cid], dates], names=["cid", "real_date"])
+        ftrs = np.column_stack(
+            [factor + rng.normal(scale=0.5, size=n_dates), rng.normal(size=n_dates)]
+        )
+        target = factor + rng.normal(scale=0.2, size=n_dates)
+        X_blocks.append(pd.DataFrame(ftrs, index=index, columns=CLUSTER_FEATURES))
+        y_blocks.append(pd.Series(target, index=index, name="XR"))
+
+    X = pd.concat(X_blocks)
+    y = pd.concat(y_blocks)
+    sample_weight = rng.uniform(0.5, 2.0, size=len(y))
+    return X, y, sample_weight
+
+
+def reference_correlation(X, y):
+    """
+    Contract steps 1-2: the values of `y` indexed by X's index, pivoted to dates x
+    cids (sorted), pairwise Pearson correlation with pandas defaults, NaN set to 0
+    and a unit diagonal.
+    """
+    cids = sorted(X.index.get_level_values(0).unique())
+    values = np.asarray(y, dtype=float).reshape(len(y))
+    wide = pd.Series(values, index=X.index).unstack(level=0).reindex(columns=cids)
+    corr = wide.corr().to_numpy(copy=True)
+    corr[np.isnan(corr)] = 0
+    np.fill_diagonal(corr, 1)
+    return corr
+
+
+def reference_linkage_matrix(X, y, method):
+    """
+    Contract steps 1-4: linkage of the condensed distances
+    d_ij = sqrt(0.5 * (1 - rho_ij)), floored at 0, with a zero diagonal.
+    """
+    corr = reference_correlation(X, y)
+    dist = np.sqrt(np.maximum(0.5 * (1 - corr), 0))
+    np.fill_diagonal(dist, 0)
+    return hierarchy.linkage(squareform(dist, checks=False), method=method)
+
+
+def clustered_model(**overrides):
+    """Model with groups="cluster" at the module's penalty settings."""
+    params = {
+        "local_lambda": LOCAL_LAMBDA,
+        "global_lambda": GLOBAL_LAMBDA,
+        "group_lambda": GROUP_LAMBDA,
+        "groups": "cluster",
+    }
+    params.update(overrides)
+    return GlobalLocalRegression(**params)
+
+
+def fit_recording_user_warnings(model, X, y, sample_weight=None):
+    """Fit `model` and return the UserWarnings emitted during the fit."""
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        model.fit(X, y, sample_weight=sample_weight)
+    return [w for w in caught if issubclass(w.category, UserWarning)]
+
+
+def select_cids(X, y, cids):
+    """Rows of X and y (aligned by position) whose cid is in `cids`."""
+    mask = np.asarray(X.index.get_level_values(0).isin(cids))
+    return X[mask], y[mask]
+
+
+class TestClusteredGlobalLocalRegression(unittest.TestCase):
+    """
+    groups="cluster": groups formed by hierarchical clustering of the cids' target
+    correlations, held to the interface contract.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.X, cls.y, cls.sample_weight = make_clustered_panel()
+
+    def assert_clusters(self, model, expected_clusters, label=""):
+        """
+        The fitted grouping is `expected_clusters`, consistently across `clusters_`,
+        `cid_to_group_`, `groups_`, `n_groups_` and `group_coefs_`, with every group
+        label a Python int and cids_[0] in group 0.
+        """
+        self.assertEqual(model.clusters_, expected_clusters, msg=label)
+        self.assertEqual(
+            model.cid_to_group_,
+            {cid: g for g, members in expected_clusters.items() for cid in members},
+            msg=label,
+        )
+        self.assertEqual(model.groups_, list(range(len(expected_clusters))), msg=label)
+        self.assertEqual(model.n_groups_, len(expected_clusters), msg=label)
+        self.assertEqual(set(model.group_coefs_), set(expected_clusters), msg=label)
+        self.assertEqual(model.cid_to_group_[model.cids_[0]], 0, msg=label)
+        labels = (
+            list(model.clusters_)
+            + list(model.groups_)
+            + list(model.cid_to_group_.values())
+            + list(model.group_coefs_)
+        )
+        for g in labels:
+            self.assertIs(type(g), int, msg=f"{label} label {g!r}")
+
+    def assert_finite_coefficients(self, model, label=""):
+        for cid in model.cids_:
+            self.assertTrue(np.all(np.isfinite(model.cid_coefs_[cid])), msg=label)
+        for g in model.groups_:
+            self.assertTrue(np.all(np.isfinite(model.group_coefs_[g])), msg=label)
+        if model.shrink_to_global:
+            self.assertTrue(np.all(np.isfinite(model.coef_)), msg=label)
+            if model.fit_intercept:
+                self.assertTrue(np.isfinite(model.intercept_), msg=label)
+
+    def assert_linkage_matrix(self, model, expected, label=""):
+        self.assertIsInstance(model.linkage_matrix_, np.ndarray, msg=label)
+        np.testing.assert_allclose(
+            model.linkage_matrix_,
+            expected,
+            rtol=LINKAGE_RTOL,
+            atol=LINKAGE_ATOL,
+            err_msg=label,
+        )
+
+    # ----------------------------------------------------------------------------------
+    # Panel guard
+    # ----------------------------------------------------------------------------------
+
+    def test_panel_has_block_structure(self):
+        # Guard against a vacuous fixture: targets are strongly correlated within a
+        # block and nearly uncorrelated across blocks.
+        corr = reference_correlation(self.X, self.y)
+        blocks = np.array([CLUSTER_BLOCKS[cid] for cid in CLUSTER_CIDS])
+        same_block = np.equal.outer(blocks, blocks)
+        off_diagonal = ~np.eye(len(blocks), dtype=bool)
+        self.assertGreater(corr[same_block & off_diagonal].min(), 0.9)
+        self.assertLess(np.abs(corr[~same_block]).max(), 0.3)
+
+    # ----------------------------------------------------------------------------------
+    # Clustering
+    # ----------------------------------------------------------------------------------
+
+    def test_recovers_blocks(self):
+        model = clustered_model(n_clusters=2).fit(self.X, self.y)
+        self.assertEqual(model.cids_, CLUSTER_CIDS)
+        self.assertEqual(model.cid_to_group_, EXPECTED_CID_TO_GROUP)
+        self.assertEqual(model.groups_, [0, 1])
+        self.assertEqual(model.n_groups_, 2)
+        self.assert_clusters(model, EXPECTED_CLUSTERS)
+
+    def test_default_parameters_recover_blocks(self):
+        # Defaults: n_clusters=2, linkage="average".
+        model = GlobalLocalRegression(groups="cluster").fit(self.X, self.y)
+        self.assert_clusters(model, EXPECTED_CLUSTERS)
+        self.assert_linkage_matrix(
+            model, reference_linkage_matrix(self.X, self.y, "average")
+        )
+
+    def test_linkage_matrix(self):
+        model = clustered_model().fit(self.X, self.y)
+        n_cids = len(CLUSTER_CIDS)
+        self.assertEqual(model.linkage_matrix_.shape, (n_cids - 1, 4))
+        self.assert_linkage_matrix(
+            model, reference_linkage_matrix(self.X, self.y, "average")
+        )
+
+    def test_each_linkage_recovers_blocks(self):
+        for method in LINKAGES:
+            label = f"linkage={method}"
+            model = clustered_model(linkage=method).fit(self.X, self.y)
+            self.assert_clusters(model, EXPECTED_CLUSTERS, label)
+            self.assert_linkage_matrix(
+                model, reference_linkage_matrix(self.X, self.y, method), label
+            )
+
+    def test_numpy_integer_n_clusters_is_accepted(self):
+        for n_clusters in [np.int64(2), np.int32(2)]:
+            label = f"n_clusters={n_clusters!r}"
+            model = clustered_model(n_clusters=n_clusters).fit(self.X, self.y)
+            self.assert_clusters(model, EXPECTED_CLUSTERS, label)
+
+    def test_n_clusters_above_n_cids_is_capped_with_warning(self):
+        singletons = {k: [cid] for k, cid in enumerate(CLUSTER_CIDS)}
+        for n_clusters in [len(CLUSTER_CIDS) + 1, 100]:
+            label = f"n_clusters={n_clusters}"
+            model = clustered_model(n_clusters=n_clusters)
+            with self.assertWarns(UserWarning, msg=label):
+                model.fit(self.X, self.y)
+            self.assert_clusters(model, singletons, label)
+            self.assertEqual(
+                model.linkage_matrix_.shape, (len(CLUSTER_CIDS) - 1, 4), msg=label
+            )
+
+    def test_n_clusters_equal_to_n_cids_gives_singletons_without_warning(self):
+        model = clustered_model(n_clusters=len(CLUSTER_CIDS))
+        caught = fit_recording_user_warnings(model, self.X, self.y)
+        self.assertEqual(caught, [])
+        self.assert_clusters(model, {k: [cid] for k, cid in enumerate(CLUSTER_CIDS)})
+
+    def test_one_cluster_holds_every_cid(self):
+        model = clustered_model(n_clusters=1)
+        caught = fit_recording_user_warnings(model, self.X, self.y)
+        self.assertEqual(caught, [])
+        self.assert_clusters(model, {0: CLUSTER_CIDS})
+        self.assertEqual(model.linkage_matrix_.shape, (len(CLUSTER_CIDS) - 1, 4))
+
+    def test_single_cid_panel(self):
+        X_one, y_one = select_cids(self.X, self.y, ["GBP"])
+
+        # n_clusters (default 2) exceeds the one training cid: capped with a warning.
+        model = clustered_model()
+        with self.assertWarns(UserWarning):
+            model.fit(X_one, y_one)
+        self.assertEqual(model.cids_, ["GBP"])
+        self.assert_clusters(model, {0: ["GBP"]})
+        self.assertIsNone(model.linkage_matrix_)
+        self.assert_finite_coefficients(model)
+
+        # n_clusters=1 needs no cap.
+        model = clustered_model(n_clusters=1)
+        caught = fit_recording_user_warnings(model, X_one, y_one)
+        self.assertEqual(caught, [])
+        self.assert_clusters(model, {0: ["GBP"]})
+        self.assertIsNone(model.linkage_matrix_)
+        self.assert_finite_coefficients(model)
+
+    def test_unbalanced_panel_with_cids_sharing_no_dates(self):
+        # AUD keeps only the first half of the dates and CAD only the second half.
+        cid_index = self.X.index.get_level_values(0)
+        date_index = self.X.index.get_level_values(1)
+        split = sorted(date_index.unique())[CLUSTER_N_DATES // 2]
+        drop = ((cid_index == "AUD") & (date_index >= split)) | (
+            (cid_index == "CAD") & (date_index < split)
+        )
+        keep = np.asarray(~drop)
+        X_unb, y_unb = self.X[keep], self.y[keep]
+        aud_dates = set(X_unb.xs("AUD", level=0).index)
+        cad_dates = set(X_unb.xs("CAD", level=0).index)
+        self.assertTrue(aud_dates)
+        self.assertTrue(cad_dates)
+        self.assertEqual(aud_dates & cad_dates, set())
+
+        for shrink_to_global in [True, False]:
+            label = f"shrink_to_global={shrink_to_global}"
+            model = clustered_model(shrink_to_global=shrink_to_global).fit(
+                X_unb, y_unb
+            )
+            self.assert_finite_coefficients(model, label)
+            self.assert_linkage_matrix(
+                model, reference_linkage_matrix(X_unb, y_unb, "average"), label
+            )
+            self.assert_clusters(model, EXPECTED_CLUSTERS, label)
+
+    def test_zero_variance_targets_and_fewer_clusters_than_requested(self):
+        # Every cid has a constant target, so every correlation is NaN -> 0 and every
+        # distance is sqrt(0.5). With all merge heights tied, fcluster returns fewer
+        # clusters than requested, which is accepted silently.
+        X_four, _ = select_cids(self.X, self.y, ["AUD", "CAD", "EUR", "GBP"])
+        constants = {"AUD": 1.0, "CAD": 2.0, "EUR": -3.0, "GBP": 0.5}
+        y_const = pd.Series(
+            [constants[cid] for cid in X_four.index.get_level_values(0)],
+            index=X_four.index,
+            name="XR",
+        )
+        expected_linkage = reference_linkage_matrix(X_four, y_const, "average")
+        np.testing.assert_allclose(expected_linkage[:, 2], np.sqrt(0.5))
+        # Guard: the tie really yields fewer clusters than the 3 requested.
+        raw_labels = hierarchy.fcluster(expected_linkage, t=3, criterion="maxclust")
+        self.assertEqual(len(np.unique(raw_labels)), 1)
+
+        model = clustered_model(n_clusters=3)
+        caught = fit_recording_user_warnings(model, X_four, y_const)
+        self.assertEqual(caught, [])
+        self.assert_clusters(model, {0: ["AUD", "CAD", "EUR", "GBP"]})
+        self.assert_linkage_matrix(model, expected_linkage)
+        self.assert_finite_coefficients(model)
+
+    def test_sample_weight_does_not_change_clusters(self):
+        base = clustered_model().fit(self.X, self.y)
+        # Extreme weights, which would move any weighted correlation.
+        extreme = np.where(np.arange(len(self.y)) % 3 == 0, 1e3, 1e-3)
+        for sw in [self.sample_weight, extreme]:
+            weighted = clustered_model().fit(self.X, self.y, sample_weight=sw)
+            self.assertEqual(weighted.clusters_, base.clusters_)
+            np.testing.assert_array_equal(
+                weighted.linkage_matrix_, base.linkage_matrix_
+            )
+
+    def test_target_is_aligned_with_X_by_row_position(self):
+        # The returns panel takes y's values in X's row order and indexes them by X's
+        # index, whatever y's own index or the row order.
+        base = clustered_model().fit(self.X, self.y)
+        perm = np.random.default_rng(9).permutation(len(self.y))
+        X_perm, y_perm = self.X.iloc[perm], self.y.iloc[perm]
+        # Values aligned with X_perm by position, index labels scrambled.
+        y_scrambled = pd.Series(y_perm.values, index=self.X.index, name="XR")
+        cases = {
+            "single-column frame": (self.X, self.y.to_frame()),
+            "range index": (self.X, self.y.reset_index(drop=True)),
+            "permuted rows": (X_perm, y_perm),
+            "permuted rows, range-index frame": (
+                X_perm,
+                y_perm.reset_index(drop=True).to_frame(),
+            ),
+            "permuted rows, scrambled y index": (X_perm, y_scrambled),
+        }
+        for label, (X_case, y_case) in cases.items():
+            model = clustered_model().fit(X_case, y_case)
+            self.assert_clusters(model, EXPECTED_CLUSTERS, label)
+            self.assert_linkage_matrix(model, base.linkage_matrix_, label)
+
+    # ----------------------------------------------------------------------------------
+    # Key invariant: same fit as the equivalent dict
+    # ----------------------------------------------------------------------------------
+
+    def test_coefficients_match_equivalent_dict_groups(self):
+        for shrink_to_global in [True, False]:
+            for fit_intercept, weighted in VARIANTS:
+                label = (
+                    f"shrink_to_global={shrink_to_global}, "
+                    f"{variant_label(fit_intercept, weighted)}"
+                )
+                sw = self.sample_weight if weighted else None
+                params = {
+                    "fit_intercept": fit_intercept,
+                    "shrink_to_global": shrink_to_global,
+                }
+                clustered = clustered_model(**params).fit(
+                    self.X, self.y, sample_weight=sw
+                )
+                # Guard: the clustering is non-trivial.
+                self.assertEqual(clustered.clusters_, EXPECTED_CLUSTERS, msg=label)
+                explicit = clustered_model(groups=clustered.clusters_, **params).fit(
+                    self.X, self.y, sample_weight=sw
+                )
+
+                self.assertEqual(clustered.cids_, explicit.cids_, msg=label)
+                self.assertEqual(
+                    clustered.cid_to_group_, explicit.cid_to_group_, msg=label
+                )
+                self.assertEqual(clustered.groups_, explicit.groups_, msg=label)
+                self.assertEqual(clustered.n_groups_, explicit.n_groups_, msg=label)
+                for cid in explicit.cids_:
+                    np.testing.assert_allclose(
+                        clustered.cid_coefs_[cid],
+                        explicit.cid_coefs_[cid],
+                        rtol=0,
+                        atol=INVARIANT_ATOL,
+                        err_msg=f"{label} cid_coefs_[{cid}]",
+                    )
+                self.assertEqual(
+                    set(clustered.group_coefs_), set(explicit.group_coefs_), msg=label
+                )
+                for g in explicit.groups_:
+                    np.testing.assert_allclose(
+                        clustered.group_coefs_[g],
+                        explicit.group_coefs_[g],
+                        rtol=0,
+                        atol=INVARIANT_ATOL,
+                        err_msg=f"{label} group_coefs_[{g}]",
+                    )
+                if shrink_to_global:
+                    np.testing.assert_allclose(
+                        clustered.coef_,
+                        explicit.coef_,
+                        rtol=0,
+                        atol=INVARIANT_ATOL,
+                        err_msg=f"{label} coef_",
+                    )
+                    if fit_intercept:
+                        np.testing.assert_allclose(
+                            clustered.intercept_,
+                            explicit.intercept_,
+                            rtol=0,
+                            atol=INVARIANT_ATOL,
+                            err_msg=f"{label} intercept_",
+                        )
+                    else:
+                        self.assertIsNone(clustered.intercept_, msg=label)
+                else:
+                    for name in ["coef_", "intercept_"]:
+                        self.assertFalse(hasattr(clustered, name), msg=f"{label} {name}")
+
+    # ----------------------------------------------------------------------------------
+    # Validation
+    # ----------------------------------------------------------------------------------
+
+    def test_other_groups_string_raises_type_error_mentioning_cluster(self):
+        for groups in ["kmeans", "clusters", "Cluster", ""]:
+            # No validation at construction (sklearn convention), only in fit.
+            model = clustered_model(groups=groups)
+            with self.assertRaises(TypeError, msg=repr(groups)) as ctx:
+                model.fit(self.X, self.y)
+            self.assertIn("cluster", str(ctx.exception), msg=repr(groups))
+
+    def test_invalid_linkage_raises_value_error(self):
+        # Valid scipy methods outside the four names are rejected too.
+        for method in ["centroid", "median", "weighted", "Average", "ward ", ""]:
+            model = clustered_model(linkage=method)
+            with self.assertRaises(ValueError, msg=repr(method)):
+                model.fit(self.X, self.y)
+
+    def test_n_clusters_below_one_raises_value_error(self):
+        for n_clusters in [0, -1, np.int64(0)]:
+            model = clustered_model(n_clusters=n_clusters)
+            with self.assertRaises(ValueError, msg=repr(n_clusters)):
+                model.fit(self.X, self.y)
+
+    def test_non_integer_n_clusters_raises_type_error(self):
+        for n_clusters in [2.5, "2", True, 2.0, np.float64(2.0), np.True_, None]:
+            model = clustered_model(n_clusters=n_clusters)
+            with self.assertRaises(TypeError, msg=repr(n_clusters)):
+                model.fit(self.X, self.y)
+
+    def test_cluster_parameters_ignored_without_cluster_groups(self):
+        # Neither validated nor used unless groups == "cluster".
+        invalid = [(0, "average"), ("2", "bogus"), (2.5, "centroid"), (True, "ward")]
+        for groups in [None, BLOCK_GROUPS]:
+            baseline = clustered_model(groups=groups).fit(self.X, self.y)
+            for n_clusters, method in invalid:
+                label = f"groups={groups}, n_clusters={n_clusters!r}, linkage={method}"
+                model = clustered_model(
+                    groups=groups, n_clusters=n_clusters, linkage=method
+                ).fit(self.X, self.y)
+                for name in ["clusters_", "linkage_matrix_"]:
+                    self.assertFalse(hasattr(model, name), msg=f"{label} {name}")
+                for cid in baseline.cids_:
+                    np.testing.assert_array_equal(
+                        model.cid_coefs_[cid], baseline.cid_coefs_[cid], err_msg=label
+                    )
+                np.testing.assert_array_equal(
+                    model.coef_, baseline.coef_, err_msg=label
+                )
+                if groups is not None:
+                    self.assertEqual(model.groups_, baseline.groups_, msg=label)
+
+    # ----------------------------------------------------------------------------------
+    # sklearn compatibility
+    # ----------------------------------------------------------------------------------
+
+    def test_new_parameters_follow_shrink_to_global(self):
+        signature = inspect.signature(GlobalLocalRegression.__init__)
+        names = list(signature.parameters)
+        self.assertEqual(names[-3:], ["shrink_to_global", "n_clusters", "linkage"])
+        self.assertEqual(signature.parameters["n_clusters"].default, 2)
+        self.assertEqual(signature.parameters["linkage"].default, "average")
+
+    def test_get_params_and_clone(self):
+        params = GlobalLocalRegression().get_params()
+        self.assertEqual(params["n_clusters"], 2)
+        self.assertEqual(params["linkage"], "average")
+
+        # Stored unchanged, without validation at construction.
+        odd = GlobalLocalRegression(n_clusters="2", linkage="bogus")
+        self.assertEqual(odd.n_clusters, "2")
+        self.assertEqual(odd.linkage, "bogus")
+
+        model = clustered_model(n_clusters=3, linkage="complete")
+        self.assertEqual(model.n_clusters, 3)
+        self.assertEqual(model.linkage, "complete")
+        params = model.get_params()
+        self.assertEqual(params["n_clusters"], 3)
+        self.assertEqual(params["linkage"], "complete")
+        self.assertEqual(params["groups"], "cluster")
+
+        model.fit(self.X, self.y)
+        cloned = clone(model)
+        self.assertIsNot(cloned, model)
+        cloned_params = cloned.get_params()
+        self.assertEqual(cloned_params["n_clusters"], 3)
+        self.assertEqual(cloned_params["linkage"], "complete")
+        self.assertEqual(cloned_params["groups"], "cluster")
+        for name in ["clusters_", "linkage_matrix_"]:
+            self.assertFalse(hasattr(cloned, name), msg=name)
+        cloned.fit(self.X, self.y)
+        self.assertEqual(cloned.clusters_, model.clusters_)
+        np.testing.assert_array_equal(cloned.linkage_matrix_, model.linkage_matrix_)
+
+    # ----------------------------------------------------------------------------------
+    # predict
+    # ----------------------------------------------------------------------------------
+
+    def test_predict_after_clustered_fit(self):
+        for shrink_to_global in [True, False]:
+            label = f"shrink_to_global={shrink_to_global}"
+            model = clustered_model(shrink_to_global=shrink_to_global).fit(
+                self.X, self.y
+            )
+            preds = model.predict(self.X)
+            self.assertEqual(np.shape(preds), (len(self.X),), msg=label)
+            self.assertTrue(np.all(np.isfinite(preds)), msg=label)
+
+    # ----------------------------------------------------------------------------------
+    # Duplicate (cid, real_date) rows
+    # ----------------------------------------------------------------------------------
+
+    def test_duplicate_rows_raise_value_error_naming_the_pair(self):
+        # Repeated rows are appended at the end, so X and y stay aligned by position.
+        position = 3
+        X = pd.concat([self.X, self.X.iloc[[position]]])
+        y = pd.concat([self.y, self.y.iloc[[position]]])
+        cid, date = self.X.index[position]
+        for shrink_to_global in [True, False]:
+            label = f"shrink_to_global={shrink_to_global}"
+            model = clustered_model(shrink_to_global=shrink_to_global)
+            with self.assertRaises(ValueError, msg=label) as ctx:
+                model.fit(X, y)
+            message = str(ctx.exception)
+            for part in ["cluster", "unique", "duplicate", f"{cid} {date:%Y-%m-%d}"]:
+                self.assertIn(part, message, msg=label)
+            # Not pandas' raw error from the pivot
+            self.assertNotIn("cannot reshape", message, msg=label)
+
+    def test_duplicate_count_is_of_distinct_pairs(self):
+        # A pair that occurs three times is one duplicated pair, not two extra rows.
+        cases = [([3, 3], 1), ([3, 3, 100], 2), ([3, 100, 100, 3], 2)]
+        for extra_positions, expected_count in cases:
+            label = f"extra rows at {extra_positions}"
+            X = pd.concat([self.X, self.X.iloc[extra_positions]])
+            y = pd.concat([self.y, self.y.iloc[extra_positions]])
+            with self.assertRaises(ValueError, msg=label) as ctx:
+                clustered_model().fit(X, y)
+            self.assertRegex(
+                str(ctx.exception), rf"more than once: {expected_count}\.", msg=label
+            )
+
+    def test_duplicate_listing_shows_first_five_pairs_in_index_order(self):
+        # Seven pairs over several cids, repeated in reverse order, so that index order
+        # differs from the order in which the repeated rows appear.
+        positions = [2, 10, 65, 70, 130, 190, 250]
+        X = pd.concat([self.X, self.X.iloc[positions[::-1]]])
+        y = pd.concat([self.y, self.y.iloc[positions[::-1]]])
+        pairs = [f"{cid} {date:%Y-%m-%d}" for cid, date in self.X.index[positions]]
+        with self.assertRaises(ValueError) as ctx:
+            clustered_model().fit(X, y)
+        message = str(ctx.exception)
+        self.assertRegex(message, r"more than once: 7\.")
+        for pair in pairs[5:]:
+            self.assertNotIn(pair, message)
+        offsets = [message.find(pair) for pair in pairs[:5]]
+        self.assertNotIn(-1, offsets)
+        self.assertEqual(offsets, sorted(offsets))
+
+    def test_duplicate_rows_still_fit_with_dict_or_no_groups(self):
+        # Only groups="cluster" needs unique pairs; the dict and None paths are unchanged.
+        extra_positions = [3, 3, 100]
+        X = pd.concat([self.X, self.X.iloc[extra_positions]])
+        y = pd.concat([self.y, self.y.iloc[extra_positions]])
+        for shrink_to_global in [True, False]:
+            for groups in [EXPECTED_CLUSTERS, BLOCK_GROUPS, None]:
+                label = f"groups={groups}, shrink_to_global={shrink_to_global}"
+                model = clustered_model(
+                    groups=groups, shrink_to_global=shrink_to_global
+                ).fit(X, y)
+                self.assertEqual(model.cids_, CLUSTER_CIDS, msg=label)
+                if groups is None:
+                    for cid in model.cids_:
+                        coefs = model.cid_coefs_[cid]
+                        self.assertTrue(np.all(np.isfinite(coefs)), msg=label)
+                else:
+                    self.assert_finite_coefficients(model, label)
 
 
 if __name__ == "__main__":
