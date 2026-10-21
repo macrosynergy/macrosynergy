@@ -217,8 +217,17 @@ class TestNormalizeWeights(unittest.TestCase):
     def test_normalize_random_exception(self):
         self.df_valid[np.random.random(self.df_valid.shape) < 0.2] = np.inf
 
-        with self.assertRaises(Exception):
+        with self.assertRaises(ValueError):
             normalize_weights(self.df_valid)
+
+    def test_normalize_exception_with_all_nan_row(self):
+        # An all-inf row normalises to all-NaN; that must not disable the check for
+        # the other rows.
+        df = self.df_valid.copy()
+        df.iloc[0] = np.inf
+        df.iloc[1, 0] = np.inf
+        with self.assertRaises(ValueError):
+            normalize_weights(df)
 
     def test_norm_to_pct(self):
         df = self.df_valid.copy()
