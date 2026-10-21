@@ -249,6 +249,7 @@ JPMAQS_DATASET_THEME_MAPPING = {
     "Macroeconomic trends": "JPMAQS_MACROECONOMIC_TRENDS",
     "Shocks and risk measures": "JPMAQS_SHOCKS_RISK_MEASURES",
     "Stylized trading factors": "JPMAQS_STYLIZED_TRADING_FACTORS",
+    "Power factors": "JPMAQS_POWER_FACTORS",
 }
 
 
