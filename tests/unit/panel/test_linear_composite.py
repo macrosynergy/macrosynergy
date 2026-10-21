@@ -9,6 +9,7 @@ from macrosynergy.panel.linear_composite import (
     _missing_cids_xcats_str,
 )
 from macrosynergy.management.simulate import make_test_df
+from macrosynergy.management.types import QuantamentalDataFrame
 
 
 class TestAll(unittest.TestCase):
@@ -1049,6 +1050,156 @@ class TestAll(unittest.TestCase):
         )
         # All values should be NaN with lag larger than data
         self.assertTrue(result_large_lag["value"].isna().all())
+
+    def _partial_panel(self) -> QuantamentalDataFrame:
+        """
+        Three cids over four business days. XR for GBP is missing on the last two
+        dates and for CAD on the last date, as when a composite is built before all
+        inputs have updated. The weight category WGT is available on every date.
+        """
+        dates = pd.bdate_range("2020-01-01", periods=4)
+        vals = {
+            "AUD": [1.0, 1.0, 1.0, 1.0],
+            "CAD": [2.0, 2.0, 2.0, np.nan],
+            "GBP": [4.0, 4.0, np.nan, np.nan],
+        }
+        rows = [
+            {"real_date": d, "cid": c, "xcat": "XR", "value": v}
+            for c, vs in vals.items()
+            for d, v in zip(dates, vs)
+            if not np.isnan(v)
+        ]
+        rows += [
+            {"real_date": d, "cid": c, "xcat": "WGT", "value": w}
+            for c, w in zip(vals, [0.5, 0.3, 0.2])
+            for d in dates
+        ]
+        return QuantamentalDataFrame(pd.DataFrame(rows))
+
+    def test_ffill_limit_cid_agg(self):
+        """`ffill_limit` carries a cid's last value forward for at most N dates"""
+        df = self._partial_panel()
+        cids = ["AUD", "CAD", "GBP"]
+        weights = [0.5, 0.3, 0.2]
+
+        def run(**kwargs):
+            out = linear_composite(df=df, xcats="XR", cids=cids, weights=weights, **kwargs)
+            return out.set_index("real_date")["value"].tolist()
+
+        # Default: renormalize over whatever is available on each date
+        self.assertTrue(np.allclose(run(), [1.9, 1.9, (0.5 + 0.6) / 0.8, 1.0]))
+        # One date: GBP filled on date 3 only, CAD filled on date 4
+        self.assertTrue(
+            np.allclose(run(ffill_limit=1), [1.9, 1.9, 1.9, (0.5 + 0.6) / 0.8])
+        )
+        # Two dates: both gaps filled
+        self.assertTrue(np.allclose(run(ffill_limit=2), [1.9] * 4))
+
+    def test_ffill_limit_cid_agg_category_weights(self):
+        """With category weights, missing weights are carried forward with the data"""
+        df = self._partial_panel()
+        # weights stop where the data stop
+        xr = df[df["xcat"] == "XR"]
+        keep = df["xcat"].eq("XR") | (
+            df.set_index(["cid", "real_date"]).index.isin(
+                xr.set_index(["cid", "real_date"]).index
+            )
+        )
+        df = QuantamentalDataFrame(df[keep])
+        cids = ["AUD", "CAD", "GBP"]
+
+        out = linear_composite(df=df, xcats="XR", cids=cids, weights="WGT")
+        self.assertTrue(np.allclose(out["value"], [1.9, 1.9, (0.5 + 0.6) / 0.8, 1.0]))
+        out = linear_composite(df=df, xcats="XR", cids=cids, weights="WGT", ffill_limit=2)
+        self.assertTrue(np.allclose(out["value"], [1.9] * 4))
+
+    def test_ffill_limit_does_not_backfill(self):
+        """A constituent is never filled before its first observation"""
+        df = self._partial_panel()
+        late = df[~((df["cid"] == "GBP") & (df["real_date"] == df["real_date"].min()))]
+        out = linear_composite(
+            df=QuantamentalDataFrame(late), xcats="XR", cids=["AUD", "CAD", "GBP"],
+            weights=[0.5, 0.3, 0.2], ffill_limit=3,
+        )
+        self.assertAlmostEqual(out["value"].iloc[0], (0.5 + 0.6) / 0.8)
+        self.assertTrue(np.allclose(out["value"].iloc[1:], 1.9))
+
+    def test_min_coverage_cid_agg(self):
+        """`min_coverage` blanks dates whose available weight share is too low"""
+        df = self._partial_panel()
+        cids = ["AUD", "CAD", "GBP"]
+
+        for weights in ([0.5, 0.3, 0.2], "WGT"):
+            out = linear_composite(
+                df=df, xcats="XR", cids=cids, weights=weights, min_coverage=0.8
+            )
+            vals = out.set_index("real_date")["value"]
+            # coverage per date: 1.0, 1.0, 0.8, 0.5
+            self.assertTrue(np.allclose(vals.iloc[:3], [1.9, 1.9, (0.5 + 0.6) / 0.8]))
+            self.assertTrue(np.isnan(vals.iloc[3]))
+
+        out = linear_composite(
+            df=df, xcats="XR", cids=cids, weights=[0.5, 0.3, 0.2], min_coverage=0.9
+        )
+        self.assertTrue(out["value"].iloc[2:].isna().all())
+        self.assertTrue(np.allclose(out["value"].iloc[:2], 1.9))
+
+    def test_min_coverage_after_ffill(self):
+        """Coverage is measured after forward filling"""
+        df = self._partial_panel()
+        out = linear_composite(
+            df=df, xcats="XR", cids=["AUD", "CAD", "GBP"], weights=[0.5, 0.3, 0.2],
+            ffill_limit=1, min_coverage=0.9,
+        )
+        vals = out.set_index("real_date")["value"]
+        self.assertTrue(np.allclose(vals.iloc[:3], [1.9] * 3))
+        self.assertTrue(np.isnan(vals.iloc[3]))
+
+    def test_ffill_limit_and_min_coverage_xcat_agg(self):
+        """Both options apply per cid when aggregating over categories"""
+        df = self._partial_panel()
+        panel = pd.DataFrame(df[df["cid"] == "AUD"])
+        panel["xcat"] = panel["xcat"].astype(str).map({"XR": "A", "WGT": "B"})
+        # B is missing on the last date
+        panel = panel[
+            ~((panel["xcat"] == "B") & (panel["real_date"] == panel["real_date"].max()))
+        ]
+        panel = QuantamentalDataFrame(panel)
+        kwargs = dict(df=panel, xcats=["A", "B"], weights=[0.5, 0.5])
+
+        base = linear_composite(**kwargs)
+        self.assertAlmostEqual(base["value"].iloc[-1], 1.0)
+
+        filled = linear_composite(**kwargs, ffill_limit=1)
+        self.assertTrue(np.allclose(filled["value"], 0.75))
+
+        gated = linear_composite(**kwargs, min_coverage=0.6)
+        self.assertTrue(np.isnan(gated["value"].iloc[-1]))
+        self.assertTrue(np.allclose(gated["value"].iloc[:-1], 0.75))
+
+    def test_ffill_limit_min_coverage_defaults(self):
+        """The defaults leave results unchanged"""
+        df = self.dfd
+        for kwargs in (dict(xcats="XR", cids=self.cids), dict(xcats=["XR", "CRY"])):
+            base = linear_composite(df=df, **kwargs)
+            explicit = linear_composite(df=df, **kwargs, ffill_limit=None, min_coverage=None)
+            pd.testing.assert_frame_equal(base, explicit)
+
+    def test_ffill_limit_min_coverage_validation(self):
+        """Argument checks for `ffill_limit` and `min_coverage`"""
+        df = self._partial_panel()
+        base = dict(df=df, xcats="XR", cids=["AUD", "CAD", "GBP"])
+        for kwargs in ({"ffill_limit": 1.5}, {"ffill_limit": True}, {"min_coverage": "0.9"}):
+            with self.assertRaises(TypeError):
+                linear_composite(**base, **kwargs)
+        for kwargs in (
+            {"ffill_limit": 0},
+            {"ffill_limit": -1},
+            {"min_coverage": 0},
+            {"min_coverage": 1.5},
+        ):
+            with self.assertRaises(ValueError):
+                linear_composite(**base, **kwargs)
 
 
 if __name__ == "__main__":

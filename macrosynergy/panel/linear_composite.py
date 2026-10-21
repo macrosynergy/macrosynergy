@@ -39,6 +39,8 @@ def linear_composite(
     weight_lag: int = 0,
     rebal_freq: str = "D",
     thresh: Optional[float] = None,
+    ffill_limit: Optional[int] = None,
+    min_coverage: Optional[float] = None,
 ):
     """
     Weighted linear combinations of cross sections or categories
@@ -116,6 +118,23 @@ def linear_composite(
         at `thresh` and floors negative values at `-thresh` for all input series before
         calculating the composite. This reduces the impact of outliers. Default is None
         (no winsorization).
+    ffill_limit : int, optional
+        Maximum number of consecutive observation dates over which the last available
+        value of each constituent (cross-section or category) is carried forward before
+        the composite is calculated. This prevents a composite from being computed on a
+        partial set of constituents when some have not yet been updated for the latest
+        date, e.g. `ffill_limit=1` carries a constituent's previous value for one date.
+        A constituent is never filled before its first observation. When `weights` is a
+        category string, the weights are carried forward with the same limit. Default is
+        None (no forward filling).
+    min_coverage : float, optional
+        Minimum share, in (0, 1], of the total absolute weight of the constituents that
+        must be available on a date for the composite to be calculated; on dates below
+        the threshold the composite is NaN. Coverage is measured after any forward
+        filling by `ffill_limit`, and the total includes every constituent with a weight
+        on that date, whether or not it has data. Note that constituents whose history
+        starts later count as missing on earlier dates, so a high threshold can also
+        remove early history. Default is None (any available constituents are used).
 
     Returns
     -------
@@ -141,6 +160,8 @@ def linear_composite(
         weight_lag,
         rebal_freq,
         thresh,
+        ffill_limit,
+        min_coverage,
         _xcat_agg,
         mode,
     ) = _check_args(
@@ -160,6 +181,8 @@ def linear_composite(
         weight_lag=weight_lag,
         rebal_freq=rebal_freq,
         thresh=thresh,
+        ffill_limit=ffill_limit,
+        min_coverage=min_coverage,
     )
 
     # update local variables
@@ -209,6 +232,8 @@ def linear_composite(
             complete_xcats=complete_xcats,
             new_xcat=new_xcat,
             thresh=thresh,
+            ffill_limit=ffill_limit,
+            min_coverage=min_coverage,
         )
 
     else:  # mode == "cid_agg" -- single xcat
@@ -228,8 +253,10 @@ def linear_composite(
             weight_lag=weight_lag,
             rebal_freq=rebal_freq,
             thresh=thresh,
+            ffill_limit=ffill_limit,
+            min_coverage=min_coverage,
         )
-    
+
     return QuantamentalDataFrame(result_df, categorical=result_as_categorical)
 
 def _missing_cids_xcats_str(
@@ -283,11 +310,17 @@ def _linear_composite_basic(
     normalize_weights: bool = True,
     complete: bool = False,
     mode: str = "xcat_agg",
+    min_coverage: Optional[float] = None,
 ):
     """Main calculation function for linear_composite()"""
 
     # Create a boolean mask to help us work out the calcs
     nan_mask: pd.DataFrame = data_df.isna() | weights_df.isna()
+
+    # Share of the total absolute weight carried by constituents with data
+    if min_coverage is not None:
+        abs_weights = weights_df.abs()
+        coverage = abs_weights[~nan_mask].sum(axis=1) / abs_weights.sum(axis=1)
 
     # Normalize weights (if requested)
     if normalize_weights:
@@ -312,6 +345,10 @@ def _linear_composite_basic(
     # Remove periods with missing data (if requested) (rows with any NaNs)
     if complete:
         out_df[nan_mask.any(axis="columns")] = np.nan
+
+    # Remove periods where the available constituents carry too little weight
+    if min_coverage is not None:
+        out_df[~(coverage >= min_coverage - 1e-12)] = np.nan
 
     # put NaNs back in, as sum() removes them
     out_df[nan_mask.all(axis="columns")] = np.nan
@@ -406,6 +443,8 @@ def linear_composite_cid_agg(
     weight_lag: int = 0,
     rebal_freq: str = "D",
     thresh: Optional[float] = None,
+    ffill_limit: Optional[int] = None,
+    min_coverage: Optional[float] = None,
 ):
     """Linear composite of various cids for a given category across all periods."""
     if isinstance(weights, str):
@@ -444,6 +483,14 @@ def linear_composite_cid_agg(
         .unstack(level=1)
     )
 
+    # Carry each cid's last value forward (and, for category weights, its weight)
+    if ffill_limit is not None:
+        data_df = data_df.ffill(limit=ffill_limit)
+        if isinstance(weights, str):
+            weights_df = weights_df.reindex(
+                weights_df.index.union(data_df.index)
+            ).ffill(limit=ffill_limit)
+
     # Apply winsorization if thresh is specified
     if thresh is not None:
         data_df = data_df.clip(lower=-thresh, upper=thresh)
@@ -474,6 +521,7 @@ def linear_composite_cid_agg(
         normalize_weights=normalize_weights,
         complete=complete_cids,
         mode="cid_agg",
+        min_coverage=min_coverage,
     )
 
     if df.is_categorical():
@@ -496,6 +544,8 @@ def linear_composite_xcat_agg(
     complete_xcats: bool = True,
     new_xcat="NEW",
     thresh: Optional[float] = None,
+    ffill_limit: Optional[int] = None,
+    min_coverage: Optional[float] = None,
 ):
     """Linear composite of various xcats across all cids and periods"""
 
@@ -506,6 +556,10 @@ def linear_composite_xcat_agg(
 
     # Create wide dataframes for the data and weights
     data_df = df.set_index(["cid", "real_date", "xcat"])["value"].unstack(level=2)
+
+    # Carry each category's last value forward, within each cid
+    if ffill_limit is not None:
+        data_df = data_df.groupby(level="cid", observed=True).ffill(limit=ffill_limit)
 
     # Apply winsorization if thresh is specified
     if thresh is not None:
@@ -524,6 +578,7 @@ def linear_composite_xcat_agg(
         normalize_weights=normalize_weights,
         complete=complete_xcats,
         mode="xcat_agg",
+        min_coverage=min_coverage,
     )
     if df.is_categorical():
         # add a new column called xcat with the new_xcat value
@@ -664,6 +719,8 @@ def _check_args(
     weight_lag: int = 0,
     rebal_freq: str = "D",
     thresh: Optional[float] = None,
+    ffill_limit: Optional[int] = None,
+    min_coverage: Optional[float] = None,
 ):
     """
     Check the arguments of linear_composite()
@@ -846,6 +903,20 @@ def _check_args(
         if thresh <= 0:
             raise ValueError("`thresh` must be positive.")
 
+    # Validate ffill_limit
+    if ffill_limit is not None:
+        if not isinstance(ffill_limit, int) or isinstance(ffill_limit, bool):
+            raise TypeError("`ffill_limit` must be an integer or None.")
+        if ffill_limit < 1:
+            raise ValueError("`ffill_limit` must be a positive integer.")
+
+    # Validate min_coverage
+    if min_coverage is not None:
+        if not isinstance(min_coverage, (int, float)) or isinstance(min_coverage, bool):
+            raise TypeError("`min_coverage` must be a numeric value or None.")
+        if not 0 < min_coverage <= 1:
+            raise ValueError("`min_coverage` must be in the interval (0, 1].")
+
     return (
         df,
         xcats,
@@ -863,6 +934,8 @@ def _check_args(
         weight_lag,
         rebal_freq,
         thresh,
+        ffill_limit,
+        min_coverage,
         _xcat_agg,
         mode,
     )
