@@ -1,5 +1,5 @@
 import warnings
-from typing import Union, List, Tuple
+from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import pandas as pd
@@ -12,119 +12,99 @@ from sklearn.base import BaseEstimator, RegressorMixin
 class GlobalLocalRegression(BaseEstimator, RegressorMixin):
     r"""
     Linear panel model with hierarchical shrinkage of country-specific (local)
-    coefficients towards unknown global coefficients. Learning means that both
-    country-specific and global coefficients are estimated from data.
+    coefficients towards unknown group and/or global coefficients. Learning
+    means that country-specific, group, and global coefficients are estimated
+    from data.
 
     Parameters
     ----------
     local_lambda : float, default=1
         Regularization strength to pull local coefficients towards global coefficients.
-        When `groups` is provided, local coefficients are instead pulled towards the
-        coefficients of their group. When `shrink_to_global` is False and `groups` is
+        When groups is provided, local coefficients are instead pulled towards the
+        coefficients of their group. When shrink_to_global is False and groups is
         None, local slopes are pulled towards zero and local intercepts are not
         penalized.
     global_lambda : float, default=1
-        Regularization strength to pull global coefficients towards zero. Has no effect
-        when `shrink_to_global` is False.
+        Regularization strength to pull global slopes towards zero. The global
+        intercept is not penalized. Has no effect when shrink_to_global is False.
     positive : bool, default=False
         Whether to constrain all coefficients to be positive. Default is False.
     fit_intercept : bool, default=True
         Whether to fit an intercept term. Default is True.
-    min_xs_samples : int, default=36
-        Minimum number of samples required in each group for the group to be considered
-        a contribution to the mean squared error component of the loss function.
-    groups : dict or str, default=None
-        Mapping of group names to list-likes of cross-sections. If provided, a
-        three-level hierarchy is fit: local coefficients are shrunk towards the
-        coefficients of their group, group coefficients are shrunk towards the global
-        coefficients and the global coefficients are shrunk towards zero. Every
-        cross-section in the training data must belong to exactly one group.
-        Cross-sections that are absent from the training data are ignored, and groups
-        without any training cross-sections are dropped. If "cluster", the groups are
-        instead formed at fit time by hierarchical clustering of the correlations
-        between the training targets of the cross-sections, as described in the
-        Notes. Default is None, meaning that local coefficients are shrunk directly
+    groups : Union[Dict, str], default=None
+        Mapping of group names to list-likes of cross-sections. If "cluster", the
+        groups are instead formed at fit time by hierarchical agglomerative clustering
+        of the correlations between the returns of the cross-sections, as described in
+        the Notes. Default is None, meaning that local coefficients are shrunk directly
         towards the global coefficients.
     group_lambda : float, default=1
         Regularization strength to pull group coefficients towards global coefficients.
-        When `shrink_to_global` is False, group slopes are instead pulled towards zero
-        and group intercepts are not penalized. Has no effect when `groups` is None.
+        When shrink_to_global=False, group slopes are instead pulled towards zero
+        and group intercepts are not penalized. Has no effect when groups is None.
     shrink_to_global : bool, default=True
-        Whether to fit global coefficients at the top of the hierarchy. If False, no
-        global coefficients are fit and the top level of the hierarchy, which is the
-        group coefficients when `groups` is provided and the local coefficients
-        otherwise, has its slopes shrunk towards zero and its intercepts left
-        unpenalized. Without `groups`, this amounts to a separate ridge regression per
-        cross-section. `coef_` and `intercept_` are not set in this case.
+        Whether to fit global coefficients at the top of the hierarchy. Default is True.
     n_clusters : int, default=2
-        Number of groups to form when `groups` is "cluster". If it exceeds the number
-        of training cross-sections, it is capped at that number with a warning. Has
-        no effect otherwise.
+        Number of groups to form when groups is "cluster".
     linkage : str, default="average"
-        Linkage method used to merge clusters when `groups` is "cluster". One of
-        "average", "complete", "single" or "ward". Has no effect otherwise.
+        Linkage method used to merge clusters when groups is "cluster". One of
+        "average", "complete" or "single". Default is "average".
+    min_overlap : int, default=36
+        Minimum number of dates two cross-sections must share for the correlation of
+        their returns to be estimated when groups is "cluster". Pairs with less
+        overlap are treated as uncorrelated. Default is 36.
 
     Notes
     -----
-    A panel can be modelled from a global perspective, where time series of all countries
-    are "pooled" or stacked together, meaning that samples from different countries are
-    treated as independent. This is called a pooled regression. With one model fit on all
-    countries' data, this is a high-bias, low-variance model.
+    A panel can be modelled from a global perspective, where time series of all
+    countries are "pooled" or stacked together, meaning that samples from different
+    countries are treated as independent. This is called a pooled regression. With
+    one model fit on all countries' data, this is a high-bias, low-variance model.
+
+    A panel can also be modelled from a group perspective, where time series from
+    similar countries are "pooled" together and a model fit for each group. Relative
+    to the global perspective, this reduces bias but increases variance.
 
     Alternatively, country-by-country regressions can be fit, with a separate model for
     each country. This is low-bias but high-variance, since each model sees less data.
 
-    This implies that a balance can be found between these two extremes by balancing
-    this bias-variance trade-off. Introduction of bias to the country-by-country models
-    can lead to a potentially substantial reduction in variance. Mathematically, this fit
-    is found by minimizing the sum of squared residuals for each country, with a term
-    that penalizes deviation of country-specific coefficients from a global coefficient.
-    The global coefficient is also penalized to prevent it from growing too large.
+    A balance can be found between these three cases by balancing this bias-variance
+    trade-off. Introduction of bias to the country-by-country models
+    can lead to a potentially substantial reduction in variance. Mathematically, this
+    fit is found by minimizing the sum of squared residuals for each country, with a
+    term that penalizes deviation of country-specific coefficients from group
+    coefficients, which in turn penalizes deviation from global coefficients. The
+    global slopes are also penalized to prevent them from growing too large.
 
     The loss function is as follows:
 
     .. math::
 
-            L(\{\beta_i\}_{i=1}^{C}, \beta) = \sum_{i = 1}^{C} \left [ \frac{1}{n_{i}}  \sum_{t=1}^{n_{i}} (y_{it} - x_{it}^{\intercal} \beta_{i})^2 \right ] + \lambda_{\text{local}} \sum_{i=1}^{C} ||\beta_i - \beta||_{2}^{2} + \lambda_{\text{global}} ||\beta||_{2}^{2}
+            L(\{\beta_i\}_{i=1}^{C}, \{\gamma_g\}_{g=1}^{G}, \beta) =
+            \sum_{i = 1}^{C} \left [ \frac{1}{n_{i}}  \sum_{t=1}^{n_{i}} (y_{it} -
+            x_{it}^{\intercal} \beta_{i})^2 \right ] +
+            \lambda_{\text{local}} \sum_{i=1}^{C} ||\beta_i - \gamma_{g(i)}||_{2}^{2} +
+            \lambda_{\text{group}} \sum_{g=1}^{G} ||\gamma_g - \beta||_{2}^{2} +
+            \lambda_{\text{global}} ||\tilde{\beta}||_{2}^{2}
 
-    When `groups` is provided, an intermediate level of group coefficients
-    :math:`\gamma_g` is added between the local and global coefficients. Local
-    coefficients are pulled towards the coefficients of their group :math:`g(i)`, and
-    group coefficients are pulled towards the global coefficients. The loss function
-    is then:
+    where :math:`\tilde{\beta}` is :math:`\beta` without its intercept.
 
-    .. math::
+    When groups is None, local coefficients are shrunk directly towards the set of
+    global coefficients, whose slopes are themselves shrunk towards 0.
 
-            L(\{\beta_i\}_{i=1}^{C}, \{\gamma_g\}_{g=1}^{G}, \beta) = \sum_{i = 1}^{C} \left [ \frac{1}{n_{i}}  \sum_{t=1}^{n_{i}} (y_{it} - x_{it}^{\intercal} \beta_{i})^2 \right ] + \lambda_{\text{local}} \sum_{i=1}^{C} ||\beta_i - \gamma_{g(i)}||_{2}^{2} + \lambda_{\text{group}} \sum_{g=1}^{G} ||\gamma_g - \beta||_{2}^{2} + \lambda_{\text{global}} ||\beta||_{2}^{2}
+    When shrink_to_global is False, no coefficients are shrunk towards global
+    coefficients. Instead, the top level of the hierarchy, the local coefficients or
+    the group coefficients when groups is provided, has its slopes shrunk towards 0.
 
-    where the mean squared error of each cross-section is weighted when sample weights
-    are passed to `fit`.
+    Intercepts at the top of the hierarchy are never shrunk towards 0. This matches
+    sklearn's Ridge behaviour.
 
-    When `shrink_to_global` is False, no global coefficients are fit and the top level
-    of the hierarchy is shrunk towards zero instead. Writing :math:`\tilde{\beta}` for a
-    coefficient vector without its intercept, the loss function without groups is:
-
-    .. math::
-
-            L(\{\beta_i\}_{i=1}^{C}) = \sum_{i = 1}^{C} \left [ \frac{1}{n_{i}}  \sum_{t=1}^{n_{i}} (y_{it} - x_{it}^{\intercal} \beta_{i})^2 \right ] + \lambda_{\text{local}} \sum_{i=1}^{C} ||\tilde{\beta}_i||_{2}^{2}
-
-    and with groups:
-
-    .. math::
-
-            L(\{\beta_i\}_{i=1}^{C}, \{\gamma_g\}_{g=1}^{G}) = \sum_{i = 1}^{C} \left [ \frac{1}{n_{i}}  \sum_{t=1}^{n_{i}} (y_{it} - x_{it}^{\intercal} \beta_{i})^2 \right ] + \lambda_{\text{local}} \sum_{i=1}^{C} ||\beta_i - \gamma_{g(i)}||_{2}^{2} + \lambda_{\text{group}} \sum_{g=1}^{G} ||\tilde{\gamma}_g||_{2}^{2}
-
-    When `groups` is "cluster", the training targets are pivoted to one time series
+    When groups="cluster", the training targets are pivoted to one time series
     per cross-section and the Pearson correlation :math:`\rho_{ij}` of each pair is
-    computed over their common dates. Correlations that cannot be computed, due to
-    too little overlap or zero variance, are set to zero. The correlations are turned
-    into distances :math:`d_{ij} = \sqrt{0.5 (1 - \rho_{ij})}` and the cross-sections
-    are merged by agglomerative hierarchical clustering with the chosen `linkage`
-    until at most `n_clusters` groups remain. Groups are labelled 0, 1, ... in order
-    of first appearance among the sorted cross-sections, and the model is then fit
-    exactly as if these groups had been passed as a dictionary. The groups are stored
-    in `clusters_` and the linkage matrix, for plotting a dendrogram, in
-    `linkage_matrix_`. Sample weights do not affect the clustering.
+    computed over their common dates. Pairs sharing fewer than min_overlap dates, or
+    with no variance, are treated as uncorrelated. The correlations are turned into
+    distances :math:`d_{ij} = \sqrt{0.5 (1 - \rho_{ij})}` and the cross-sections
+    are merged by agglomerative hierarchical clustering with the chosen linkage
+    until at most n_clusters groups remain.
     """
 
     def __init__(
@@ -134,11 +114,11 @@ class GlobalLocalRegression(BaseEstimator, RegressorMixin):
         group_lambda=1,
         positive=False,
         fit_intercept=True,
-        min_xs_samples=36,
         groups=None,
         shrink_to_global=True,
         n_clusters=2,
         linkage="average",
+        min_overlap=36,
     ):
         # Attributes
         self.local_lambda = local_lambda
@@ -146,11 +126,11 @@ class GlobalLocalRegression(BaseEstimator, RegressorMixin):
         self.group_lambda = group_lambda
         self.positive = positive
         self.fit_intercept = fit_intercept
-        self.min_xs_samples = min_xs_samples
         self.groups = groups
         self.shrink_to_global = shrink_to_global
         self.n_clusters = n_clusters
         self.linkage = linkage
+        self.min_overlap = min_overlap
 
     def fit(self, X, y, sample_weight=None):
         """
@@ -181,70 +161,22 @@ class GlobalLocalRegression(BaseEstimator, RegressorMixin):
         self.cids_ = sorted(X.index.get_level_values(0).unique())
         self.n_cids_ = len(self.cids_)
         self.n_features_ = X.shape[1]
-        self._set_cid_summaries(X, y, sample_weight)
 
-        # Each coefficient row is shrunk towards its parent row. Local rows point at
-        # the global row, or at their group row when groups is provided.
-        if self.shrink_to_global:
-            if self.groups is None:
-                n_rows = self.n_cids_ + 1
-                parents = [n_rows - 1] * self.n_cids_
-                lambdas = [self.local_lambda] * self.n_cids_
-            else:
-                if isinstance(self.groups, str):
-                    self.cid_to_group_ = self._cluster_groups(X, y)
-                else:
-                    self.cid_to_group_ = self._validate_groups()
-                self.groups_ = sorted(set(self.cid_to_group_.values()))
-                self.n_groups_ = len(self.groups_)
-                n_rows = self.n_cids_ + self.n_groups_ + 1
-                group_rows = {
-                    group: self.n_cids_ + k for k, group in enumerate(self.groups_)
-                }
-                parents = [group_rows[self.cid_to_group_[cid]] for cid in self.cids_]
-                parents += [n_rows - 1] * self.n_groups_
-                lambdas = [self.local_lambda] * self.n_cids_
-                lambdas += [self.group_lambda] * self.n_groups_
+        self._set_cid_sufficient_statistics(X, y, sample_weight)
+        self._set_groups(X, y)
 
-            # Row r of diff_matrix_ @ weights is beta_r - beta_parent(r). The global
-            # row has no parent, so it is shrunk towards zero.
-            self.diff_matrix_ = np.eye(n_rows)
-            self.diff_matrix_[np.arange(n_rows - 1), parents] = -1
-            lambdas = np.array(lambdas + [self.global_lambda], dtype=float)
-            self.shrinkage_ = np.repeat(lambdas[:, None], self.n_features_, axis=1)
-        else:
-            # There is no global row. The top level, the local rows or the group rows
-            # when groups is provided, has no parent and is shrunk towards zero.
-            if self.groups is None:
-                n_rows = self.n_cids_
-                top_rows = np.arange(n_rows)
-                self.diff_matrix_ = np.eye(n_rows)
-                lambdas = np.array([self.local_lambda] * n_rows, dtype=float)
-            else:
-                if isinstance(self.groups, str):
-                    self.cid_to_group_ = self._cluster_groups(X, y)
-                else:
-                    self.cid_to_group_ = self._validate_groups()
-                self.groups_ = sorted(set(self.cid_to_group_.values()))
-                self.n_groups_ = len(self.groups_)
-                n_rows = self.n_cids_ + self.n_groups_
-                top_rows = np.arange(self.n_cids_, n_rows)
-                group_rows = {
-                    group: self.n_cids_ + k for k, group in enumerate(self.groups_)
-                }
-                parents = [group_rows[self.cid_to_group_[cid]] for cid in self.cids_]
-                self.diff_matrix_ = np.eye(n_rows)
-                self.diff_matrix_[np.arange(self.n_cids_), parents] = -1
-                lambdas = np.array(
-                    [self.local_lambda] * self.n_cids_
-                    + [self.group_lambda] * self.n_groups_,
-                    dtype=float,
-                )
+        parents, lambdas = self._coef_hierarchy()
 
-            # As in ridge regression, intercepts are not shrunk towards zero
-            self.shrinkage_ = np.repeat(lambdas[:, None], self.n_features_, axis=1)
-            if self.fit_intercept:
-                self.shrinkage_[top_rows, 0] = 0
+        # Row r of diff_matrix_ @ weights is beta_r - beta_parent(r)
+        n_rows = parents.shape[0]
+        children = np.flatnonzero(parents >= 0)
+        self.diff_matrix_ = np.eye(n_rows)
+        self.diff_matrix_[children, parents[children]] = -1
+
+        # shrinkage_[r, j] is the penalty strength on feature j of row r
+        self.shrinkage_ = np.repeat(lambdas[:, None], self.n_features_, axis=1)
+        if self.fit_intercept:
+            self.shrinkage_[parents < 0, 0] = 0  # don't shrink top level intercept
 
         coefs = self._calculate_map_coefs(
             n_rows=n_rows,
@@ -298,11 +230,30 @@ class GlobalLocalRegression(BaseEstimator, RegressorMixin):
             cids_ order. When groups is provided, the next n_groups_ rows are the
             group coefficients in groups_ order. When shrink_to_global is True, the
             last row is the global coefficients.
-        """
-        weights = weights.reshape(-1, self.n_features_)
-        diffs = self.diff_matrix_ @ weights
 
-        return self._mse(weights) + np.sum(self.shrinkage_ * diffs**2)
+        Notes
+        -----
+        Every penalty term has the form lambda * (row - parent row)^2. A row without a
+        parent is compared with zero. All terms are evaluated at once from the following
+        two arrays built in fit:
+
+        * diff_matrix_, of shape (n_rows, n_rows). Row r has +1 in column r and -1 in
+          the column of the parent of r, so row r of diff_matrix_ @ weights is
+          beta_r - beta_parent(r).
+        * shrinkage_, of shape (n_rows, n_features_), the shape of
+          diff_matrix_ @ weights. Entry (r, j) is the penalty strength on feature j of
+          row r.
+
+        The penalty is then np.sum(shrinkage_ * diffs**2).
+        """
+        return _loss(
+            weights=weights,
+            diff_matrix=self.diff_matrix_,
+            shrinkage=self.shrinkage_,
+            xtx=self.XtX_cid_,
+            xty=self.Xty_cid_,
+            yty=self.yty_cid_,
+        )
 
     def loss_derivative(self, weights):
         """
@@ -316,41 +267,31 @@ class GlobalLocalRegression(BaseEstimator, RegressorMixin):
             cids_ order. When groups is provided, the next n_groups_ rows are the
             group coefficients in groups_ order. When shrink_to_global is True, the
             last row is the global coefficients.
+
+        Notes
+        -----
+        The penalty term lambda * (beta_r - beta_p)^2 of row r with parent row p has
+        derivative 2 * lambda * (beta_r - beta_p) with respect to beta_r, and the
+        negative of that with respect to beta_p. Row r of 2 * shrinkage_ * diff_matrix_
+        @ weights holds this derivative for row r. Multiplying by diff_matrix_.T adds
+        it to row r, through the +1 in column r, and subtracts it from row p, through
+        the -1 in column p.
         """
-        weights = weights.reshape(-1, self.n_features_)
-        diffs = self.diff_matrix_ @ weights
-
-        # The transpose sends each penalty gradient back to the child row (+) and to
-        # its parent row (-)
-        grads = self.diff_matrix_.T @ (2 * self.shrinkage_ * diffs)
-        grads[: self.n_cids_] += self._mse_gradient(weights)
-
-        return grads.flatten()
-
-    def _mse(self, weights):
-        # Each cross-section's weighted MSE expands to yty - 2 b'Xty + b'XtX b
-        local = weights[: self.n_cids_]
-        XtX_b = np.einsum("cij,cj->ci", self.XtX_cid_, local)
-
-        return (
-            self.yty_cid_.sum()
-            - 2 * np.sum(local * self.Xty_cid_)
-            + np.sum(local * XtX_b)
+        return _loss_derivative(
+            weights=weights,
+            diff_matrix=self.diff_matrix_,
+            shrinkage=self.shrinkage_,
+            xtx=self.XtX_cid_,
+            xty=self.Xty_cid_,
         )
 
-    def _mse_gradient(self, weights):
-        local = weights[: self.n_cids_]
-
-        return 2 * (np.einsum("cij,cj->ci", self.XtX_cid_, local) - self.Xty_cid_)
-
-    def _set_cid_summaries(self, X, y, sample_weight):
+    def _set_cid_sufficient_statistics(self, X, y, sample_weight):
         """
-        Store the weighted second moments of each cross-section's training data.
-
-        Sets `XtX_cid_`, `Xty_cid_` and `yty_cid_`, with rows in `cids_` order. Each
-        moment is normalised by the cross-section's total sample weight, so that the
-        mean squared error of a cross-section can be evaluated from them alone. `y`
-        and `sample_weight` are aligned with `X` by row position.
+        For each cid compute the following statistics:
+            * X^T W X / s
+            * X^T W y / s
+            * y^T W y / s
+        where s is the total sample weight of the cross-section.
 
         Parameters
         ----------
@@ -361,92 +302,68 @@ class GlobalLocalRegression(BaseEstimator, RegressorMixin):
         sample_weight : np.ndarray or None
             Sample weights with one value per row of X, or None for equal weights.
         """
-        X_values = X.to_numpy(dtype=float)
-        y_values = np.asarray(y, dtype=float).reshape(len(y))
-        if sample_weight is None:
-            w_values = np.ones(len(y_values))
-        else:
-            w_values = np.asarray(sample_weight, dtype=float)
+        suff_stats = _compute_sufficient_statistics(
+            x=X,
+            y=y,
+            sample_weight=sample_weight,
+            cids=self.cids_,
+        )
 
-        # One stable sort makes each cross-section's rows a contiguous block
-        cid_codes = pd.Categorical(
-            X.index.get_level_values(0), categories=self.cids_
-        ).codes
-        order = np.argsort(cid_codes, kind="stable")
-        starts = np.searchsorted(cid_codes[order], np.arange(self.n_cids_ + 1))
-        X_values = X_values[order]
-        y_values = y_values[order]
-        w_values = w_values[order]
+        self.XtX_cid_, self.Xty_cid_, self.yty_cid_ = suff_stats
 
-        self.XtX_cid_ = np.zeros((self.n_cids_, self.n_features_, self.n_features_))
-        self.Xty_cid_ = np.zeros((self.n_cids_, self.n_features_))
-        self.yty_cid_ = np.zeros(self.n_cids_)
-        for i in range(self.n_cids_):
-            block = slice(starts[i], starts[i + 1])
-            X_i, y_i, w_i = X_values[block], y_values[block], w_values[block]
-
-            total_weight = w_i.sum()
-
-            self.XtX_cid_[i] = (X_i * w_i[:, None]).T @ X_i / total_weight
-            self.Xty_cid_[i] = X_i.T @ (w_i * y_i) / total_weight
-            self.yty_cid_[i] = w_i @ y_i**2 / total_weight
-
-    def _validate_groups(self):
+    def _set_groups(self, X, y):
         """
-        Validate `groups` against the training cross-sections.
-
-        Returns
-        -------
-        dict
-            Mapping of each training cross-section to the name of its group.
-        """
-        if not isinstance(self.groups, dict):
-            raise TypeError(
-                f"`groups` must be a dictionary mapping group names to lists of "
-                f"cross-sections, got {type(self.groups).__name__}."
-            )
-
-        # Each group must map to a list-like of cids, not a single string
-        for group, group_cids in self.groups.items():
-            if isinstance(group_cids, str):
-                raise TypeError(
-                    f"Each group in `groups` must map to a list-like of "
-                    f"cross-sections, got the string '{group_cids}' for group {group}."
-                )
-
-        # Each listed cid may belong to one group only
-        listed_cid_to_group = {}
-        for group, group_cids in self.groups.items():
-            for cid in group_cids:
-                if cid in listed_cid_to_group and listed_cid_to_group[cid] != group:
-                    raise ValueError(
-                        f"Cross-section {cid} is assigned to more than one group: "
-                        f"{listed_cid_to_group[cid]} and {group}."
-                    )
-                listed_cid_to_group[cid] = group
-
-        # Every training cid must belong to a group
-        missing_cids = [cid for cid in self.cids_ if cid not in listed_cid_to_group]
-        if len(missing_cids) > 0:
-            raise ValueError(
-                f"The following cross-sections in the training data are not assigned "
-                f"to any group: {missing_cids}."
-            )
-
-        return {cid: listed_cid_to_group[cid] for cid in self.cids_}
-
-    def _cluster_groups(self, X, y):
-        """
-        Form groups by hierarchical clustering of the training targets.
-
-        Cross-sections are clustered on the pairwise correlations of their targets.
-        Sets `clusters_` and `linkage_matrix_`. `y` is aligned with `X` by row
-        position.
+        Assign each training cross-section to a group, from `groups` or by clustering.
 
         Parameters
         ----------
         X : pd.DataFrame
             Input feature matrix, multi-indexed by `cid` and `real_date`.
+        y : pd.DataFrame or pd.Series
+            Target vector with one value per row of X.
+        """
+        if self.groups is None:
+            return
+
+        if isinstance(self.groups, str):
+            self.cid_to_group_ = self._cluster_groups(X, y)
+        else:
+            self.cid_to_group_ = _validate_groups(self.groups, self.cids_)
+
+        self.groups_ = sorted(set(self.cid_to_group_.values()))
+        self.n_groups_ = len(self.groups_)
+
+    def _coef_hierarchy(self):
+        """
+        Assign parent row and shrinkage strength of each coefficient row. Rows are
+        ordered as local rows, then group rows when groups is provided, then the
+        global row when shrink_to_global is True. Each row is shrunk towards its
+        parent row. A parent of -1 marks a root, whose slopes are shrunk towards zero.
+
+        Returns
+        -------
+        Tuple[np.ndarray, np.ndarray]
+            Integer parent row index and float shrinkage strength of each row.
+        """
+        return _coef_hierarchy(
+            cids=self.cids_,
+            local_lambda=self.local_lambda,
+            group_lambda=self.group_lambda,
+            global_lambda=self.global_lambda,
+            groups=getattr(self, "groups_", None),
+            cid_to_group=getattr(self, "cid_to_group_", None),
+            shrink_to_global=self.shrink_to_global,
+        )
+
+    def _cluster_groups(self, X, y):
+        """
+        Form groups by hierarchical agglomerative clustering of the training targets.
+        Cross-sections are clustered on the pairwise correlations of their targets.
+
+        Parameters
+        ----------
+        X : pd.DataFrame
+            Input feature matrix, multi-indexed by cid and real_date.
         y : pd.DataFrame or pd.Series
             Target vector with one value per row of X.
 
@@ -460,35 +377,21 @@ class GlobalLocalRegression(BaseEstimator, RegressorMixin):
                 f"`groups` must be a dictionary mapping group names to lists of "
                 f"cross-sections or the string 'cluster', got '{self.groups}'."
             )
-        if isinstance(self.n_clusters, bool) or not isinstance(
-            self.n_clusters, (int, np.integer)
-        ):
-            raise TypeError(
-                f"`n_clusters` must be an integer, got "
-                f"{type(self.n_clusters).__name__}."
-            )
+        if not isinstance(self.n_clusters, (int, np.integer)):
+            raise TypeError("n_clusters must be an integer")
+        if not isinstance(self.min_overlap, (int, np.integer)):
+            raise TypeError("min_overlap must be an integer")
         if self.n_clusters < 1:
-            raise ValueError(f"`n_clusters` must be at least 1, got {self.n_clusters}.")
-        valid_linkages = ["average", "complete", "single", "ward"]
-        if not isinstance(self.linkage, str) or self.linkage not in valid_linkages:
+            raise ValueError("n_clusters must be at least 1")
+
+        valid_linkages = ["average", "complete", "single"]
+        if self.linkage not in valid_linkages:
             raise ValueError(
                 f"`linkage` must be one of {valid_linkages}, got {self.linkage!r}."
             )
-
-        # The returns panel needs exactly one target per cid and date
-        duplicated = X.index[X.index.duplicated(keep=False)].unique()
-        if len(duplicated) > 0:
-            listed = [
-                f"{cid} {date:%Y-%m-%d}"
-                if isinstance(date, pd.Timestamp)
-                else f"{cid} {date}"
-                for cid, date in duplicated[:5]
-            ]
+        if self.min_overlap < 2:
             raise ValueError(
-                f'`groups="cluster"` needs unique (cid, real_date) pairs to build the '
-                f"correlation matrix of returns, but X has duplicate pairs. Distinct "
-                f"pairs occurring more than once: {len(duplicated)}. First (at most "
-                f"5): {', '.join(listed)}."
+                f"`min_overlap` must be at least 2, got {self.min_overlap}."
             )
 
         if self.n_clusters > self.n_cids_:
@@ -500,38 +403,18 @@ class GlobalLocalRegression(BaseEstimator, RegressorMixin):
             )
         n_clusters = min(self.n_clusters, self.n_cids_)
 
-        if self.n_cids_ == 1:
-            self.linkage_matrix_ = None
-            labels = [1]
-        else:
-            # One column of targets per cross-section, in cids_ order
-            y_values = np.asarray(y, dtype=float).reshape(len(y))
-            returns = pd.Series(y_values, index=X.index).unstack(level=0)
-            returns = returns.reindex(columns=self.cids_)
+        y_vals = np.asarray(y, dtype=float).reshape(len(y))
+        rets = pd.Series(y_vals, index=X.index)
 
-            # Pairs with too little overlap or no variance are treated as uncorrelated
-            corr = np.nan_to_num(returns.corr().to_numpy(), nan=0.0)
-            np.fill_diagonal(corr, 1)
-            dist = np.sqrt(np.clip(0.5 * (1 - corr), 0, None))
-            np.fill_diagonal(dist, 0)
+        clusters, cid_to_group = _cluster_returns(
+            rets=rets,
+            cids=self.cids_,
+            n_clusters=n_clusters,
+            min_overlap=self.min_overlap,
+            linkage=self.linkage,
+        )
 
-            self.linkage_matrix_ = hierarchy.linkage(
-                squareform(dist, checks=False), method=self.linkage
-            )
-            labels = hierarchy.fcluster(
-                self.linkage_matrix_, t=n_clusters, criterion="maxclust"
-            )
-
-        # Label groups 0, 1, ... in order of first appearance along cids_
-        relabel = {}
-        for label in labels:
-            relabel.setdefault(label, len(relabel))
-        cid_to_group = {cid: relabel[label] for cid, label in zip(self.cids_, labels)}
-
-        self.clusters_ = {
-            group: [cid for cid in self.cids_ if cid_to_group[cid] == group]
-            for group in range(len(relabel))
-        }
+        self.clusters_ = clusters
 
         return cid_to_group
 
@@ -549,32 +432,254 @@ class GlobalLocalRegression(BaseEstimator, RegressorMixin):
 
         if self.groups is not None:
             self.group_coefs_ = {
-                group: coefs[self.n_cids_ + k]
-                for k, group in enumerate(self.groups_)
+                group: coefs[self.n_cids_ + k] for k, group in enumerate(self.groups_)
             }
 
-    def _define_bounds(self, n_rows: int) -> Union[List[Tuple], None]:
-        bounds = None
-        if self.positive:
-            row_bounds = [(0, None)] * self.n_features_
-            if self.fit_intercept:
-                row_bounds[0] = (None, None)  # no restriction on intercepts
-            bounds = row_bounds * n_rows
-
-        return bounds
-
     def _calculate_map_coefs(self, n_rows: int, loss_fn, jac_fn):
+        bounds = _define_bounds(
+            n_rows=n_rows,
+            positive=self.positive,
+            fit_intercept=self.fit_intercept,
+            n_features=self.n_features_,
+        )
+
         result = minimize(
             fun=loss_fn,
             jac=jac_fn,
             x0=np.zeros(n_rows * self.n_features_),  # initialize with zeros
             method="L-BFGS-B",
-            bounds=self._define_bounds(n_rows),
+            bounds=bounds,
         )
 
         coefs = result.x.reshape(n_rows, self.n_features_)
 
         return coefs
+
+
+def _mse(
+    weights: np.ndarray,
+    xtx: np.ndarray,
+    xty: np.ndarray,
+    yty: np.ndarray,
+) -> float:
+    n_cids = xtx.shape[0]
+    local = weights[:n_cids]
+    xtx_b = np.einsum("cij,cj->ci", xtx, local)
+
+    return yty.sum() - 2 * np.sum(local * xty) + np.sum(local * xtx_b)
+
+
+def _mse_gradient(weights: np.ndarray, xtx: np.ndarray, xty: np.ndarray) -> np.ndarray:
+    n_cids = xtx.shape[0]
+    local = weights[:n_cids]
+
+    grad = 2 * (np.einsum("cij,cj->ci", xtx, local) - xty)
+
+    return grad
+
+
+def _loss(
+    weights: np.ndarray,
+    diff_matrix: np.ndarray,
+    shrinkage: np.ndarray,
+    xtx: np.ndarray,
+    xty: np.ndarray,
+    yty: np.ndarray,
+) -> float:
+    n_features = xtx.shape[1]
+
+    weights = weights.reshape(-1, n_features)
+    diffs = diff_matrix @ weights
+
+    mse = _mse(weights=weights, xtx=xtx, xty=xty, yty=yty)
+
+    return mse + np.sum(shrinkage * diffs**2)
+
+
+def _loss_derivative(
+    weights: np.ndarray,
+    diff_matrix: np.ndarray,
+    shrinkage: np.ndarray,
+    xtx: np.ndarray,
+    xty: np.ndarray,
+) -> np.ndarray:
+    n_cids = xtx.shape[0]
+    n_features = xtx.shape[1]
+
+    weights = weights.reshape(-1, n_features)
+    diffs = diff_matrix @ weights
+
+    mse_grad = _mse_gradient(weights, xtx, xty)
+
+    grads = diff_matrix.T @ (2 * shrinkage * diffs)
+    grads[:n_cids] += mse_grad
+
+    return grads.flatten()
+
+
+def _compute_sufficient_statistics(
+    x: pd.DataFrame,
+    y: Union[pd.Series, pd.DataFrame, np.ndarray],
+    cids: List[str],
+    sample_weight: Optional[np.ndarray] = None,
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    n_cids = len(cids)
+    n_features = x.shape[1]
+
+    x_vals = np.asarray(x, dtype=float)
+    y_vals = np.asarray(y, dtype=float).reshape(len(y))
+    w_vals = (
+        np.ones(y_vals.shape[0])
+        if sample_weight is None
+        else np.asarray(sample_weight, dtype=float)
+    )
+
+    # One stable sort makes each cross-section's rows a contiguous block
+    cid_codes = pd.Categorical(x.index.get_level_values(0), categories=cids).codes
+    order = np.argsort(cid_codes, kind="stable")
+    starts = np.searchsorted(cid_codes[order], np.arange(n_cids + 1))
+
+    x_vals = x_vals[order]
+    y_vals = y_vals[order]
+    w_vals = w_vals[order]
+
+    xtx = np.zeros((n_cids, n_features, n_features))
+    xty = np.zeros((n_cids, n_features))
+    yty = np.zeros(n_cids)
+
+    for i in range(n_cids):
+        start, end = starts[i], starts[i + 1]
+
+        X_i = x_vals[start:end]
+        y_i = y_vals[start:end]
+        w_i = w_vals[start:end]
+
+        total_weight = w_i.sum()
+
+        xtx[i] = (X_i * w_i[:, None]).T @ X_i / total_weight
+        xty[i] = X_i.T @ (w_i * y_i) / total_weight
+        yty[i] = w_i @ y_i**2 / total_weight
+
+    return xtx, xty, yty
+
+
+def _cluster_returns(
+    rets: pd.Series,
+    cids: List[str],
+    n_clusters: int,
+    min_overlap: int,
+    linkage: str,
+) -> Tuple[Dict[int, List[str]], Dict[str, int]]:
+    labels = [1]
+    if len(cids) != 1:
+        rets = rets.unstack(level=0)
+        corr = rets.reindex(columns=cids).corr(min_periods=min_overlap).to_numpy()
+
+        corr = np.nan_to_num(corr, nan=0.0)
+        np.fill_diagonal(corr, 1)
+
+        dist = np.sqrt(np.clip(0.5 * (1 - corr), 0, None))
+        np.fill_diagonal(dist, 0)
+
+        linkage_matrix = hierarchy.linkage(
+            y=squareform(dist, checks=False), method=linkage
+        )
+        labels = hierarchy.fcluster(
+            Z=linkage_matrix,
+            t=n_clusters,
+            criterion="maxclust",
+        )
+
+    # Label groups
+    relabel = {}
+    for label in labels:
+        relabel.setdefault(label, len(relabel))
+    cid_to_group = {cid: relabel[label] for cid, label in zip(cids, labels)}
+
+    clusters = {
+        group: [cid for cid in cids if cid_to_group[cid] == group]
+        for group in range(len(relabel))
+    }
+
+    return clusters, cid_to_group
+
+
+def _coef_hierarchy(
+    cids: List[str],
+    local_lambda: float,
+    group_lambda: float,
+    global_lambda: float,
+    groups: Optional[List[int]],
+    cid_to_group: Optional[Dict[str, int]] = None,
+    shrink_to_global: bool = True,
+) -> Tuple[np.ndarray, np.ndarray]:
+    n_cids = len(cids)
+
+    # Local rows start at the top of the hierarchy, as roots with parent -1
+    parents = [-1] * n_cids
+    lambdas = [local_lambda] * n_cids
+
+    # Each local row points at its group row, and the group rows become the roots
+    if groups is not None:
+        group_rows = {group: n_cids + k for k, group in enumerate(groups)}
+        parents = [group_rows[cid_to_group[cid]] for cid in cids]
+        parents += [-1] * len(groups)
+        lambdas += [group_lambda] * len(groups)
+
+    # The current roots point at one global row, which becomes the only root
+    if shrink_to_global:
+        global_row = len(parents)
+        parents = [global_row if p == -1 else p for p in parents] + [-1]
+        lambdas += [global_lambda]
+
+    return np.array(parents), np.array(lambdas, dtype=float)
+
+
+def _define_bounds(
+    n_rows: int,
+    positive: bool,
+    fit_intercept: bool,
+    n_features: int,
+) -> Union[List[Tuple], None]:
+    bounds = None
+    if positive:
+        row_bounds = [(0, None)] * n_features
+        if fit_intercept:
+            row_bounds[0] = (None, None)  # no restriction on intercepts
+        bounds = row_bounds * n_rows
+
+    return bounds
+
+
+def _validate_groups(
+    groups: Dict[str, List[str]], cids: List[str]
+) -> Dict[str, List[str]]:
+    if not isinstance(groups, dict):
+        raise TypeError(
+            "groups must be a dictionary mapping group names to lists of "
+            "cross-sections"
+        )
+
+    # Each listed cid may belong to one group only
+    listed_cid_to_group = {}
+    for group, group_cids in groups.items():
+        for cid in group_cids:
+            if cid in listed_cid_to_group and listed_cid_to_group[cid] != group:
+                raise ValueError(
+                    f"Cross-section {cid} is assigned to more than one group: "
+                    f"{listed_cid_to_group[cid]} and {group}."
+                )
+            listed_cid_to_group[cid] = group
+
+    # Every training cid must belong to a group
+    missing_cids = [cid for cid in cids if cid not in listed_cid_to_group]
+    if len(missing_cids) > 0:
+        raise ValueError(
+            f"The following cross-sections in the training data are not assigned "
+            f"to any group: {missing_cids}."
+        )
+
+    return {cid: listed_cid_to_group[cid] for cid in cids}
 
 
 if __name__ == "__main__":
