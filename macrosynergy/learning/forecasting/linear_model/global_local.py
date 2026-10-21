@@ -1,8 +1,11 @@
+import warnings
 from typing import Union, List, Tuple
 
 import numpy as np
 import pandas as pd
+from scipy.cluster import hierarchy
 from scipy.optimize import minimize
+from scipy.spatial.distance import squareform
 from sklearn.base import BaseEstimator, RegressorMixin
 
 
@@ -30,15 +33,18 @@ class GlobalLocalRegression(BaseEstimator, RegressorMixin):
     min_xs_samples : int, default=36
         Minimum number of samples required in each group for the group to be considered
         a contribution to the mean squared error component of the loss function.
-    groups : dict, default=None
+    groups : dict or str, default=None
         Mapping of group names to list-likes of cross-sections. If provided, a
         three-level hierarchy is fit: local coefficients are shrunk towards the
         coefficients of their group, group coefficients are shrunk towards the global
         coefficients and the global coefficients are shrunk towards zero. Every
         cross-section in the training data must belong to exactly one group.
         Cross-sections that are absent from the training data are ignored, and groups
-        without any training cross-sections are dropped. Default is None, meaning that
-        local coefficients are shrunk directly towards the global coefficients.
+        without any training cross-sections are dropped. If "cluster", the groups are
+        instead formed at fit time by hierarchical clustering of the correlations
+        between the training targets of the cross-sections, as described in the
+        Notes. Default is None, meaning that local coefficients are shrunk directly
+        towards the global coefficients.
     group_lambda : float, default=1
         Regularization strength to pull group coefficients towards global coefficients.
         When `shrink_to_global` is False, group slopes are instead pulled towards zero
@@ -50,6 +56,13 @@ class GlobalLocalRegression(BaseEstimator, RegressorMixin):
         otherwise, has its slopes shrunk towards zero and its intercepts left
         unpenalized. Without `groups`, this amounts to a separate ridge regression per
         cross-section. `coef_` and `intercept_` are not set in this case.
+    n_clusters : int, default=2
+        Number of groups to form when `groups` is "cluster". If it exceeds the number
+        of training cross-sections, it is capped at that number with a warning. Has
+        no effect otherwise.
+    linkage : str, default="average"
+        Linkage method used to merge clusters when `groups` is "cluster". One of
+        "average", "complete", "single" or "ward". Has no effect otherwise.
 
     Notes
     -----
@@ -100,6 +113,18 @@ class GlobalLocalRegression(BaseEstimator, RegressorMixin):
     .. math::
 
             L(\{\beta_i\}_{i=1}^{C}, \{\gamma_g\}_{g=1}^{G}) = \sum_{i = 1}^{C} \left [ \frac{1}{n_{i}}  \sum_{t=1}^{n_{i}} (y_{it} - x_{it}^{\intercal} \beta_{i})^2 \right ] + \lambda_{\text{local}} \sum_{i=1}^{C} ||\beta_i - \gamma_{g(i)}||_{2}^{2} + \lambda_{\text{group}} \sum_{g=1}^{G} ||\tilde{\gamma}_g||_{2}^{2}
+
+    When `groups` is "cluster", the training targets are pivoted to one time series
+    per cross-section and the Pearson correlation :math:`\rho_{ij}` of each pair is
+    computed over their common dates. Correlations that cannot be computed, due to
+    too little overlap or zero variance, are set to zero. The correlations are turned
+    into distances :math:`d_{ij} = \sqrt{0.5 (1 - \rho_{ij})}` and the cross-sections
+    are merged by agglomerative hierarchical clustering with the chosen `linkage`
+    until at most `n_clusters` groups remain. Groups are labelled 0, 1, ... in order
+    of first appearance among the sorted cross-sections, and the model is then fit
+    exactly as if these groups had been passed as a dictionary. The groups are stored
+    in `clusters_` and the linkage matrix, for plotting a dendrogram, in
+    `linkage_matrix_`. Sample weights do not affect the clustering.
     """
 
     def __init__(
@@ -112,6 +137,8 @@ class GlobalLocalRegression(BaseEstimator, RegressorMixin):
         min_xs_samples=36,
         groups=None,
         shrink_to_global=True,
+        n_clusters=2,
+        linkage="average",
     ):
         # Attributes
         self.local_lambda = local_lambda
@@ -122,6 +149,8 @@ class GlobalLocalRegression(BaseEstimator, RegressorMixin):
         self.min_xs_samples = min_xs_samples
         self.groups = groups
         self.shrink_to_global = shrink_to_global
+        self.n_clusters = n_clusters
+        self.linkage = linkage
 
     def fit(self, X, y, sample_weight=None):
         """
@@ -162,7 +191,10 @@ class GlobalLocalRegression(BaseEstimator, RegressorMixin):
                 parents = [n_rows - 1] * self.n_cids_
                 lambdas = [self.local_lambda] * self.n_cids_
             else:
-                self.cid_to_group_ = self._validate_groups()
+                if isinstance(self.groups, str):
+                    self.cid_to_group_ = self._cluster_groups(X, y)
+                else:
+                    self.cid_to_group_ = self._validate_groups()
                 self.groups_ = sorted(set(self.cid_to_group_.values()))
                 self.n_groups_ = len(self.groups_)
                 n_rows = self.n_cids_ + self.n_groups_ + 1
@@ -189,7 +221,10 @@ class GlobalLocalRegression(BaseEstimator, RegressorMixin):
                 self.diff_matrix_ = np.eye(n_rows)
                 lambdas = np.array([self.local_lambda] * n_rows, dtype=float)
             else:
-                self.cid_to_group_ = self._validate_groups()
+                if isinstance(self.groups, str):
+                    self.cid_to_group_ = self._cluster_groups(X, y)
+                else:
+                    self.cid_to_group_ = self._validate_groups()
                 self.groups_ = sorted(set(self.cid_to_group_.values()))
                 self.n_groups_ = len(self.groups_)
                 n_rows = self.n_cids_ + self.n_groups_
@@ -399,6 +434,106 @@ class GlobalLocalRegression(BaseEstimator, RegressorMixin):
             )
 
         return {cid: listed_cid_to_group[cid] for cid in self.cids_}
+
+    def _cluster_groups(self, X, y):
+        """
+        Form groups by hierarchical clustering of the training targets.
+
+        Cross-sections are clustered on the pairwise correlations of their targets.
+        Sets `clusters_` and `linkage_matrix_`. `y` is aligned with `X` by row
+        position.
+
+        Parameters
+        ----------
+        X : pd.DataFrame
+            Input feature matrix, multi-indexed by `cid` and `real_date`.
+        y : pd.DataFrame or pd.Series
+            Target vector with one value per row of X.
+
+        Returns
+        -------
+        dict
+            Mapping of each training cross-section to the integer label of its group.
+        """
+        if self.groups != "cluster":
+            raise TypeError(
+                f"`groups` must be a dictionary mapping group names to lists of "
+                f"cross-sections or the string 'cluster', got '{self.groups}'."
+            )
+        if isinstance(self.n_clusters, bool) or not isinstance(
+            self.n_clusters, (int, np.integer)
+        ):
+            raise TypeError(
+                f"`n_clusters` must be an integer, got "
+                f"{type(self.n_clusters).__name__}."
+            )
+        if self.n_clusters < 1:
+            raise ValueError(f"`n_clusters` must be at least 1, got {self.n_clusters}.")
+        valid_linkages = ["average", "complete", "single", "ward"]
+        if not isinstance(self.linkage, str) or self.linkage not in valid_linkages:
+            raise ValueError(
+                f"`linkage` must be one of {valid_linkages}, got {self.linkage!r}."
+            )
+
+        # The returns panel needs exactly one target per cid and date
+        duplicated = X.index[X.index.duplicated(keep=False)].unique()
+        if len(duplicated) > 0:
+            listed = [
+                f"{cid} {date:%Y-%m-%d}"
+                if isinstance(date, pd.Timestamp)
+                else f"{cid} {date}"
+                for cid, date in duplicated[:5]
+            ]
+            raise ValueError(
+                f'`groups="cluster"` needs unique (cid, real_date) pairs to build the '
+                f"correlation matrix of returns, but X has duplicate pairs. Distinct "
+                f"pairs occurring more than once: {len(duplicated)}. First (at most "
+                f"5): {', '.join(listed)}."
+            )
+
+        if self.n_clusters > self.n_cids_:
+            warnings.warn(
+                f"`n_clusters` ({self.n_clusters}) is larger than the number of "
+                f"training cross-sections ({self.n_cids_}) and was capped at the "
+                f"number of training cross-sections.",
+                UserWarning,
+            )
+        n_clusters = min(self.n_clusters, self.n_cids_)
+
+        if self.n_cids_ == 1:
+            self.linkage_matrix_ = None
+            labels = [1]
+        else:
+            # One column of targets per cross-section, in cids_ order
+            y_values = np.asarray(y, dtype=float).reshape(len(y))
+            returns = pd.Series(y_values, index=X.index).unstack(level=0)
+            returns = returns.reindex(columns=self.cids_)
+
+            # Pairs with too little overlap or no variance are treated as uncorrelated
+            corr = np.nan_to_num(returns.corr().to_numpy(), nan=0.0)
+            np.fill_diagonal(corr, 1)
+            dist = np.sqrt(np.clip(0.5 * (1 - corr), 0, None))
+            np.fill_diagonal(dist, 0)
+
+            self.linkage_matrix_ = hierarchy.linkage(
+                squareform(dist, checks=False), method=self.linkage
+            )
+            labels = hierarchy.fcluster(
+                self.linkage_matrix_, t=n_clusters, criterion="maxclust"
+            )
+
+        # Label groups 0, 1, ... in order of first appearance along cids_
+        relabel = {}
+        for label in labels:
+            relabel.setdefault(label, len(relabel))
+        cid_to_group = {cid: relabel[label] for cid, label in zip(self.cids_, labels)}
+
+        self.clusters_ = {
+            group: [cid for cid in self.cids_ if cid_to_group[cid] == group]
+            for group in range(len(relabel))
+        }
+
+        return cid_to_group
 
     def _assign_coef_and_intercept_attrs(self, coefs):
         self.cid_coefs_ = {cid: coefs[i] for i, cid in enumerate(self.cids_)}
