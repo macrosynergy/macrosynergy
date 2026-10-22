@@ -119,25 +119,15 @@ def linear_composite(
         calculating the composite. This reduces the impact of outliers. Default is None
         (no winsorization).
     ffill_limit : int, optional
-        Maximum number of consecutive observation dates over which the last available
-        value of each constituent (cross-section or category) is carried forward before
-        the composite is calculated. This prevents a composite from being computed on a
-        partial set of constituents when some have not yet been updated for the latest
-        date, e.g. `ffill_limit=1` carries a constituent's previous value for one date.
-        A constituent is never filled before its first observation. When `weights` is a
-        category string, the weights are carried forward with the same limit. Default is
-        None (no forward filling).
+        Maximum number of observation dates over which each constituent's last value
+        (and any weight) is carried forward, e.g. to bridge constituents not yet
+        updated for the latest date. Default is None (no forward filling).
     nan_tolerance : float, optional
-        maximum share, between 0 and 1 inclusive, of the total absolute weight that may
-        belong to constituents with missing (NaN) values on a date; if exceeded, the
-        composite for that date is set to NaN. E.g. `nan_tolerance=0.1` requires
-        constituents carrying at least 90% of the weight to be available, and
-        `nan_tolerance=0` requires all of them. Missing values are counted after any
-        forward filling by `ffill_limit`, and the total weight includes every
-        constituent with a weight on that date, whether or not it has data. Note that
-        constituents whose history starts later count as missing on earlier dates, so a
-        low tolerance can also remove early history. Default is None (any available
-        constituents are used).
+        Maximum share of the total absolute weight that may be applied to constituents
+        with missing values (after any forward fill). If exceeded the composite is set
+        to NaN for that date. Constituents where history starts later count as missing
+        on earlier dates, so a low tolerance may remove early history. Default is None
+        (no limit).
 
     Returns
     -------
