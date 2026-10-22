@@ -3,6 +3,7 @@ import pandas as pd
 from typing import Dict, List, Optional, Tuple, Union
 import seaborn as sns
 import matplotlib.pyplot as plt
+from macrosynergy.management.utils import global_skip_visuals_flag
 
 
 def view_table(
@@ -80,6 +81,8 @@ def view_table(
     footnote_fontsize : int, optional
         Font size for the footnote text. Default is 10.
     """
+    if global_skip_visuals_flag():
+        return
 
     if not isinstance(df, pd.DataFrame):
         raise TypeError("Table must be a DataFrame")

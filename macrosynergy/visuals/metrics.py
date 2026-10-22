@@ -15,6 +15,7 @@ import pandas as pd
 import seaborn as sns
 
 from macrosynergy.visuals import Heatmap
+from macrosynergy.management.utils import global_skip_visuals_flag
 
 
 def view_metrics(
@@ -79,6 +80,8 @@ def view_metrics(
     None
         None
     """
+    if global_skip_visuals_flag():
+        return
 
     heatmap = Heatmap(
         df=df,

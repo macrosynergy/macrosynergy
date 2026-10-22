@@ -18,6 +18,7 @@ from .utils import (
     categories_df,
     reduce_df_by_ticker,
     merge_categories,
+    global_skip_visuals_flag,
 )
 from . import utils, types, decorators, simulate, constants
 from .validation import validate_and_reduce_qdf
@@ -48,6 +49,7 @@ __all__ = [
     "make_qdf",
     "common_cids",
     "update_df",
+    "global_skip_visuals_flag",
     # Modules/Subpackages
     "utils",
     "types",

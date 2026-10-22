@@ -8,7 +8,7 @@ import seaborn as sns
 from typing import List, Tuple
 
 from macrosynergy.management.simulate import make_qdf
-from macrosynergy.management.utils import reduce_df
+from macrosynergy.management.utils import reduce_df, global_skip_visuals_flag
 
 
 def heatmap_grades(
@@ -45,6 +45,8 @@ def heatmap_grades(
         Tuple of width and height of graph. Default is None, meaning it is set in
         accordance with df.
     """
+    if global_skip_visuals_flag():
+        return
 
     df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
 

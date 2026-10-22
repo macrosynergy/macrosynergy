@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 
 from macrosynergy.management.types import QuantamentalDataFrame
-from macrosynergy.management.utils import reduce_df
+from macrosynergy.management.utils import reduce_df, global_skip_visuals_flag
 
 
 def view_weights(
@@ -108,6 +108,8 @@ def view_weights(
         bands no longer add up along the vertical axis, and are rejected. A wholly
         negative panel plots as a stack below the axis.
     """
+    if global_skip_visuals_flag():
+        return
     if not isinstance(df, pd.DataFrame):
         raise TypeError(f"'df' must be a DataFrame - received {type(df)}.")
     if df.empty:
