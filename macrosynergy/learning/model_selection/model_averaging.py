@@ -1,3 +1,5 @@
+import warnings
+
 import numpy as np
 import pandas as pd
 
@@ -39,9 +41,14 @@ class ModelAveragingRegressor(BaseEstimator, RegressorMixin):
         - "mad": scale by the median absolute deviation of the scores
         - "iqr": scale by the interquartile range of the scores
         - float: a custom scaling factor
+        Members with a non-finite cross-validation score get weight zero and
+        are left out of the scale. Identical finite scores, or a single finite
+        score, share weight equally. If no score is finite, every member gets
+        equal weight. A negative float still inverts the ranking.
     min_weight : float, default=0.0
         Minimum weight to be included in the final ensemble. Weights below this threshold
-        will be set to zero.
+        will be set to zero. String quantiles are taken over members with a finite
+        score, so an excluded member does not lower the floor.
     error_score : "raise" or numeric, default=np.nan
         Value to assign to the score if an error occurs in estimator fitting. If set to "
         raise", the error is raised. If numeric, the score is set to this value.
@@ -172,39 +179,85 @@ class ModelAveragingRegressor(BaseEstimator, RegressorMixin):
             return adjusted_predictions
     
     def _compute_weights(self, cv_scores, temperature, min_weight):
-        all_scores = np.array([cv_scores[name] for name in self.model_names_])
+        all_scores = np.array(
+            [cv_scores[name] for name in self.model_names_], dtype=float
+        )
+        finite = np.isfinite(all_scores)
 
+        # One non-finite score used to make max/min/std NaN and, after dividing
+        # by that spread, every weight NaN. SignalOptimizer then forward-fills
+        # the previous forecast. Drop those members instead. A zero spread
+        # (one member, or exact ties) is the softmax limit: equal weight.
+        if not finite.any():
+            warnings.warn(
+                "No estimator produced a finite cross-validation score; "
+                "falling back to equal weights.",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+            equal = np.full(len(all_scores), 1.0 / len(all_scores))
+            return dict(zip(self.model_names_, equal))
+        if not finite.all():
+            excluded = [
+                name
+                for name, ok in zip(self.model_names_, finite)
+                if not ok
+            ]
+            warnings.warn(
+                "Estimators with a non-finite cross-validation score receive "
+                f"zero weight: {excluded}.",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+
+        scores = all_scores[finite]
         if temperature == "max-min":
-            spread = np.max(all_scores) - np.min(all_scores)
+            spread = np.max(scores) - np.min(scores)
         elif temperature == "std":
-            spread = np.std(all_scores)
+            spread = np.std(scores)
         elif temperature == "mad":
-            spread = np.median(np.abs(all_scores - np.median(all_scores)))
+            spread = np.median(np.abs(scores - np.median(scores)))
         elif temperature == "iqr":
-            spread = np.percentile(all_scores, 75) - np.percentile(all_scores, 25)
+            spread = np.percentile(scores, 75) - np.percentile(scores, 25)
         else:
             # temperature is a float
             spread = float(temperature)
 
-        scaled_scores = all_scores / spread # TODO: deal with zero later
-        scaled_scores = scaled_scores - np.max(scaled_scores) # exp could blowup so subtracting the max is computationally easier first + doesn't change the relative sizes of the scaled scores
-        weights = np.exp(scaled_scores)
-        weights = weights / weights.sum()
+        if not np.isfinite(spread) or spread == 0:
+            softmax = np.full(len(scores), 1.0 / len(scores))
+        else:
+            # A negative custom temperature still inverts the ranking.
+            scaled_scores = scores / spread
+            # exp could blow up, so subtract the max first. This does not
+            # change the relative sizes of the scaled scores.
+            scaled_scores = scaled_scores - np.max(scaled_scores)
+            softmax = np.exp(scaled_scores)
+            softmax = softmax / softmax.sum()
 
+        weights = np.zeros(len(all_scores), dtype=float)
+        weights[finite] = softmax
+
+        # Quantiles use the finite members only, so an excluded zero does not
+        # pull the floor down and knock out a real model.
         if isinstance(min_weight, str):
+            ref = weights[finite]
             if min_weight == "mean":
-                min_weight = np.mean(weights)
+                min_weight = np.mean(ref)
             elif min_weight == "median":
-                min_weight = np.median(weights)
+                min_weight = np.median(ref)
             elif min_weight == "lq":
-                min_weight = np.percentile(weights, 25)
+                min_weight = np.percentile(ref, 25)
             elif min_weight == "uq":
-                min_weight = np.percentile(weights, 75)
+                min_weight = np.percentile(ref, 75)
             elif min_weight == "lb":
-                min_weight = np.percentile(weights, 25) - 1.5 * (np.percentile(weights, 75) - np.percentile(weights, 25))
+                min_weight = np.percentile(ref, 25) - 1.5 * (
+                    np.percentile(ref, 75) - np.percentile(ref, 25)
+                )
             elif min_weight == "ub":
-                min_weight = np.percentile(weights, 75) + 1.5 * (np.percentile(weights, 75) - np.percentile(weights, 25))
-        
+                min_weight = np.percentile(ref, 75) + 1.5 * (
+                    np.percentile(ref, 75) - np.percentile(ref, 25)
+                )
+
         if min_weight > 0:
             adjusted_weights = np.where(weights < min_weight, 0.0, weights)
             if adjusted_weights.sum() == 0:
