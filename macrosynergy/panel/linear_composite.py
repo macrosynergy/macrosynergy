@@ -476,13 +476,12 @@ def linear_composite_cid_agg(
         .unstack(level=1)
     )
 
-    # Carry each cid's last value forward (and, for category weights, its weight)
+    # Carry each cid's last value and weight forward
     if ffill_limit is not None:
         data_df = data_df.ffill(limit=ffill_limit)
-        if isinstance(weights, str):
-            weights_df = weights_df.reindex(
-                weights_df.index.union(data_df.index)
-            ).ffill(limit=ffill_limit)
+        weights_df = weights_df.reindex(weights_df.index.union(data_df.index)).ffill(
+            limit=ffill_limit
+        )
 
     # Apply winsorization if thresh is specified
     if thresh is not None:
