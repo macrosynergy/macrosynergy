@@ -213,7 +213,7 @@ class LADRegressor(BaseEstimator, RegressorMixin):
                     "structure."
                 )
 
-        if X.shape[1] != len(self.coef_):
+        if self.coef_ is not None and X.shape[1] != len(self.coef_):
             raise ValueError(
                 "The number of features in the input feature matrix must match the number "
                 "of model coefficients."
