@@ -249,6 +249,7 @@ JPMAQS_DATASET_THEME_MAPPING = {
     "Macroeconomic trends": "JPMAQS_MACROECONOMIC_TRENDS",
     "Shocks and risk measures": "JPMAQS_SHOCKS_RISK_MEASURES",
     "Stylized trading factors": "JPMAQS_STYLIZED_TRADING_FACTORS",
+    "Power factors": "JPMAQS_POWER_FACTORS",
 }
 
 
@@ -1725,24 +1726,21 @@ class DataQueryFileAPIClient:
         files_df["snap-date"] = (snap_dt_col - SNAP_WINDOW_START).dt.strftime("%Y%m%d")
         return files_df
 
-    def _latest_complete_snapshot_date(self, files_df: pd.DataFrame) -> Optional[str]:
+    def _latest_snapshot_date(self, files_df: pd.DataFrame) -> Optional[str]:
         """
-        Returns the latest snap-date whose full-snapshot set covers every JPMaQS theme,
-        or None if no snap-date has a complete set.
+        Returns the latest snap-date with at least one full-snapshot file, or None if
+        there is none. Not every theme has to be present, so a theme that is not yet
+        published does not hold back the others.
         """
         if files_df.empty:
             return None
-        expected = set(JPMAQS_DATASET_THEME_MAPPING.values())
         checkfile = lambda x: any(s in x for s in ["_DELTA", "_METADATA"])  # noqa: E731
         snap_df = files_df[~files_df["file-name"].apply(checkfile)]
+        if snap_df.empty:
+            return None
         if "snap-date" not in snap_df.columns:
             snap_df = self._add_snap_date_column(snap_df)
-        complete_dates = [
-            snap_date
-            for snap_date, group_ids in snap_df.groupby("snap-date")["file-group-id"]
-            if expected.issubset(group_ids)
-        ]
-        return max(complete_dates) if len(complete_dates) else None
+        return snap_df["snap-date"].max()
 
     def download_files(
         self,
@@ -1945,7 +1943,7 @@ class DataQueryFileAPIClient:
             )
         )
         # resolve and filter by the latest snapshot date across all groups
-        latest_snapshot_date = self._latest_complete_snapshot_date(files_df)
+        latest_snapshot_date = self._latest_snapshot_date(files_df)
         if latest_snapshot_date is None:
             logger.warning("No snapshot available to download.")
             return []
