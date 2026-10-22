@@ -252,6 +252,7 @@ def linear_composite(
 
     return QuantamentalDataFrame(result_df, categorical=result_as_categorical)
 
+
 def _missing_cids_xcats_str(
     df: QuantamentalDataFrame,
     cids: List[str],
@@ -310,7 +311,7 @@ def _linear_composite_basic(
     # Create a boolean mask to help us work out the calcs
     nan_mask: pd.DataFrame = data_df.isna() | weights_df.isna()
 
-    # Share of the total absolute weight carried by constituents with missing data
+    # Share of absolute weight on constituents with missing data
     if nan_tolerance is not None:
         abs_weights = weights_df.abs()
         nan_share = abs_weights[nan_mask].sum(axis=1) / abs_weights.sum(axis=1)
@@ -549,7 +550,7 @@ def linear_composite_xcat_agg(
     # Create wide dataframes for the data and weights
     data_df = df.set_index(["cid", "real_date", "xcat"])["value"].unstack(level=2)
 
-    # Carry each category's last value forward, within each cid
+    # Carry each xcat's last value forward, within each cid
     if ffill_limit is not None:
         data_df = data_df.groupby(level="cid", observed=True).ffill(limit=ffill_limit)
 
@@ -694,6 +695,7 @@ def _check_df_for_missing_cid_data(
     rcids = [c for c in cids if c in found_cids]  # to preserve order
     return QuantamentalDataFrame(df), rcids, _xcat, weights, signs
 
+
 def _check_args(
     df: QuantamentalDataFrame,
     xcats: Union[str, List[str]],
@@ -764,13 +766,17 @@ def _check_args(
                 "The calculation will be performed with the available xcats."
             )
             if signs is not None:
-                signs = [signs[i] for i, xc in enumerate(xcats) if xc not in missing_xcats]
+                signs = [
+                    signs[i] for i, xc in enumerate(xcats) if xc not in missing_xcats
+                ]
             if isinstance(weights, list):
-                weights = [weights[i] for i, xc in enumerate(xcats) if xc not in missing_xcats]
+                weights = [
+                    weights[i] for i, xc in enumerate(xcats) if xc not in missing_xcats
+                ]
             xcats = [xc for xc in xcats if xc not in missing_xcats]
 
     # check cids
-    
+
     if cids is None:
         cids: List[str] = list(cids_in_df)
     elif isinstance(cids, str):
@@ -791,9 +797,13 @@ def _check_args(
                 "The calculation will be performed with the available cids."
             )
             if signs is not None:
-                signs = [signs[i] for i, cid in enumerate(cids) if cid not in missing_cids]
+                signs = [
+                    signs[i] for i, cid in enumerate(cids) if cid not in missing_cids
+                ]
             if isinstance(weights, list):
-                weights = [weights[i] for i, cid in enumerate(cids) if cid not in missing_cids]
+                weights = [
+                    weights[i] for i, cid in enumerate(cids) if cid not in missing_cids
+                ]
             cids = [cid for cid in cids if cid not in missing_cids]
 
     _xcat_agg: bool = len(xcats) > 1 or new_xcat != "NEW"
@@ -824,8 +834,7 @@ def _check_args(
     elif isinstance(weights, str):
         if weights not in xcats_in_df:
             raise ValueError(
-                "When using a category-string as `weights`"
-                " it must be present in `df`."
+                "When using a category-string as `weights` it must be present in `df`."
             )
     else:
         raise TypeError("`weights` must be a list of floats, a string or None.")
@@ -904,7 +913,9 @@ def _check_args(
 
     # Validate nan_tolerance
     if nan_tolerance is not None:
-        if not isinstance(nan_tolerance, (int, float)) or isinstance(nan_tolerance, bool):
+        if not isinstance(nan_tolerance, (int, float)) or isinstance(
+            nan_tolerance, bool
+        ):
             raise TypeError("`nan_tolerance` must be a numeric value or None.")
         if not 0 <= nan_tolerance <= 1:
             raise ValueError("`nan_tolerance` must be between 0 and 1.")
