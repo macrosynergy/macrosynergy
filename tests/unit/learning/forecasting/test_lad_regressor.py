@@ -319,6 +319,13 @@ class TestLADRegressor(unittest.TestCase):
             X=np.array([[np.nan] * self.X.shape[1]] * self.X.shape[0])
         )
 
+    def test_predict_not_converged(self):
+        """An unconverged LADRegressor predicts zeros, as documented"""
+        with self.assertWarns(Warning):
+            lad = LADRegressor(maxiter=1).fit(self.X, self.y)
+        self.assertIsNone(lad.coef_)
+        np.testing.assert_array_equal(lad.predict(self.X), np.zeros(self.X.shape[0]))
+
     def test_valid_predict(self):
         """Check default LADRegressor predict method works as expected"""
         lad = LADRegressor().fit(self.X, self.y)
