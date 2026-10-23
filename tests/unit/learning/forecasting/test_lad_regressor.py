@@ -810,7 +810,7 @@ class TestTimeWeightedLADRegression(unittest.TestCase):
 
     def test_valid_fit(self):
         """Check default TWLAD fit method works as expected"""
-        lad = TimeWeightedLADRegressor(fit_intercept=True, half_life=24)
+        lad = TimeWeightedLADRegressor(fit_intercept=True, half_life=24, tol=1e-10)
         try:
             lad.fit(X=self.X, y=self.y)
         except Exception as e:
@@ -828,7 +828,7 @@ class TestTimeWeightedLADRegression(unittest.TestCase):
             np.testing.assert_almost_equal(lad.intercept_, qr.intercept_, decimal=2)
 
         """Check no intercept TWLAD fit method works as expected"""
-        lad = TimeWeightedLADRegressor(fit_intercept=False, half_life=24)
+        lad = TimeWeightedLADRegressor(fit_intercept=False, half_life=24, tol=1e-10)
         try:
             lad.fit(X=self.X, y=self.y)
         except Exception as e:
