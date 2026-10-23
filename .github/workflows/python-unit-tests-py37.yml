@@ -32,9 +32,10 @@ jobs:
       #   uses: astral-sh/setup-uv@v5
 
       - name: Setup Miniconda
-        uses: conda-incubator/setup-miniconda@v3
+        uses: conda-incubator/setup-miniconda@v4
         with:
           python-version: 3.12
+          channels: defaults
       - name: Test conda installation
         shell: bash -l {0}
         run: conda info
