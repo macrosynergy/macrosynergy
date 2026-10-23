@@ -19,7 +19,7 @@ jobs:
         run: |
           FOLDERS=$(ls -d tests/unit/*/ | sed 's|tests/unit/||' | sed 's|/||' | jq -R -s -c 'split("\n")[:-1]')
           echo "Matrix: $FOLDERS"
-          echo "::set-output name=matrix::$FOLDERS"
+          echo "matrix=$FOLDERS" >> "$GITHUB_OUTPUT"
 
   run-unit-tests-release:
     needs: prepare-matrix
