@@ -3712,6 +3712,73 @@ class TestAll(unittest.TestCase):
         except Exception as e:
             self.fail(f"feature_selection_heatmap raised an exception: {e}")
 
+    def test_chosen_models_consistent_within_block(self):
+        """
+        When selection_freq is not None ensure each fitted model has the same model
+        and hyperparameters as the selection period that opens its block
+        """
+        so = SignalOptimizer(df=self.df, xcats=["CPI", "GROWTH", "RIR", "XR"])
+
+        freq = 12
+        so.calculate_predictions(
+            name="test",
+            models={
+                "lr": Pipeline([("scaler", StandardScaler()), ("model", LinearRegression())]),
+                "rr": Pipeline([("scaler", StandardScaler()), ("model", Ridge())]),
+            },
+            hyperparameters={
+                "lr": {"model__fit_intercept": [True, False]},
+                "rr": {"model__alpha": [0.1, 1.0, 10.0]},
+            },
+            scorers={"R2": make_scorer(r2_score, greater_is_better=True)},
+            inner_splitters={"rolling": RollingKFoldPanelSplit(n_splits=5)},
+            test_size=1,
+            store_correlations=True,
+            selection_freq=freq,
+        )
+
+        chosen = so.get_optimal_models(name="test").sort_values("real_date")
+        chosen = chosen.reset_index(drop=True)
+
+        assert not chosen.empty
+
+        # Each reuse period reports the same model and hyperparameters as the
+        # selection period that opens its block.
+        for i in range(len(chosen)):
+            block_start = (i // freq) * freq
+            assert chosen.loc[i, "model_type"] == chosen.loc[block_start, "model_type"]
+            assert chosen.loc[i, "hparams"] == chosen.loc[block_start, "hparams"]
+
+
+    def test_single_model_reuse_matches_full_selection(self):
+        # A single model with a single hyperparameter combination always selects the
+        # same model. Reuse periods refit that model on the expanding window, exactly
+        # as full selection does, so the forecasts must be identical. This proves
+        # reuse periods refit on fresh data rather than serving stale predictions.
+        so = SignalOptimizer(df=self.df, xcats=["CPI", "GROWTH", "RIR", "XR"])
+
+        shared_kwargs = dict(
+            models={"lr": LinearRegression()},
+            hyperparameters={"lr": {"fit_intercept": [True]}},
+            scorers={"R2": make_scorer(r2_score, greater_is_better=True)},
+            inner_splitters={"rolling": RollingKFoldPanelSplit(n_splits=5)},
+            test_size=1,
+        )
+
+        so.calculate_predictions(name="every", selection_freq=None, **shared_kwargs)
+        so.calculate_predictions(name="reuse", selection_freq=6, **shared_kwargs)
+
+
+        every = so.preds[so.preds.xcat == "every"].sort_values(["cid", "real_date"])
+        reuse = so.preds[so.preds.xcat == "reuse"].sort_values(["cid", "real_date"])
+
+        assert not every.empty
+        pd.testing.assert_series_equal(
+            every["value"].reset_index(drop=True),
+            reuse["value"].reset_index(drop=True),
+            check_names=False
+        )
+
 
 def _get_X_y(so: SignalOptimizer, drop_nas):
     df_long = categories_df(

@@ -6,6 +6,7 @@ import numbers
 import warnings
 from abc import ABC
 from functools import partial
+from typing import Optional
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -19,9 +20,7 @@ from sklearn.preprocessing import StandardScaler
 from tqdm.auto import tqdm
 
 from macrosynergy.compat import JOBLIB_RETURN_AS
-from macrosynergy.learning.splitters import (
-    WalkForwardPanelSplit,
-)
+from macrosynergy.learning.splitters import WalkForwardPanelSplit
 from macrosynergy.management import categories_df
 from macrosynergy.management.types.qdf import QuantamentalDataFrame
 
@@ -260,6 +259,7 @@ class BasePanelLearner(ABC):
         store_additional_data=None,
         n_jobs_outer=-1,
         n_jobs_inner=1,
+        selection_freq: Optional[int] = None,
     ):
         """
         Run a learning process over a panel.
@@ -310,6 +310,13 @@ class BasePanelLearner(ABC):
         n_jobs_inner : int, optional
             Number of jobs to run in parallel for the inner loop. Default is 1. If no
             hyperparameter tuning is required, this parameter can be disregarded.
+        selection_freq : int, optional
+            Number of outer splits (retraining iterations) between model selections.
+            If None, a full cross-validated hyperparameter search is performed at every
+            outer split. When set to an integer, selection is performed on the first
+            outer split and every `selection_freq` splits thereafter. On the splits in
+            between, the most recently selected model and hyperparameters are refit on
+            the current training window without re-running the search.
 
         Returns
         -------
@@ -333,6 +340,7 @@ class BasePanelLearner(ABC):
             store_additional_data=store_additional_data,
             n_jobs_outer=n_jobs_outer,
             n_jobs_inner=n_jobs_inner,
+            selection_freq=selection_freq,
         )
 
         # Determine all outer splits and run the learning process in parallel
@@ -364,33 +372,83 @@ class BasePanelLearner(ABC):
             # No CV is performed, so no base splits are needed
             base_splits = None
 
-        # Return list of results
-        optim_results = tqdm(
-            Parallel(n_jobs=n_jobs_outer, **JOBLIB_RETURN_AS)(
-                delayed(self._worker)(
-                    name=name,
+        common_worker_args = dict(
+            name=name,
+            scorers=scorers,
+            cv_summary=cv_summary,
+            include_train_folds=include_train_folds,
+            search_type=search_type,
+            store_additional_data=store_additional_data,
+            normalize_fold_results=normalize_fold_results,
+            n_iter=n_iter,
+            n_jobs_inner=n_jobs_inner,
+            base_splits=base_splits,
+        )
+
+        if selection_freq is None:
+            # Model selection at every period: run the outer splits in parallel.
+            optim_results = tqdm(
+                Parallel(n_jobs=n_jobs_outer, **JOBLIB_RETURN_AS)(
+                    delayed(self._worker)(
+                        train_idx=train_idx,
+                        test_idx=test_idx,
+                        models=models,
+                        hyperparameters=hyperparameters,
+                        inner_splitters=inner_splitters,
+                        n_splits_add=self._get_n_splits_add(
+                            iteration, outer_splitter, split_functions
+                        ),
+                        **common_worker_args,
+                    )
+                    for iteration, (train_idx, test_idx) in enumerate(train_test_splits)
+                ),
+                total=len(train_test_splits),
+            )
+        else:
+            # Model selection every `selection_freq` periods. Each selection period
+            # performs a full search. The periods in between refit the most recently
+            # selected model with no search.
+            optim_results = []
+            current_name = None
+            current_hparams = None
+            for iteration, (train_idx, test_idx) in enumerate(tqdm(train_test_splits)):
+                model_selection = (
+                    (iteration % selection_freq) == 0 or
+                    current_name is None
+                )
+
+                if model_selection:
+                    iter_models = models
+                    iter_hparams = hyperparameters
+                    iter_inner_splitters = inner_splitters
+                else:
+                    iter_params = models[current_name].get_params(deep=False)
+                    iter_model = type(models[current_name])(**iter_params)
+                    iter_model.set_params(**current_hparams)
+                    iter_models = {current_name: iter_model}
+                    iter_hparams = None
+                    iter_inner_splitters = None
+
+                result = self._worker(
                     train_idx=train_idx,
                     test_idx=test_idx,
-                    inner_splitters=inner_splitters,
-                    models=models,
-                    hyperparameters=hyperparameters,
-                    scorers=scorers,
-                    cv_summary=cv_summary,
-                    include_train_folds=include_train_folds,
-                    search_type=search_type,
-                    store_additional_data=store_additional_data,
-                    normalize_fold_results=normalize_fold_results,
-                    n_iter=n_iter,
+                    models=iter_models,
+                    hyperparameters=iter_hparams,
+                    inner_splitters=iter_inner_splitters,
                     n_splits_add=self._get_n_splits_add(
                         iteration, outer_splitter, split_functions
                     ),
-                    n_jobs_inner=n_jobs_inner,
-                    base_splits=base_splits,
+                    **common_worker_args,
                 )
-                for iteration, (train_idx, test_idx) in enumerate(train_test_splits)
-            ),
-            total=len(train_test_splits),
-        )
+
+                model_choice_data = result["model_choice"]
+                if model_selection:
+                    current_name = model_choice_data[1]
+                    current_hparams = model_choice_data[3]
+                else:
+                    model_choice_data[3] = dict(current_hparams)
+
+                optim_results.append(result)
 
         return optim_results
 
@@ -1334,6 +1392,7 @@ class BasePanelLearner(ABC):
         store_additional_data,
         n_jobs_outer,
         n_jobs_inner,
+        selection_freq=None,
     ):
         """
         Input parameter checks for the run method.
@@ -1374,6 +1433,8 @@ class BasePanelLearner(ABC):
             Number of jobs to run in parallel for the outer loop.
         n_jobs_inner : int
             Number of jobs to run in parallel for the inner loop.
+        selection_freq : int, optional
+            Number of outer splits (retraining iterations) between model selections.
         """
         # name
         if not isinstance(name, str):
@@ -1662,6 +1723,13 @@ class BasePanelLearner(ABC):
                     raise ValueError(
                         "n_jobs_inner must be greater than zero or equal to -1."
                     )
+
+        # selection_freq
+        if selection_freq is not None:
+            if not isinstance(selection_freq, int) or isinstance(selection_freq, bool):
+                raise TypeError("selection_freq must be an integer.")
+            if selection_freq < 1:
+                raise ValueError("selection_freq must be a positive integer.")
 
     def _check_hyperparam_grid(self, search_type, pipe_params):
         if pipe_params != {}:
