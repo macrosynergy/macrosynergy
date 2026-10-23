@@ -400,7 +400,10 @@ class TestAll(unittest.TestCase):
                 xcats=self.xcats,
                 end="invalid",
             )
-        with self.assertRaises(TypeError):
+        with self.assertRaisesRegex(
+            ValueError,
+            expected_regex=r"blacklist must have exactly n_targets"
+        ):
             so = SignalOptimizer(
                 df=self.df,
                 xcats=self.xcats,
@@ -519,6 +522,15 @@ class TestAll(unittest.TestCase):
                 df=self.df,
                 xcats=self.xcats,
                 n_targets=-1,
+            )
+
+        # blacklist length does not match n_targets
+        with self.assertRaises(ValueError):
+            SignalOptimizer(
+                df=self.df,
+                xcats=self.xcats,
+                n_targets=2,
+                blacklist=[self.black_valid],
             )
 
     def test_types_calculate_predictions(self):
@@ -3713,7 +3725,72 @@ class TestAll(unittest.TestCase):
             self.fail(f"feature_selection_heatmap raised an exception: {e}")
 
 
-def _get_X_y(so: SignalOptimizer, drop_nas):
+    def test_multi_target_per_target_blacklist(self):
+        """
+        When n_targets > 1 and blacklist is a list of dicts, each blacklist should
+        only null out forecasts for its corresponding target column. The other target's
+        forecasts must remain intact for those cross-section/date ranges.
+        """
+        black_target_growth = {
+            "AUD": (
+                pd.Timestamp(year=2018, month=9, day=1),
+                pd.Timestamp(year=2020, month=4, day=1),
+            ),
+        }
+        black_target_rir = {
+            "GBP": (
+                pd.Timestamp(year=2019, month=6, day=1),
+                pd.Timestamp(year=2020, month=2, day=1),
+            ),
+        }
+        so = SignalOptimizer(
+            df=self.df,
+            xcats=self.xcats,  # last 2 are ["GROWTH", "RIR"]
+            cids=self.cids,
+            n_targets=2,
+            blacklist=[black_target_growth, black_target_rir],
+            drop_nas="X",
+        )
+
+        # sklearn models don't allow nans in y, so fill here just so
+        # the test doesn't error. The same logic is still being tested
+        so.y = so.y.fillna(0)
+        try:
+            so.calculate_predictions(
+                name="test_multi_bl",
+                models={"LR": LinearRegression()},
+                n_jobs_outer=1,
+                min_cids=1,
+                min_periods=12,
+            )
+        except Exception as e:
+            self.fail(f"calculate_predictions raised an exception: {e}")
+
+        result = so.preds
+
+        assert result[
+            result["cid"].eq("AUD") &
+            result["real_date"].between("2018-09-01", "2020-04-01") &
+            result["xcat"].eq("GROWTH_test_multi_bl")
+        ].empty
+        assert not result[
+            result["cid"].eq("AUD") &
+            result["real_date"].between("2018-09-01", "2020-04-01") &
+            result["xcat"].eq("RIR_test_multi_bl")
+        ].empty
+        assert result[
+            result["cid"].eq("GBP") &
+            result["real_date"].between("2019-06-01", "2020-02-01") &
+            result["xcat"].eq("RIR_test_multi_bl")
+        ].empty
+        assert not result[
+            result["cid"].eq("GBP") &
+            result["real_date"].between("2019-06-01", "2020-02-01") &
+            result["xcat"].eq("GROWTH_test_multi_bl")
+        ].empty
+
+
+def _get_X_y(so: SignalOptimizer, drop_nas: bool):
     df_long = categories_df(
             df=so.df,
             xcats=so.xcats,
