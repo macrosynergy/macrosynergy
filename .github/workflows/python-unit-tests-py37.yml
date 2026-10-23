@@ -22,6 +22,8 @@ jobs:
   run-unit-tests:
     needs: prepare-matrix
     runs-on: ubuntu-24.04
+    env:
+      CONDA_PLUGINS_CONDA_PYPI_PIP_WARNING: "false"  # silence conda-pypi "Did you know" tip
     strategy:
       matrix:
         folder: ${{fromJson(needs.prepare-matrix.outputs.matrix)}}
