@@ -280,6 +280,8 @@ class ReturnForecaster(BasePanelLearner):
             n_jobs_outer=n_jobs_cv,
             n_jobs_inner=n_jobs_model,
             store_additional_data=None,
+            skip_validation=False,
+            show_tqdm=False,
         )
         if not isinstance(store_correlations, bool):
             raise TypeError("The store_correlations argument must be a boolean.")

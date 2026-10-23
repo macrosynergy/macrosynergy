@@ -225,6 +225,7 @@ class BasePanelLearner(ABC):
         n_jobs_outer=-1,
         n_jobs_inner=1,
         skip_validation=False,
+        show_tqdm=True,
     ):
         """
         Run a learning process over a panel.
@@ -278,6 +279,8 @@ class BasePanelLearner(ABC):
         skip_validation : bool, optional
             Whether to skip the more intensive validation checks for, primarily, the 
             model and hyperparameter dictionaries. Default is False.
+        show_tqdm : bool, optional
+            Whether to display a tqdm progress bar during the learning process. Default is True.
         Returns
         -------
         list
@@ -301,6 +304,7 @@ class BasePanelLearner(ABC):
             n_jobs_outer=n_jobs_outer,
             n_jobs_inner=n_jobs_inner,
             skip_validation=skip_validation,
+            show_tqdm=show_tqdm,
         )
 
         # Determine all outer splits and run the learning process in parallel
@@ -360,6 +364,7 @@ class BasePanelLearner(ABC):
                 for iteration, (train_idx, test_idx) in enumerate(train_test_splits)
             ),
             total=len(train_test_splits),
+            disable=not show_tqdm,
         )
 
         return optim_results
@@ -1382,6 +1387,7 @@ class BasePanelLearner(ABC):
         n_jobs_outer,
         n_jobs_inner,
         skip_validation,
+        show_tqdm,
     ):
         """
         Input parameter checks for the run method.
@@ -1424,6 +1430,8 @@ class BasePanelLearner(ABC):
             Number of jobs to run in parallel for the inner loop.
         skip_validation : bool
             Whether to skip validation checks. Default is False.
+        show_tqdm : bool
+            Whether to display a tqdm progress bar during the learning process. Default is True.
         """
         # name
         if not isinstance(name, str):
@@ -1716,6 +1724,10 @@ class BasePanelLearner(ABC):
         # skip_validation
         if not isinstance(skip_validation, bool):
             raise TypeError("skip_validation must be a boolean.")
+
+        # show_tqdm
+        if not isinstance(show_tqdm, bool):
+            raise TypeError("show_tqdm must be a boolean.")
 
     def _check_hyperparam_grid(self, search_type, pipe_params):
         if pipe_params != {}:

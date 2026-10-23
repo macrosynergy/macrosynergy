@@ -225,6 +225,7 @@ class SignalOptimizer(BasePanelLearner):
         n_jobs_inner=1,
         store_correlations=False,
         skip_validation = False,
+        show_tqdm = True,
     ):
         """
         Determine forecasts and store relevant quantities over time.
@@ -323,6 +324,8 @@ class SignalOptimizer(BasePanelLearner):
         skip_validation : bool
             Whether to skip the more intensive validation checks for, primarily, the 
             model and hyperparameter dictionaries. Default is False.
+        show_tqdm : bool, optional
+            Whether to display a tqdm progress bar during the optimization process. Default is True.
         """
         # Additional checks
         if not isinstance(store_correlations, bool):
@@ -371,7 +374,8 @@ class SignalOptimizer(BasePanelLearner):
             n_iter=n_iter,
             n_jobs_outer=n_jobs_outer,
             n_jobs_inner=n_jobs_inner,
-            skip_validation=skip_validation
+            skip_validation=skip_validation,
+            show_tqdm=show_tqdm,
         )
 
         self._check_duplicate_results(name)
