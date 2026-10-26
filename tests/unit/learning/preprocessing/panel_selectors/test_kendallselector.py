@@ -34,8 +34,10 @@ class TestKendallSelector(unittest.TestCase):
                 tuples.append((cid, work_day))
 
         n_samples = len(tuples)
-        ftrs = np.random.normal(loc=0, scale=1, size=(n_samples, 3))
-        labels = np.matmul(ftrs, [1, 0, -1]) + np.random.normal(0, 0.01, len(ftrs))
+        trend = np.arange(n_samples, dtype=float)
+        unrelated = np.roll(trend, n_samples // 2)
+        ftrs = np.column_stack([trend, unrelated, -trend])
+        labels = np.matmul(ftrs, [1, 0, -1])
         df = pd.DataFrame(
             data=np.concatenate((np.reshape(labels, (-1, 1)), ftrs), axis=1),
             index=pd.MultiIndex.from_tuples(tuples, names=["cid", "real_date"]),
@@ -144,6 +146,7 @@ class TestKendallSelector(unittest.TestCase):
         # Test default initialization
         scaler = KendallSignificanceSelector().fit(self.X, self.y)
         X_transformed = scaler.transform(self.X)
-        self.assertTrue(X_transformed.shape[1] == 2)
-        self.assertIsInstance(X_transformed, pd.DataFrame)
-        self.assertTrue(all([xcat in self.X.columns for xcat in X_transformed.columns]))
+        pd.testing.assert_frame_equal(
+            X_transformed,
+            self.X.loc[:, ["CPI", "RIR"]],
+        )

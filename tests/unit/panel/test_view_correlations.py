@@ -1,6 +1,7 @@
 import unittest
 import pandas as pd
 from pandas.testing import assert_frame_equal
+import matplotlib.pyplot as plt
 from unittest.mock import patch
 from tests.simulate import make_qdf
 from macrosynergy.panel.view_correlations import correl_matrix
@@ -49,6 +50,7 @@ class TestAll(unittest.TestCase):
         self.dfd = dfd
 
     def tearDown(self) -> None:
+        plt.close("all")
         return super().tearDown()
 
     def test_lag_series(self):

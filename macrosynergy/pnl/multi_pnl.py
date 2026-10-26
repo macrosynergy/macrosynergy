@@ -4,6 +4,7 @@ It also provides functionality to calculate a weighted aggregate PnL based on us
 for each PnL.
 """
 
+from numbers import Number
 from typing import Dict, List, Optional, Tuple, Union
 
 import matplotlib.pyplot as plt
@@ -258,7 +259,11 @@ class MultiPnL:
         plt.show()
         pnl_df.drop(columns="cumulative pnl", inplace=True)
 
-    def evaluate_pnls(self, pnl_xcats: List[str] = None) -> pd.DataFrame:
+    def evaluate_pnls(
+        self,
+        pnl_xcats: List[str] = None,
+        sr_thresholds: Optional[List[float]] = None,
+    ) -> pd.DataFrame:
         """
         Returns a DataFrame containing the following evaluation metrics for specified PnLs:
 
@@ -274,6 +279,9 @@ class MultiPnL:
         - Sharpe Stability Ratio - HAC-robust t-stat for the mean rolling
           Sharpe ratio (see :func:`sharpe_stability_ratio`); accounts for
           sample size and serial dependence
+        - Prob. Sharpe Ratio > {threshold} - one-sided asymptotic probability
+          that the mean rolling Sharpe ratio is above each threshold in
+          ``sr_thresholds``, if provided
         - Traded Months
 
         .. note::
@@ -288,6 +296,10 @@ class MultiPnL:
         pnl_xcats : List[str]
             List of PnLs to evaluate. If None, all PnLs are evaluated. Must be in the
             format 'xcat', or 'xcat/return_xcat'.
+        sr_thresholds : List[float], optional
+            Sharpe ratio thresholds for which one-sided probabilities are
+            reported. Default is None, in which case ``[0.25, 0.5, 0.75]`` is
+            used. Pass an empty list to suppress the threshold probability rows.
 
         Returns
         -------
@@ -296,6 +308,16 @@ class MultiPnL:
         """
 
         self._check_pnls_added()
+        if sr_thresholds is None:
+            sr_thresholds = [0.25, 0.5, 0.75]
+        if not isinstance(sr_thresholds, list):
+            raise TypeError("sr_thresholds must be a list of numbers.")
+        if not all(
+            isinstance(elem, Number) and not isinstance(elem, bool)
+            for elem in sr_thresholds
+        ):
+            raise TypeError("sr_thresholds must be a list of numbers.")
+
         if pnl_xcats is None:
             pnl_xcats = self.pnl_xcats
         else:
@@ -304,17 +326,25 @@ class MultiPnL:
         pnl_evals = []
         for pnl_xcat in pnl_xcats:
             if pnl_xcat in self.composite_pnl_xcats or self._bm_dict:
-                eval_df = self._evaluate_pnl_stats(pnl_xcat)
+                eval_df = self._evaluate_pnl_stats(
+                    pnl_xcat, sr_thresholds=sr_thresholds
+                )
                 eval_df.columns = [pnl_xcat]
             else:
                 pnl = self.single_return_pnls[pnl_xcat]
-                eval_df = pnl.evaluate_pnls([pnl_xcat.split("/")[0]])
+                eval_df = pnl.evaluate_pnls(
+                    [pnl_xcat.split("/")[0]], sr_thresholds=sr_thresholds
+                )
                 eval_df.columns = [pnl_xcat]
             pnl_evals.append(eval_df)
 
         return pd.concat(pnl_evals, axis=1, ignore_index=False, sort=False)
 
-    def _evaluate_pnl_stats(self, pnl_xcat: str) -> pd.DataFrame:
+    def _evaluate_pnl_stats(
+        self,
+        pnl_xcat: str,
+        sr_thresholds: List[float],
+    ) -> pd.DataFrame:
         """
         Evaluate a PnL in a manner similar to NaivePnL's ``evaluate_pnls()``.
 
@@ -335,6 +365,8 @@ class MultiPnL:
             for bm in self._bm_dict:
                 stats.append(f"{bm} correl")
         stats.append("Sharpe Stability Ratio")
+        sr_prob_rows = [f"Prob. Sharpe Ratio > {float(sr):g}" for sr in sr_thresholds]
+        stats.extend(sr_prob_rows)
         stats.append("Traded Months")
 
         pnl_df = self.pnls_df[self.pnls_df["xcat"] == pnl_xcat].copy()
@@ -387,6 +419,14 @@ class MultiPnL:
                 benchmark_sr=0.0,
                 annualization_factor=261,
             )
+            for sr, row in zip(sr_thresholds, sr_prob_rows):
+                df.loc[row, col] = sharpe_stability_ratio(
+                    dfw[col].dropna(),
+                    window=252,
+                    benchmark_sr=float(sr),
+                    annualization_factor=261,
+                    probability=True,
+                )
 
         df.loc["Traded Months", :] = dfw.resample(mfreq).sum().count()
         return df

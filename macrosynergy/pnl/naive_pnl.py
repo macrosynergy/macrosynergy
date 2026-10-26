@@ -23,8 +23,18 @@ from macrosynergy.management.utils import (
 )
 from macrosynergy.management.types import QuantamentalDataFrame
 from macrosynergy.panel.make_zn_scores import make_zn_scores
-from macrosynergy.pnl.sharpe_stability_ratio import sharpe_stability_ratio
+from macrosynergy.pnl.sharpe_stability_ratio import (
+    _rolling_sharpe,
+    sharpe_stability_ratio,
+)
+from macrosynergy.pnl.pnl_table import (
+    DEFAULT_PNL_METRIC_GROUPS,
+    HTMLTable,
+    pnl_table_html,
+)
 from macrosynergy.signal import SignalReturnRelations
+from macrosynergy.visuals.table import view_table
+from macrosynergy.visuals.weights import _plot_weight_area
 
 
 class NaivePnL:
@@ -174,10 +184,10 @@ class NaivePnL:
             which is delimited by the frequency chosen. Additionally, the re-balancing
             frequency will be applied to make_zn_scores() if used as the method to produce
             the raw signals.
-        rebal_slip : str
-            re-balancing slippage in days. Default is 1 which means that it takes one
-            day to re-balance the position and that the new positions produce PnL from the
-            second day after the signal has been recorded.
+        rebal_slip : int
+            re-balancing slippage in days. Default is 0. A value of 1 means that it
+            takes one day to re-balance the position and that the new positions produce
+            PnL from the second day after the signal has been recorded.
         vol_scale : bool
             ex-post scaling of PnL to annualized volatility given. This is for
             comparative visualization and not out-of-sample. Default is none.
@@ -650,7 +660,7 @@ class NaivePnL:
         return pd.concat(dfw_list)
 
     @staticmethod
-    def rebalancing(dfw: pd.DataFrame, rebal_freq: str = "daily", rebal_slip=0):
+    def rebalancing(dfw: pd.DataFrame, rebal_freq: str = "daily", rebal_slip: int = 0):
         """
         The signals are calculated daily and for each individual cross-section defined
         in the panel. However, re-balancing a position can occur more infrequently than
@@ -665,52 +675,51 @@ class NaivePnL:
         rebal_freq : str
             re-balancing frequency for positions according to signal must be one of
             'daily' (default), 'weekly', 'monthly', 'quarterly', or 'annual'.
-        rebal_slip : str
+        rebal_slip : int
             re-balancing slippage in days.
 
         Returns
         -------
-        ~pandas.Series
-            will return a pd.Series containing the associated signals according to the
-            re-balancing frequency.
+        ~pandas.DataFrame
+            will return a pd.DataFrame containing the associated signals according to
+            the re-balancing frequency.
         """
 
         # The re-balancing days are the first of the respective time-periods because of
         # the shift forward by one day applied earlier in the code. Therefore, only
         # concerned with the minimum date of each re-balance period.
-        dfw["year"] = dfw["real_date"].dt.year
-        if rebal_freq == "annual":
-            rebal_dates = dfw.groupby(["cid", "year"], observed=True)["real_date"].min()
-        elif rebal_freq == "quarterly":
-            dfw["quarter"] = dfw["real_date"].dt.quarter
-            rebal_dates = dfw.groupby(
-                ["cid", "year", "quarter"],
-                observed=True,
-            )["real_date"].min()
-        elif rebal_freq == "monthly":
-            dfw["month"] = dfw["real_date"].dt.month
-            rebal_dates = dfw.groupby(
-                ["cid", "year", "month"],
-                observed=True,
-            )["real_date"].min()
-        elif rebal_freq == "weekly":
-            dfw["week"] = dfw["real_date"].apply(lambda x: x.week)
-            rebal_dates = dfw.groupby(["cid", "year", "week"], observed=True)[
-                "real_date"
-            ].min()
-        elif rebal_freq == "daily":
-            rebal_dates = dfw.groupby(["cid", "year", "real_date"], observed=True)[
-                "real_date"
-            ].min()
-        else:
+        err_str = "Re-balancing slippage must be a non-negative integer."
+        if not isinstance(rebal_slip, int):
+            raise TypeError(err_str)
+        elif rebal_slip < 0:
+            raise ValueError(err_str)
+
+        period_alias = {
+            "daily": "D",
+            "weekly": "W",
+            "monthly": "M",
+            "quarterly": "Q",
+            "annual": "Y",
+        }
+        if rebal_freq not in period_alias:
             raise ValueError(
                 "Re-balancing frequency must be one of: daily, weekly, monthly, quarterly or annual."
             )
 
+        if not pd.api.types.is_datetime64_any_dtype(dfw["real_date"]):
+            dfw = dfw.assign(real_date=pd.to_datetime(dfw["real_date"]))
+        dfw = dfw.sort_values(["cid", "real_date"])
+
+        # One period key per date, on the period edges of get_sops()/get_eops()
+        # (macrosynergy.management.utils). The re-balancing date remains each
+        # cross-section's own first available date within the period.
+        dfw["period"] = dfw["real_date"].dt.to_period(period_alias[rebal_freq])
+        rebal_dates = dfw.groupby(["cid", "period"], observed=True)["real_date"].min()
+
         # Convert the index, 'cid', to a formal column aligned to the re-balancing dates.
         r_dates_df = rebal_dates.reset_index(level=0)
         r_dates_df.reset_index(drop=True, inplace=True)
-        dfw = dfw[["real_date", "psig", "cid"]]
+        dfw = dfw[["real_date", "psig", "cid", "period"]]
 
         # Isolate the required signals on the re-balancing dates. Only concerned with the
         # respective signal on the re-balancing date. However, the produced DataFrame
@@ -719,25 +728,32 @@ class NaivePnL:
         # days are included. The intermediary dates, dates between re-balancing dates,
         # will initially be populated by NA values. To ensure the signal is used for the
         # duration between re-balancing dates, forward fill the computed signal over the
-        # associated dates.
+        # associated dates, without carrying it beyond the re-balancing period.
 
         # The signal is computed for each individual cross-section. Therefore, merge on
         # the real_date and the cross-section.
-        rebal_merge = r_dates_df.merge(dfw, how="left", on=["real_date", "cid"])
+        rebal_merge = r_dates_df.merge(
+            dfw[["real_date", "cid", "psig"]], how="left", on=["real_date", "cid"]
+        )
         # Re-establish the daily date series index where the intermediary dates, between
         # the re-balancing dates, will be populated using a forward fill.
-        rebal_merge = dfw[["real_date", "cid"]].merge(
+        rebal_merge = dfw[["real_date", "cid", "period"]].merge(
             rebal_merge, how="left", on=["real_date", "cid"]
         )
-        rebal_merge["psig"] = (
-            rebal_merge.groupby("cid", observed=True)["psig"].ffill().shift(rebal_slip)
-        )
-        rebal_merge = rebal_merge.sort_values(["cid", "real_date"])
 
-        rebal_merge = rebal_merge.set_index("real_date")
-        sig_series = rebal_merge.drop(["cid"], axis=1)
+        # Filling by period as well as cross-section bounds the carry to the period the
+        # signal was recorded in.
+        rebal_merge["psig"] = rebal_merge.groupby(["cid", "period"], observed=True)[
+            "psig"
+        ].ffill()
+        if rebal_slip:
+            rebal_merge["psig"] = (
+                rebal_merge["psig"]
+                .groupby(rebal_merge["cid"], observed=True)
+                .shift(rebal_slip)
+            )
 
-        return sig_series
+        return rebal_merge.set_index(["cid", "real_date"])[["psig"]]
 
     @staticmethod
     def long_only_pnl(
@@ -1049,6 +1065,381 @@ class NaivePnL:
             return fg
         plt.show()
 
+    def plot_pnl_consistency(
+        self,
+        pnl_cat: str,
+        benchmark_pnl_cat: str,
+        kind: str = "panels",
+        pnl_cid: str = "ALL",
+        start: str = None,
+        end: str = None,
+        window: int = 252 * 5,
+        annualization_factor: int = 252,
+        min_periods: int = None,
+        freq: str = "A",
+        title: str = None,
+        title_fontsize: int = 16,
+        pnl_title: str = None,
+        ir_title: str = None,
+        bar_title: str = None,
+        subtitle_fontsize: int = 14,
+        xcat_labels: Dict[str, str] = None,
+        ylab: str = "% of capital, no compounding",
+        ir_ylab: str = "information ratio",
+        label_fontsize: int = 12,
+        tick_fontsize: int = 12,
+        figsize: Tuple = None,
+        height_ratios: Tuple = (2, 1),
+        annotate_count: bool = True,
+        return_fig: bool = False,
+    ) -> Optional[plt.Figure]:
+        """
+        Plot the consistency of the value-add of one PnL over another.
+
+        Both views are of the active return, i.e. the difference between `pnl_cat` and
+        the neutral anchor `benchmark_pnl_cat`. With `kind='panels'` the upper panel
+        shows the cumulative active PnL and the lower panel its rolling information
+        ratio, with the full-sample information ratio as a reference line. With
+        `kind='bars'` the active return is summed over calendar periods and shown as a
+        bar chart, positive periods and negative periods in contrasting colours; this is
+        the cleaner count-based evidence, since rolling windows overlap heavily.
+
+        Parameters
+        ----------
+        pnl_cat : str
+            name of the PnL category whose value-add is assessed.
+        benchmark_pnl_cat : str
+            name of the PnL category used as the neutral anchor, subtracted from
+            `pnl_cat` to give the active return.
+        kind : str
+            the view to produce: 'panels' (default) for the cumulative active PnL and
+            its rolling information ratio, or 'bars' for the active return summed by
+            calendar period.
+        pnl_cid : str
+            cross section to be plotted; default is 'ALL' (global PnL).
+        start : str
+            earliest date in ISO format. Default is None and earliest date in df is
+            used.
+        end : str
+            latest date in ISO format. Default is None and latest date in df is used.
+        window : int
+            rolling window length in observations for the information ratio. Default is
+            1260, i.e. five years of business-daily data. Used by 'panels' only.
+        annualization_factor : int
+            periods per year used to annualize the information ratios. Default is 252.
+            Used by 'panels' only.
+        min_periods : int
+            minimum number of observations in a window. Default is None, which requires
+            a full window. Used by 'panels' only.
+        freq : str
+            calendar frequency over which the active return is summed for 'bars': 'A'
+            (annual, default), 'Q' (quarterly) or 'M' (monthly).
+        title : str
+            allows entering text for a custom chart header. For 'panels' this is a
+            header above both panels, and the default of None leaves the two panels
+            carrying their own titles only.
+        title_fontsize : int
+            font size for the chart header. Default is 16.
+        pnl_title : str
+            allows entering text for a custom title of the cumulative PnL panel. Default
+            is None, in which case the panel is titled with the two category labels.
+            Used by 'panels' only.
+        ir_title : str
+            allows entering text for a custom title of the information ratio panel.
+            Default is None, in which case the panel is titled with the length of the
+            rolling window. Used by 'panels' only.
+        bar_title : str
+            allows entering text for a custom title of the bar chart. Default is None,
+            in which case it is titled with the two category labels. Used by 'bars'
+            only.
+        subtitle_fontsize : int
+            font size for the titles of the two panels. Default is 14.
+        xcat_labels : Dict[str, str]
+            custom labels for the two PnL categories, keyed by category name. Default is
+            None and the category names are used.
+        ylab : str
+            label for the y-axis of the cumulative PnL panel and of the bar chart.
+        ir_ylab : str
+            label for the y-axis of the information ratio panel.
+        label_fontsize : int
+            font size for the axis labels. Default is 12.
+        tick_fontsize : int
+            font size for the axis ticks. Default is 12.
+        figsize : tuple
+            tuple of plot width and height. Default is None, which uses (12, 8) for
+            'panels' and (14, 4) for 'bars'.
+        height_ratios : tuple
+            relative heights of the cumulative PnL and information ratio panels. Default
+            is (2, 1). Used by 'panels' only.
+        annotate_count : bool
+            if True (default) the share of positive periods is annotated on the bar
+            chart. Used by 'bars' only.
+        return_fig : bool
+            if True the figure is returned rather than displayed. Default is False.
+
+        Returns
+        -------
+        Optional[matplotlib.figure.Figure]
+            the figure, if `return_fig` is True.
+
+
+        .. note::
+            `window` and `annualization_factor` must be set together to match the
+            frequency of the PnL series (business-daily: 1260/252 for a five-year
+            window, monthly: 60/12).
+        """
+        valid_kinds = ["panels", "bars"]
+        if kind not in valid_kinds:
+            raise ValueError(f"'kind' must be one of {valid_kinds} - received {kind}.")
+        for name, cat in [
+            ("pnl_cat", pnl_cat),
+            ("benchmark_pnl_cat", benchmark_pnl_cat),
+        ]:
+            if not isinstance(cat, str):
+                raise TypeError(f"'{name}' must be a string - received {type(cat)}.")
+            if cat not in self.pnl_names:
+                raise ValueError(
+                    f"The PnL passed to '{name}' is not defined. The possible options "
+                    f"are {self.pnl_names}."
+                )
+
+        if pnl_cat == benchmark_pnl_cat:
+            raise ValueError(
+                "'pnl_cat' and 'benchmark_pnl_cat' must be different categories."
+            )
+
+        if not isinstance(pnl_cid, str):
+            raise TypeError(f"'pnl_cid' must be a string - received {type(pnl_cid)}.")
+
+        if not isinstance(window, int) or window < 2:
+            raise ValueError("'window' must be an integer >= 2.")
+
+        if not isinstance(annualization_factor, int) or annualization_factor <= 0:
+            raise ValueError("'annualization_factor' must be a positive integer.")
+
+        pnl_cats: List[str] = [pnl_cat, benchmark_pnl_cat]
+
+        if xcat_labels is None:
+            xcat_labels = {pnl: pnl for pnl in pnl_cats}
+        elif isinstance(xcat_labels, dict):
+            missing = set(pnl_cats) - set(xcat_labels)
+            if missing:
+                raise ValueError(
+                    f"'xcat_labels' must contain a label for each of {pnl_cats} - "
+                    f"missing {sorted(missing)}."
+                )
+        else:
+            raise TypeError(
+                "'xcat_labels' should be a dictionary with keys as the PnL categories "
+                "and values as the custom labels."
+            )
+
+        dfx = reduce_df(
+            self.df, pnl_cats, [pnl_cid], start, end, self.black, out_all=False
+        )
+        dfw = dfx.pivot(index="real_date", columns="xcat", values="value")
+
+        missing = [pnl for pnl in pnl_cats if pnl not in dfw.columns]
+        if missing:
+            raise ValueError(
+                f"No data available for {missing} on cross section '{pnl_cid}' over the "
+                "requested period."
+            )
+
+        act: pd.Series = (dfw[pnl_cat] - dfw[benchmark_pnl_cat]).dropna()
+
+        if act.empty:
+            raise ValueError(
+                "The active return series is empty over the requested period."
+            )
+
+        sns.set_theme(style="whitegrid", palette="colorblind")
+
+        if kind == "bars":
+            fig = self._plot_active_bars(
+                act=act,
+                freq=freq,
+                labels=(xcat_labels[pnl_cat], xcat_labels[benchmark_pnl_cat]),
+                title=title,
+                title_fontsize=title_fontsize,
+                bar_title=bar_title,
+                subtitle_fontsize=subtitle_fontsize,
+                ylab=ylab,
+                label_fontsize=label_fontsize,
+                tick_fontsize=tick_fontsize,
+                figsize=figsize if figsize is not None else (14, 4),
+                annotate_count=annotate_count,
+            )
+            if return_fig:
+                return fig
+            plt.show()
+            return
+
+        if len(act) <= window:
+            raise ValueError(
+                f"The active return series has {len(act)} observations, which is not "
+                f"enough for a rolling window of {window}. Reduce 'window' or widen the "
+                "sample period."
+            )
+
+        act_ir: float = act.mean() / act.std() * np.sqrt(annualization_factor)
+        roll_ir: pd.Series = _rolling_sharpe(
+            act,
+            window=window,
+            annualization_factor=annualization_factor,
+            min_periods=min_periods,
+        )
+
+        if figsize is None:
+            figsize = (12, 8)
+
+        fig, (ax1, ax2) = plt.subplots(
+            2,
+            1,
+            figsize=figsize,
+            sharex=True,
+            gridspec_kw={"height_ratios": list(height_ratios)},
+        )
+
+        ax1.plot(act.index, act.cumsum(), linewidth=2)
+        ax1.axhline(0, color="black", linewidth=0.5)
+        if pnl_title is None:
+            pnl_title = (
+                f"Cumulative active PnL: {xcat_labels[pnl_cat]} minus "
+                f"{xcat_labels[benchmark_pnl_cat]}"
+            )
+        ax1.set_title(pnl_title, fontsize=subtitle_fontsize)
+        ax1.set_ylabel(ylab, fontsize=label_fontsize)
+
+        ax2.plot(roll_ir.index, roll_ir, linewidth=2)
+        ax2.axhline(0, color="black", linewidth=0.5)
+        ax2.axhline(act_ir, color="gray", linewidth=1, linestyle="--")
+        ax2.annotate(
+            f"full sample: {act_ir:.2f}",
+            xy=(act.index[0], act_ir),
+            xytext=(0, 6),
+            textcoords="offset points",
+            fontsize=9,
+            color="gray",
+        )
+        if ir_title is None:
+            ir_title = (
+                f"Rolling {window / annualization_factor:.3g}-year information ratio of "
+                "the active return"
+            )
+        ax2.set_title(ir_title, fontsize=subtitle_fontsize)
+        ax2.set_ylabel(ir_ylab, fontsize=label_fontsize)
+
+        for ax in (ax1, ax2):
+            ax.tick_params(axis="both", labelsize=tick_fontsize)
+
+        plt.tight_layout()
+
+        if title is not None:
+            fig.suptitle(title, fontsize=title_fontsize)
+            fig.subplots_adjust(top=0.90)
+
+        if return_fig:
+            return fig
+        plt.show()
+
+    @staticmethod
+    def _period_keys(index: pd.DatetimeIndex, freq: str):
+        """
+        Calendar-period grouping keys and their labels for a datetime index.
+
+        Returns the list of grouping keys and a callable that formats a group key into a
+        label, or None when the key is already the label (an integer year).
+        """
+        freq_map = {"A": "year", "Q": "quarter", "M": "month"}
+        if not isinstance(freq, str) or freq.upper() not in freq_map:
+            raise ValueError(
+                f"'freq' must be one of {list(freq_map)} - received {freq}."
+            )
+        freq = freq.upper()
+
+        if freq == "A":
+            return [index.year], None
+        if freq == "Q":
+            return [index.year, index.quarter], lambda y, p: f"{y}Q{p}"
+        return [index.year, index.month], lambda y, p: f"{y}-{p:02d}"
+
+    @classmethod
+    def _group_by_period(cls, df, freq: str, agg: str):
+        """
+        Aggregate a wide, date-indexed frame or series over calendar periods, labelling
+        the result by the period it represents.
+        """
+        keys, labels = cls._period_keys(df.index, freq)
+        out = df.groupby(keys).agg(agg)
+        if labels is not None:
+            out.index = [labels(*ix) for ix in out.index]
+        out.index.name = None
+        return out
+
+    def _plot_active_bars(
+        self,
+        act: pd.Series,
+        freq: str,
+        labels: Tuple[str, str],
+        title: str,
+        title_fontsize: int,
+        bar_title: str,
+        subtitle_fontsize: int,
+        ylab: str,
+        label_fontsize: int,
+        tick_fontsize: int,
+        figsize: Tuple,
+        annotate_count: bool,
+    ) -> plt.Figure:
+        """
+        Bar chart of the active return summed over calendar periods.
+        """
+        act_period = self._group_by_period(act, freq=freq, agg="sum")
+
+        cmap = plt.get_cmap("RdBu")
+        colors = [cmap(0.85) if v > 0 else cmap(0.15) for v in act_period]
+
+        fig, ax = plt.subplots(figsize=figsize)
+        ax.bar(
+            [str(ix) for ix in act_period.index],
+            act_period.to_numpy(),
+            color=colors,
+        )
+        ax.axhline(0, color="black", linewidth=0.5)
+
+        if bar_title is None:
+            bar_title = f"Active return: {labels[0]} minus {labels[1]}"
+
+        ax.set_title(
+            bar_title,
+            fontsize=subtitle_fontsize if title is not None else title_fontsize,
+        )
+        ax.set_ylabel(ylab, fontsize=label_fontsize)
+        ax.set_xlabel("")
+        ax.tick_params(axis="both", labelsize=tick_fontsize)
+        plt.setp(ax.get_xticklabels(), rotation=90)
+
+        if annotate_count:
+            n_pos = int((act_period > 0).sum())
+            ax.annotate(
+                f"positive periods: {n_pos} of {len(act_period)}",
+                xy=(0.01, 0.97),
+                xycoords="axes fraction",
+                ha="left",
+                va="top",
+                fontsize=9,
+                color="gray",
+            )
+
+        plt.tight_layout()
+
+        if title is not None:
+            fig.suptitle(title, fontsize=title_fontsize)
+            fig.subplots_adjust(top=0.88)
+
+        return fig
+
     def get_input_signals(self) -> pd.DataFrame:
         """
         Returns a DataFrame containing the input signals (post any filtering).
@@ -1216,6 +1607,388 @@ class NaivePnL:
 
         plt.show()
 
+    def _wide_signal(
+        self,
+        pnl_name: str,
+        pnl_cids: List[str],
+        start: str = None,
+        end: str = None,
+    ) -> pd.DataFrame:
+        """
+        The applied signal of a PnL as a wide frame, one column per cross-section in the
+        order requested.
+        """
+        dfx: pd.DataFrame = self.signal_df[pnl_name]
+        dfw: pd.DataFrame = dfx.pivot(index="real_date", columns="cid", values="sig")
+
+        dfw.columns = pd.Index(dfw.columns.astype(str), name="cid")
+        dfw = dfw.reindex(columns=pnl_cids).truncate(before=start, after=end)
+
+        if dfw.empty:
+            raise ValueError(
+                "No signal data available for the requested cross-sections and period."
+            )
+        return dfw
+
+    def _wide_returns(
+        self, pnl_cids: List[str], index: pd.DatetimeIndex
+    ) -> pd.DataFrame:
+        """
+        The return category the PnL was built on, as a wide frame aligned to `index`.
+        """
+        dfr = reduce_df(
+            self.df, [self.ret], pnl_cids, None, None, self.black, out_all=False
+        )
+        dfw = dfr.pivot(index="real_date", columns="cid", values="value")
+        dfw.columns = pd.Index(dfw.columns.astype(str), name="cid")
+
+        missing = [cid for cid in pnl_cids if cid not in dfw.columns]
+        if missing:
+            raise ValueError(
+                f"No '{self.ret}' data available for {missing}, so the returns cannot "
+                "be attributed to every cross-section requested."
+            )
+        return dfw.reindex(columns=pnl_cids).reindex(index)
+
+    @staticmethod
+    def _align_weights(weights: pd.DataFrame, pnl_cids: List[str]) -> pd.DataFrame:
+        """
+        Validate and align a user-supplied wide weights frame to the cross-sections.
+        """
+        dfw = weights.copy()
+        dfw.columns = pd.Index([str(c) for c in dfw.columns], name="cid")
+
+        missing = [cid for cid in pnl_cids if cid not in dfw.columns]
+        if missing:
+            raise ValueError(
+                f"'weights' is missing a column for {missing}. It must have one column "
+                f"per cross-section in {pnl_cids}."
+            )
+        if not isinstance(dfw.index, pd.DatetimeIndex):
+            dfw.index = pd.to_datetime(dfw.index)
+        return dfw.reindex(columns=pnl_cids)
+
+    def _plot_contribution_bars(
+        self,
+        dfp: pd.DataFrame,
+        pnl_name: str,
+        freq: str,
+        scale: float,
+        cid_labels: Dict[str, str],
+        title: str,
+        title_fontsize: int,
+        xlabel: str,
+        ylabel: str,
+        cmap: str,
+        figsize: Optional[Tuple[float, float]],
+        legend_fontsize: int,
+    ) -> plt.Figure:
+        """
+        Stacked bars of the per-period, per-cross-section PnL contributions, with the
+        PnL's own period totals as markers.
+        """
+        dfb = dfp.rename(columns=lambda cid: cid_labels.get(cid, cid))
+        dfb.index = [str(ix) for ix in dfb.index]
+
+        fig, ax = plt.subplots(figsize=figsize if figsize is not None else (14, 6))
+        dfb.plot.bar(stacked=True, ax=ax, colormap=cmap or "tab20")
+
+        dfn = self.pnl_df([pnl_name])
+        pnl_period = (
+            self._group_by_period(
+                dfn.set_index("real_date")["value"], freq=freq, agg="sum"
+            )
+            * scale
+        )
+        pnl_period.index = [str(ix) for ix in pnl_period.index]
+        ax.scatter(
+            range(len(dfb)),
+            pnl_period.reindex(dfb.index).to_numpy(),
+            color="black",
+            zorder=3,
+            label=f"{pnl_name} total",
+        )
+
+        ax.axhline(0, color="black", linewidth=0.5)
+        ax.set_title(
+            title if title is not None else "PnL decomposed by cross-section",
+            fontsize=title_fontsize,
+        )
+        ax.set_ylabel(ylabel if ylabel is not None else "% of capital, no compounding")
+        ax.set_xlabel(xlabel)
+        ax.legend(loc="upper left", bbox_to_anchor=(1, 1), fontsize=legend_fontsize)
+        plt.tight_layout()
+        return fig
+
+    def plot_pnl_attribution(
+        self,
+        pnl_name: str,
+        kind: str = "weights",
+        pnl_cids: List[str] = None,
+        start: str = None,
+        end: str = None,
+        freq: str = "A",
+        agg: str = "mean",
+        scale: float = 1.0,
+        weights: pd.DataFrame = None,
+        title: str = None,
+        title_fontsize: int = 14,
+        cid_labels: Dict[str, str] = None,
+        xlabel: str = "",
+        ylabel: str = None,
+        min_color: float = None,
+        max_color: float = None,
+        cmap: str = None,
+        fmt: str = ".0f",
+        figsize: Optional[Tuple[float, float]] = None,
+        footnote: str = None,
+        legend_fontsize: int = 9,
+        return_fig: bool = False,
+    ) -> Optional[plt.Figure]:
+        """
+        Attribute a naive PnL to its cross-sections over calendar periods.
+
+        For a PnL whose signals are portfolio weights, the four views break the strategy
+        down into what it held, what the market delivered, and what each sleeve
+        contributed:
+
+        - 'weights' (default) renders an annotated table of the applied weight per period
+          and cross-section, aggregated by `agg`. Whereas `signal_heatmap` shows a
+          monthly or quarterly heatmap of the raw signal, this aggregates over calendar
+          periods, by default calendar years.
+        - 'area' shows a stacked area chart of the weights over time, so the composition
+          of the portfolio and its changes are visible at full resolution.
+        - 'returns' renders the same table for the return category the PnL was built on,
+          summed per period, so that scanning one period across the 'weights' and
+          'returns' tables pairs what the portfolio held with what markets delivered.
+        - 'contribution' shows stacked bars of the weight times the return, summed per
+          period, so the cross-section contributions add up to the PnL of the strategy.
+          Markers give the PnL's own period totals as a cross-check.
+
+        Parameters
+        ----------
+        pnl_name : str
+            name of the naive PnL to be attributed.
+        kind : str
+            the view to produce: 'weights' (default), 'area', 'returns' or
+            'contribution'.
+        pnl_cids : List[str]
+            cross-sections to be displayed, in the order given. Default is all
+            available.
+        start : str
+            earliest date in ISO format. Default is None and the earliest date of the
+            signal is used.
+        end : str
+            latest date in ISO format. Default is None and the latest date of the signal
+            is used.
+        freq : str
+            calendar frequency over which the values are aggregated: 'A' (annual,
+            default), 'Q' (quarterly) or 'M' (monthly). Not used by 'area', which plots
+            at the resolution of the underlying weights.
+        agg : str
+            aggregation applied to the weights within each period for 'weights'. Default
+            is 'mean'. Any of 'mean', 'median', 'sum', 'min', 'max', 'first', 'last' and
+            'std' is accepted. Returns and contributions are always summed.
+        scale : float
+            factor applied to the aggregated values, for instance 100 to express
+            weights as a percentage of the portfolio. Default is 1.0.
+        weights : ~pandas.DataFrame
+            wide dataframe of weights, indexed by date with one column per
+            cross-section, used by 'area' in place of the applied signal. This allows
+            the chart to show the weights as they were set, before the re-balancing and
+            slippage that `make_pnl` applies. Default is None, in which case the applied
+            signal is used for every view.
+        title : str
+            allows entering text for a custom chart header. Default is None, in which
+            case a header describing the view is generated.
+        title_fontsize : int
+            font size of the title. Default is 14.
+        cid_labels : Dict[str, str]
+            custom labels for the cross-sections, keyed by cross-section. Applied to the
+            table rows of 'weights' and 'returns' and to the legend of 'area' and
+            'contribution'. Default is None and the cross-section names are used.
+        xlabel : str
+            label for the x-axis. Default is an empty string.
+        ylabel : str
+            label for the y-axis. Default is None, in which case it is empty for the
+            tables and describes the units for 'area' and 'contribution'.
+        min_color : float
+            value mapped to the bottom of the colour scale of the tables. Default is
+            None, in which case it is 0 for values that are everywhere non-negative and
+            the negative of the largest absolute value otherwise.
+        max_color : float
+            value mapped to the top of the colour scale of the tables. Default is None,
+            in which case the largest absolute value in the table is used.
+        cmap : str
+            name of the colormap. Default is None, which uses a sequential 'Blues' for a
+            one-sided table and the diverging 'vlag_r' otherwise, and 'tab20' for the
+            stacked charts.
+        fmt : str
+            string format for the cell annotations of the tables. Default is '.0f'.
+        figsize : (float, float)
+            width and height in inches. Default is None, which sizes the figure to the
+            view and the number of cross-sections.
+        footnote : str
+            free-text caption rendered below the tables. Default is None.
+        legend_fontsize : int
+            font size of the legend of 'area' and 'contribution'. Default is 9.
+        return_fig : bool
+            if True the figure is returned rather than displayed. Default is False.
+
+        Returns
+        -------
+        Optional[matplotlib.figure.Figure]
+            the figure, if `return_fig` is True.
+
+
+        .. note::
+            The signal is the value that actually determines the concurrent PnL, i.e. it
+            already reflects the re-balancing frequency and the slippage passed to
+            `make_pnl`. Periods are calendar periods, so a first or last period that the
+            sample only partly covers is aggregated over the available days alone.
+        """
+        valid_kinds = ["weights", "area", "returns", "contribution"]
+        if kind not in valid_kinds:
+            raise ValueError(f"'kind' must be one of {valid_kinds} - received {kind}.")
+
+        if not isinstance(pnl_name, str):
+            raise TypeError("The method expects to receive a single PnL name.")
+        if pnl_name not in self.pnl_names:
+            raise ValueError(
+                f"The PnL passed to 'pnl_name' parameter is not defined. The possible "
+                f"options are {self.pnl_names}."
+            )
+
+        valid_aggs = ["mean", "median", "sum", "min", "max", "first", "last", "std"]
+        if agg not in valid_aggs:
+            raise ValueError(f"'agg' must be one of {valid_aggs} - received {agg}.")
+
+        if not isinstance(scale, Number) or isinstance(scale, bool):
+            raise TypeError(f"'scale' must be a number - received {type(scale)}.")
+
+        if pnl_cids is None:
+            pnl_cids = self.cids
+        elif not set(pnl_cids) <= set(self.cids):
+            raise ValueError(
+                f"Cross-sections not available. Available cids are: {self.cids}."
+            )
+
+        if not isinstance(xlabel, str):
+            raise TypeError(f"<str> expected for `xlabel` - received {type(xlabel)}.")
+        if ylabel is not None and not isinstance(ylabel, str):
+            raise TypeError(f"<str> expected for `ylabel` - received {type(ylabel)}.")
+
+        if cid_labels is None:
+            cid_labels = {}
+        elif not isinstance(cid_labels, dict):
+            raise TypeError(
+                "'cid_labels' should be a dictionary with keys as the cross-sections "
+                "and values as the custom labels."
+            )
+
+        if weights is not None and not isinstance(weights, pd.DataFrame):
+            raise TypeError(
+                f"'weights' must be a DataFrame - received {type(weights)}."
+            )
+
+        # The applied positions: already re-balanced and slipped by `make_pnl`.
+        pos = self._wide_signal(pnl_name, pnl_cids, start, end)
+
+        if kind == "area":
+            # Optionally the weights as they were set, rather than as applied.
+            dfw = pos if weights is None else self._align_weights(weights, pnl_cids)
+            dfw = dfw.truncate(before=start, after=end) * scale
+            if dfw.empty:
+                raise ValueError("No weight data available for the requested period.")
+            fig = _plot_weight_area(
+                dfw=dfw,
+                cid_labels=cid_labels,
+                title=title if title is not None else "Allocation weights over time",
+                title_fontsize=title_fontsize,
+                xlabel=xlabel,
+                ylabel=ylabel if ylabel is not None else "weight",
+                label_fontsize=12,
+                tick_fontsize=None,
+                cmap=cmap or "tab20",
+                figsize=figsize if figsize is not None else (12, 6),
+                legend=True,
+                legend_fontsize=legend_fontsize,
+            )
+            if return_fig:
+                return fig
+            plt.show()
+            return
+
+        if kind == "weights":
+            dfp = self._group_by_period(pos, freq=freq, agg=agg) * scale
+            if title is None:
+                title = "Average applied weight by period and cross-section"
+        else:
+            rets = self._wide_returns(pnl_cids, pos.index)
+            if kind == "returns":
+                dfp = self._group_by_period(rets, freq=freq, agg="sum") * scale
+                if title is None:
+                    title = "Return by period and cross-section"
+            else:
+                dfp = self._group_by_period(pos * rets, freq=freq, agg="sum") * scale
+                if title is None:
+                    title = "PnL by period decomposed by cross-section"
+
+        if kind == "contribution":
+            fig = self._plot_contribution_bars(
+                dfp=dfp,
+                pnl_name=pnl_name,
+                freq=freq,
+                scale=scale,
+                cid_labels=cid_labels,
+                title=title,
+                title_fontsize=title_fontsize,
+                xlabel=xlabel,
+                ylabel=ylabel,
+                cmap=cmap,
+                figsize=figsize,
+                legend_fontsize=legend_fontsize,
+            )
+            if return_fig:
+                return fig
+            plt.show()
+            return
+
+        dfp = dfp.reindex(columns=pnl_cids).transpose()
+        dfp.index = [cid_labels.get(cid, cid) for cid in dfp.index]
+
+        values = dfp.to_numpy(dtype=float)
+        abs_max = np.nanmax(np.abs(values))
+        if not np.isfinite(abs_max) or abs_max == 0:
+            abs_max = 1.0
+        one_sided = np.nanmin(values) >= 0
+        if max_color is None:
+            max_color = abs_max
+        if min_color is None:
+            # A one-sided colour scale for values that never go negative, so the whole
+            # colormap is used rather than half of a diverging one.
+            min_color = 0.0 if one_sided else -abs_max
+        if cmap is None:
+            cmap = "Blues" if one_sided and min_color == 0.0 else "vlag_r"
+
+        if figsize is None:
+            figsize = (14, max(4, len(dfp.index) / 2))
+
+        return view_table(
+            dfp,
+            title=title,
+            title_fontsize=title_fontsize,
+            figsize=figsize,
+            min_color=min_color,
+            max_color=max_color,
+            cmap=cmap,
+            xlabel=xlabel,
+            ylabel=ylabel if ylabel is not None else "",
+            fmt=fmt,
+            footnote=footnote,
+            return_fig=return_fig,
+        )
+
     def agg_signal_bars(
         self,
         pnl_name: str,
@@ -1253,9 +2026,9 @@ class NaivePnL:
             PnL.
         """
 
-        assert isinstance(
-            pnl_name, str
-        ), "The method expects to receive a single PnL name."
+        assert isinstance(pnl_name, str), (
+            "The method expects to receive a single PnL name."
+        )
         error_cats = (
             f"The PnL passed to 'pnl_name' parameter is not defined. The "
             f"possible options are {self.pnl_names}."
@@ -1322,87 +2095,77 @@ class NaivePnL:
         else:
             plt.show()
 
-    def evaluate_pnls(
-        self,
-        pnl_cats: Optional[List[str]] = None,
-        pnl_cids: List[str] = ["ALL"],
-        start: Optional[str] = None,
-        end: Optional[str] = None,
-        label_dict: Optional[Dict[str, str]] = None,
-    ):
+    @staticmethod
+    def _max_drawdown_recovery_months(cum_pnl: pd.Series, return_ongoing: bool = False):
         """
-        Returns a table of PnL statistics containing the following metrics:
-            - Return - percentage, annualized
-            - Standard Deviation - percentage, annualized
-            - Sharpe Ratio
-            - Sortino Ratio
-            - Max 21-Day Draw - percentage
-            - Max 6-Month Draw - percentage
-            - Peak to Trough Draw - percentage
-            - Top 5% Monthly PnL Share
-            - Sharpe Stability Ratio - HAC-robust t-stat for the mean rolling
-              Sharpe ratio (see ``sharpe_stability_ratio``); accounts for
-              sample size and serial dependence
-            - Traded Months
+        Trading days from the peak preceding the worst drawdown to its full
+        recovery, expressed in months of 21 trading days - the same
+        convention used for "Max 21-Day Draw %" elsewhere in
+        ``evaluate_pnls()``.
 
         Parameters
         ----------
-        pnl_cats : List[str], optional
-            list of PnL categories that should be plotted. Default is None and all
-            available PnL categories are used.
-        pnl_cids : List[str]
-            list of cross-sections to be plotted; default is 'ALL' (global PnL). Note:
-            one can only have multiple PnL categories or multiple cross-sections, not both.
-        start : str
-            earliest date in ISO format. Default is None and earliest date in df is
-            used.
-        end : str
-            latest date in ISO format. Default is None and latest date in df is used.
-        label_dict : dict[str, str]
-            dictionary with keys as pnl_cats and values as new labels for the PnLs.
+        cum_pnl : pd.Series
+            Cumulative PnL series (e.g. ``dfw[col].cumsum()``). NaNs are
+            dropped.
+        return_ongoing : bool, default False
+            If True, return a ``(months, ongoing)`` tuple instead of just
+            ``months``, where ``ongoing`` is True when the worst drawdown
+            hadn't recovered by the end of the sample - i.e. ``months``
+            reflects an open, still-running drawdown rather than a
+            completed recovery.
 
         Returns
         -------
-        ~pandas.DataFrame
-            standardized DataFrame with key PnL performance statistics.
+        float, or (float, bool) if ``return_ongoing``
+            Recovery time in months. 0 if the series never had a drawdown
+            at all. If the worst drawdown hasn't recovered by the end of
+            the sample, the elapsed time from its preceding peak to the
+            last observation - i.e. how long that drawdown has been
+            running so far, not the length of the whole trading history.
+            NaN if ``cum_pnl`` has no non-NaN observations.
         """
+        s = cum_pnl.dropna()
+        if s.empty:
+            months, ongoing = float("nan"), False
+        else:
+            high_watermark = s.cummax()
+            drawdown = high_watermark - s
+            trough_pos = int(np.argmax(drawdown.values))
+            if drawdown.iloc[trough_pos] == 0:
+                months, ongoing = 0.0, False
+            else:
+                peak_level = high_watermark.iloc[trough_pos]
+                peak_pos = int(
+                    np.where(s.values[: trough_pos + 1] == peak_level)[0][-1]
+                )
 
-        error_cids = "List of cross-sections expected."
-        error_xcats = "List of PnL categories expected."
-        if not isinstance(pnl_cids, list):
-            raise TypeError(error_cids)
-        if not isinstance(pnl_cats, (list, type(None))):
-            raise TypeError(error_xcats)
-        if pnl_cats is not None:
-            if not all([isinstance(elem, str) for elem in pnl_cats]):
-                raise TypeError(error_xcats)
-        if not all([isinstance(elem, str) for elem in pnl_cids]):
-            raise TypeError(error_cids)
+                recovered = np.where(s.values[trough_pos:] >= peak_level)[0]
+                if len(recovered) == 0:
+                    months, ongoing = (len(s) - 1 - peak_pos) / 21, True
+                else:
+                    recovery_pos = trough_pos + int(recovered[0])
+                    months, ongoing = (recovery_pos - peak_pos) / 21, False
 
-        if pnl_cats is None:
-            # The field, self.pnl_names, is a data structure that stores the name of the
-            # category assigned to PnL values. Each time make_pnl() method is called, the
-            # computed DataFrame will have an associated category established by the
-            # logical method: ('PNL_' + sig) if pnl_name is None else pnl_name. Each
-            # category will be held in the data structure.
-            pnl_cats = self.pnl_names
+        return (months, ongoing) if return_ongoing else months
 
-        if not set(pnl_cats) <= set(self.pnl_names):
-            missing = [pnl for pnl in pnl_cats if pnl not in self.pnl_names]
-            pnl_error = (
-                f"Received PnL categories have not been defined. The PnL "
-                f"category(s) which has not been defined is: {missing}. "
-                f"The produced PnL category(s) are {self.pnl_names}."
-            )
-            raise ValueError(pnl_error)
+    def _stats_from_wide(self, dfw: pd.DataFrame, sr_thresholds: List[float]):
+        """
+        Core of ``evaluate_pnls()``: the stats table for an already-pivoted
+        wide returns frame (index date, columns return series). Factored
+        out so ``evaluate_pnls_html()`` can compute the exact same stats
+        for a raw ``bms`` benchmark ticker series - which isn't a
+        registered PnL category and so can't go through ``evaluate_pnls()``
+        itself - without duplicating the computation.
 
-        assert (len(pnl_cats) == 1) | (len(pnl_cids) == 1)
-
-        dfx = reduce_df(
-            self.df, pnl_cats, pnl_cids, start, end, self.black, out_all=False
-        )
-
-        groups = "xcat" if len(pnl_cids) == 1 else "cid"
+        Returns
+        -------
+        (pd.DataFrame, dict)
+            The stats DataFrame (indexed like ``evaluate_pnls()``'s
+            output), and a ``{column: bool}`` map of which columns' "Max
+            Draw Recovery (months)" figure is an ongoing, unrecovered
+            drawdown.
+        """
         stats = [
             "Return %",
             "St. Dev. %",
@@ -1425,8 +2188,11 @@ class NaivePnL:
                 stats.insert(len(stats) - 1, f"{bm} correl")
 
         stats.insert(len(stats) - 1, "Sharpe Stability Ratio")
+        stats.insert(len(stats) - 1, "Max Draw Recovery (months)")
+        sr_prob_rows = [f"Prob. Sharpe Ratio > {float(sr):g}" for sr in sr_thresholds]
+        for row in sr_prob_rows:
+            stats.insert(len(stats) - 1, row)
 
-        dfw = dfx.pivot(index="real_date", columns=groups, values="value")
         df = pd.DataFrame(columns=dfw.columns, index=stats)
 
         df.iloc[0, :] = dfw.mean(axis=0) * 261
@@ -1459,6 +2225,8 @@ class NaivePnL:
 
         df.iloc[7, :] = top_months.sum() / total_pnl
 
+        traded_months = dfw.notna().resample(mfreq).sum().ne(0).sum()
+
         if len(benchmark_tickers) > 0:
             bm_df = pd.concat(list(self._bm_dict.values()), axis=1)
             for i, bm in enumerate(benchmark_tickers):
@@ -1468,6 +2236,7 @@ class NaivePnL:
                 )
                 df.loc[f"{bm} correl", :] = correlation
 
+        dd_recovery_ongoing = {}
         for col in dfw.columns:
             df.loc["Sharpe Stability Ratio", col] = sharpe_stability_ratio(
                 dfw[col].dropna(),
@@ -1475,8 +2244,129 @@ class NaivePnL:
                 benchmark_sr=0.0,
                 annualization_factor=252,
             )
+            recovery_months, ongoing = self._max_drawdown_recovery_months(
+                cum_pnl[col], return_ongoing=True
+            )
+            df.loc["Max Draw Recovery (months)", col] = recovery_months
+            dd_recovery_ongoing[col] = ongoing
+            for sr, row in zip(sr_thresholds, sr_prob_rows):
+                df.loc[row, col] = sharpe_stability_ratio(
+                    dfw[col].dropna(),
+                    window=252,
+                    benchmark_sr=float(sr),
+                    annualization_factor=252,
+                    probability=True,
+                )
 
-        df.loc["Traded Months", :] = dfw.notna().resample(mfreq).sum().ne(0).sum()
+        df.loc["Traded Months", :] = traded_months
+
+        return df, dd_recovery_ongoing
+
+    def evaluate_pnls(
+        self,
+        pnl_cats: Optional[List[str]] = None,
+        pnl_cids: List[str] = ["ALL"],
+        start: Optional[str] = None,
+        end: Optional[str] = None,
+        label_dict: Optional[Dict[str, str]] = None,
+        sr_thresholds: Optional[List[float]] = None,
+    ):
+        """
+        Returns a table of PnL statistics containing the following metrics:
+            - Return - percentage, annualized
+            - Standard Deviation - percentage, annualized
+            - Sharpe Ratio
+            - Sortino Ratio
+            - Max 21-Day Draw - percentage
+            - Max 6-Month Draw - percentage
+            - Peak to Trough Draw - percentage
+            - Top 5% Monthly PnL Share
+            - Sharpe Stability Ratio - HAC-robust t-stat for the mean rolling
+              Sharpe ratio (see ``sharpe_stability_ratio``); accounts for
+              sample size and serial dependence
+            - Max Draw Recovery (months) - time from the peak preceding the
+              worst drawdown to its full recovery, in 21-trading-day months;
+              0 if there was never a drawdown, or Traded Months if the worst
+              drawdown hasn't recovered by the end of the sample
+            - Prob. Sharpe Ratio > {threshold} - one-sided asymptotic
+              probability that the mean rolling Sharpe ratio is above each
+              threshold in ``sr_thresholds``, if provided
+            - Traded Months
+
+        Parameters
+        ----------
+        pnl_cats : List[str], optional
+            list of PnL categories that should be plotted. Default is None and all
+            available PnL categories are used.
+        pnl_cids : List[str]
+            list of cross-sections to be plotted; default is 'ALL' (global PnL). Note:
+            one can only have multiple PnL categories or multiple cross-sections, not both.
+        start : str
+            earliest date in ISO format. Default is None and earliest date in df is
+            used.
+        end : str
+            latest date in ISO format. Default is None and latest date in df is used.
+        label_dict : dict[str, str]
+            dictionary with keys as pnl_cats and values as new labels for the PnLs.
+        sr_thresholds : List[float], optional
+            Sharpe ratio thresholds for which one-sided probabilities are
+            reported. Default is None, in which case ``[0.25, 0.5, 0.75]`` is
+            used. Pass an empty list to suppress the threshold probability rows.
+
+        Returns
+        -------
+        ~pandas.DataFrame
+            standardized DataFrame with key PnL performance statistics.
+        """
+
+        error_cids = "List of cross-sections expected."
+        error_xcats = "List of PnL categories expected."
+        if not isinstance(pnl_cids, list):
+            raise TypeError(error_cids)
+        if not isinstance(pnl_cats, (list, type(None))):
+            raise TypeError(error_xcats)
+        if sr_thresholds is None:
+            sr_thresholds = [0.25, 0.5, 0.75]
+        if not isinstance(sr_thresholds, list):
+            raise TypeError("sr_thresholds must be a list of numbers.")
+        if not all(
+            isinstance(elem, Number) and not isinstance(elem, bool)
+            for elem in sr_thresholds
+        ):
+            raise TypeError("sr_thresholds must be a list of numbers.")
+        if pnl_cats is not None:
+            if not all([isinstance(elem, str) for elem in pnl_cats]):
+                raise TypeError(error_xcats)
+        if not all([isinstance(elem, str) for elem in pnl_cids]):
+            raise TypeError(error_cids)
+
+        if pnl_cats is None:
+            # The field, self.pnl_names, is a data structure that stores the name of the
+            # category assigned to PnL values. Each time make_pnl() method is called, the
+            # computed DataFrame will have an associated category established by the
+            # logical method: ('PNL_' + sig) if pnl_name is None else pnl_name. Each
+            # category will be held in the data structure.
+            pnl_cats = self.pnl_names
+
+        if not set(pnl_cats) <= set(self.pnl_names):
+            missing = [pnl for pnl in pnl_cats if pnl not in self.pnl_names]
+            pnl_error = (
+                f"Received PnL categories have not been defined. The PnL "
+                f"category(s) which has not been defined is: {missing}. "
+                f"The produced PnL category(s) are {self.pnl_names}."
+            )
+            raise ValueError(pnl_error)
+
+        assert (len(pnl_cats) == 1) | (len(pnl_cids) == 1)
+
+        dfx = reduce_df(
+            self.df, pnl_cats, pnl_cids, start, end, self.black, out_all=False
+        )
+
+        groups = "xcat" if len(pnl_cids) == 1 else "cid"
+        dfw = dfx.pivot(index="real_date", columns=groups, values="value")
+
+        df, dd_recovery_ongoing = self._stats_from_wide(dfw, sr_thresholds)
 
         if label_dict is not None:
             if not isinstance(label_dict, dict):
@@ -1490,10 +2380,310 @@ class NaivePnL:
                     "label_dict must have the same number of keys as columns in the "
                     "DataFrame."
                 )
+            dd_recovery_ongoing = {
+                label_dict.get(c, c): v for c, v in dd_recovery_ongoing.items()
+            }
             df.rename(columns=label_dict, inplace=True)
             df = df[label_dict.values()]
 
+        # Consumed by evaluate_pnls_pretty() right after calling this method,
+        # to mark an unrecovered "Max Draw Recovery (months)" figure as an
+        # open/ongoing drawdown rather than a completed recovery - without
+        # adding a visible row/column to this DataFrame's public shape.
+        self._last_dd_recovery_ongoing = dd_recovery_ongoing
+
         return df
+
+    def evaluate_pnls_html(
+        self,
+        headline: Union[str, List[str]],
+        bench: Optional[Union[str, List[str]]] = None,
+        headline_label: Optional[Union[str, List[str]]] = None,
+        bench_label: Optional[Union[str, List[str]]] = None,
+        groups: Optional[Dict[str, List[str]]] = None,
+        order: Optional[Dict[str, List[str]]] = None,
+        row_labels: Optional[Dict[str, Union[str, List[str]]]] = None,
+        pnl_cids: List[str] = ["ALL"],
+        start: Optional[str] = None,
+        end: Optional[str] = None,
+        sr_thresholds: Optional[List[float]] = None,
+        title: str = "Naive PnL statistics",
+        subtitle: str = "10% vol target | daily rebalance | gross of costs",
+        custom_css: Optional[str] = None,
+        footnotes: bool = True,
+    ) -> HTMLTable:
+        """
+        Presentation-ready HTML rendering of the ``evaluate_pnls()``
+        statistics table - a grouped, ledger-style layout for reports and
+        notebooks, or for saving to an HTML file to open in Word or embed
+        in a web page. The statistics shown are those computed by
+        ``evaluate_pnls()``, selected and grouped for presentation.
+
+        Parameters
+        ----------
+        headline : str or List[str]
+            PnL categor(y/ies) to show as the (non-benchmark) column(s), in
+            display order.
+        bench : str or List[str], optional
+            PnL categor(y/ies) to show as benchmark column(s), styled
+            distinctly (muted) from the headline column(s), in display
+            order. Default is None, in which case the benchmark ticker(s)
+            passed as ``bms`` to the constructor are used - the same
+            benchmark(s) shown in the correlation row(s). Raises
+            ``ValueError`` if omitted when no ``bms`` were configured.
+        headline_label, bench_label : str or List[str], optional
+            Column header labels. Default is the category names themselves.
+            If ``bench`` is a list, ``bench_label`` must be a matching list
+            (or omitted).
+        groups : dict of {section title: [metric names]}, optional
+            Section headings and the metrics listed under each, in order,
+            e.g. ``{"Performance": ["Return %", "Sharpe Ratio"]}``. Default
+            is None, in which case a standard set of performance, risk &
+            drawdown, and robustness metrics is used. Raises ``KeyError``
+            if a requested metric is not one of the rows produced by
+            ``evaluate_pnls()``.
+        order : dict of {section title: [metric names in desired order]}, optional
+            Override just the row order within a section from ``groups``,
+            without redeclaring which metrics belong to it.
+        row_labels : dict of {row name: display label or [labels]}, optional
+            Rename individual rows for display, without changing which rows
+            are selected by ``groups``/``order``. Keys are matched against
+            the row names produced by ``evaluate_pnls()``, e.g.
+            ``{"St. Dev. %": "Vol %"}``.
+
+            The special key ``"Benchmark correlation"`` relabels the
+            benchmark-correlation row(s) - named after the benchmark
+            ticker, e.g. ``"USD_DUXR correl"`` - without having to spell
+            the ticker(s) out:
+
+            - a single label, e.g. ``{"Benchmark correlation": "Benchmark
+              correlation"}``, is applied to the row when one benchmark is
+              configured. With several benchmarks, the label is suffixed
+              with a number ("Benchmark correlation 1", "... 2", ...) so
+              each row keeps a distinct name.
+            - a list of labels, one per benchmark in the order ``bms`` was
+              passed to the constructor, e.g. ``{"Benchmark correlation":
+              ["5Y", "2Y"]}``. Must match the number of benchmarks exactly.
+        pnl_cids, start, end, sr_thresholds : see ``evaluate_pnls()``.
+        title, subtitle : str
+            Header text shown above the table. ``subtitle`` defaults to
+            "10% vol target | daily rebalance | gross of costs" - override
+            it if this instance's PnLs don't share that configuration (e.g.
+            a different ``vol_scale`` or ``rebal_freq`` in ``make_pnl()``).
+        custom_css : str, optional
+            Extra CSS appended after the table's own stylesheet to
+            customize its appearance. Because it comes last, a rule
+            targeting one of the table's classes overrides the default
+            without needing ``!important``, e.g.
+            ``custom_css=".pnl-title { color: #7a1f1f; }"``. See
+            ``pnl_table_html`` for the classes that can be targeted.
+        footnotes : bool, default True
+            Whether to render the explanatory footnotes below the table
+            (see Notes). Set to ``False`` to suppress them - the
+            underlying "+" prefix on cells is unaffected, only the
+            footnote text is toggled.
+
+        Returns
+        -------
+        HTMLTable
+            The formatted table. Displays inline when returned from a
+            notebook cell; its ``.data`` attribute holds the raw HTML
+            string, e.g. to save with
+            ``Path("table.html").write_text(...)`` for use in Word or on a
+            web page.
+
+        Notes
+        -----
+        A "Max Draw Recovery (months)" figure is prefixed with "+" wherever
+        the worst drawdown hadn't recovered by the end of the sample - it
+        reads as "at least this many months and still running", not a
+        completed recovery time. "Top 5% Monthly PnL Share" is top-5%-months
+        PnL divided by total PnL, so it reads negative whenever total PnL is
+        negative. Both get an explanatory footnote below the table whenever
+        they occur (subject to ``footnotes``).
+        """
+        headlines = headline if isinstance(headline, list) else [headline]
+        if headline_label is None:
+            headline_labels = headlines
+        elif isinstance(headline_label, list):
+            headline_labels = headline_label
+        else:
+            headline_labels = [headline_label] if len(headlines) == 1 else headlines
+
+        if bench is None:
+            if not getattr(self, "_bm_dict", None):
+                raise ValueError(
+                    "bench must be provided, or configure bms=... on the "
+                    "NaivePnL constructor to default to those benchmark "
+                    "ticker(s)."
+                )
+            benches = list(self._bm_dict.keys())
+        else:
+            benches = bench if isinstance(bench, list) else [bench]
+        if bench_label is None:
+            bench_labels = benches
+        elif isinstance(bench_label, list):
+            bench_labels = bench_label
+        else:
+            bench_labels = [bench_label] if len(benches) == 1 else benches
+        if len(bench_labels) != len(benches):
+            raise ValueError(
+                f"bench_label must match bench 1:1 ({len(benches)} "
+                f"benchmark(s)), got {len(bench_labels)} label(s)."
+            )
+
+        using_default_groups = groups is None
+        groups = groups if groups is not None else DEFAULT_PNL_METRIC_GROUPS
+        order = order or {}
+
+        resolved = {}
+        for section, metrics in groups.items():
+            if section in order:
+                if set(order[section]) != set(metrics):
+                    raise ValueError(
+                        f"order[{section!r}] must contain exactly {metrics}"
+                    )
+                resolved[section] = order[section]
+            else:
+                resolved[section] = metrics
+
+        # A bench entry is either a real PnL category (goes through
+        # evaluate_pnls() as usual) or a raw bms ticker defaulted-in above
+        # (not a registered PnL, so it can't go through evaluate_pnls()'s
+        # pnl_names check - computed directly from its own return series
+        # via the same stats routine instead).
+        bench_pnl_names = [b for b in benches if b in self.pnl_names]
+        bench_bm_tickers = [b for b in benches if b not in self.pnl_names]
+        unknown_bench = [b for b in bench_bm_tickers if b not in self._bm_dict]
+        if unknown_bench:
+            raise ValueError(
+                f"bench {unknown_bench} is neither a defined PnL category "
+                f"({self.pnl_names}) nor a configured bms ticker "
+                f"({list(self._bm_dict.keys())})."
+            )
+
+        tbr = self.evaluate_pnls(
+            pnl_cats=[*headlines, *bench_pnl_names],
+            pnl_cids=pnl_cids,
+            start=start,
+            end=end,
+            sr_thresholds=sr_thresholds,
+        )
+
+        # Columns whose "Max Draw Recovery (months)" figure is an open, not
+        # yet completed drawdown as of the last observation - flagged with
+        # a "+" prefix below rather than read as a finished recovery time.
+        dd_recovery_ongoing = dict(getattr(self, "_last_dd_recovery_ongoing", {}))
+
+        if bench_bm_tickers:
+            dfw_bm = pd.concat([self._bm_dict[t] for t in bench_bm_tickers], axis=1)
+            if start is not None:
+                dfw_bm = dfw_bm.loc[dfw_bm.index >= pd.Timestamp(start)]
+            if end is not None:
+                dfw_bm = dfw_bm.loc[dfw_bm.index <= pd.Timestamp(end)]
+            stats_bm, ongoing_bm = self._stats_from_wide(
+                dfw_bm,
+                sr_thresholds if sr_thresholds is not None else [0.25, 0.5, 0.75],
+            )
+            dd_recovery_ongoing.update(ongoing_bm)
+            tbr = pd.concat([tbr, stats_bm], axis=1)
+
+        recovery_row_label = "Max Draw Recovery (months)"
+
+        # "Benchmark correlation" in `groups`/`order` is a placeholder for
+        # whichever real f"{bm} correl" row(s) `evaluate_pnls()` produced;
+        # expand it in place rather than renaming tbr, so tbr keeps the
+        # ticker-based naming used everywhere else in the package.
+        correl_rows = [i for i in tbr.index if i.endswith(" correl")]
+        if correl_rows:
+            resolved = {
+                section: [
+                    r
+                    for m in metrics
+                    for r in (correl_rows if m == "Benchmark correlation" else [m])
+                ]
+                for section, metrics in resolved.items()
+            }
+
+        all_metrics = [m for metrics in resolved.values() for m in metrics]
+
+        # Using the *default* groups without a benchmark configured on this
+        # instance: drop the correlation row rather than raising, since it
+        # only makes sense once a benchmark has been set. An explicitly
+        # passed `groups` still raises on a missing metric below.
+        if using_default_groups and not correl_rows:
+            resolved = {
+                section: [m for m in metrics if m != "Benchmark correlation"]
+                for section, metrics in resolved.items()
+            }
+            all_metrics = [m for metrics in resolved.values() for m in metrics]
+
+        missing = [m for m in all_metrics if m not in tbr.index]
+        if missing:
+            raise KeyError(f"Unknown metric(s) requested: {missing}")
+
+        if row_labels:
+            row_labels = dict(row_labels)
+            recovery_row_label = row_labels.get(recovery_row_label, recovery_row_label)
+            if "Benchmark correlation" in row_labels:
+                label = row_labels.pop("Benchmark correlation")
+                if isinstance(label, list):
+                    if len(label) != len(correl_rows):
+                        raise ValueError(
+                            f"row_labels['Benchmark correlation'] has "
+                            f"{len(label)} label(s) but {len(correl_rows)} "
+                            f"benchmark(s) are configured."
+                        )
+                    suffixed = label
+                elif len(correl_rows) <= 1:
+                    # A single benchmark can safely share the generic label;
+                    # two or more would collide into the same row name
+                    # (pandas doesn't allow duplicate index values here), so
+                    # number them instead of dropping back to the real
+                    # ticker names.
+                    suffixed = [label] * len(correl_rows)
+                else:
+                    suffixed = [f"{label} {i}" for i in range(1, len(correl_rows) + 1)]
+                for r, lbl in zip(correl_rows, suffixed):
+                    row_labels.setdefault(r, lbl)
+            tbr = tbr.rename(index=row_labels)
+            resolved = {
+                section: [row_labels.get(m, m) for m in metrics]
+                for section, metrics in resolved.items()
+            }
+            all_metrics = [m for metrics in resolved.values() for m in metrics]
+
+        plus_cols = [col for col, ongoing in dd_recovery_ongoing.items() if ongoing]
+
+        # Resolve through any row_labels renaming so a renamed "Traded
+        # Months"/"Max Draw Recovery (months)"/"Top 5% Monthly PnL Share"
+        # row keeps its whole-number formatting/negative-share footnote
+        # instead of silently losing them.
+        traded_months_label = "Traded Months"
+        top5_row_label = "Top 5% Monthly PnL Share"
+        if row_labels:
+            traded_months_label = row_labels.get(
+                traded_months_label, traded_months_label
+            )
+            top5_row_label = row_labels.get(top5_row_label, top5_row_label)
+
+        html = pnl_table_html(
+            tbr,
+            list(resolved.items()),
+            headlines,
+            benches,
+            headline_labels,
+            bench_labels,
+            whole_number_metrics={traded_months_label, recovery_row_label}
+            & set(all_metrics),
+            plus_prefix={recovery_row_label: plus_cols} if plus_cols else None,
+            negative_share_row=top5_row_label,
+            footnotes=footnotes,
+            title=title,
+            subtitle=subtitle,
+            custom_css=custom_css,
+        )
+        return HTMLTable(html)
 
     def print_pnl_names(self):
         """

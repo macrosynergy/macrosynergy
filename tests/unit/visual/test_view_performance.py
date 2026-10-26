@@ -86,6 +86,42 @@ class TestViewPerformance(unittest.TestCase):
         )
         self.assertIsInstance(fig, plt.Figure)
 
+    def test_paired_palette_starts_with_dark_colour(self):
+        fig = msv.view_performance(
+            self.df,
+            xcats=["FXXR_NSA"],
+            cids=["AUD", "CAD", "GBP"],
+            return_fig=True,
+        )
+
+        handles, _ = fig.axes[0].get_legend_handles_labels()
+        legend_colours = []
+        for handle in handles:
+            if hasattr(handle, "patches"):
+                handle = handle.patches[0]
+            legend_colours.append(handle.get_facecolor()[:3])
+
+        self.assertLess(sum(legend_colours[0]), sum(legend_colours[1]))
+        self.assertLess(sum(legend_colours[2]), sum(legend_colours[3]))
+
+    def test_legend_loc_uses_matplotlib_semantics(self):
+        fig = msv.view_performance(
+            self.df,
+            xcats=["FXXR_NSA"],
+            cids=["AUD", "CAD", "GBP"],
+            metrics=["Annualized return, %", "Annualized SD, %"],
+            legend_loc="upper center",
+            legend_bbox_to_anchor=(0.5, -0.3),
+            return_fig=True,
+        )
+
+        ax = fig.axes[0]
+        fig.canvas.draw()
+        anchor_y = ax.transAxes.transform((0.5, -0.3))[1]
+        legend_bbox = ax.get_legend().get_window_extent()
+
+        self.assertLessEqual(legend_bbox.y1, anchor_y)
+
     def test_invalid_dimension_combination_raises(self):
         with self.assertRaises(ValueError):
             msv.view_performance(

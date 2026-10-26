@@ -2,18 +2,20 @@
 Module for calculating an approximate nominal PnL under consideration of transaction costs.
 """
 
+import warnings
+from numbers import Number
+from typing import Dict, List, Optional, Tuple, Union
+
 import numpy as np
 import pandas as pd
-from typing import List, Union, Tuple, Optional, Dict
-from numbers import Number
-import warnings
+
 import macrosynergy.visuals as msv
+from macrosynergy.management.types import QuantamentalDataFrame
 from macrosynergy.management.utils import (
+    get_eops,
     reduce_df,
     ticker_df_to_qdf,
-    get_eops,
 )
-from macrosynergy.management.types import QuantamentalDataFrame
 from macrosynergy.pnl.transaction_costs import (
     TransactionCosts,
     TransactionCostsDictAdapter,
@@ -441,7 +443,7 @@ def _portfolio_sums(
 
 
 def proxy_pnl_calc(
-    df: QuantamentalDataFrame,
+    df: Union[QuantamentalDataFrame, pd.DataFrame],
     spos: str,
     rstring: str,
     transaction_costs_object: Optional[

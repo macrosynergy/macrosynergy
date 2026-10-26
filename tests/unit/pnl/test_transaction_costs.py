@@ -677,5 +677,43 @@ class TestTransactionCostsDictAdapter(unittest.TestCase):
                     )
 
 
+class TestDictAdapterHeatmaps(unittest.TestCase):
+    HEATMAPS = ("bidoffer_heatmap", "rollcost_heatmap")
+
+    def setUp(self):
+        self.cost_dict = {
+            "USD_FX": _cost_entry(
+                bid_offer=(0.2, 0.4), rollcost=(0.05, 0.15), size=(35, 90)
+            ),
+            "EUR_FX": _cost_entry(
+                bid_offer=(0.1, 0.2), rollcost=(0.02, 0.08), size=(30, 80)
+            ),
+            "GBP_FX": _cost_entry(
+                bid_offer=(0.3, 0.6), rollcost=(0.07, 0.21), size=(40, 95)
+            ),
+        }
+        self.adapter = TransactionCostsDictAdapter(cost_dict=self.cost_dict)
+
+    def _plotted_fids(self, method: str, **kwargs) -> List[str]:
+        module = "macrosynergy.pnl.transaction_costs"
+        with unittest.mock.patch(f"{module}.sns.heatmap") as mock_heatmap:
+            with unittest.mock.patch(f"{module}.plt.show"):
+                getattr(self.adapter, method)(**kwargs)
+        matplotlib.pyplot.close("all")
+        return list(mock_heatmap.call_args[0][0].columns)
+
+    def test_heatmaps_default_to_all_fids(self):
+        for method in self.HEATMAPS:
+            with self.subTest(method=method):
+                self.assertEqual(self._plotted_fids(method), self.adapter.fids)
+
+    def test_heatmaps_accept_fids_subset(self):
+        subset = ["EUR_FX"]
+        self.assertNotEqual(subset, self.adapter.fids)
+        for method in self.HEATMAPS:
+            with self.subTest(method=method):
+                self.assertEqual(self._plotted_fids(method, fids=subset), subset)
+
+
 if __name__ == "__main__":
     unittest.main()

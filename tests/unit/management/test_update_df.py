@@ -11,6 +11,7 @@ from macrosynergy.management.utils import (
 )
 from macrosynergy.panel.make_relative_value import make_relative_value
 from typing import Union, List, Dict, Tuple, Optional
+import inspect as _inspect
 
 
 class TestAll(unittest.TestCase):
@@ -454,6 +455,55 @@ class TestAll(unittest.TestCase):
 
         with self.assertRaises(TypeError):
             update_tickers(df=self.dfd, df_add=1)
+
+
+class TestUpdateDfEdge(unittest.TestCase):
+    def setUp(self):
+        self.df = pd.DataFrame({
+            "cid": ["AUD", "AUD", "GBP"],
+            "xcat": ["XR", "INFL", "XR"],
+            "real_date": pd.to_datetime(["2020-01-01", "2020-01-02", "2020-01-01"]),
+            "value": [1.0, 2.0, 3.0],
+        })
+
+    def test_empty_base_returns_add(self):
+        empty = self.df.iloc[0:0].copy()
+        out = update_df(empty, self.df)
+        self.assertEqual(len(out), len(self.df))
+
+    def test_empty_add_returns_base(self):
+        empty = self.df.iloc[0:0].copy()
+        out = update_df(self.df, empty)
+        self.assertEqual(len(out), len(self.df))
+
+    def test_last_wins_on_overlap(self):
+        upd = self.df.copy()
+        upd["value"] = [10.0, 20.0, 30.0]
+        out = update_df(self.df, upd)
+        merged = out.set_index(["cid", "xcat", "real_date"])["value"]
+        self.assertEqual(merged.loc[("AUD", "XR", pd.Timestamp("2020-01-01"))], 10.0)
+
+    def test_non_df_raises_attributeerror(self):
+        # A list has no .columns; current update_df accesses df.columns before its
+        # isinstance guard, so a non-DataFrame raises AttributeError (pinning current behaviour).
+        with self.assertRaises(AttributeError):
+            update_df([1, 2, 3], self.df)
+
+    def test_non_qdf_dataframe_raises_typeerror(self):
+        # A plain DataFrame has .columns (survives that access) but is not a
+        # QuantamentalDataFrame, so the isinstance guard fires the documented TypeError.
+        bad_df = pd.DataFrame({"a": [1], "b": [2]})
+        with self.assertRaises(TypeError):
+            update_df(bad_df, self.df)
+
+    def test_update_df_signature_unchanged(self):
+        sig = _inspect.signature(update_df)
+        self.assertEqual(list(sig.parameters), ["df", "df_add", "xcat_replace"])
+        self.assertEqual(sig.parameters["xcat_replace"].default, False)
+
+    def test_update_tickers_signature_unchanged(self):
+        sig = _inspect.signature(update_tickers)
+        self.assertEqual(list(sig.parameters), ["df", "df_add"])
 
 
 if __name__ == "__main__":

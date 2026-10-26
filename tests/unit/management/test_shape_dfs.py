@@ -1,10 +1,12 @@
 import unittest
 import random
+from unittest.mock import patch
 import numpy as np
 import pandas as pd
 from macrosynergy.compat import RESAMPLE_NUMERIC_ONLY, PD_OLD_RESAMPLE
 from tests.simulate import make_qdf
 from macrosynergy.management.simulate import make_test_df
+from macrosynergy.management.types import QuantamentalDataFrame
 from macrosynergy.management.utils import (
     reduce_df,
     reduce_df_by_ticker,
@@ -116,6 +118,94 @@ class TestAll(unittest.TestCase):
 
         black_range_2 = pd.date_range(start="2014-01-01", end="2014-12-31")
         self.assertTrue(not any(item in black_range_2 for item in dfd_cad["real_date"]))
+
+    def test_reduce_df_blacklist_validation(self):
+        # reduce_df validates the blacklist itself, rather than building a mask that
+        # quietly excludes nothing
+        cases = {
+            "not a dict": 1,
+            "non-str key": {1: ["2011-01-01", "2012-12-31"]},
+            "non-iterable value": {"AUD": 5},
+            "wrong length": {"AUD": ["2011-01-01"]},
+            "value that is not date-like": {"AUD": ["not-a-date", "2012-12-31"]},
+        }
+        for label, blacklist in cases.items():
+            with self.subTest(case=label):
+                with self.assertRaises(TypeError):
+                    reduce_df(self.dfd, xcats=["XR"], blacklist=blacklist)
+
+    def test_reduce_df_object_and_categorical_qdf_agree(self):
+        # an object-dtype QuantamentalDataFrame is filtered here, a categorical one is
+        # handed to the QDF implementation; the rows must match either way
+        kwargs = dict(xcats=["XR", "CRY"], cids=self.cids[:2], start="2013-01-01")
+        from_object = reduce_df(
+            QuantamentalDataFrame(self.dfd, categorical=False), **kwargs
+        )
+        from_category = reduce_df(
+            QuantamentalDataFrame(self.dfd, categorical=True), **kwargs
+        )
+
+        self.assertFalse(from_object.empty)
+        self.assertEqual(from_object["cid"].dtype.name, "object")
+        self.assertEqual(from_category["cid"].dtype.name, "category")
+        pd.testing.assert_frame_equal(
+            from_object, from_category.astype({"cid": "object", "xcat": "object"})
+        )
+
+    def test_reduce_df_delegates_only_for_categorical(self):
+        # both routes return identical rows, so only the dispatch itself pins this branch
+        kwargs = dict(xcats=["XR"], cids=self.cids[:2])
+        real_reduce_df = QuantamentalDataFrame.reduce_df
+
+        for label, categorical, expect_delegated in (
+            ("object dtype", False, False),
+            ("categorical", True, True),
+        ):
+            with self.subTest(case=label):
+                calls = []
+
+                def spy(qdf_self, *args, **spy_kwargs):
+                    calls.append(1)
+                    return real_reduce_df(qdf_self, *args, **spy_kwargs)
+
+                frame = QuantamentalDataFrame(self.dfd, categorical=categorical)
+                with patch.object(QuantamentalDataFrame, "reduce_df", spy):
+                    out = reduce_df(frame, **kwargs)
+
+                self.assertEqual(bool(calls), expect_delegated)
+                self.assertEqual(set(out["cid"].unique()), set(self.cids[:2]))
+
+    def test_reduce_df_by_ticker_dates(self):
+        start, end = "2013-01-01", "2015-12-31"
+        ticks = ["AUD_XR", "CAD_CRY"]  # `self.dfd` spans 2011-2020 for every cid x xcat
+        out = reduce_df_by_ticker(self.dfd, ticks=ticks, start=start, end=end)
+
+        self.assertEqual(out["real_date"].min(), pd.to_datetime(start))
+        self.assertEqual(out["real_date"].max(), pd.to_datetime(end))
+        self.assertEqual(set(out["cid"] + "_" + out["xcat"]), set(ticks))
+
+    def test_reduce_df_by_ticker_builds_tickers_from_categorical(self):
+        # categorical columns cannot be joined with `+`; one categorical index column keeps
+        # the frame on this path, where the string cast is what makes it work
+        start, end = "2013-01-01", "2015-12-31"
+        ticks = ["AUD_XR", "CAD_CRY"]
+        expected_rows = len(
+            reduce_df_by_ticker(self.dfd, ticks=ticks, start=start, end=end)
+        )
+        self.assertGreater(expected_rows, 0)
+
+        for label, casts in (
+            ("cid only", {"cid": "category"}),
+            ("cid and xcat", {"cid": "category", "xcat": "category"}),
+        ):
+            with self.subTest(case=label):
+                frame = pd.DataFrame(self.dfd.astype(casts))
+                out = reduce_df_by_ticker(frame, ticks=ticks, start=start, end=end)
+                self.assertEqual(len(out), expected_rows)
+                self.assertEqual(
+                    set(out["cid"].astype(str) + "_" + out["xcat"].astype(str)),
+                    set(ticks),
+                )
 
     def test_reduce_df_preserves_original(self):
         black = {
@@ -512,8 +602,8 @@ class TestAll(unittest.TestCase):
     def test_reduce_df_by_ticker(self):
         dfd = make_test_df()
         res_df = reduce_df_by_ticker(df=dfd, ticks=None, start=None, end=None)
-        self.assertTrue(dfd.equals(res_df.drop(columns="ticker")))
-
+        self.assertTrue(dfd.equals(res_df))
+        res_df["ticker"] = res_df["cid"] + "_" + res_df["xcat"]
         expc_tickers = dfd["cid"] + "_" + dfd["xcat"]
         self.assertTrue(expc_tickers.equals(res_df["ticker"]))
 

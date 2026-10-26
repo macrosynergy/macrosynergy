@@ -269,6 +269,74 @@ class TestComputeDailyWeights(unittest.TestCase):
         q2 = result[pd.to_datetime(result["real_date"]).dt.month.isin([4, 5, 6])]
         self.assertIn("BBB", q2["cid"].unique())
 
+    def test_membership_sparser_than_reconstitution_raises(self):
+        # membership snapshots only taken once per quarter; monthly reconstitution
+        # (the default) would silently reset to a stale membership snapshot each month.
+        quarter_starts = pd.to_datetime(["2020-01-01", "2020-04-01"])
+        constituents = pd.DataFrame(
+            [
+                {"cid": cid, "real_date": dt, "membership": 1}
+                for cid in self.cids
+                for dt in quarter_starts
+            ]
+        )
+        with self.assertRaises(AssertionError):
+            compute_daily_weights(constituents, self.returns.copy(), "M")
+
+    def test_membership_matching_reconstitution_freq_passes(self):
+        # Same quarterly-sparse membership, but reconstitution snapped to quarterly
+        # so the input is dense enough for the cadence it actually needs to support.
+        quarter_starts = pd.to_datetime(["2020-01-01", "2020-04-01"])
+        constituents = pd.DataFrame(
+            [
+                {"cid": cid, "real_date": dt, "membership": 1}
+                for cid in self.cids
+                for dt in quarter_starts
+            ]
+        )
+        result = compute_daily_weights(
+            constituents, self.returns.copy(), "M", reconstitution_freq="Q"
+        )
+        self.assertFalse(result.empty)
+
+    def test_raw_weight_dense_input_passes(self):
+        constituents = self.constituents.copy()
+        constituents["raw_weight"] = 1.0
+        result = compute_daily_weights(
+            constituents, self.returns.copy(), "M", weights_col="raw_weight"
+        )
+        self.assertFalse(result.empty)
+
+    def test_raw_weight_sparser_than_rebalancing_raises(self):
+        # raw_weight only observed once per quarter; monthly rebalancing/reconstitution
+        # (the default) would silently reset to a stale target each month.
+        constituents = self.constituents.copy()
+        constituents["raw_weight"] = np.nan
+        quarter_starts = pd.to_datetime(["2020-01-01", "2020-04-01"])
+        mask = constituents["real_date"].isin(quarter_starts)
+        constituents.loc[mask, "raw_weight"] = 1.0
+        with self.assertRaises(AssertionError):
+            compute_daily_weights(
+                constituents, self.returns.copy(), "M", weights_col="raw_weight"
+            )
+
+    def test_raw_weight_matching_reconstitution_freq_passes(self):
+        # Same quarterly-sparse raw_weight, but reconstitution snapped to quarterly
+        # so the input is dense enough for the cadence it actually needs to support.
+        constituents = self.constituents.copy()
+        constituents["raw_weight"] = np.nan
+        quarter_starts = pd.to_datetime(["2020-01-01", "2020-04-01"])
+        mask = constituents["real_date"].isin(quarter_starts)
+        constituents.loc[mask, "raw_weight"] = 1.0
+        result = compute_daily_weights(
+            constituents,
+            self.returns.copy(),
+            "M",
+            reconstitution_freq="Q",
+            weights_col="raw_weight",
+        )
+        self.assertFalse(result.empty)
+
 
 class TestComputeIndexReturns(unittest.TestCase):
     def setUp(self):

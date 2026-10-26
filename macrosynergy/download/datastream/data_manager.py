@@ -25,15 +25,16 @@ Typical usage::
     mgr = DatastreamDataManager(username="DS:YOUR_ID", password="secret")
 
     # Snapshot metadata
-    raw_meta = mgr.get_metadata(["VOD", "BP", "HSBA"], fields=["NAME", "RIC", "PCUR"])
+    raw_meta = mgr.get_metadata(["VOD", "BP.", "HSBA"], fields=["NAME", "RIC", "PCUR"])
     meta_df  = DatastreamDataManager.process_metadata(raw_meta)
 
     # Time-series prices
-    raw_ts   = mgr.get_data(["VOD", "BP"], fields=["P", "RI"], start="-1Y", end="0D")
+    raw_ts   = mgr.get_data(["VOD", "BP."], fields=["P", "RI"], start="-1Y", end="0D")
     ts_dict  = DatastreamDataManager.process_timeseries_data(raw_ts)
 """
 
 import logging
+import os
 from datetime import date, datetime, timedelta
 from typing import Dict, List, Optional, Tuple, Union
 
@@ -254,7 +255,7 @@ class DatastreamDataManager:
         ----------
         tickers : str, list, or tuple
             One or more Datastream instrument codes.  Comma-separated strings are
-            accepted (e.g. ``'VOD,BP,HSBA'``).
+            accepted (e.g. ``'VOD,BP.,HSBA'``).
         fields : str, list, or tuple, optional
             One or more Datastream datatype codes.  Defaults to ``'NAME'``.
 
@@ -280,9 +281,7 @@ class DatastreamDataManager:
         for t_chunk in ticker_chunks:
             row_frames: List[pd.DataFrame] = []
             for f_chunk in field_chunks:
-                ticker_arg = self._format_tickers_arg(
-                    t_chunk, multi_field=len(f_chunk) > 1
-                )
+                ticker_arg = self._format_tickers_arg(t_chunk)
                 logger.debug(
                     "get_metadata chunk: tickers=%s, fields=%s", ticker_arg, f_chunk
                 )
@@ -353,7 +352,10 @@ class DatastreamDataManager:
         Raises
         ------
         ValueError
-            If *tickers* or *fields* normalises to an empty list.
+            If *tickers* or *fields* normalises to an empty list, or if the
+            DSWS API returns an error payload (an ``$$ER:``-prefixed value,
+            or a malformed response lacking a ``Dates`` field) for any
+            chunk of the request.
         """
         ticker_list = self._normalize_to_list(tickers)
         field_list = self._normalize_to_list(fields)
@@ -364,9 +366,7 @@ class DatastreamDataManager:
 
         for t_chunk in ticker_chunks:
             for f_chunk in field_chunks:
-                ticker_arg = self._format_tickers_arg(
-                    t_chunk, multi_field=len(f_chunk) > 1
-                )
+                ticker_arg = self._format_tickers_arg(t_chunk)
                 logger.debug(
                     "get_data chunk: tickers=%s, fields=%s, start=%s, end=%s, freq=%s",
                     ticker_arg,
@@ -383,7 +383,16 @@ class DatastreamDataManager:
                     end=end,
                     freq=freq,
                 )
+                if isinstance(chunk_df, str):
+                    # ``DS_Response._format_Response`` returns a bare error
+                    # string (instead of a DataFrame) when the JSON response
+                    # is missing a 'Dates' field, e.g. for a malformed request.
+                    raise ValueError(
+                        f"Datastream API error for tickers={ticker_arg!r}, "
+                        f"fields={f_chunk!r}: {chunk_df}"
+                    )
                 if chunk_df is not None and not chunk_df.empty:
+                    self._raise_if_error_response(chunk_df, ticker_arg, f_chunk)
                     frames.append(chunk_df)
 
         if not frames:
@@ -704,32 +713,70 @@ class DatastreamDataManager:
             raise ValueError("fields must not be empty after normalisation.")
 
     @staticmethod
-    def _format_tickers_arg(tickers: List[str], multi_field: bool) -> str:
+    def _format_tickers_arg(tickers: List[str]) -> str:
         """Produce the ``tickers`` string expected by ``ds.get_data()``.
 
-        Rules (from DSWS documentation):
-
-        * Single ticker, single field  → plain string ``'VOD'``.
-        * Single ticker, multiple fields → angle-bracket wrapped ``'<VOD>'``.
-        * Multiple tickers             → comma-separated ``'VOD,BP,HSBA'``
-          (regardless of field count).
+        A single ticker is passed through unchanged; multiple tickers are
+        comma-joined. The field count has no bearing on this: the DSWS JSON
+        client already carries multiple fields via the request's
+        ``DataTypes`` array, so there is no bracket/expression syntax to
+        apply here (``DS_Response.post_user_request`` only special-cases a
+        ``|`` character, for instrument properties — an angle-bracket
+        wrapped ticker is passed straight through as a literal, invalid
+        instrument code).
 
         Parameters
         ----------
         tickers : list of str
             One or more ticker codes.
-        multi_field : bool
-            ``True`` when multiple datatype fields are requested.
 
         Returns
         -------
         str
             Formatted tickers argument ready to pass to ``ds.get_data()``.
         """
-        if len(tickers) == 1:
-            ticker = tickers[0]
-            return f"<{ticker}>" if multi_field else ticker
         return ",".join(tickers)
+
+    @staticmethod
+    def _raise_if_error_response(
+        df: pd.DataFrame, tickers: str, fields: List[str]
+    ) -> None:
+        """Raise ``ValueError`` when *df* is a DSWS error payload.
+
+        A valid time-series response has instrument codes as the top level
+        of a ``MultiIndex`` column axis. A rejected request instead comes
+        back in the flat, metadata-style shape with a literal ``Value``
+        column carrying an ``$$ER:``-prefixed message (e.g. from an invalid
+        instrument/datatype combination). Left unchecked, that error
+        DataFrame is indistinguishable to a caller from genuine (if oddly
+        shaped) data, since ``get_data`` does not otherwise raise.
+
+        Parameters
+        ----------
+        df : pd.DataFrame
+            A single chunk's raw response from ``ds.get_data()``.
+        tickers : str
+            The formatted tickers argument used for the request (for the
+            error message).
+        fields : list of str
+            The fields requested in this chunk (for the error message).
+
+        Raises
+        ------
+        ValueError
+            If *df* contains a ``Value`` column with an ``$$ER:`` marker.
+        """
+        value_col = next((c for c in df.columns if str(c).lower() == "value"), None)
+        if value_col is None:
+            return
+        values = df[value_col].astype(str)
+        is_error = values.str.startswith("$$ER:")
+        if is_error.any():
+            error_sample = values[is_error].iloc[0]
+            raise ValueError(
+                f"Datastream returned an error for tickers={tickers!r}, "
+                f"fields={fields!r}: {error_sample}"
+            )
 
     @staticmethod
     def _format_date(date: Optional[Union[str, datetime]]) -> str:
@@ -878,3 +925,122 @@ def parse_list_name(ln: str) -> date:
     mm = int(ln[-4:-2])
     yy = int(ln[-2:]) + 1900 if ln[-2] in (["9", "8"]) else int(ln[-2:]) + 2000
     return (datetime(yy + mm // 12, mm % 12 + 1, 1) - timedelta(days=1)).date()
+
+
+if __name__ == "__main__":
+    # Live smoke test against the real DSWS API, covering every combination
+    # of ticker count (single/multi) x field kind (static/time series) x
+    # field count (single/multi). Only runs when real credentials are
+    # available, since it makes billed API calls.
+    if os.environ.get("DS_USERNAME") and os.environ.get("DS_PASSWORD"):
+        _mgr = DatastreamDataManager(
+            username=os.environ["DS_USERNAME"],
+            password=os.environ["DS_PASSWORD"],
+        )
+
+        _cases = [
+            (
+                "Single ticker, static field",
+                lambda: _mgr.get_metadata(["VOD"], fields=["NAME"]),
+            ),
+            (
+                "Single ticker, time series field",
+                lambda: _mgr.get_data(
+                    ["VOD"], fields=["P"], start="-1M", end="0D", freq="D"
+                ),
+            ),
+            (
+                "Single ticker, static fields (>1)",
+                lambda: _mgr.get_metadata(["VOD"], fields=["NAME", "RIC"]),
+            ),
+            (
+                "Single ticker, time series fields (>1)",
+                lambda: _mgr.get_data(
+                    ["VOD"], fields=["P", "RI"], start="-1M", end="0D", freq="D"
+                ),
+            ),
+            (
+                "Multi ticker, static field",
+                lambda: _mgr.get_metadata(["VOD", "BP."], fields=["NAME"]),
+            ),
+            (
+                "Multi ticker, time series field",
+                lambda: _mgr.get_data(
+                    ["VOD", "BP."], fields=["P"], start="-1M", end="0D", freq="D"
+                ),
+            ),
+            (
+                "Multi ticker, static fields (>1)",
+                lambda: _mgr.get_metadata(["VOD", "BP."], fields=["NAME", "RIC"]),
+            ),
+            (
+                "Multi ticker, time series fields (>1)",
+                lambda: _mgr.get_data(
+                    ["VOD", "BP."], fields=["P", "RI"], start="-1M", end="0D", freq="D"
+                ),
+            ),
+        ]
+
+        for _label, _fn in _cases:
+            print(f"\n=== {_label} ===")
+            try:
+                _result = _fn()
+                print(f"shape: {_result.shape}")
+                print(_result)
+            except Exception as exc:
+                print(f"FAILED: {exc}")
+
+        # Deliberately invalid requests: DSWS returns these as an
+        # '$$ER:'-marked Value column rather than an HTTP error, which is
+        # exactly the shape _raise_if_error_response() must catch. Each case
+        # here must raise ValueError — anything else means the hardening
+        # added for the '<TICKER>' bug has regressed.
+        _failure_cases = [
+            (
+                "Invalid ticker, time series field",
+                lambda: _mgr.get_data(
+                    ["ZZZINVALIDTICKER999"],
+                    fields=["P"],
+                    start="-1M",
+                    end="0D",
+                    freq="D",
+                ),
+            ),
+            (
+                "Invalid ticker, time series fields (>1)",
+                lambda: _mgr.get_data(
+                    ["ZZZINVALIDTICKER999"],
+                    fields=["P", "RI"],
+                    start="-1M",
+                    end="0D",
+                    freq="D",
+                ),
+            ),
+            (
+                "Invalid field, valid ticker, time series",
+                lambda: _mgr.get_data(
+                    ["VOD"],
+                    fields=["NOTAREALFIELD"],
+                    start="-1M",
+                    end="0D",
+                    freq="D",
+                ),
+            ),
+        ]
+
+        for _label, _fn in _failure_cases:
+            print(f"\n=== {_label} (expected to raise ValueError) ===")
+            try:
+                _result = _fn()
+                print(f"FAIL: expected ValueError but got a result: {_result}")
+            except ValueError as exc:
+                print(f"PASS: raised ValueError as expected: {exc}")
+            except Exception as exc:
+                print(f"FAIL: expected ValueError but got {type(exc).__name__}: {exc}")
+
+        _mgr.log_usage_stats(force=True)
+    else:
+        print(
+            "DS_USERNAME / DS_PASSWORD not set in the environment — "
+            "skipping Datastream live API smoke tests."
+        )

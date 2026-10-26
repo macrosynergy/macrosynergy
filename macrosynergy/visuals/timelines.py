@@ -135,7 +135,7 @@ def timelines(
         Optional text shown at the bottom-left of the figure canvas.
     footnote_fontsize : int
         Font size of the footnote. Default is 9.
-    y_axis_label: str
+    y_axis_label : str
         The label for the y-axis. Default is None.
     """
 

@@ -215,6 +215,7 @@ class SignalOptimizer(BasePanelLearner):
         min_cids=4,
         min_periods=12 * 3,
         min_xcats=1,
+        start_date = None,
         test_size=1,
         max_periods=None,
         split_functions=None,
@@ -280,6 +281,11 @@ class SignalOptimizer(BasePanelLearner):
             the frequency `freq` specified in the constructor. Default is 36.
         min_xcats : int, optional
             Minimum number of xcats required for the initial training set. Default is 1.
+        start_date = None, optional
+            Start date for the sequential optimization process. Default is None, in which
+            the optimization process is determined by (min_cids, min_periods, min_xcats)
+            and the first date in the dataframe. If this is set, (min_cids, min_periods, min_xcats)
+            should be None.
         test_size : int, optional
             Number of periods to pass before retraining a selected model. Default is 1.
         max_periods : int, optional
@@ -342,6 +348,7 @@ class SignalOptimizer(BasePanelLearner):
             min_periods=min_periods,
             max_periods=max_periods,
             min_xcats=min_xcats,
+            start_date=start_date
         )
 
         results = self.run(
@@ -2019,7 +2026,8 @@ if __name__ == "__main__":
         store_additional_data=[
             "oob_score_",
             "feature_importances_"
-        ]
+        ],
+        start_date="2016-01-29"
     )
 
     so.models_heatmap("LR")

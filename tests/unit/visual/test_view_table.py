@@ -1,11 +1,12 @@
 import unittest
-import pandas as pd
-from typing import List, Dict, Any
-from macrosynergy.management.simulate import make_test_df
-import macrosynergy.visuals as msv
+from typing import Any, Dict
+from unittest.mock import patch
+
 import matplotlib
 import matplotlib.pyplot as plt
-from unittest.mock import patch
+import pandas as pd
+
+import macrosynergy.visuals as msv
 
 
 class TestAll(unittest.TestCase):
@@ -108,6 +109,30 @@ class TestAll(unittest.TestCase):
         args["yticklabels"] = ["Row1", "Row2", "Row3", "Row4", "EXTRA_ROW"]
         with self.assertRaises(ValueError):
             msv.view_table(**args)
+
+    def test_view_table_box_rows(self):
+        import matplotlib.colors as mcolors
+        from matplotlib.patches import Rectangle
+
+        def boxes(box_rows):
+            fig = msv.view_table(**self.valid_args, box_rows=box_rows, return_fig=True)
+            rects = [p for p in fig.axes[0].patches if isinstance(p, Rectangle)]
+            plt.close(fig)
+            return rects
+
+        self.assertEqual(len(boxes(None)), 0)
+        self.assertEqual(len(boxes({1: "black"})), 1)
+        # contiguous same-colour positions merge into a single box
+        self.assertEqual(len(boxes({1: "red", 2: "red", 3: "red"})), 1)
+        # a gap splits into two boxes
+        self.assertEqual(len(boxes({0: "black", 2: "black", 3: "black"})), 2)
+        # contiguous but different colours do not merge, and keep their colours
+        two = boxes({1: "grey", 2: "black"})
+        self.assertEqual(len(two), 2)
+        self.assertEqual(
+            {mcolors.to_hex(r.get_edgecolor()) for r in two},
+            {mcolors.to_hex("grey"), mcolors.to_hex("black")},
+        )
 
 
 if __name__ == "__main__":

@@ -32,6 +32,7 @@ from .model_evaluation import (
     sortino_ratio,
     multi_output_sharpe,
     multi_output_sortino,
+    multi_output_meanreturn,
     regression_accuracy,
     regression_balanced_accuracy,
     correlation_coefficient,
@@ -65,6 +66,7 @@ from .forecasting import (
     PLSTransformer,
     LinearMultiTargetRegression,
     TimeWeightedWrapper,
+    LarsSurrogateModel,
 )
 
 from .model_selection import (
@@ -80,7 +82,12 @@ def __getattr__(name):
         "TimeSeriesSampler",
         "MultiOutputSharpe",
         "MultiOutputMCR",
+        "NegMeanPortfolioReturn",
+        "PortfolioVariance",
+        "NegMeanVarianceUtility",
+        "NegSharpeRatio",
         "MLPRegressor",
+        "LongShortModule",
     }
     if name in _torch_names:
         from .forecasting import __getattr__ as _fget
@@ -125,6 +132,7 @@ __all__ = [
     "sortino_ratio",
     "multi_output_sharpe",
     "multi_output_sortino",
+    "multi_output_meanreturn",
     "regression_accuracy",
     "regression_balanced_accuracy",
     "create_panel_metric",
@@ -151,6 +159,7 @@ __all__ = [
     "LinearMultiTargetRegression",
     "MLPRegressor",
     "ModelAveragingRegressor",
+    "LarsSurrogateModel",
     # market beta estimation
     "BetaEstimator",
     # regression system
@@ -170,6 +179,11 @@ __all__ = [
     "TimeSeriesSampler",
     "MultiOutputSharpe",
     "MultiOutputMCR",
+    "NegMeanPortfolioReturn",
+    "PortfolioVariance",
+    "NegMeanVarianceUtility",
+    "NegSharpeRatio",
+    "LongShortModule",
     # model selection
     "ModelAveragingRegressor",
 ]
