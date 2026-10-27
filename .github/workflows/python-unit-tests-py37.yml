@@ -17,11 +17,13 @@ jobs:
         run: |
           FOLDERS=$(ls -d tests/unit/*/ | sed 's|tests/unit/||' | sed 's|/||' | jq -R -s -c 'split("\n")[:-1]')
           echo "Matrix: $FOLDERS"
-          echo "::set-output name=matrix::$FOLDERS"
+          echo "matrix=$FOLDERS" >> "$GITHUB_OUTPUT"
 
   run-unit-tests:
     needs: prepare-matrix
     runs-on: ubuntu-24.04
+    env:
+      CONDA_PLUGINS_CONDA_PYPI_PIP_WARNING: "false"  # silence conda-pypi "Did you know" tip
     strategy:
       matrix:
         folder: ${{fromJson(needs.prepare-matrix.outputs.matrix)}}
@@ -32,9 +34,10 @@ jobs:
       #   uses: astral-sh/setup-uv@v5
 
       - name: Setup Miniconda
-        uses: conda-incubator/setup-miniconda@v3
+        uses: conda-incubator/setup-miniconda@v4
         with:
           python-version: 3.12
+          channels: defaults
       - name: Test conda installation
         shell: bash -l {0}
         run: conda info
