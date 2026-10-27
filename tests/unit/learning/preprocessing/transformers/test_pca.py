@@ -35,7 +35,7 @@ class TestPanelPCA(unittest.TestCase):
                 tuples.append((cid, work_day))
 
         n_samples = len(tuples)
-        ftrs = np.random.normal(loc=0, scale=1, size=(n_samples, 3))
+        ftrs = np.random.normal(loc=0, scale=[1, 1, 0.5], size=(n_samples, 3))
         labels = np.matmul(ftrs, [1, 2, -1]) + np.random.normal(0, 0.5, len(ftrs))
         df = pd.DataFrame(
             data=np.concatenate((np.reshape(labels, (-1, 1)), ftrs), axis=1),

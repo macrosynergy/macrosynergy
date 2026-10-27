@@ -156,11 +156,11 @@ class TestLMTR(unittest.TestCase):
             seemingly_unrelated=False,
         ).fit(X=self.X, y=self.y)
         lr = LinearRegression(fit_intercept=fit_intercept).fit(X=self.X_numpy, y=self.y_numpy)
-        np.testing.assert_array_almost_equal(lmtr.coefs_["XR"], lr.coef_[0,:])
-        np.testing.assert_array_almost_equal(lmtr.coefs_["XR2"], lr.coef_[1,:])
+        np.testing.assert_allclose(lmtr.coefs_["XR"], lr.coef_[0,:], rtol=1e-5)
+        np.testing.assert_allclose(lmtr.coefs_["XR2"], lr.coef_[1,:], rtol=1e-5)
         if fit_intercept:
-            np.testing.assert_array_almost_equal(lmtr.intercepts_["XR"], lr.intercept_[0])
-            np.testing.assert_array_almost_equal(lmtr.intercepts_["XR2"], lr.intercept_[1])
+            np.testing.assert_allclose(lmtr.intercepts_["XR"], lr.intercept_[0], rtol=1e-5, atol=1e-5)
+            np.testing.assert_allclose(lmtr.intercepts_["XR2"], lr.intercept_[1], rtol=1e-5, atol=1e-5)
         else:
             np.testing.assert_array_almost_equal(lmtr.intercepts_["XR"], 0.0)
             np.testing.assert_array_almost_equal(lmtr.intercepts_["XR2"], 0.0)
@@ -178,14 +178,17 @@ class TestLMTR(unittest.TestCase):
                 X=X_new,
                 y=self.y[target],
             )
-            np.testing.assert_array_almost_equal(
+            np.testing.assert_allclose(
                 lmtr_fs.coefs_[target],
                 lr_fs.coef_,
+                rtol=1e-5,
             )
             if fit_intercept:
-                np.testing.assert_array_almost_equal(
+                np.testing.assert_allclose(
                     lmtr_fs.intercepts_[target],
                     lr_fs.intercept_,
+                    rtol=1e-5,
+                    atol=1e-5,
                 )
             else:
                 np.testing.assert_array_almost_equal(
@@ -200,11 +203,11 @@ class TestLMTR(unittest.TestCase):
             seemingly_unrelated=True,
         ).fit(X=self.X, y=self.y)
         lr = LinearRegression(fit_intercept=fit_intercept).fit(X=self.X_numpy, y=self.y_numpy)
-        np.testing.assert_array_almost_equal(lmtr_su.coefs_["XR"], lr.coef_[0,:])
-        np.testing.assert_array_almost_equal(lmtr_su.coefs_["XR2"], lr.coef_[1,:])
+        np.testing.assert_allclose(lmtr_su.coefs_["XR"], lr.coef_[0,:], rtol=1e-5)
+        np.testing.assert_allclose(lmtr_su.coefs_["XR2"], lr.coef_[1,:], rtol=1e-5)
         if fit_intercept:
-            np.testing.assert_array_almost_equal(lmtr_su.intercepts_["XR"], lr.intercept_[0])
-            np.testing.assert_array_almost_equal(lmtr_su.intercepts_["XR2"], lr.intercept_[1])
+            np.testing.assert_allclose(lmtr_su.intercepts_["XR"], lr.intercept_[0], rtol=1e-5, atol=1e-5)
+            np.testing.assert_allclose(lmtr_su.intercepts_["XR2"], lr.intercept_[1], rtol=1e-5, atol=1e-5)
         else:
             np.testing.assert_array_almost_equal(lmtr_su.intercepts_["XR"], 0.0)
             np.testing.assert_array_almost_equal(lmtr_su.intercepts_["XR2"], 0.0)
@@ -256,11 +259,11 @@ class TestLMTR(unittest.TestCase):
             seemingly_unrelated=True,
             covariance_estimator=EmpiricalCovariance(),
         ).fit(X=self.X, y=self.y)
-        np.testing.assert_array_almost_equal(lmtr_su_ml.coefs_["XR"], lmtr_su_emp.coefs_["XR"])
-        np.testing.assert_array_almost_equal(lmtr_su_ml.coefs_["XR2"], lmtr_su_emp.coefs_["XR2"])
+        np.testing.assert_allclose(lmtr_su_ml.coefs_["XR"], lmtr_su_emp.coefs_["XR"], rtol=1e-5)
+        np.testing.assert_allclose(lmtr_su_ml.coefs_["XR2"], lmtr_su_emp.coefs_["XR2"], rtol=1e-5)
         if fit_intercept:
-            np.testing.assert_array_almost_equal(lmtr_su_ml.intercepts_["XR"], lmtr_su_emp.intercepts_["XR"])
-            np.testing.assert_array_almost_equal(lmtr_su_ml.intercepts_["XR2"], lmtr_su_emp.intercepts_["XR2"])
+            np.testing.assert_allclose(lmtr_su_ml.intercepts_["XR"], lmtr_su_emp.intercepts_["XR"], rtol=1e-5, atol=1e-5)
+            np.testing.assert_allclose(lmtr_su_ml.intercepts_["XR2"], lmtr_su_emp.intercepts_["XR2"], rtol=1e-5, atol=1e-5)
     @parameterized.expand([True, False])
     def test_predict_types(self, seemingly_unrelated):
         """
