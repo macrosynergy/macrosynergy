@@ -12,6 +12,7 @@ from sklearn.preprocessing import StandardScaler
 
 from macrosynergy.learning.forecasting.torch.models.mlps import MultiLayerPerceptron
 from macrosynergy.learning.forecasting.nn import MLPRegressor
+import macrosynergy.learning as msl
 
 # Set up invalid torch_models for testing
 class InvalidModelNoBase(nn.Module):
@@ -59,11 +60,6 @@ class InvalidModelNoForward(nn.Module, BaseEstimator):
         )
         self.head = nn.Linear(self.n_latent, 2)
 
-    def forward(self, x):
-        out = self.encoder(x)
-        out = self.head(out)
-        return out
-
 class ValidModel(nn.Module, BaseEstimator):
     def __init__(self, n_latent = 4):
         super().__init__()
@@ -73,7 +69,6 @@ class ValidModel(nn.Module, BaseEstimator):
         self.encoder = nn.Sequential(
             nn.Linear(2, self.n_latent),
             nn.ReLU(),
-            nn.Linear(self.n_latent, 2),
         )
         self.head = nn.Linear(self.n_latent, 2)
 
@@ -608,8 +603,8 @@ class TestMLPRegressor(unittest.TestCase):
 
         # self.assertRaises(ValueError, model.fit, X=self.X, y=self.y, sample_weight=np.array([1.0, 2.0, 3.0] * (len(self.X)//3)))
 
-    @parameterized.expand(itertools.product([None, True, False], ["batch", "layer", "none"], [True, False]))
-    def test_valid_fit(self, long_only, normalization, refit):
+    @parameterized.expand(itertools.product([None, nn.Softmax(dim=-1), msl.LongShortModule()], ["batch", "layer", None], [True, False], [0.7, msl.RollingKFoldPanelSplit(5)]))
+    def test_valid_fit(self, signal_modifier, normalization, refit, train_splitter):
         """ 
         Test that valid models run as expected under different hyperparameter settings with
         stored attributes as expected. 
@@ -622,8 +617,7 @@ class TestMLPRegressor(unittest.TestCase):
             encoder_activation="relu",
             head_activation="tanh",
             dropout_p=0.2,
-            long_only = long_only,
-            dollar_neutral = False,
+            signal_modifier = signal_modifier,
             normalization = normalization,
             torch_model = None,
             loss_func=nn.MSELoss(),
@@ -638,7 +632,7 @@ class TestMLPRegressor(unittest.TestCase):
             drop_last = False,
             epochs = 5,
             patience = 2,
-            train_splitter = 0.7,
+            train_splitter = train_splitter,
             x_scaler=StandardScaler(with_mean=False),
             y_scaler=StandardScaler(with_mean=False),
             refit = refit,
@@ -650,11 +644,13 @@ class TestMLPRegressor(unittest.TestCase):
 
         self.assertIsInstance(model1, MLPRegressor)
         self.assertIsInstance(model1.models, list)
-        self.assertIsInstance(model1.models[0], nn.Module)
-
-        for parameter in model1.models[0].parameters():
-            self.assertFalse(torch.isnan(parameter).any())
-            self.assertFalse(torch.isinf(parameter).any())
+        # Without refitting, each stored model is a list of validated models
+        modules1 = model1.models[0] if isinstance(model1.models[0], list) else [model1.models[0]]
+        for module in modules1:
+            self.assertIsInstance(module, nn.Module)
+            for parameter in module.parameters():
+                self.assertFalse(torch.isnan(parameter).any())
+                self.assertFalse(torch.isinf(parameter).any())
 
         # Repeat and check the parameters are the same 
         model2 = MLPRegressor(
@@ -664,8 +660,7 @@ class TestMLPRegressor(unittest.TestCase):
             encoder_activation="relu",
             head_activation="tanh",
             dropout_p=0.2,
-            long_only = long_only,
-            dollar_neutral = False,
+            signal_modifier = signal_modifier,
             normalization = normalization,
             torch_model = None,
             loss_func=nn.MSELoss(),
@@ -680,7 +675,7 @@ class TestMLPRegressor(unittest.TestCase):
             drop_last = False,
             epochs = 5,
             patience = 2,
-            train_splitter = 0.7,
+            train_splitter = train_splitter,
             x_scaler=StandardScaler(with_mean=False),
             y_scaler=StandardScaler(with_mean=False),
             refit = refit,
@@ -690,8 +685,10 @@ class TestMLPRegressor(unittest.TestCase):
             min_samples = 36,
         ).fit(self.X, self.y)
 
-        for param1, param2 in zip(model1.models[0].parameters(), model2.models[0].parameters()):
-            self.assertTrue(torch.equal(param1, param2))
+        modules2 = model2.models[0] if isinstance(model2.models[0], list) else [model2.models[0]]
+        for module1, module2 in zip(modules1, modules2):
+            for param1, param2 in zip(module1.parameters(), module2.parameters()):
+                self.assertTrue(torch.equal(param1, param2))
 
         # Test that different random state leads to different parameters
         model3 = MLPRegressor(
@@ -701,8 +698,7 @@ class TestMLPRegressor(unittest.TestCase):
             encoder_activation="relu",
             head_activation="tanh",
             dropout_p=0.2,
-            long_only = long_only,
-            dollar_neutral = False,
+            signal_modifier = signal_modifier,
             normalization = normalization,
             torch_model = None,
             loss_func=nn.MSELoss(),
@@ -717,7 +713,7 @@ class TestMLPRegressor(unittest.TestCase):
             drop_last = False,
             epochs = 5,
             patience = 2,
-            train_splitter = 0.7,
+            train_splitter = train_splitter,
             x_scaler=StandardScaler(with_mean=False),
             y_scaler=StandardScaler(with_mean=False),
             refit = refit,
@@ -727,8 +723,10 @@ class TestMLPRegressor(unittest.TestCase):
             min_samples = 36,
         ).fit(self.X, self.y)
 
-        for param1, param3 in zip(model1.models[0].parameters(), model3.models[0].parameters()):
-            self.assertFalse(torch.equal(param1, param3))
+        modules3 = model3.models[0] if isinstance(model3.models[0], list) else [model3.models[0]]
+        for module1, module3 in zip(modules1, modules3):
+            for param1, param3 in zip(module1.parameters(), module3.parameters()):
+                self.assertFalse(torch.equal(param1, param3))
 
         # Test on custom torch_model as expected 
         model4 = MLPRegressor(
@@ -742,7 +740,6 @@ class TestMLPRegressor(unittest.TestCase):
             epochs = 5,
             patience = 2,
             normalization = None,
-            dollar_neutral = None,
         ).fit(self.X, self.y)
 
         model5 = MLPRegressor(
@@ -756,7 +753,6 @@ class TestMLPRegressor(unittest.TestCase):
             epochs = 5,
             patience = 2,
             normalization = None,
-            dollar_neutral = None,
         ).fit(self.X, self.y)
 
         model6 = MLPRegressor(
@@ -770,23 +766,29 @@ class TestMLPRegressor(unittest.TestCase):
             epochs = 5,
             patience = 2,
             normalization = None,
-            dollar_neutral = None,
             random_state=123,
         ).fit(self.X, self.y)
 
         self.assertIsInstance(model4, MLPRegressor)
         self.assertIsInstance(model4.models, list)
-        self.assertIsInstance(model4.models[0], nn.Module)
+        # Without refitting, each stored model is a list of validated models
+        modules4 = model4.models[0] if isinstance(model4.models[0], list) else [model4.models[0]]
+        modules5 = model5.models[0] if isinstance(model5.models[0], list) else [model5.models[0]]
+        modules6 = model6.models[0] if isinstance(model6.models[0], list) else [model6.models[0]]
 
-        for parameter in model4.models[0].parameters():
-            self.assertFalse(torch.isnan(parameter).any())
-            self.assertFalse(torch.isinf(parameter).any())
+        for module in modules4:
+            self.assertIsInstance(module, nn.Module)
+            for parameter in module.parameters():
+                self.assertFalse(torch.isnan(parameter).any())
+                self.assertFalse(torch.isinf(parameter).any())
 
-        for param4, param5 in zip(model4.models[0].parameters(), model5.models[0].parameters()):
-            self.assertTrue(torch.equal(param4, param5))
+        for module4, module5 in zip(modules4, modules5):
+            for param4, param5 in zip(module4.parameters(), module5.parameters()):
+                self.assertTrue(torch.equal(param4, param5))
 
-        for param4, param6 in zip(model4.models[0].parameters(), model6.models[0].parameters()):
-            self.assertFalse(torch.equal(param4, param6))
+        for module4, module6 in zip(modules4, modules6):
+            for param4, param6 in zip(module4.parameters(), module6.parameters()):
+                self.assertFalse(torch.equal(param4, param6))
 
         # Now test the model runs with multiple optimizers and random states
         model7 = MLPRegressor(
@@ -808,10 +810,12 @@ class TestMLPRegressor(unittest.TestCase):
         self.assertIsInstance(model7.models, list)
         self.assertEqual(len(model7.models), 4)
         for submodel in model7.models:
-            self.assertIsInstance(submodel, nn.Module)
-            for parameter in submodel.parameters():
-                self.assertFalse(torch.isnan(parameter).any())
-                self.assertFalse(torch.isinf(parameter).any())
+            submodules = submodel if isinstance(submodel, list) else [submodel]
+            for module in submodules:
+                self.assertIsInstance(module, nn.Module)
+                for parameter in module.parameters():
+                    self.assertFalse(torch.isnan(parameter).any())
+                    self.assertFalse(torch.isinf(parameter).any())
 
         model8 = MLPRegressor(
             n_latent = 32,
@@ -829,8 +833,11 @@ class TestMLPRegressor(unittest.TestCase):
         ).fit(self.X, self.y)
 
         for submodel1, submodel8 in zip(model7.models, model8.models):
-            for param1, param8 in zip(submodel1.parameters(), submodel8.parameters()):
-                self.assertTrue(torch.equal(param1, param8))
+            submodules1 = submodel1 if isinstance(submodel1, list) else [submodel1]
+            submodules8 = submodel8 if isinstance(submodel8, list) else [submodel8]
+            for module1, module8 in zip(submodules1, submodules8):
+                for param1, param8 in zip(module1.parameters(), module8.parameters()):
+                    self.assertTrue(torch.equal(param1, param8))
 
         # Check that a custom torch model runs with multiple optimizers and random states as expected
         model9 = MLPRegressor(
@@ -842,7 +849,6 @@ class TestMLPRegressor(unittest.TestCase):
             dropout_p=None,
             n_latent=None,
             normalization=None,
-            dollar_neutral=None,
             epochs = 5,
             patience = 2,
             optimizer=["AdamW", "SGD+mom"],
@@ -860,14 +866,16 @@ class TestMLPRegressor(unittest.TestCase):
             patience = 2,
             n_latent = None,
             normalization=None,
-            dollar_neutral=None,
             optimizer=["AdamW", "SGD+mom"],
             random_state=[42, 43],
         ).fit(self.X, self.y)
 
         for submodel9, submodel10 in zip(model9.models, model10.models):
-            for param9, param10 in zip(submodel9.parameters(), submodel10.parameters()):
-                self.assertTrue(torch.equal(param9, param10))
+            submodules9 = submodel9 if isinstance(submodel9, list) else [submodel9]
+            submodules10 = submodel10 if isinstance(submodel10, list) else [submodel10]
+            for module9, module10 in zip(submodules9, submodules10):
+                for param9, param10 in zip(module9.parameters(), module10.parameters()):
+                    self.assertTrue(torch.equal(param9, param10))
 
     def test_valid_fit_refit(self):
         """
@@ -875,28 +883,35 @@ class TestMLPRegressor(unittest.TestCase):
         """
         model_refit = MLPRegressor(epochs = 5, patience = 2, refit=True).fit(self.X, self.y)
         model_norefit = MLPRegressor(epochs = 5, patience = 2, refit=False).fit(self.X, self.y)
-        params_norefit = [p.clone() for p in model_norefit.models[0].parameters()]
+        # Without refitting, each stored model is a list of validated models
+        self.assertIsInstance(model_norefit.models[0], list)
         params_refit = [p.clone() for p in model_refit.models[0].parameters()]
-        for p_norefit, p_refit in zip(params_norefit, params_refit):
-            self.assertFalse(torch.equal(p_norefit, p_refit))
+        for validated_model in model_norefit.models[0]:
+            params_norefit = [p.clone() for p in validated_model.parameters()]
+            for p_norefit, p_refit in zip(params_norefit, params_refit):
+                self.assertFalse(torch.equal(p_norefit, p_refit))
 
     def test_valid_fit_dollar_neutral(self):
         """
         Test that the dollar neutral constraint is applied correctly during training.
         """
-        model = MLPRegressor(epochs = 5, patience = 2, dollar_neutral=True, long_only = False).fit(self.X.iloc[:, :1], pd.concat((self.X.iloc[:, :1], self.y), axis=1))
-        for param in model.models[0].parameters():
-            self.assertFalse(torch.isnan(param).any())
-            self.assertFalse(torch.isinf(param).any())
+        model = MLPRegressor(epochs = 5, patience = 2, signal_modifier = msl.LongShortModule(dollar_neutral = True)).fit(self.X.iloc[:, :1], pd.concat((self.X.iloc[:, :1], self.y), axis=1))
+        # Without refitting, each stored model is a list of validated models
+        self.assertIsInstance(model.models[0], list)
+        for idx, validated_model in enumerate(model.models[0]):
+            for param in validated_model.parameters():
+                self.assertFalse(torch.isnan(param).any())
+                self.assertFalse(torch.isinf(param).any())
 
-        # Get forward pass outputs for the training data
-        with torch.no_grad():
-            X_tensor = torch.tensor(model.x_scaler.transform(self.X.iloc[:, :1]), dtype=torch.float32)
-            outputs = model.models[0](X_tensor)
+            # Get forward pass outputs for the training data, scaled as in predict
+            validated_model.eval()
+            with torch.no_grad():
+                X_tensor = torch.tensor(model.x_scalers[idx].transform(self.X.iloc[:, :1]), dtype=torch.float32)
+                outputs = validated_model(X_tensor)
 
-        # Check that the sum of the outputs across all samples is approximately zero (dollar neutral constraint)
-        output_mean = outputs.sum(dim = 1)
-        self.assertTrue(torch.allclose(output_mean, torch.zeros_like(output_mean), atol=1e-4))
+            # Check that the sum of the outputs across all samples is approximately zero (dollar neutral constraint)
+            output_mean = outputs.sum(dim = 1)
+            self.assertTrue(torch.allclose(output_mean, torch.zeros_like(output_mean), atol=1e-4))
 
     def test_types_predict(self):
         model = MLPRegressor().fit(self.X, self.y)
@@ -946,26 +961,28 @@ class TestMLPRegressor(unittest.TestCase):
         self.assertIn("XR", preds_insufficient.columns)
         self.assertNotIn("XR2", preds_insufficient.columns)
 
-    def test_valid_create_train_test_splits(self):
+    def test_valid_create_train_test_splits_(self):
         # Test that there is no leakage between train and validation sets in the time split and that the split is done according to the specified train_splitter
         model = MLPRegressor()
-        X_tr, X_va, y_tr, y_va = model.create_train_valid_splits(self.X, self.y, train_splitter=0.6)
+        X_tr, X_va, y_tr, y_va = model.create_train_valid_splits_(self.X, self.y, splitter=0.6)
 
         dates = sorted(self.X.index.get_level_values(1).unique())
         cut = int(0.6 * len(dates))
         train_dates = set(dates[:cut])
         val_dates = set(dates[cut:])
 
-        self.assertEqual(set(X_tr.index.get_level_values("real_date").unique()), train_dates)
-        self.assertEqual(set(X_va.index.get_level_values("real_date").unique()), val_dates)
-        self.assertEqual(set(y_tr.index.get_level_values("real_date").unique()), train_dates)
-        self.assertEqual(set(y_va.index.get_level_values("real_date").unique()), val_dates)
+        self.assertEqual(set(X_tr[0].index.get_level_values("real_date").unique()), train_dates)
+        self.assertEqual(set(X_va[0].index.get_level_values("real_date").unique()), val_dates)
+        self.assertEqual(set(y_tr[0].index.get_level_values("real_date").unique()), train_dates)
+        self.assertEqual(set(y_va[0].index.get_level_values("real_date").unique()), val_dates)
 
-    def test_valid_scale_data(self):
+    def test_valid_scale_data_(self):
         # Test that the data is scaled correctly when both scalers are provided
         model = MLPRegressor()
-        X_tr, X_va, y_tr, y_va = model.create_train_valid_splits(self.X, self.y, train_splitter=0.6)
-        X_tr_scaled, y_tr_scaled, X_va_scaled, y_va_scaled = model.scale_data(X_train=X_tr, X_valid=X_va, y_train=y_tr, y_valid=y_va, x_scaler=StandardScaler(with_mean=True), y_scaler=StandardScaler(with_mean=True))
+        X_trs, X_vas, y_trs, y_vas = model.create_train_valid_splits_(self.X, self.y, splitter=0.6)
+        X_tr, X_va, y_tr, y_va = X_trs[0], X_vas[0], y_trs[0], y_vas[0]
+        X_trs_s, y_trs_s, X_vas_s, y_vas_s, _, _ = model.scale_data_(X_trains=X_trs, y_trains=y_trs, X_valids=X_vas, y_valids=y_vas, x_scaler=StandardScaler(with_mean=True), y_scaler=StandardScaler(with_mean=True))
+        X_tr_scaled, y_tr_scaled, X_va_scaled, y_va_scaled = X_trs_s[0], y_trs_s[0], X_vas_s[0], y_vas_s[0]
 
         self.assertIsInstance(X_tr_scaled, np.ndarray)
         self.assertIsInstance(X_va_scaled, np.ndarray)
@@ -978,14 +995,16 @@ class TestMLPRegressor(unittest.TestCase):
         self.assertAlmostEqual(y_tr_scaled.std(), 1, places=5)
 
         # Repeat for the case where the means are not removed (a common use case)
-        X_tr_scaled, y_tr_scaled, X_va_scaled, y_va_scaled = model.scale_data(X_train=X_tr, X_valid = X_va, y_train = y_tr, y_valid = y_va, x_scaler=StandardScaler(with_mean=False), y_scaler=StandardScaler(with_mean=False))
+        X_trs_s, y_trs_s, X_vas_s, y_vas_s, _, _ = model.scale_data_(X_trains=X_trs, y_trains=y_trs, X_valids=X_vas, y_valids=y_vas, x_scaler=StandardScaler(with_mean=False), y_scaler=StandardScaler(with_mean=False))
+        X_tr_scaled, y_tr_scaled, X_va_scaled, y_va_scaled = X_trs_s[0], y_trs_s[0], X_vas_s[0], y_vas_s[0]
         self.assertIsInstance(X_tr_scaled, np.ndarray)
         self.assertIsInstance(X_va_scaled, np.ndarray)
         self.assertIsInstance(y_tr_scaled, np.ndarray)
         self.assertIsInstance(y_va_scaled, np.ndarray)
 
         # Repeat for the case where X is scaled but y is not
-        X_tr_scaled, y_tr_scaled, X_va_scaled, y_va_scaled = model.scale_data(X_train=X_tr, X_valid=X_va, y_train=y_tr, y_valid=y_va, x_scaler=StandardScaler(with_mean=False), y_scaler=None)
+        X_trs_s, y_trs_s, X_vas_s, y_vas_s, _, _ = model.scale_data_(X_trains=X_trs, y_trains=y_trs, X_valids=X_vas, y_valids=y_vas, x_scaler=StandardScaler(with_mean=False), y_scaler=None)
+        X_tr_scaled, y_tr_scaled, X_va_scaled, y_va_scaled = X_trs_s[0], y_trs_s[0], X_vas_s[0], y_vas_s[0]
         self.assertIsInstance(X_tr_scaled, np.ndarray)
         self.assertIsInstance(X_va_scaled, np.ndarray)
         self.assertIsInstance(y_tr_scaled, np.ndarray)
@@ -1010,8 +1029,9 @@ class TestMLPRegressor(unittest.TestCase):
         before = {k: v.detach().clone() for k, v in torch_model.state_dict().items()}
 
         sklearn_model = MLPRegressor()
-        X_tr, X_va, y_tr, y_va = sklearn_model.create_train_valid_splits(self.X, self.y, train_splitter=0.6)
-        X_tr_scaled, y_tr_scaled, X_va_scaled, y_va_scaled = sklearn_model.scale_data(X_train=X_tr, X_valid = X_va, y_train = y_tr, y_valid = y_va, x_scaler=StandardScaler(with_mean=True), y_scaler=StandardScaler(with_mean=True))
+        X_trs, X_vas, y_trs, y_vas = sklearn_model.create_train_valid_splits_(self.X, self.y, splitter=0.6)
+        X_trs_s, y_trs_s, X_vas_s, y_vas_s, _, _ = sklearn_model.scale_data_(X_trains=X_trs, y_trains=y_trs, X_valids=X_vas, y_valids=y_vas, x_scaler=StandardScaler(with_mean=True), y_scaler=StandardScaler(with_mean=True))
+        X_tr_scaled, y_tr_scaled = X_trs_s[0], y_trs_s[0]
 
         torch_model = sklearn_model._fit_one_batch(
             torch_model,
@@ -1020,8 +1040,6 @@ class TestMLPRegressor(unittest.TestCase):
             optimizer=optimizer,
             scheduler = None,
             loss_func = nn.MSELoss(),
-            sample_weight = None,
-            sample_weight_strategy = None,
             reg_turnover = 1
         )
         after = {k: v.detach().clone() for k, v in torch_model.state_dict().items()}
@@ -1036,8 +1054,6 @@ class TestMLPRegressor(unittest.TestCase):
             optimizer=optimizer,
             scheduler = scheduler,
             loss_func = nn.MSELoss(),
-            sample_weight = None,
-            sample_weight_strategy = None,
             reg_turnover = 1
         )
         after2 = {k: v.detach().clone() for k, v in torch_model.state_dict().items()}
