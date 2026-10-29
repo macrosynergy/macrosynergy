@@ -429,7 +429,8 @@ class SignalOptimizer(BasePanelLearner):
                 if self.multi_target_fill == "zero":
                     forecasts_df.loc[idx, ~forecasts_df.columns.isin([f"{target}_{name}" for target in forecasts.columns])] = 0
                 elif self.multi_target_fill == "mean":
-                    forecasts_df.loc[idx, ~forecasts_df.columns.isin([f"{target}_{name}" for target in forecasts.columns])] = forecasts.mean(axis=1).values
+                    missing_targets = ~forecasts_df.columns.isin([f"{target}_{name}" for target in forecasts.columns])
+                    forecasts_df.loc[idx, missing_targets] = np.repeat(forecasts.mean(axis=1).values[:, np.newaxis], missing_targets.sum(), axis=1)
 
         forecasts_df = forecasts_df.groupby(level=0).ffill().dropna()
 

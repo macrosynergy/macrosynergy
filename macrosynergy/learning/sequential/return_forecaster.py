@@ -55,6 +55,8 @@ class ReturnForecaster(BasePanelLearner):
         "X", or "y". If True, then all NaNs are removed from the data. "X" means
         only NaNs in independent variables are dropped. "y" means only NaNs in dependent
         variables are dropped. Default is True.
+    n_targets : int, optional
+        Number of response variables to consider. Default is 1.
 
     Notes
     -----
@@ -79,13 +81,14 @@ class ReturnForecaster(BasePanelLearner):
         xcat_aggs=["last", "sum"],
         generate_labels=None,
         drop_nas=True,
+        n_targets=1,
     ):
         # Parent checks
         self._check_init(
             df=df,
             xcats=xcats,
             cids=cids,
-            n_targets=1,
+            n_targets=n_targets,
             start=None,
             end=None,
             blacklist=blacklist,
@@ -93,7 +96,7 @@ class ReturnForecaster(BasePanelLearner):
             lag=lag,
             xcat_aggs=xcat_aggs,
             generate_labels=generate_labels,
-            drop_nas=drop_nas,
+            drop_nas=drop_nas, 
         )
         # Additional checks to those carried in the parent class
         if not isinstance(real_date, str):
@@ -105,7 +108,8 @@ class ReturnForecaster(BasePanelLearner):
         
         self.real_date = pd.to_datetime(real_date)
         df_adj = reduce_df(df=df, xcats=xcats)
-        self._check_factor_availability(df_adj, xcats, self.real_date, drop_nas)
+
+        self._check_factor_availability(df_adj, xcats, self.real_date, drop_nas, n_targets)
 
         if not isinstance(lag, int):
             raise TypeError("The lag argument must be an integer.")
@@ -125,6 +129,7 @@ class ReturnForecaster(BasePanelLearner):
             df=df_train,
             xcats=xcats,
             cids=cids,
+            n_targets=n_targets,
             start=None,
             end=None,
             blacklist=blacklist,
@@ -138,16 +143,22 @@ class ReturnForecaster(BasePanelLearner):
 
         # Set up out-of-sample dataset for forecasting
         self.X_test = (
-            reduce_df(df=df_test, blacklist=blacklist)
-            .pivot(index=["cid", "real_date"], columns="xcat", values="value")[
-                self.X.columns
-            ]
+            reduce_df(df=df_test, blacklist=blacklist, cids=cids)
+            .pivot(index=["cid", "real_date"], columns="xcat", values="value")
+            .reindex(columns=self.X.columns)
             .sort_index()
         )
         self.X_test = self.X_test.dropna(how="all")
 
         if self.drop_nas in (True, "X"):
             self.X_test = self.X_test.dropna(how="any")
+
+        if self.X_test.empty:
+            raise ValueError(
+                f"No cross-section has sufficient feature availability on {self.real_date} "
+                f"to produce a forecast under drop_nas={drop_nas}."
+            )
+
             
         self.unique_test_levels = self.X_test.index.get_level_values(0).unique()
 
@@ -219,6 +230,7 @@ class ReturnForecaster(BasePanelLearner):
         search_type="grid",
         normalize_fold_results=False,
         cv_summary="mean",
+        multi_target_fill="zero",
         include_train_folds=False,
         n_iter=None,
         n_jobs_cv=1,
@@ -257,6 +269,10 @@ class ReturnForecaster(BasePanelLearner):
             Summary function to use to combine scores across cross-validation folds.
             Default is "mean". Options are "mean", "median", "mean-std", "mean/std",
             "mean-std-ge" or a callable function.
+        multi_target_fill : str, optional
+            Method to use to fill in predictions for targets with poor availability in the
+            case of multi-target models. Options are "zero" and "mean". Default is "zero".
+            If no multi-target models are used, this parameter can be disregarded.
         include_train_folds : bool, optional
             Whether to calculate cross-validation statistics on the training folds in 
             additional to the test folds. If True, the cross-validation estimator will be
@@ -302,7 +318,13 @@ class ReturnForecaster(BasePanelLearner):
             raise ValueError(
                 "The store_correlations argument is only valid when all models are Scikit-learn Pipelines."
             )
+        if not isinstance(multi_target_fill, str):
+            raise TypeError("The multi_target_fill argument must be a string.")
+        if multi_target_fill not in ["mean", "zero"]:
+            raise ValueError("The multi_target_fill argument must be one of 'mean' or 'zero'.")
+        
         self.store_correlations = store_correlations
+        self.multi_target_fill = multi_target_fill
 
         # Get training and test indices
         train_idx = list(range(len(self.X)))
@@ -345,9 +367,20 @@ class ReturnForecaster(BasePanelLearner):
         ftr_corr_data.extend(optim_results["ftr_corr"])
 
         # First create pandas dataframes to store the forecasts
-        forecasts_df = pd.DataFrame(
-            index=self.X_test.index, columns=[name], data=np.nan, dtype="float32"
-        )
+        if self.n_targets == 1:
+            forecasts_df = pd.DataFrame(
+                index = self.X_test.index,
+                columns = [name],
+                data=np.nan,
+                dtype="float32"
+            )
+        else:
+            forecasts_df = pd.DataFrame(
+                index=self.X_test.index,
+                columns=[f"{target}_{name}" for target in self.xcats[-self.n_targets :]],
+                data=np.nan,
+                dtype="float32"
+            )
         # Create quantamental dataframe of forecasts
         model = (
             models[optim_results["model_choice"][1]]
@@ -355,8 +388,25 @@ class ReturnForecaster(BasePanelLearner):
             .fit(self.X, self.y)
         )
         forecasts = model.predict(self.X_test)
-        forecasts_df.iloc[:, 0] = forecasts
 
+        if self.n_targets == 1:
+            forecasts_df.iloc[:, 0] = forecasts
+        elif forecasts.shape[1] == self.n_targets:
+            # Multi output model with the same number of targets as response variables
+            if isinstance(forecasts, np.ndarray):
+                forecasts_df.loc[:, :] = forecasts
+            else:
+                forecasts_df.loc[:, :] = forecasts.values
+        else:
+            # Multi output model with less targets than response variables
+            # This is usually due to excluded assets with insufficient data at training time
+            forecasts_df.loc[:, [f"{target}_{name}" for target in forecasts.columns]] = forecasts.values
+            if self.multi_target_fill == "zero":
+                forecasts_df.loc[:, ~forecasts_df.columns.isin([f"{target}_{name}" for target in forecasts.columns])] = 0
+            elif self.multi_target_fill == "mean":
+                missing_targets = ~forecasts_df.columns.isin([f"{target}_{name}" for target in forecasts.columns])
+                forecasts_df.loc[:, missing_targets] = np.repeat(forecasts.mean(axis=1).values[:, np.newaxis], missing_targets.sum(), axis=1)
+        
         if self.blacklist is not None:
             for cross_section, periods in self.blacklist.items():
                 cross_section_key = cross_section.split("_")[0]
@@ -431,8 +481,8 @@ class ReturnForecaster(BasePanelLearner):
         )
 
     def _check_duplicate_results(self, name):
-        conditions = [
-            ("preds", "xcat", name),
+        pred_names = [name] if self.n_targets == 1 else [f"{t}_{name}" for t in self.xcats[-self.n_targets:]]
+        conditions = [("preds", "xcat", n) for n in pred_names] + [
             ("feature_importances", "name", name),
             ("intercepts", "name", name),
             ("selected_ftrs", "name", name),
@@ -532,6 +582,8 @@ class ReturnForecaster(BasePanelLearner):
             elif coef.ndim == 2:
                 if coef.shape[0] == 1:
                     coefs = coef.flatten()
+                elif self.n_targets > 1 and coef.shape[0] == self.n_targets:
+                    coefs = coef.mean(axis=0)
 
         coef_ftr_map = {ftr: coef for ftr, coef in zip(feature_names, coefs)}
         coefs = [
@@ -543,6 +595,9 @@ class ReturnForecaster(BasePanelLearner):
                 # Store the intercept if it has length one
                 if len(final_estimator.intercept_) == 1:
                     intercepts = final_estimator.intercept_[0]
+                elif self.n_targets > 1 and len(final_estimator.intercept_) == self.n_targets:
+                    # Use the average intercept
+                    intercepts = final_estimator.intercept_.mean()
                 else:
                     intercepts = np.nan
             else:
@@ -838,7 +893,7 @@ class ReturnForecaster(BasePanelLearner):
 
         return self.ftr_corr[self.ftr_corr.name.isin(name)]
 
-    def _check_factor_availability(self, df, xcats, real_date, drop_nas):
+    def _check_factor_availability(self, df, xcats, real_date, drop_nas, n_targets):
         """
         Check the date is in the dataframe and all categories are available on the date.
         """
@@ -857,8 +912,11 @@ class ReturnForecaster(BasePanelLearner):
 
         # Check that all categories are available on the date
         if drop_nas in (True, "X"):
-            num_categories = len(df[df.real_date == real_date].xcat.unique())
-            if num_categories != len(xcats):
+            ftrs = xcats[:-n_targets]
+            num_categories = df[
+                (df.real_date == real_date) & df.xcat.isin(ftrs) & df.value.notna()
+            ].xcat.nunique()
+            if num_categories != len(ftrs):
                 raise ValueError(
                     f"Not all categories are available on the real date {real_date}."
                 )
