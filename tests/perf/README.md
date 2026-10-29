@@ -52,7 +52,9 @@ baseline's and every argument it was called with.
 ## CI and storage
 
 The `Performance benchmarks` workflow is run manually, with `tiers` and an optional
-`baseline_ref` (a tag, commit or branch). It:
+`baseline_ref` (a tag, commit or branch), or on a pull request by adding the
+`run-perf-benchmarks` label, which measures the PR's head commit at the default tiers.
+It:
 
 1. runs the benchmarks and adds a `ci` block (run URL, ref, SHA, tiers, baseline ref) to
    the JSON;

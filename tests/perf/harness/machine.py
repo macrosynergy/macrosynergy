@@ -105,14 +105,15 @@ def _usable_cpu_count() -> Optional[int]:
     return _value_or_none(lambda: len(os.sched_getaffinity(0))) or os.cpu_count()
 
 
-def _total_ram_gb() -> Optional[float]:
+def _total_ram_gb() -> Optional[int]:
     """
     Total physical memory, in gibibytes.
 
     Returns
     -------
-    Optional[float]
-        Total memory rounded to one decimal place, or None if psutil cannot report it.
+    Optional[int]
+        Total memory rounded to whole gibibytes, so machines of the same size agree, or
+        None if psutil cannot report it.
     """
 
     def total_bytes():
@@ -121,7 +122,7 @@ def _total_ram_gb() -> Optional[float]:
         return psutil.virtual_memory().total
 
     total = _value_or_none(total_bytes)
-    return round(total / 2**30, 1) if total else None
+    return round(total / 2**30) if total else None
 
 
 def _library_versions() -> Dict[str, str]:
@@ -251,7 +252,7 @@ class MachineProfile:
         The CPU model name.
     usable_cpu_count : Optional[int]
         Number of CPUs the process may run on.
-    total_ram_gb : Optional[float]
+    total_ram_gb : Optional[int]
         Total physical memory, in gibibytes.
     operating_system : Optional[str]
         System name and release.
@@ -277,7 +278,7 @@ class MachineProfile:
 
     cpu_model: Optional[str]
     usable_cpu_count: Optional[int]
-    total_ram_gb: Optional[float]
+    total_ram_gb: Optional[int]
     operating_system: Optional[str]
     python_version: str
     library_versions: Tuple[Tuple[str, str], ...]

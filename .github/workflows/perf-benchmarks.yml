@@ -1,0 +1,99 @@
+name: Performance benchmarks
+
+# Run manually, or on a pull request by adding the `run-perf-benchmarks` label. Hosted
+# runners are shared, so their timings are for the record, not for gating. Each run's JSON
+# is stored in the R2 bucket; the HTML report is an artifact.
+on:
+  pull_request:
+    types: [labeled]
+  workflow_dispatch:
+    inputs:
+      tiers:
+        description: "Comma-separated tiers to measure"
+        default: "tiny,small,medium"
+      baseline_ref:
+        description: "Tag, commit or branch to compare against. Empty: the newest benchmarked ancestor"
+        default: ""
+
+jobs:
+  benchmark:
+    if: github.event_name == 'workflow_dispatch' || github.event.label.name == 'run-perf-benchmarks'
+    runs-on: ubuntu-latest
+    env:
+      BUCKET_SCRIPT: .github/scripts/perf_bucket.sh
+      TIERS: ${{ inputs.tiers || 'tiny,small,medium' }}
+      BASELINE_REF: ${{ inputs.baseline_ref }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+
+      - name: Restore caches - Python 3.11
+        uses: ./.github/actions/restore-pip-cache
+        with:
+          python-version: 3.11
+
+      - name: Run benchmarks
+        env:
+          MACROSYN_PERF_TIERS: ${{ env.TIERS }}
+        run: |
+          python -m pytest tests/perf/benchmarks -m perf -n0 --no-cov --benchmark-only \
+            --benchmark-json=perf-results.json
+
+      - name: Record the workflow run
+        env:
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          REF: ${{ github.head_ref || github.ref_name }}
+          SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          jq --arg run_url "$RUN_URL" --arg ref "$REF" --arg sha "$SHA" \
+            --arg tiers "$TIERS" --arg baseline_ref "$BASELINE_REF" \
+            '.ci = {run_url: $run_url, ref: $ref, sha: $sha, tiers: $tiers, baseline_ref: $baseline_ref}' \
+            perf-results.json > ci.json
+          mv ci.json perf-results.json
+
+      - name: Store results
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.PERF_BENCH_R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.PERF_BENCH_R2_SECRET_ACCESS_KEY }}
+          AWS_ENDPOINT_URL: ${{ secrets.PERF_BENCH_R2_ENDPOINT }}
+          AWS_DEFAULT_REGION: auto
+          PERF_BENCH_BUCKET: ${{ secrets.PERF_BENCH_R2_BUCKET }}
+        run: bash "$BUCKET_SCRIPT" upload perf-results.json
+
+      - name: Fetch baseline
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.PERF_BENCH_R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.PERF_BENCH_R2_SECRET_ACCESS_KEY }}
+          AWS_ENDPOINT_URL: ${{ secrets.PERF_BENCH_R2_ENDPOINT }}
+          AWS_DEFAULT_REGION: auto
+          PERF_BENCH_BUCKET: ${{ secrets.PERF_BENCH_R2_BUCKET }}
+        run: |
+          bash "$BUCKET_SCRIPT" baseline perf-results.json baseline.json "$BASELINE_REF" \
+            || [ $? -eq 2 ]
+
+      - name: Render report
+        run: |
+          if [ -f baseline.json ]; then
+            python -m tests.perf.report.page perf-results.json --baseline baseline.json
+          else
+            python -m tests.perf.report.page perf-results.json
+          fi
+
+      - name: Upload report
+        uses: actions/upload-artifact@v4
+        with:
+          name: perf-benchmark-report
+          path: |
+            perf-results.json
+            perf-results.html
+          retention-days: 90
+
+      - name: Require the requested baseline
+        if: inputs.baseline_ref != ''
+        run: |
+          if [ ! -f baseline.json ]; then
+            echo "::error::No benchmark run on this hardware for $BASELINE_REF"
+            exit 1
+          fi
