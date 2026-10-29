@@ -1,11 +1,8 @@
 name: Performance benchmarks
 
-# Run manually, or on a pull request by adding the `run-perf-benchmarks` label. Hosted
-# runners are shared, so their timings are for the record, not for gating. Each run's JSON
-# is stored in the R2 bucket; the HTML report is an artifact.
+# Manual only: hosted runners are shared, so their timings are for the record, not for
+# gating. Each run's JSON is stored in the R2 bucket; the HTML report is an artifact.
 on:
-  pull_request:
-    types: [labeled]
   workflow_dispatch:
     inputs:
       tiers:
@@ -17,16 +14,14 @@ on:
 
 jobs:
   benchmark:
-    if: github.event_name == 'workflow_dispatch' || github.event.label.name == 'run-perf-benchmarks'
     runs-on: ubuntu-latest
     env:
       BUCKET_SCRIPT: .github/scripts/perf_bucket.sh
-      TIERS: ${{ inputs.tiers || 'tiny,small,medium' }}
+      TIERS: ${{ inputs.tiers }}
       BASELINE_REF: ${{ inputs.baseline_ref }}
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 0
 
       - name: Restore caches - Python 3.11
@@ -44,10 +39,8 @@ jobs:
       - name: Record the workflow run
         env:
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          REF: ${{ github.head_ref || github.ref_name }}
-          SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
-          jq --arg run_url "$RUN_URL" --arg ref "$REF" --arg sha "$SHA" \
+          jq --arg run_url "$RUN_URL" --arg ref "$GITHUB_REF_NAME" --arg sha "$GITHUB_SHA" \
             --arg tiers "$TIERS" --arg baseline_ref "$BASELINE_REF" \
             '.ci = {run_url: $run_url, ref: $ref, sha: $sha, tiers: $tiers, baseline_ref: $baseline_ref}' \
             perf-results.json > ci.json
