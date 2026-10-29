@@ -19,14 +19,17 @@ class InvalidModelNoBase(nn.Module):
         super().__init__()
         self.n_latent = n_latent
 
-        self.model = nn.Sequential(
+        self.encoder = nn.Sequential(
             nn.Linear(2, self.n_latent),
             nn.ReLU(),
-            nn.Linear(self.n_latent, 2),
         )
 
+        self.head = nn.Linear(self.n_latent, 2)
+
     def forward(self, x):
-        out = self.model(x)
+        out = self.encoder(x)
+        out = self.head(out)
+        
         return out
     
 class InvalidModelNoModule(BaseEstimator):
@@ -34,14 +37,15 @@ class InvalidModelNoModule(BaseEstimator):
         super().__init__()
         self.n_latent = n_latent
 
-        self.model = nn.Sequential(
+        self.encoder = nn.Sequential(
             nn.Linear(2, self.n_latent),
             nn.ReLU(),
-            nn.Linear(self.n_latent, 2),
         )
+        self.head = nn.Linear(self.n_latent, 2)
 
     def forward(self, x):
-        out = self.model(x)
+        out = self.encoder(x)
+        out = self.head(out)
         return out
     
 class InvalidModelNoForward(nn.Module, BaseEstimator):
@@ -49,11 +53,16 @@ class InvalidModelNoForward(nn.Module, BaseEstimator):
         super().__init__()
         self.n_latent = n_latent
 
-        self.model = nn.Sequential(
+        self.encoder = nn.Sequential(
             nn.Linear(2, self.n_latent),
             nn.ReLU(),
-            nn.Linear(self.n_latent, 2),
         )
+        self.head = nn.Linear(self.n_latent, 2)
+
+    def forward(self, x):
+        out = self.encoder(x)
+        out = self.head(out)
+        return out
 
 class ValidModel(nn.Module, BaseEstimator):
     def __init__(self, n_latent = 4):
@@ -61,14 +70,16 @@ class ValidModel(nn.Module, BaseEstimator):
         self.n_latent = n_latent
 
 
-        self.model = nn.Sequential(
+        self.encoder = nn.Sequential(
             nn.Linear(2, self.n_latent),
             nn.ReLU(),
             nn.Linear(self.n_latent, 2),
         )
+        self.head = nn.Linear(self.n_latent, 2)
 
     def forward(self, x):
-        out = self.model(x)
+        out = self.encoder(x)
+        out = self.head(out)
         return out
     
 class TestMLPRegressor(unittest.TestCase):
@@ -470,9 +481,7 @@ class TestMLPRegressor(unittest.TestCase):
         self.assertEqual(model.encoder_activation, "relu")
         self.assertEqual(model.head_activation, "identity")
         self.assertEqual(model.dropout_p, 0)
-        self.assertEqual(model.normalization, "none")
-        self.assertEqual(model.dollar_neutral, False)
-        self.assertEqual(model.long_only, None)
+        self.assertEqual(model.normalization, None)
         self.assertEqual(model.torch_model, None)
         self.assertIsInstance(model.loss_func, nn.MSELoss)
         self.assertEqual(model.optimizer, "AdamW")
@@ -515,7 +524,6 @@ class TestMLPRegressor(unittest.TestCase):
             head_activation=None,
             dropout_p=None,
             normalization=None,
-            dollar_neutral=None,
             torch_model = ValidModel(),
             loss_func=nn.L1Loss(),
             optimizer=["AdamW", "SGD+mom"],
@@ -544,7 +552,6 @@ class TestMLPRegressor(unittest.TestCase):
         self.assertEqual(model.head_activation, None)
         self.assertEqual(model.dropout_p, None)
         self.assertEqual(model.normalization, None)
-        self.assertEqual(model.dollar_neutral, None)
         self.assertIsInstance(model.torch_model, ValidModel)
         self.assertIsInstance(model.loss_func, nn.L1Loss)
         self.assertEqual(model.optimizer, ["AdamW", "SGD+mom"])
