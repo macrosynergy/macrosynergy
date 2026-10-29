@@ -50,6 +50,11 @@ class ReturnForecaster(BasePanelLearner):
     generate_labels : callable, optional
         Function to transform the response variable into either alternative regression
         targets or classification labels. Default is None.
+    drop_nas : bool, str, optional
+        Strategy for dealing with NaNs in the data. Valid arguments are True, False,
+        "X", or "y". If True, then all NaNs are removed from the data. "X" means
+        only NaNs in independent variables are dropped. "y" means only NaNs in dependent
+        variables are dropped. Default is True.
 
     Notes
     -----
@@ -73,6 +78,7 @@ class ReturnForecaster(BasePanelLearner):
         lag=1,
         xcat_aggs=["last", "sum"],
         generate_labels=None,
+        drop_nas=True,
     ):
         # Parent checks
         self._check_init(
@@ -87,7 +93,7 @@ class ReturnForecaster(BasePanelLearner):
             lag=lag,
             xcat_aggs=xcat_aggs,
             generate_labels=generate_labels,
-            drop_nas=True,
+            drop_nas=drop_nas,
         )
         # Additional checks to those carried in the parent class
         if not isinstance(real_date, str):
@@ -99,7 +105,7 @@ class ReturnForecaster(BasePanelLearner):
         
         self.real_date = pd.to_datetime(real_date)
         df_adj = reduce_df(df=df, xcats=xcats)
-        self._check_factor_availability(df_adj, xcats, self.real_date)
+        self._check_factor_availability(df_adj, xcats, self.real_date, drop_nas)
 
         if not isinstance(lag, int):
             raise TypeError("The lag argument must be an integer.")
@@ -126,7 +132,7 @@ class ReturnForecaster(BasePanelLearner):
             lag=lag,
             xcat_aggs=xcat_aggs,
             generate_labels=generate_labels,
-            drop_nas=True,
+            drop_nas=drop_nas,
             skip_checks=True # So that the checks aren't run twice
         )
 
@@ -136,9 +142,13 @@ class ReturnForecaster(BasePanelLearner):
             .pivot(index=["cid", "real_date"], columns="xcat", values="value")[
                 self.X.columns
             ]
-            .dropna()
             .sort_index()
         )
+        self.X_test = self.X_test.dropna(how="all")
+
+        if self.drop_nas in (True, "X"):
+            self.X_test = self.X_test.dropna(how="any")
+            
         self.unique_test_levels = self.X_test.index.get_level_values(0).unique()
 
         # Set up data structures for analytics
@@ -828,7 +838,7 @@ class ReturnForecaster(BasePanelLearner):
 
         return self.ftr_corr[self.ftr_corr.name.isin(name)]
 
-    def _check_factor_availability(self, df, xcats, real_date):
+    def _check_factor_availability(self, df, xcats, real_date, drop_nas):
         """
         Check the date is in the dataframe and all categories are available on the date.
         """
@@ -846,11 +856,12 @@ class ReturnForecaster(BasePanelLearner):
             raise ValueError(f"Real date {real_date} is not in the dataframe.")
 
         # Check that all categories are available on the date
-        num_categories = len(df[df.real_date == real_date].xcat.unique())
-        if num_categories != len(xcats):
-            raise ValueError(
-                f"Not all categories are available on the real date {real_date}."
-            )
+        if drop_nas in (True, "X"):
+            num_categories = len(df[df.real_date == real_date].xcat.unique())
+            if num_categories != len(xcats):
+                raise ValueError(
+                    f"Not all categories are available on the real date {real_date}."
+                )
 
 
 if __name__ == "__main__":
@@ -897,6 +908,7 @@ if __name__ == "__main__":
         freq="M",
         lag=1,
         xcat_aggs=["last", "sum"],
+        drop_nas = "X"
     )
 
     rf.calculate_predictions(
