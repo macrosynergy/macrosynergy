@@ -60,6 +60,7 @@ class ValidModel(nn.Module, BaseEstimator):
         super().__init__()
         self.n_latent = n_latent
 
+
         self.model = nn.Sequential(
             nn.Linear(2, self.n_latent),
             nn.ReLU(),
@@ -175,24 +176,18 @@ class TestMLPRegressor(unittest.TestCase):
         with self.assertRaises(ValueError):
             model = MLPRegressor(dropout_p=-0.1)
         with self.assertRaises(ValueError):
-            model = MLPRegressor(dropout_p=0.5)
-        with self.assertRaises(ValueError):
-            model = MLPRegressor(dropout_p=0.6)
-        with self.assertRaises(ValueError):
             model = MLPRegressor(dropout_p=1.234)
 
         with self.assertRaises(ValueError):
             model = MLPRegressor(torch_model="not None", dropout_p=0.2)
 
-        """ long_only """
-        # should be a boolean
+        """signal_modifier"""
+        # should be a callable
         with self.assertRaises(TypeError):
-            model = MLPRegressor(long_only="not a bool")
-
-        """ dollar_neutral """
-        # should be a boolean
+            model = MLPRegressor(signal_modifier="not a callable")
+        # should be a Module object
         with self.assertRaises(TypeError):
-            model = MLPRegressor(dollar_neutral="not a bool")
+            model = MLPRegressor(signal_modifier=123)
 
         """ normalization """
         # should be a string
@@ -200,6 +195,9 @@ class TestMLPRegressor(unittest.TestCase):
             model = MLPRegressor(normalization=True)
         with self.assertRaises(TypeError):
             model = MLPRegressor(normalization=3)
+        # should be one of batch or layer
+        with self.assertRaises(ValueError):
+            model = MLPRegressor(normalization="not an option")
 
         """ torch_model """
         # should be an instance of nn.Module and BaseEstimator, with a valid forward method
@@ -213,7 +211,6 @@ class TestMLPRegressor(unittest.TestCase):
                 head_activation=None,
                 dropout_p=None,
                 n_latent=None,
-                dollar_neutral=None,
                 normalization=None
             )
         with self.assertRaises(TypeError):
@@ -225,7 +222,6 @@ class TestMLPRegressor(unittest.TestCase):
                 head_activation=None,
                 dropout_p=None,
                 n_latent=None,
-                dollar_neutral=None,
                 normalization=None
             )
         with self.assertRaises(TypeError):
@@ -237,7 +233,6 @@ class TestMLPRegressor(unittest.TestCase):
                 head_activation=None,
                 dropout_p=None,
                 n_latent=None,
-                dollar_neutral=None,
                 normalization=None
             )
         with self.assertRaises(ValueError):
@@ -249,7 +244,6 @@ class TestMLPRegressor(unittest.TestCase):
                 head_activation=None,
                 dropout_p=None,
                 n_latent=None,
-                dollar_neutral=None,
                 normalization=None
             )
 
@@ -263,7 +257,6 @@ class TestMLPRegressor(unittest.TestCase):
                 head_activation=None,
                 dropout_p=None,
                 n_latent=None,
-                dollar_neutral=None,
                 normalization=None
             )
         with self.assertRaises(ValueError):
@@ -275,7 +268,6 @@ class TestMLPRegressor(unittest.TestCase):
                 head_activation=None,
                 dropout_p=None,
                 n_latent=None,
-                dollar_neutral=None,
                 normalization=None
             )
         with self.assertRaises(ValueError):
@@ -287,7 +279,6 @@ class TestMLPRegressor(unittest.TestCase):
                 head_activation=None,
                 dropout_p=None,
                 n_latent=None,
-                dollar_neutral=None,
                 normalization=None
             )
         with self.assertRaises(ValueError):
@@ -299,7 +290,6 @@ class TestMLPRegressor(unittest.TestCase):
                 head_activation="relu",
                 dropout_p=None,
                 n_latent=None,
-                dollar_neutral=None,
                 normalization=None
             )
         with self.assertRaises(ValueError):
@@ -311,7 +301,6 @@ class TestMLPRegressor(unittest.TestCase):
                 head_activation=None,
                 dropout_p=0.2,
                 n_latent=None,
-                dollar_neutral=None,
                 normalization=None
             )
         with self.assertRaises(ValueError):
@@ -323,7 +312,6 @@ class TestMLPRegressor(unittest.TestCase):
                 head_activation=None,
                 dropout_p=None,
                 n_latent=4,
-                dollar_neutral=None,
                 normalization=None
             )
 
@@ -419,16 +407,16 @@ class TestMLPRegressor(unittest.TestCase):
         with self.assertRaises(ValueError):
             model = MLPRegressor(patience=0)
 
-        """ train_pct """
-        # Should be a float between 0 and 1
+        """ train_splitter """
+        # Should be a float between 0 and 1 or a scikit-learn splitter
         with self.assertRaises(TypeError):
-            model = MLPRegressor(train_pct="not a float")
+            model = MLPRegressor(train_splitter="not a float")
         with self.assertRaises(ValueError):
-            model = MLPRegressor(train_pct=-0.1)
+            model = MLPRegressor(train_splitter=-0.1)
         with self.assertRaises(ValueError):
-            model = MLPRegressor(train_pct=1.1)
+            model = MLPRegressor(train_splitter=1.1)
         with self.assertRaises(ValueError):
-            model = MLPRegressor(train_pct=1)
+            model = MLPRegressor(train_splitter=1)
 
         """ x_scaler """
         # Instance of StandardScaler or None 
@@ -498,7 +486,7 @@ class TestMLPRegressor(unittest.TestCase):
         self.assertEqual(model.drop_last, False)
         self.assertEqual(model.epochs, 10000)
         self.assertEqual(model.patience, 1000)
-        self.assertEqual(model.train_pct, 0.7)
+        self.assertEqual(model.train_splitter, 0.7)
         self.assertIsInstance(model.x_scaler, StandardScaler)
         self.assertIsInstance(model.y_scaler, StandardScaler)
         self.assertEqual(model.refit, False)
@@ -541,7 +529,7 @@ class TestMLPRegressor(unittest.TestCase):
             drop_last = True,
             epochs = 10,
             patience = 2,
-            train_pct = 0.8,
+            train_splitter = 0.8,
             x_scaler=StandardScaler(with_mean=True),
             y_scaler=None,
             verbose = True,
@@ -570,7 +558,7 @@ class TestMLPRegressor(unittest.TestCase):
         self.assertEqual(model.drop_last, True)
         self.assertEqual(model.epochs, 10)
         self.assertEqual(model.patience, 2)
-        self.assertEqual(model.train_pct, 0.8)
+        self.assertEqual(model.train_splitter, 0.8)
         self.assertIsInstance(model.x_scaler, StandardScaler)
         self.assertIsNone(model.y_scaler)
         self.assertEqual(model.refit, False)
@@ -643,7 +631,7 @@ class TestMLPRegressor(unittest.TestCase):
             drop_last = False,
             epochs = 5,
             patience = 2,
-            train_pct = 0.7,
+            train_splitter = 0.7,
             x_scaler=StandardScaler(with_mean=False),
             y_scaler=StandardScaler(with_mean=False),
             refit = refit,
@@ -685,7 +673,7 @@ class TestMLPRegressor(unittest.TestCase):
             drop_last = False,
             epochs = 5,
             patience = 2,
-            train_pct = 0.7,
+            train_splitter = 0.7,
             x_scaler=StandardScaler(with_mean=False),
             y_scaler=StandardScaler(with_mean=False),
             refit = refit,
@@ -722,7 +710,7 @@ class TestMLPRegressor(unittest.TestCase):
             drop_last = False,
             epochs = 5,
             patience = 2,
-            train_pct = 0.7,
+            train_splitter = 0.7,
             x_scaler=StandardScaler(with_mean=False),
             y_scaler=StandardScaler(with_mean=False),
             refit = refit,
@@ -952,9 +940,9 @@ class TestMLPRegressor(unittest.TestCase):
         self.assertNotIn("XR2", preds_insufficient.columns)
 
     def test_valid_create_train_test_splits(self):
-        # Test that there is no leakage between train and validation sets in the time split and that the split is done according to the specified train_pct
+        # Test that there is no leakage between train and validation sets in the time split and that the split is done according to the specified train_splitter
         model = MLPRegressor()
-        X_tr, X_va, y_tr, y_va = model.create_train_valid_splits(self.X, self.y, train_pct=0.6)
+        X_tr, X_va, y_tr, y_va = model.create_train_valid_splits(self.X, self.y, train_splitter=0.6)
 
         dates = sorted(self.X.index.get_level_values(1).unique())
         cut = int(0.6 * len(dates))
@@ -969,7 +957,7 @@ class TestMLPRegressor(unittest.TestCase):
     def test_valid_scale_data(self):
         # Test that the data is scaled correctly when both scalers are provided
         model = MLPRegressor()
-        X_tr, X_va, y_tr, y_va = model.create_train_valid_splits(self.X, self.y, train_pct=0.6)
+        X_tr, X_va, y_tr, y_va = model.create_train_valid_splits(self.X, self.y, train_splitter=0.6)
         X_tr_scaled, y_tr_scaled, X_va_scaled, y_va_scaled = model.scale_data(X_train=X_tr, X_valid=X_va, y_train=y_tr, y_valid=y_va, x_scaler=StandardScaler(with_mean=True), y_scaler=StandardScaler(with_mean=True))
 
         self.assertIsInstance(X_tr_scaled, np.ndarray)
@@ -1015,7 +1003,7 @@ class TestMLPRegressor(unittest.TestCase):
         before = {k: v.detach().clone() for k, v in torch_model.state_dict().items()}
 
         sklearn_model = MLPRegressor()
-        X_tr, X_va, y_tr, y_va = sklearn_model.create_train_valid_splits(self.X, self.y, train_pct=0.6)
+        X_tr, X_va, y_tr, y_va = sklearn_model.create_train_valid_splits(self.X, self.y, train_splitter=0.6)
         X_tr_scaled, y_tr_scaled, X_va_scaled, y_va_scaled = sklearn_model.scale_data(X_train=X_tr, X_valid = X_va, y_train = y_tr, y_valid = y_va, x_scaler=StandardScaler(with_mean=True), y_scaler=StandardScaler(with_mean=True))
 
         torch_model = sklearn_model._fit_one_batch(
