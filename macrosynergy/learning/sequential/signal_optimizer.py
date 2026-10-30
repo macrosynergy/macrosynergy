@@ -116,7 +116,6 @@ class SignalOptimizer(BasePanelLearner):
         xcat_aggs=["last", "sum"],
         generate_labels=None,
         drop_nas=True,
-        cid_as_feature=False,
     ):
         # Run checks and necessary dataframe massaging
         super().__init__(
@@ -132,7 +131,6 @@ class SignalOptimizer(BasePanelLearner):
             xcat_aggs=xcat_aggs,
             generate_labels=generate_labels,
             drop_nas=drop_nas,
-            cid_as_feature=cid_as_feature,
         )
 
         # Create forecast dataframe index
