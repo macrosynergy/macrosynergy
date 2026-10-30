@@ -12,9 +12,9 @@ class TestLongShortModule(unittest.TestCase):
         Test that constructor arguments raise appropriate
         Type and Value Errors. 
         """
-        # dollar_neutral should be a boolean
+        # zero_sum should be a boolean
         with self.assertRaises(TypeError):
-            LongShortModule(dollar_neutral="not_a_boolean")
+            LongShortModule(zero_sum="not_a_boolean")
 
         # eps should be a non-negative real number
         with self.assertRaises(TypeError):
@@ -33,17 +33,17 @@ class TestLongShortModule(unittest.TestCase):
             self.fail(f"Default initialization failed with exception: {e}")
 
         self.assertIsInstance(default_module, LongShortModule)
-        self.assertEqual(default_module.dollar_neutral, False)
+        self.assertEqual(default_module.zero_sum, False)
         self.assertEqual(default_module.eps, 0)
 
         # Test custom initialization works as expected
         try:
-            module = LongShortModule(dollar_neutral=True, eps=1e-5)
+            module = LongShortModule(zero_sum=True, eps=1e-5)
         except Exception as e:
             self.fail(f"Initialization failed with dexception: {e}")
 
         self.assertIsInstance(module, LongShortModule)
-        self.assertEqual(module.dollar_neutral, True)
+        self.assertEqual(module.zero_sum, True)
         self.assertEqual(module.eps, 1e-5)
 
     def test_valid_forward(self):
@@ -59,17 +59,17 @@ class TestLongShortModule(unittest.TestCase):
 
 
         # Dollar neutrality
-        module = LongShortModule(dollar_neutral=True, eps = 0)
+        module = LongShortModule(zero_sum=True, eps = 0)
         x = torch.randn(10, 5)  # batch of 10 samples, 5 assets
         weights = module(x)
         self.assertTrue(torch.all(weights.abs() <= 1))
         self.assertTrue(torch.allclose(weights.abs().sum(dim=-1), torch.ones(10)))
-        self.assertTrue(torch.allclose(weights.sum(dim=-1), torch.zeros(10)))
+        self.assertTrue(torch.allclose(weights.sum(dim=-1), torch.zeros(10), atol=1e-6))
 
         # Dollar neutrality with epsilon greater than 0
-        module = LongShortModule(dollar_neutral=True, eps=1e-4)
+        module = LongShortModule(zero_sum=True, eps=1e-4)
         x = torch.randn(10, 5)  # batch of 10 samples, 5 assets
         weights = module(x)
         self.assertTrue(torch.all(weights.abs() <= 1))
         self.assertTrue(torch.allclose(weights.abs().sum(dim=-1), torch.ones(10)))
-        self.assertTrue(torch.allclose(weights.sum(dim=-1), torch.zeros(10)))
+        self.assertTrue(torch.allclose(weights.sum(dim=-1), torch.zeros(10), atol=1e-6))

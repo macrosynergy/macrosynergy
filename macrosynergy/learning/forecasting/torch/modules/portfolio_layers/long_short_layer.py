@@ -11,7 +11,7 @@ class LongShortModule(nn.Module):
 
     Parameters
     ----------
-    dollar_neutral : bool, default=False
+    zero_sum : bool, default=False
         If True, the layer is first demeaned to ensure that the sum of the outputs equals
         zero.
     eps : float, default=0
@@ -25,22 +25,22 @@ class LongShortModule(nn.Module):
     long and short positions.
     The eps parameter ensures numerical stability by preventing division by zero when the
     sum of absolute values is very small.
-    If dollar_neutral is set to True, equal capital is allocated to long and short
+    If zero_sum is set to True, equal capital is allocated to long and short
     positions. 
     """
-    def __init__(self, dollar_neutral = False, eps = 0):
+    def __init__(self, zero_sum = False, eps = 0):
         super().__init__()
 
         # Checks
-        if not isinstance(dollar_neutral, bool):
-            raise TypeError("dollar_neutral must be a boolean value.")
+        if not isinstance(zero_sum, bool):
+            raise TypeError("zero_sum must be a boolean value.")
         if not isinstance(eps, numbers.Real):
             raise TypeError("eps must be a real number.")
         if eps < 0:
             raise ValueError("eps must be non-negative.")
 
         # Attributes
-        self.dollar_neutral = dollar_neutral
+        self.zero_sum = zero_sum
         self.eps = eps
         
     def forward(self, x):
@@ -53,7 +53,7 @@ class LongShortModule(nn.Module):
             The input tensor for the layer. Should have dimension (batch_size, n_assets)
             where n_assets is the number of assets in the portfolio.
         """
-        if self.dollar_neutral:
+        if self.zero_sum:
             x = x - x.mean(axis = -1, keepdim=True)
             
         x = x / x.abs().sum(dim=-1, keepdim=True).clamp_min(self.eps)
