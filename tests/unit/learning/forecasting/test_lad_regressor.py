@@ -319,6 +319,13 @@ class TestLADRegressor(unittest.TestCase):
             X=np.array([[np.nan] * self.X.shape[1]] * self.X.shape[0])
         )
 
+    def test_predict_not_converged(self):
+        """An unconverged LADRegressor predicts zeros, as documented"""
+        with self.assertWarns(Warning):
+            lad = LADRegressor(maxiter=1).fit(self.X, self.y)
+        self.assertIsNone(lad.coef_)
+        np.testing.assert_array_equal(lad.predict(self.X), np.zeros(self.X.shape[0]))
+
     def test_valid_predict(self):
         """Check default LADRegressor predict method works as expected"""
         lad = LADRegressor().fit(self.X, self.y)
@@ -810,7 +817,7 @@ class TestTimeWeightedLADRegression(unittest.TestCase):
 
     def test_valid_fit(self):
         """Check default TWLAD fit method works as expected"""
-        lad = TimeWeightedLADRegressor(fit_intercept=True, half_life=24)
+        lad = TimeWeightedLADRegressor(fit_intercept=True, half_life=24, tol=1e-10)
         try:
             lad.fit(X=self.X, y=self.y)
         except Exception as e:
@@ -828,7 +835,7 @@ class TestTimeWeightedLADRegression(unittest.TestCase):
             np.testing.assert_almost_equal(lad.intercept_, qr.intercept_, decimal=2)
 
         """Check no intercept TWLAD fit method works as expected"""
-        lad = TimeWeightedLADRegressor(fit_intercept=False, half_life=24)
+        lad = TimeWeightedLADRegressor(fit_intercept=False, half_life=24, tol=1e-10)
         try:
             lad.fit(X=self.X, y=self.y)
         except Exception as e:

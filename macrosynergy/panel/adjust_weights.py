@@ -268,11 +268,11 @@ def normalize_weights(
     out_weights = out_weights.div(out_weights.sum(axis="columns"), axis="index")
 
     norm_rows = out_weights.sum(axis="columns").apply(lambda x: np.isclose(x, 1))
-    all_nan_rows = out_weights.index[out_weights.isnull().all(axis="columns")]
+    all_nan_rows = out_weights.isnull().all(axis="columns")
 
     # assert that all rows sum to 1 or are all NaN
-    if not norm_rows.all() and all_nan_rows.size == 0:
-        raise Exception("Normalization failed; weights do not sum to 1")
+    if not (norm_rows | all_nan_rows).all():
+        raise ValueError("Normalization failed; weights do not sum to 1")
 
     if normalize_to_pct:
         out_weights = out_weights * 100

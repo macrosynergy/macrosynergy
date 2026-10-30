@@ -2062,6 +2062,8 @@ class TestAll(unittest.TestCase):
             "store_additional_data": ["linreg__model__coef_", "ridge__model__coef_"],
             "n_jobs_outer": 1,
             "n_jobs_inner": 1,
+            "skip_validation": False,
+            "show_tqdm": True,
         }
 
         # Check the valid case to ensure it passes without error
@@ -2083,6 +2085,8 @@ class TestAll(unittest.TestCase):
             "split_functions": "invalid_split_functions",  # Invalid: should be a function or None
             "n_jobs_outer": "invalid_jobs",  # Invalid: should be an integer
             "n_jobs_inner": "invalid_jobs",  # Invalid: should be an integer
+            "skip_validation": "invalid_boolean",  # Invalid: should be a boolean
+            "show_tqdm": "invalid_boolean",  # Invalid: should be a boolean
         }
 
         # Loop through the invalid cases

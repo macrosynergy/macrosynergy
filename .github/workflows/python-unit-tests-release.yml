@@ -19,14 +19,14 @@ jobs:
         run: |
           FOLDERS=$(ls -d tests/unit/*/ | sed 's|tests/unit/||' | sed 's|/||' | jq -R -s -c 'split("\n")[:-1]')
           echo "Matrix: $FOLDERS"
-          echo "::set-output name=matrix::$FOLDERS"
+          echo "matrix=$FOLDERS" >> "$GITHUB_OUTPUT"
 
   run-unit-tests-release:
     needs: prepare-matrix
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest]
+        os: [ubuntu-24.04]
         python-version: ["3.8", "3.9", "3.10", "3.11", "3.13", "3.14"]
         folder: ${{fromJson(needs.prepare-matrix.outputs.matrix)}}
     runs-on: ${{ matrix.os }}
@@ -73,10 +73,10 @@ jobs:
 
   test-build-settings-matrix:
     needs: run-unit-tests-release-success
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest]
+        os: [ubuntu-24.04]
         python-version: ["3.8", "3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]
     steps:
       - uses: actions/checkout@v7
