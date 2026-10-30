@@ -52,6 +52,9 @@ class GlobalLocalRegression(BaseEstimator, RegressorMixin):
         Minimum number of dates two cross-sections must share for the correlation of
         their returns to be estimated when groups is "cluster". Pairs with less
         overlap are treated as uncorrelated. Default is 36.
+    relative_returns : bool, default=False
+        Whether to cluster on returns relative to the cross-sectional mean of each
+        date, rather than raw returns, when groups is "cluster". Default is False.
 
     Notes
     -----
@@ -105,6 +108,12 @@ class GlobalLocalRegression(BaseEstimator, RegressorMixin):
     distances :math:`d_{ij} = \sqrt{0.5 (1 - \rho_{ij})}` and the cross-sections
     are merged by agglomerative hierarchical clustering with the chosen linkage
     until at most n_clusters groups remain.
+
+    When relative_returns is True, each target is first replaced by its deviation
+    from the equally weighted mean of the cross-sections observed on the same date,
+    so moves common to the whole panel do not drive the clustering. Demeaning
+    induces a correlation of about :math:`-1/(C-1)` between otherwise unrelated
+    cross-sections, which matters when there are few of them.
     """
 
     def __init__(
@@ -119,6 +128,7 @@ class GlobalLocalRegression(BaseEstimator, RegressorMixin):
         n_clusters=2,
         linkage="average",
         min_overlap=36,
+        relative_returns=False,
     ):
         # Attributes
         self.local_lambda = local_lambda
@@ -131,6 +141,7 @@ class GlobalLocalRegression(BaseEstimator, RegressorMixin):
         self.n_clusters = n_clusters
         self.linkage = linkage
         self.min_overlap = min_overlap
+        self.relative_returns = relative_returns
 
     def fit(self, X, y, sample_weight=None):
         """
@@ -358,7 +369,9 @@ class GlobalLocalRegression(BaseEstimator, RegressorMixin):
     def _cluster_groups(self, X, y):
         """
         Form groups by hierarchical agglomerative clustering of the training targets.
-        Cross-sections are clustered on the pairwise correlations of their targets.
+        Cross-sections are clustered on the pairwise correlations of their targets,
+        or of their targets relative to the cross-sectional mean of each date when
+        relative_returns is True.
 
         Parameters
         ----------
@@ -381,6 +394,8 @@ class GlobalLocalRegression(BaseEstimator, RegressorMixin):
             raise TypeError("n_clusters must be an integer")
         if not isinstance(self.min_overlap, (int, np.integer)):
             raise TypeError("min_overlap must be an integer")
+        if not isinstance(self.relative_returns, (bool, np.bool_)):
+            raise TypeError("relative_returns must be a boolean")
         if self.n_clusters < 1:
             raise ValueError("n_clusters must be at least 1")
 
@@ -397,11 +412,12 @@ class GlobalLocalRegression(BaseEstimator, RegressorMixin):
         if self.n_clusters > self.n_cids_:
             warnings.warn(
                 f"`n_clusters` ({self.n_clusters}) is larger than the number of "
-                f"training cross-sections ({self.n_cids_}) and was capped at the "
-                f"number of training cross-sections.",
+                f"training cross-sections ({self.n_cids_}). Falling back to a single cluster.",
                 UserWarning,
             )
-        n_clusters = min(self.n_clusters, self.n_cids_)
+            n_clusters = 1
+        else:
+            n_clusters = self.n_clusters
 
         y_vals = np.asarray(y, dtype=float).reshape(len(y))
         rets = pd.Series(y_vals, index=X.index)
@@ -412,6 +428,7 @@ class GlobalLocalRegression(BaseEstimator, RegressorMixin):
             n_clusters=n_clusters,
             min_overlap=self.min_overlap,
             linkage=self.linkage,
+            relative_returns=self.relative_returns,
         )
 
         self.clusters_ = clusters
@@ -569,11 +586,14 @@ def _cluster_returns(
     n_clusters: int,
     min_overlap: int,
     linkage: str,
+    relative_returns: bool = False,
 ) -> Tuple[Dict[int, List[str]], Dict[str, int]]:
     labels = [1]
     if len(cids) != 1:
-        rets = rets.unstack(level=0)
-        corr = rets.reindex(columns=cids).corr(min_periods=min_overlap).to_numpy()
+        rets = rets.unstack(level=0).reindex(columns=cids)
+        if relative_returns:
+            rets = rets.sub(rets.mean(axis=1), axis=0)
+        corr = rets.corr(min_periods=min_overlap).to_numpy()
 
         corr = np.nan_to_num(corr, nan=0.0)
         np.fill_diagonal(corr, 1)

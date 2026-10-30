@@ -1763,6 +1763,26 @@ class TestClusteredGlobalLocalRegression(unittest.TestCase):
             weighted = clustered_model().fit(self.X, self.y, sample_weight=sw)
             self.assertEqual(weighted.clusters_, base.clusters_)
 
+    def test_relative_returns_remove_moves_common_to_every_cid(self):
+        # A strong move common to every cid, plus extra noise on AUD and GBP. On raw
+        # returns the common move dominates and AUD is split off on its own. On
+        # relative returns the common move cancels and the blocks are recovered.
+        rng = np.random.default_rng(1)
+        dates = self.X.index.get_level_values(1)
+        common = pd.Series(rng.normal(size=CLUSTER_N_DATES), index=dates.unique())
+        noisy = np.isin(self.X.index.get_level_values(0), ["AUD", "GBP"])
+        y_common = (
+            self.y
+            + 3 * common.reindex(dates).to_numpy()
+            + np.where(noisy, 2, 0) * rng.normal(size=len(self.y))
+        )
+
+        raw = clustered_model().fit(self.X, y_common)
+        self.assertNotEqual(raw.clusters_, EXPECTED_CLUSTERS)
+
+        relative = clustered_model(relative_returns=True).fit(self.X, y_common)
+        self.assert_clusters(relative, EXPECTED_CLUSTERS)
+
     def test_target_is_aligned_with_X_by_row_position(self):
         # The returns panel takes y's values in X's row order and indexes them by X's
         # index, whatever y's own index or the row order.
@@ -1906,6 +1926,12 @@ class TestClusteredGlobalLocalRegression(unittest.TestCase):
             with self.assertRaises(TypeError, msg=repr(min_overlap)):
                 model.fit(self.X, self.y)
 
+    def test_non_boolean_relative_returns_raises_type_error(self):
+        for relative_returns in [1, 0, "True", None]:
+            model = clustered_model(relative_returns=relative_returns)
+            with self.assertRaises(TypeError, msg=repr(relative_returns)):
+                model.fit(self.X, self.y)
+
     def test_cluster_parameters_ignored_without_cluster_groups(self):
         # Neither validated nor used unless groups == "cluster".
         invalid = [
@@ -1947,13 +1973,21 @@ class TestClusteredGlobalLocalRegression(unittest.TestCase):
         signature = inspect.signature(GlobalLocalRegression.__init__)
         names = list(signature.parameters)
         self.assertEqual(
-            names[-4:], ["shrink_to_global", "n_clusters", "linkage", "min_overlap"]
+            names[-5:],
+            [
+                "shrink_to_global",
+                "n_clusters",
+                "linkage",
+                "min_overlap",
+                "relative_returns",
+            ],
         )
         self.assertEqual(signature.parameters["n_clusters"].default, 2)
         self.assertEqual(signature.parameters["linkage"].default, "average")
         self.assertEqual(
             signature.parameters["min_overlap"].default, DEFAULT_MIN_OVERLAP
         )
+        self.assertIs(signature.parameters["relative_returns"].default, False)
 
     def test_get_params_and_clone(self):
         params = GlobalLocalRegression().get_params()
