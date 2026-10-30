@@ -42,7 +42,6 @@ class BasePanelLearner(ABC):
         generate_labels=None,
         skip_checks=False,
         drop_nas=True,
-        cid_as_feature=False,
     ):
         """
         Initialize a sequential learning process over a panel.
@@ -211,10 +210,6 @@ class BasePanelLearner(ABC):
 
         if self.generate_labels is not None:
             self.y = self.y.apply(self.generate_labels)
-
-        # Add categorical cid column if requested
-        if cid_as_feature:
-            self.X["CAT_CID"] = pd.Categorical(self.X.index.get_level_values("cid"))
 
         # Store necessary index information
         self.index = self.X.index
