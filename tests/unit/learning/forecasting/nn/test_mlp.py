@@ -891,11 +891,11 @@ class TestMLPRegressor(unittest.TestCase):
             for p_norefit, p_refit in zip(params_norefit, params_refit):
                 self.assertFalse(torch.equal(p_norefit, p_refit))
 
-    def test_valid_fit_dollar_neutral(self):
+    def test_valid_fit_zero_sum(self):
         """
         Test that the dollar neutral constraint is applied correctly during training.
         """
-        model = MLPRegressor(epochs = 5, patience = 2, signal_modifier = msl.LongShortModule(dollar_neutral = True)).fit(self.X.iloc[:, :1], pd.concat((self.X.iloc[:, :1], self.y), axis=1))
+        model = MLPRegressor(epochs = 5, patience = 2, signal_modifier = msl.LongShortModule(zero_sum = True)).fit(self.X.iloc[:, :1], pd.concat((self.X.iloc[:, :1], self.y), axis=1))
         # Without refitting, each stored model is a list of validated models
         self.assertIsInstance(model.models[0], list)
         for idx, validated_model in enumerate(model.models[0]):
