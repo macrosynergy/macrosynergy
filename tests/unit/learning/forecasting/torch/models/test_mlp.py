@@ -302,6 +302,7 @@ class TestMultiLayerPerceptron(TestCase):
         model_encoder = nn.Sequential(
             nn.Linear(10, 32, bias=False),
             nn.Tanh(),
+            nn.Dropout(p=0),
         )
         created_encoder = self.single_output_single_layer_mlp._build_encoder(10, [32], "tanh", False, dropout_p=0, normalization = None)
         self.assertIsInstance(created_encoder, nn.Sequential)
@@ -311,6 +312,7 @@ class TestMultiLayerPerceptron(TestCase):
         model_encoder = nn.Sequential(
             nn.Linear(10, 32, bias=False),
             nn.ReLU(inplace=True),
+            nn.Dropout(p=0),
         )
         created_encoder = self.single_output_single_layer_mlp._build_encoder(10, [32], "relu", False, dropout_p=0, normalization = None)
         self.assertIsInstance(created_encoder, nn.Sequential)
@@ -320,6 +322,7 @@ class TestMultiLayerPerceptron(TestCase):
         model_encoder = nn.Sequential(
             nn.Linear(10, 32, bias=False),
             nn.Sigmoid(),
+            nn.Dropout(p=0),
         )
         created_encoder = self.single_output_single_layer_mlp._build_encoder(10, [32], "sigmoid", False, dropout_p=0, normalization = None)
         self.assertIsInstance(created_encoder, nn.Sequential)
@@ -331,44 +334,51 @@ class TestMultiLayerPerceptron(TestCase):
         model_encoder = nn.Sequential(
             nn.Linear(10, 32, bias=False),
             nn.Tanh(),
+            nn.Dropout(p=0),
             nn.Linear(32, 16, bias=False),
             nn.Tanh(),
+            nn.Dropout(p=0),
         )
         created_encoder = self.single_output_multi_layer_mlp._build_encoder(10, [32, 16], "tanh", False, dropout_p=0, normalization = None)
         self.assertIsInstance(created_encoder, nn.Sequential)
         self.assertEqual(len(model_encoder), len(created_encoder))
         self.assertIsInstance(created_encoder[1], nn.Tanh)
-        self.assertIsInstance(created_encoder[3], nn.Tanh)
+        self.assertIsInstance(created_encoder[4], nn.Tanh)
         # Sigmoid
         model_encoder = nn.Sequential(
             nn.Linear(10, 32, bias=False),
             nn.Sigmoid(),
+            nn.Dropout(p=0),
             nn.Linear(32, 16, bias=False),
             nn.Sigmoid(),
+            nn.Dropout(p=0),
         )
         created_encoder = self.single_output_multi_layer_mlp._build_encoder(10, [32, 16], "sigmoid", False, dropout_p=0, normalization = None)
         self.assertIsInstance(created_encoder, nn.Sequential)
         self.assertEqual(len(model_encoder), len(created_encoder))
         self.assertIsInstance(created_encoder[1], nn.Sigmoid)
-        self.assertIsInstance(created_encoder[3], nn.Sigmoid)
+        self.assertIsInstance(created_encoder[4], nn.Sigmoid)
         # ReLU
         model_encoder = nn.Sequential(
             nn.Linear(10, 32, bias=False),
             nn.ReLU(inplace=True),
+            nn.Dropout(p=0),
             nn.Linear(32, 16, bias=False),
             nn.ReLU(inplace=True),
+            nn.Dropout(p=0),
         )
         created_encoder = self.single_output_multi_layer_mlp._build_encoder(10, [32, 16], "relu", False, dropout_p=0, normalization = None)
         self.assertIsInstance(created_encoder, nn.Sequential)
         self.assertEqual(len(model_encoder), len(created_encoder))
         self.assertIsInstance(created_encoder[1], nn.ReLU)
-        self.assertIsInstance(created_encoder[3], nn.ReLU)
+        self.assertIsInstance(created_encoder[4], nn.ReLU)
 
         """ Single hidden layer, multiple output """
         # Tanh
         model_encoder = nn.Sequential(
             nn.Linear(10, 32, bias=False),
             nn.Tanh(),
+            nn.Dropout(p=0),
         )
         created_encoder = self.multi_output_single_layer_mlp._build_encoder(10, [32], "tanh", False, dropout_p=0, normalization = None)
         self.assertIsInstance(created_encoder, nn.Sequential)
@@ -378,6 +388,7 @@ class TestMultiLayerPerceptron(TestCase):
         model_encoder = nn.Sequential(
             nn.Linear(10, 32, bias=False),
             nn.Sigmoid(),
+            nn.Dropout(p=0),
         )
         created_encoder = self.multi_output_single_layer_mlp._build_encoder(10, [32], "sigmoid", False, dropout_p=0, normalization = None)
         self.assertIsInstance(created_encoder, nn.Sequential)
@@ -387,6 +398,7 @@ class TestMultiLayerPerceptron(TestCase):
         model_encoder = nn.Sequential(
             nn.Linear(10, 32, bias=False),
             nn.ReLU(inplace=True),
+            nn.Dropout(p=0),
         )
         created_encoder = self.multi_output_single_layer_mlp._build_encoder(10, [32], "relu", False, dropout_p=0, normalization = None)
         self.assertIsInstance(created_encoder, nn.Sequential)
@@ -398,38 +410,44 @@ class TestMultiLayerPerceptron(TestCase):
         model_encoder = nn.Sequential(
             nn.Linear(10, 32, bias=False),
             nn.Tanh(),
+            nn.Dropout(p=0),
             nn.Linear(32, 16, bias=False),
             nn.Tanh(),
+            nn.Dropout(p=0),
         )
         created_encoder = self.multi_output_multi_layer_mlp._build_encoder(10, [32, 16], "tanh", False, dropout_p=0, normalization = None)
         self.assertIsInstance(created_encoder, nn.Sequential)
         self.assertEqual(len(model_encoder), len(created_encoder))
         self.assertIsInstance(created_encoder[1], nn.Tanh)
-        self.assertIsInstance(created_encoder[3], nn.Tanh)
+        self.assertIsInstance(created_encoder[4], nn.Tanh)
         # Sigmoid
         model_encoder = nn.Sequential(
             nn.Linear(10, 32, bias=False),
             nn.Sigmoid(),
+            nn.Dropout(p=0),
             nn.Linear(32, 16, bias=False),
             nn.Sigmoid(),
+            nn.Dropout(p=0),
         )
         created_encoder = self.multi_output_multi_layer_mlp._build_encoder(10, [32, 16], "sigmoid", False, dropout_p=0, normalization = None)
         self.assertIsInstance(created_encoder, nn.Sequential)
         self.assertEqual(len(model_encoder), len(created_encoder))
         self.assertIsInstance(created_encoder[1], nn.Sigmoid)
-        self.assertIsInstance(created_encoder[3], nn.Sigmoid)
+        self.assertIsInstance(created_encoder[4], nn.Sigmoid)
         # ReLU
         model_encoder = nn.Sequential(
             nn.Linear(10, 32, bias=False),
             nn.ReLU(inplace=True),
+            nn.Dropout(p=0),
             nn.Linear(32, 16, bias=False),
             nn.ReLU(inplace=True),
+            nn.Dropout(p=0),
         )
         created_encoder = self.multi_output_multi_layer_mlp._build_encoder(10, [32, 16], "relu", False, dropout_p=0, normalization = None)
         self.assertIsInstance(created_encoder, nn.Sequential)
         self.assertEqual(len(model_encoder), len(created_encoder))
         self.assertIsInstance(created_encoder[1], nn.ReLU)
-        self.assertIsInstance(created_encoder[3], nn.ReLU)
+        self.assertIsInstance(created_encoder[4], nn.ReLU)
 
     def test_build_head(self):
         """ Test that the projection head is built correctly """
