@@ -10,6 +10,7 @@ import pandas as pd
 
 from macrosynergy.management.simulate import make_qdf
 from macrosynergy.visuals import Heatmap
+from macrosynergy.management.utils import global_skip_visuals_flag
 
 
 def view_grades(
@@ -51,6 +52,8 @@ def view_grades(
         Tuple of width and height of graph. Default is None, meaning it is set in
         accordance with df.
     """
+    if global_skip_visuals_flag():
+        return
 
     heatmap = Heatmap(
         df=df,
