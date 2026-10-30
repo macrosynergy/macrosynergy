@@ -39,6 +39,8 @@ def linear_composite(
     weight_lag: int = 0,
     rebal_freq: str = "D",
     thresh: Optional[float] = None,
+    ffill_limit: Optional[int] = None,
+    nan_tolerance: Optional[float] = None,
 ):
     """
     Weighted linear combinations of cross sections or categories
@@ -116,6 +118,16 @@ def linear_composite(
         at `thresh` and floors negative values at `-thresh` for all input series before
         calculating the composite. This reduces the impact of outliers. Default is None
         (no winsorization).
+    ffill_limit : int, optional
+        Maximum number of observation dates over which each constituent's last value
+        (and any weight) is carried forward, e.g. to bridge constituents not yet
+        updated for the latest date. Default is None (no forward filling).
+    nan_tolerance : float, optional
+        Maximum share of the total absolute weight that may be applied to constituents
+        with missing values (after any forward fill). If exceeded the composite is set
+        to NaN for that date. Constituents where history starts later count as missing
+        on earlier dates, so a low tolerance may remove early history. Default is None
+        (no limit).
 
     Returns
     -------
@@ -141,6 +153,8 @@ def linear_composite(
         weight_lag,
         rebal_freq,
         thresh,
+        ffill_limit,
+        nan_tolerance,
         _xcat_agg,
         mode,
     ) = _check_args(
@@ -160,6 +174,8 @@ def linear_composite(
         weight_lag=weight_lag,
         rebal_freq=rebal_freq,
         thresh=thresh,
+        ffill_limit=ffill_limit,
+        nan_tolerance=nan_tolerance,
     )
 
     # update local variables
@@ -209,6 +225,8 @@ def linear_composite(
             complete_xcats=complete_xcats,
             new_xcat=new_xcat,
             thresh=thresh,
+            ffill_limit=ffill_limit,
+            nan_tolerance=nan_tolerance,
         )
 
     else:  # mode == "cid_agg" -- single xcat
@@ -228,9 +246,12 @@ def linear_composite(
             weight_lag=weight_lag,
             rebal_freq=rebal_freq,
             thresh=thresh,
+            ffill_limit=ffill_limit,
+            nan_tolerance=nan_tolerance,
         )
-    
+
     return QuantamentalDataFrame(result_df, categorical=result_as_categorical)
+
 
 def _missing_cids_xcats_str(
     df: QuantamentalDataFrame,
@@ -283,11 +304,17 @@ def _linear_composite_basic(
     normalize_weights: bool = True,
     complete: bool = False,
     mode: str = "xcat_agg",
+    nan_tolerance: Optional[float] = None,
 ):
     """Main calculation function for linear_composite()"""
 
     # Create a boolean mask to help us work out the calcs
     nan_mask: pd.DataFrame = data_df.isna() | weights_df.isna()
+
+    # Share of absolute weight on constituents with missing data
+    if nan_tolerance is not None:
+        abs_weights = weights_df.abs()
+        nan_share = abs_weights[nan_mask].sum(axis=1) / abs_weights.sum(axis=1)
 
     # Normalize weights (if requested)
     if normalize_weights:
@@ -312,6 +339,10 @@ def _linear_composite_basic(
     # Remove periods with missing data (if requested) (rows with any NaNs)
     if complete:
         out_df[nan_mask.any(axis="columns")] = np.nan
+
+    # Remove periods where missing constituents carry too much weight
+    if nan_tolerance is not None:
+        out_df[~(nan_share <= nan_tolerance + 1e-12)] = np.nan
 
     # put NaNs back in, as sum() removes them
     out_df[nan_mask.all(axis="columns")] = np.nan
@@ -406,6 +437,8 @@ def linear_composite_cid_agg(
     weight_lag: int = 0,
     rebal_freq: str = "D",
     thresh: Optional[float] = None,
+    ffill_limit: Optional[int] = None,
+    nan_tolerance: Optional[float] = None,
 ):
     """Linear composite of various cids for a given category across all periods."""
     if isinstance(weights, str):
@@ -444,6 +477,13 @@ def linear_composite_cid_agg(
         .unstack(level=1)
     )
 
+    # Carry each cid's last value and weight forward
+    if ffill_limit is not None:
+        data_df = data_df.ffill(limit=ffill_limit)
+        weights_df = weights_df.reindex(weights_df.index.union(data_df.index)).ffill(
+            limit=ffill_limit
+        )
+
     # Apply winsorization if thresh is specified
     if thresh is not None:
         data_df = data_df.clip(lower=-thresh, upper=thresh)
@@ -474,6 +514,7 @@ def linear_composite_cid_agg(
         normalize_weights=normalize_weights,
         complete=complete_cids,
         mode="cid_agg",
+        nan_tolerance=nan_tolerance,
     )
 
     if df.is_categorical():
@@ -496,6 +537,8 @@ def linear_composite_xcat_agg(
     complete_xcats: bool = True,
     new_xcat="NEW",
     thresh: Optional[float] = None,
+    ffill_limit: Optional[int] = None,
+    nan_tolerance: Optional[float] = None,
 ):
     """Linear composite of various xcats across all cids and periods"""
 
@@ -506,6 +549,10 @@ def linear_composite_xcat_agg(
 
     # Create wide dataframes for the data and weights
     data_df = df.set_index(["cid", "real_date", "xcat"])["value"].unstack(level=2)
+
+    # Carry each xcat's last value forward, within each cid
+    if ffill_limit is not None:
+        data_df = data_df.groupby(level="cid", observed=True).ffill(limit=ffill_limit)
 
     # Apply winsorization if thresh is specified
     if thresh is not None:
@@ -524,6 +571,7 @@ def linear_composite_xcat_agg(
         normalize_weights=normalize_weights,
         complete=complete_xcats,
         mode="xcat_agg",
+        nan_tolerance=nan_tolerance,
     )
     if df.is_categorical():
         # add a new column called xcat with the new_xcat value
@@ -647,6 +695,7 @@ def _check_df_for_missing_cid_data(
     rcids = [c for c in cids if c in found_cids]  # to preserve order
     return QuantamentalDataFrame(df), rcids, _xcat, weights, signs
 
+
 def _check_args(
     df: QuantamentalDataFrame,
     xcats: Union[str, List[str]],
@@ -664,6 +713,8 @@ def _check_args(
     weight_lag: int = 0,
     rebal_freq: str = "D",
     thresh: Optional[float] = None,
+    ffill_limit: Optional[int] = None,
+    nan_tolerance: Optional[float] = None,
 ):
     """
     Check the arguments of linear_composite()
@@ -715,13 +766,17 @@ def _check_args(
                 "The calculation will be performed with the available xcats."
             )
             if signs is not None:
-                signs = [signs[i] for i, xc in enumerate(xcats) if xc not in missing_xcats]
+                signs = [
+                    signs[i] for i, xc in enumerate(xcats) if xc not in missing_xcats
+                ]
             if isinstance(weights, list):
-                weights = [weights[i] for i, xc in enumerate(xcats) if xc not in missing_xcats]
+                weights = [
+                    weights[i] for i, xc in enumerate(xcats) if xc not in missing_xcats
+                ]
             xcats = [xc for xc in xcats if xc not in missing_xcats]
 
     # check cids
-    
+
     if cids is None:
         cids: List[str] = list(cids_in_df)
     elif isinstance(cids, str):
@@ -742,9 +797,13 @@ def _check_args(
                 "The calculation will be performed with the available cids."
             )
             if signs is not None:
-                signs = [signs[i] for i, cid in enumerate(cids) if cid not in missing_cids]
+                signs = [
+                    signs[i] for i, cid in enumerate(cids) if cid not in missing_cids
+                ]
             if isinstance(weights, list):
-                weights = [weights[i] for i, cid in enumerate(cids) if cid not in missing_cids]
+                weights = [
+                    weights[i] for i, cid in enumerate(cids) if cid not in missing_cids
+                ]
             cids = [cid for cid in cids if cid not in missing_cids]
 
     _xcat_agg: bool = len(xcats) > 1 or new_xcat != "NEW"
@@ -775,8 +834,7 @@ def _check_args(
     elif isinstance(weights, str):
         if weights not in xcats_in_df:
             raise ValueError(
-                "When using a category-string as `weights`"
-                " it must be present in `df`."
+                "When using a category-string as `weights` it must be present in `df`."
             )
     else:
         raise TypeError("`weights` must be a list of floats, a string or None.")
@@ -846,6 +904,22 @@ def _check_args(
         if thresh <= 0:
             raise ValueError("`thresh` must be positive.")
 
+    # Validate ffill_limit
+    if ffill_limit is not None:
+        if not isinstance(ffill_limit, int) or isinstance(ffill_limit, bool):
+            raise TypeError("`ffill_limit` must be an integer or None.")
+        if ffill_limit < 1:
+            raise ValueError("`ffill_limit` must be a positive integer.")
+
+    # Validate nan_tolerance
+    if nan_tolerance is not None:
+        if not isinstance(nan_tolerance, (int, float)) or isinstance(
+            nan_tolerance, bool
+        ):
+            raise TypeError("`nan_tolerance` must be a numeric value or None.")
+        if not 0 <= nan_tolerance <= 1:
+            raise ValueError("`nan_tolerance` must be between 0 and 1.")
+
     return (
         df,
         xcats,
@@ -863,6 +937,8 @@ def _check_args(
         weight_lag,
         rebal_freq,
         thresh,
+        ffill_limit,
+        nan_tolerance,
         _xcat_agg,
         mode,
     )
