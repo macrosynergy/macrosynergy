@@ -34,9 +34,8 @@ class GlobalLocalRegression(BaseEstimator, RegressorMixin):
     groups : Union[Dict, str], default=None
         Mapping of group names to list-likes of cross-sections. If "cluster", the
         groups are instead formed at fit time by hierarchical agglomerative clustering
-        of the correlations between the returns of the cross-sections, as described in
-        the Notes. Default is None, meaning that local coefficients are shrunk directly
-        towards the global coefficients.
+        of the correlations between the returns of the cross-sections. Default is None,
+        meaning that local coefficients are shrunk directly towards the global coefficients.
     group_lambda : float, default=1
         Regularization strength to pull group coefficients towards global coefficients.
         When shrink_to_global=False, group slopes are instead pulled towards zero
@@ -111,9 +110,7 @@ class GlobalLocalRegression(BaseEstimator, RegressorMixin):
 
     When relative_returns is True, each target is first replaced by its deviation
     from the equally weighted mean of the cross-sections observed on the same date,
-    so moves common to the whole panel do not drive the clustering. Demeaning
-    induces a correlation of about :math:`-1/(C-1)` between otherwise unrelated
-    cross-sections, which matters when there are few of them.
+    so moves common to the whole panel do not drive the clustering.
     """
 
     def __init__(
