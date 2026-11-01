@@ -67,9 +67,6 @@ class PanelStandardScaler(BasePanelScaler):
         Whether to centre the data before scaling.
     with_std : bool, default=True
         Whether to scale the data to unit variance.
-    columns : list of str, optional
-        The columns to scale. Remaining columns are passed through unchanged and need
-        not be numeric. If None, all columns are scaled. Default is None.
 
     Notes
     -----
@@ -78,7 +75,7 @@ class PanelStandardScaler(BasePanelScaler):
     dataframes are always returned, preserving the multi-indexing of the inputs.
     """
 
-    def __init__(self, type="panel", with_mean=True, with_std=True, columns=None):
+    def __init__(self, type="panel", with_mean=True, with_std=True):
         # Checks
         if not isinstance(with_mean, bool):
             raise TypeError("'with_mean' must be a boolean.")
@@ -89,7 +86,7 @@ class PanelStandardScaler(BasePanelScaler):
         self.with_mean = with_mean
         self.with_std = with_std
 
-        super().__init__(type=type, columns=columns)
+        super().__init__(type=type)
 
     def extract_statistics(self, X, feature):
         """
