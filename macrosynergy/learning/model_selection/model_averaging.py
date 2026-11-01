@@ -61,12 +61,6 @@ class ModelAveragingRegressor(BaseEstimator, RegressorMixin):
     periods, even if those models have very similar out-of-sample performance. The dynamics
     caused by this model selection overfitting impacts the stability of the trading signal,
     not to mention transaction costs.
-
-    If every model with positive weight exposes a `coef_` attribute, the ensemble's
-    `coef_` is the weighted average of these coefficients. Similarly, if every such
-    model exposes a `feature_importances_` attribute, the ensemble's
-    `feature_importances_` is their weighted average. For pipelines, the attribute of
-    the final estimator is used, with features dropped by earlier steps assigned zero.
     """
     def __init__(
         self,
