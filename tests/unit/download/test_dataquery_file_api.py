@@ -1326,7 +1326,7 @@ class TestDataQueryFileAPIClientNotificationLoading(unittest.TestCase):
         mock_list_downloaded_files.assert_not_called()
 
     @patch("macrosynergy.download.dataquery_file_api.logger")
-    def test_get_revisions_notifications(self, mock_logger):
+    def test_get_historical_changes_notifications(self, mock_logger):
         client = DataQueryFileAPIClient(
             client_id="id", client_secret="secret", out_dir=self.test_dir
         )
@@ -1334,7 +1334,7 @@ class TestDataQueryFileAPIClientNotificationLoading(unittest.TestCase):
         with patch.object(
             DataQueryFileAPIClient, "_load_metadata_jsons", return_value={}
         ):
-            out = client.get_revisions_notifications()
+            out = client.get_historical_changes_notifications()
             self.assertTrue(out.empty)
             mock_logger.warning.assert_called_with(
                 "No `Changed historical values` notifications found."
@@ -1345,7 +1345,7 @@ class TestDataQueryFileAPIClientNotificationLoading(unittest.TestCase):
             "_load_metadata_jsons",
             return_value={"Changed historical values": df},
         ):
-            out = client.get_revisions_notifications()
+            out = client.get_historical_changes_notifications()
             pd.testing.assert_frame_equal(out, df)
 
     @patch("macrosynergy.download.dataquery_file_api.logger")

@@ -183,10 +183,10 @@ window) if needed, and return the notifications as pandas DataFrames.
 
     with DataQueryFileAPIClient(out_dir="./jpmaqs_data") as client:
         missing_df = client.get_missing_data_notifications(date="2026-01-19")
-        revisions_df = client.get_revisions_notifications(date="2026-01-19")
+        historical_changes_df = client.get_historical_changes_notifications(date="2026-01-19")
 
         print(missing_df.head())
-        print(revisions_df.head())
+        print(historical_changes_df.head())
 
 """
 
@@ -1427,7 +1427,7 @@ class DataQueryFileAPIClient:
 
         return json_contentts
 
-    def get_revisions_notifications(
+    def get_historical_changes_notifications(
         self,
         date: Optional[Union[pd.Timestamp, str]] = None,
         normalize_headers: bool = True,
@@ -3153,7 +3153,7 @@ def lazy_load_from_parquets(
     never read as data: the catalog is passed separately as `catalog_path`, and the
     notification JSONs are served by
     :func:`DataQueryFileAPIClient.get_missing_data_notifications` and
-    :func:`DataQueryFileAPIClient.get_revisions_notifications`.
+    :func:`DataQueryFileAPIClient.get_historical_changes_notifications`.
 
     At least one of `tickers`, `cids` or `xcats` is required. To load every ticker,
     ask for them explicitly with
@@ -3235,7 +3235,7 @@ def lazy_load_from_parquets(
         files_dir=files_dir,
         file_format=file_format,
         # metadata files are not quantamental data; the notification JSONs are served
-        # by `get_missing_data_notifications` and `get_revisions_notifications`
+        # by `get_missing_data_notifications` and `get_historical_changes_notifications`
         include_metadata_files=False,
     )
     if files_list is not None:
