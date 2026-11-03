@@ -1739,8 +1739,8 @@ class TestSnapDateColumn(unittest.TestCase):
         self.assertIn("JPMAQS_BROKEN.parquet", str(cm.exception))
 
 
-class TestLatestCompleteSnapshotDate(unittest.TestCase):
-    """Edge cases for `_latest_complete_snapshot_date` (H1 completeness gate)."""
+class TestLatestSnapshotDate(unittest.TestCase):
+    """Edge cases for `_latest_snapshot_date`."""
 
     def setUp(self):
         self.client = _make_client()
@@ -1755,21 +1755,23 @@ class TestLatestCompleteSnapshotDate(unittest.TestCase):
     def _df(self, rows):
         return self.client._add_snap_date_column(pd.DataFrame(rows))
 
-    def test_all_complete_returns_latest(self):
+    def test_returns_latest(self):
         df = self._df(self._full_rows("20260728") + self._full_rows("20260729"))
-        self.assertEqual(self.client._latest_complete_snapshot_date(df), "20260729")
+        self.assertEqual(self.client._latest_snapshot_date(df), "20260729")
 
-    def test_newer_incomplete_falls_back_to_complete(self):
+    def test_newer_partial_snapshot_is_used(self):
+        # a theme missing from the newest date (e.g. not yet published) does not block it
         rows = self._full_rows("20260728") + self._full_rows(
             "20260729", themes=self.themes[:1]
         )
-        self.assertEqual(
-            self.client._latest_complete_snapshot_date(self._df(rows)), "20260728"
-        )
+        self.assertEqual(self.client._latest_snapshot_date(self._df(rows)), "20260729")
 
-    def test_none_complete_returns_none(self):
-        rows = self._full_rows("20260729", themes=self.themes[:3])
-        self.assertIsNone(self.client._latest_complete_snapshot_date(self._df(rows)))
+    def test_new_group_on_latest_date(self):
+        # a newly released theme appears only on the newest date and does not block it
+        rows = self._full_rows("20260728", themes=self.themes[:-1]) + self._full_rows(
+            "20260729"
+        )
+        self.assertEqual(self.client._latest_snapshot_date(self._df(rows)), "20260729")
 
     def test_empty_returns_none(self):
         df = self._df(
@@ -1778,18 +1780,16 @@ class TestLatestCompleteSnapshotDate(unittest.TestCase):
                 "file-group-id": pd.Series([], dtype="object"),
             }
         )
-        self.assertIsNone(self.client._latest_complete_snapshot_date(df))
+        self.assertIsNone(self.client._latest_snapshot_date(df))
 
-    def test_extra_full_group_still_complete(self):
+    def test_extra_full_group_counts(self):
         rows = self._full_rows("20260728") + [
             {
                 "file-name": "JPMAQS_EXTRA_20260728.parquet",
                 "file-group-id": "JPMAQS_EXTRA",
             }
         ]
-        self.assertEqual(
-            self.client._latest_complete_snapshot_date(self._df(rows)), "20260728"
-        )
+        self.assertEqual(self.client._latest_snapshot_date(self._df(rows)), "20260728")
 
     def test_deltas_and_metadata_do_not_count_as_full(self):
         rows = [
@@ -1805,7 +1805,7 @@ class TestLatestCompleteSnapshotDate(unittest.TestCase):
                 "file-group-id": "JPMAQS_METADATA_CATALOG",
             }
         )
-        self.assertIsNone(self.client._latest_complete_snapshot_date(self._df(rows)))
+        self.assertIsNone(self.client._latest_snapshot_date(self._df(rows)))
 
 
 class TestSortFileForDownloadOrder(unittest.TestCase):
@@ -2175,7 +2175,8 @@ class TestDownloadLatestSnapshot(unittest.TestCase):
                         )
                         return res, mdl, mclean
 
-    def test_downloads_latest_complete_and_cleans_anchored_to_it(self):
+    def test_downloads_latest_and_cleans_anchored_to_it(self):
+        # the newest date wins even when it holds only some themes
         avail = self._available(
             extra_rows=[
                 {
@@ -2187,19 +2188,55 @@ class TestDownloadLatestSnapshot(unittest.TestCase):
         )
         res, mdl, mclean = self._run(avail, None)
         downloaded = mdl.call_args[1]["filenames"]
-        self.assertEqual(len(downloaded), 9)
-        self.assertNotIn(f"{self.themes[0]}_20260729.parquet", downloaded)
-        self.assertEqual(mclean.call_args[1]["to_datetime"], "20260728")
+        self.assertEqual(downloaded, [f"{self.themes[0]}_20260729.parquet"])
+        self.assertEqual(mclean.call_args[1]["to_datetime"], "20260729")
         self.assertEqual(res, downloaded)
 
-    @suppress_logging
-    def test_no_complete_snapshot_skips_download_and_cleanup(self):
+    def test_rerun_after_partial_publish_fetches_only_the_rest(self):
+        # the first run got the one theme that was up; re-running fills in the others
         avail = pd.DataFrame(
             [
+                {
+                    "file-name": f"{t}_20260729.parquet",
+                    "file-group-id": t,
+                    "file-datetime": "20260729",
+                }
+                for t in self.themes
+            ]
+        )
+        already = pd.DataFrame({"file-name": [f"{self.themes[0]}_20260729.parquet"]})
+        _res, mdl, mclean = self._run(avail, already)
+        self.assertEqual(
+            sorted(mdl.call_args[1]["filenames"]),
+            sorted(f"{t}_20260729.parquet" for t in self.themes[1:]),
+        )
+        self.assertEqual(mclean.call_args[1]["to_datetime"], "20260729")
+
+    def test_requested_group_not_yet_on_latest_date_downloads_nothing(self):
+        # the latest date is picked before narrowing, so a group still to be published
+        # that day is not fetched from an older date, and nothing is pruned
+        avail = self._available(
+            extra_rows=[
                 {
                     "file-name": f"{self.themes[0]}_20260729.parquet",
                     "file-group-id": self.themes[0],
                     "file-datetime": "20260729",
+                }
+            ]
+        )
+        res, mdl, mclean = self._run(avail, None, file_group_ids=[self.themes[1]])
+        self.assertEqual(res, [])
+        mdl.assert_not_called()
+        mclean.assert_not_called()
+
+    @suppress_logging
+    def test_no_snapshot_skips_download_and_cleanup(self):
+        avail = pd.DataFrame(
+            [
+                {
+                    "file-name": f"{self.themes[0]}_DELTA_20260729T060000.parquet",
+                    "file-group-id": f"{self.themes[0]}_DELTA",
+                    "file-datetime": "20260729T060000",
                 }
             ]
         )
@@ -2215,7 +2252,7 @@ class TestDownloadLatestSnapshot(unittest.TestCase):
         _res, mdl, _clean = self._run(self._available(), already)
         downloaded = mdl.call_args[1]["filenames"]
         self.assertNotIn("JPMAQS_METADATA_CATALOG_20260728.parquet", downloaded)
-        self.assertEqual(len(downloaded), 8)
+        self.assertEqual(len(downloaded), len(self.themes) + 1)  # + delta
 
     def test_overwrite_includes_already_downloaded(self):
         already = pd.DataFrame(
@@ -2224,12 +2261,11 @@ class TestDownloadLatestSnapshot(unittest.TestCase):
         _res, mdl, _clean = self._run(self._available(), already, overwrite=True)
         downloaded = mdl.call_args[1]["filenames"]
         self.assertIn("JPMAQS_METADATA_CATALOG_20260728.parquet", downloaded)
-        self.assertEqual(len(downloaded), 9)
+        self.assertEqual(len(downloaded), len(self.themes) + 2)  # + delta, catalog
 
-    def test_file_group_ids_narrows_after_completeness_check(self):
-        # completeness is judged over ALL themes, then narrowed to the requested subset
-        # (this is the path `download()` uses; filtering before the check would find
-        # no complete snapshot and download nothing).
+    def test_file_group_ids_narrows_after_snapshot_date(self):
+        # the snapshot date is picked over ALL groups, then narrowed to the requested
+        # subset (this is the path `download()` uses).
         subset = self.themes[:2]
         _res, mdl, mclean = self._run(self._available(), None, file_group_ids=subset)
         downloaded = mdl.call_args[1]["filenames"]
