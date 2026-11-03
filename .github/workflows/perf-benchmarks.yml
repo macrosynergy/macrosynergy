@@ -1,24 +1,64 @@
 name: Performance benchmarks
 
-# Manual only: hosted runners are shared, so their timings are for the record, not for
-# gating. Each run's JSON is stored in the R2 bucket; the HTML report is an artifact.
+# Manual only. The benchmarks run on a single-use EC2 instance; storing and reporting run
+# on a hosted runner. Each run's JSON is stored in the R2 bucket; the HTML report is an
+# artifact.
 on:
   workflow_dispatch:
     inputs:
       tiers:
         description: "Comma-separated tiers to measure"
-        default: "tiny,small,medium"
+        default: "tiny,small,medium,large"
       baseline_ref:
         description: "Tag, commit or branch to compare against. Empty: the newest benchmarked ancestor"
         default: ""
+  # TODO: remove before merging #2792; workflow_dispatch only works from develop.
+  push:
+    branches: [feature/perf-testing-framework]
+
+permissions:
+  contents: read
+
+# One instance at a time; a second run waits for the first.
+concurrency: perf-benchmarks
+
+env:
+  BUCKET_SCRIPT: .github/scripts/perf_bucket.sh
+  RUNNER_SCRIPT: .github/scripts/perf_runner.sh
+  TIERS: ${{ inputs.tiers || 'tiny,small,medium,large' }}
+  BASELINE_REF: ${{ inputs.baseline_ref }}
 
 jobs:
-  benchmark:
+  start-runner:
     runs-on: ubuntu-latest
-    env:
-      BUCKET_SCRIPT: .github/scripts/perf_bucket.sh
-      TIERS: ${{ inputs.tiers }}
-      BASELINE_REF: ${{ inputs.baseline_ref }}
+    environment: perf
+    permissions:
+      contents: read
+      id-token: write
+    outputs:
+      label: ${{ steps.start.outputs.label }}
+      instance_id: ${{ steps.start.outputs.instance_id }}
+      runner_id: ${{ steps.start.outputs.runner_id }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: .github/scripts
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.PERF_RUNNER_ROLE }}
+          aws-region: eu-west-2
+
+      - name: Start the runner
+        id: start
+        env:
+          PERF_RUNNER_CONFIG: ${{ secrets.PERF_RUNNER_CONFIG }}
+        run: bash "$RUNNER_SCRIPT" start
+
+  benchmark:
+    needs: start-runner
+    runs-on: ${{ needs.start-runner.outputs.label }}
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v7
         with:
@@ -35,6 +75,29 @@ jobs:
         run: |
           python -m pytest tests/perf/benchmarks -m perf -n0 --no-cov --benchmark-only \
             --benchmark-json=perf-results.json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: perf-raw-results
+          path: perf-results.json
+          retention-days: 1
+
+  publish:
+    needs: benchmark
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Restore caches - Python 3.11
+        uses: ./.github/actions/restore-pip-cache
+        with:
+          python-version: 3.11
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: perf-raw-results
 
       - name: Record the workflow run
         env:
@@ -90,3 +153,28 @@ jobs:
             echo "::error::No benchmark run on this hardware for $BASELINE_REF"
             exit 1
           fi
+
+  stop-runner:
+    needs: [start-runner, benchmark]
+    if: always() && needs.start-runner.outputs.instance_id != ''
+    runs-on: ubuntu-latest
+    environment: perf
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: .github/scripts
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.PERF_RUNNER_ROLE }}
+          aws-region: eu-west-2
+
+      - name: Stop the runner
+        env:
+          PERF_RUNNER_CONFIG: ${{ secrets.PERF_RUNNER_CONFIG }}
+          INSTANCE_ID: ${{ needs.start-runner.outputs.instance_id }}
+          RUNNER_ID: ${{ needs.start-runner.outputs.runner_id }}
+        run: bash "$RUNNER_SCRIPT" stop "$INSTANCE_ID" "$RUNNER_ID"
