@@ -12,9 +12,9 @@ on:
       baseline_ref:
         description: "Tag, commit or branch to compare against. Empty: the newest benchmarked ancestor"
         default: ""
-  # TODO: remove before merging #2792; workflow_dispatch only works from develop.
-  push:
-    branches: [feature/perf-testing-framework]
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [test]
 
 permissions:
   contents: read
