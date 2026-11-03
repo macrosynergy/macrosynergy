@@ -3,17 +3,21 @@
 #
 # Usage:
 #   perf_runner.sh start
-#   perf_runner.sh stop INSTANCE_ID RUNNER_ID
+#   perf_runner.sh stop RUNNER_ID
 #
 # `start` registers a just-in-time GitHub runner, launches an instance that runs it (spot,
-# then on demand) and, once the runner is online, writes `label`, `instance_id` and
-# `runner_id` to GITHUB_OUTPUT. If anything fails on the way, it undoes what it started.
-# The instance terminates itself after one job, or after the configured maximum.
-# `stop` terminates the instance and removes the runner.
+# then on demand) and, once the runner is online, writes `label` and `runner_id` to
+# GITHUB_OUTPUT. If anything fails on the way, it undoes what it started. The instance
+# terminates itself when its runner exits: after one job, when `stop` removes the runner,
+# or after the configured maximum.
+#
+# The logs are public, so the script prints no AWS identifiers: it assumes the role itself
+# and reports AWS failures by error code only.
 #
 # The configuration (GitHub App, runner group, instance type, subnets, security group) is
 # a JSON SSM parameter named by PERF_RUNNER_CONFIG, managed in aws-infra-management.
-# Requires AWS credentials for the runner role.
+# In GitHub Actions it assumes the role in PERF_RUNNER_ROLE; elsewhere it uses the
+# credentials it finds.
 set -euo pipefail
 shopt -s inherit_errexit
 
@@ -42,7 +46,7 @@ trap finish EXIT
 # Configuration --------------------------------------------------------------------------
 
 load_config() {
-    aws ssm get-parameter --name "$PERF_RUNNER_CONFIG" \
+    aws_cli ssm get-parameter --name "$PERF_RUNNER_CONFIG" \
         --query Parameter.Value --output text > "$work/config.json"
 }
 
@@ -72,7 +76,7 @@ github() {
 # Signs in as the GitHub App's installation. The key and tokens only ever sit in files.
 sign_in() {
     local now claims jwt
-    aws secretsmanager get-secret-value --secret-id "$(config .key_secret)" \
+    aws_cli secretsmanager get-secret-value --secret-id "$(config .key_secret)" \
         --query SecretString --output text > "$work/key.pem"
     now=$(date +%s)
     claims=$(jq -nc --arg app "$(config .app_id)" --argjson now "$now" \
@@ -124,6 +128,38 @@ remove_leftover_runner() {
 
 # AWS ------------------------------------------------------------------------------------
 
+# Runs the AWS CLI. On failure it prints only the error code: AWS's messages name the
+# account and the role.
+aws_cli() {
+    local status=0 code
+    aws "$@" 2> "$work/aws-error" || status=$?
+    if [ "$status" -ne 0 ]; then
+        code=$(grep -oE "\\([A-Za-z]+\\)" "$work/aws-error" | head -n1 | tr -d "()") || true
+        echo "AWS $1 $2 failed: ${code:-exit $status}" >&2
+    fi
+    return "$status"
+}
+
+# In GitHub Actions, assumes PERF_RUNNER_ROLE with the job's OIDC token. Done here rather
+# than with aws-actions/configure-aws-credentials, which prints the role's ID.
+assume_role() {
+    local value
+    [ -n "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" ] || return 0
+    printf "Authorization: bearer %s\n" "$ACTIONS_ID_TOKEN_REQUEST_TOKEN" > "$work/oidc.h"
+    curl -sSf -H @"$work/oidc.h" "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=sts.amazonaws.com" |
+        jq -r .value > "$work/oidc-token"
+    aws_cli sts assume-role-with-web-identity --role-arn "$PERF_RUNNER_ROLE" \
+        --role-session-name "perf-$GITHUB_RUN_ID" --web-identity-token "file://$work/oidc-token" \
+        --query Credentials --output json > "$work/credentials"
+    AWS_ACCESS_KEY_ID=$(jq -r .AccessKeyId "$work/credentials")
+    AWS_SECRET_ACCESS_KEY=$(jq -r .SecretAccessKey "$work/credentials")
+    AWS_SESSION_TOKEN=$(jq -r .SessionToken "$work/credentials")
+    for value in "$AWS_ACCESS_KEY_ID" "$AWS_SECRET_ACCESS_KEY" "$AWS_SESSION_TOKEN"; do
+        echo "::add-mask::$value"
+    done
+    export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
+}
+
 # The instance's user data: installs the runner, runs one job, then shuts down. Python
 # goes in /opt/hostedtoolcache, the only place actions/setup-python's Linux builds run from.
 write_user_data() {
@@ -154,7 +190,7 @@ run_instance() {
         options+=(--instance-market-options
             'MarketType=spot,SpotOptions={SpotInstanceType=one-time,InstanceInterruptionBehavior=terminate}')
     fi
-    aws ec2 run-instances "${options[@]}" \
+    aws_cli ec2 run-instances "${options[@]}" \
         --image-id "$image" \
         --instance-type "$(config .instance_type)" \
         --subnet-id "$subnet" \
@@ -169,14 +205,16 @@ run_instance() {
 
 # Tries spot in every subnet, then on demand in every subnet.
 launch_instance() {
-    local label=$1 image market subnet
-    image=$(aws ssm get-parameter --name "$UBUNTU_IMAGE" --query Parameter.Value --output text)
+    local label=$1 image market subnet count index
+    count=$(config ".subnets | length")
+    image=$(aws_cli ssm get-parameter --name "$UBUNTU_IMAGE" --query Parameter.Value --output text)
     for market in spot on-demand; do
-        for subnet in $(config '.subnets[]'); do
+        for index in $(seq 0 $((count - 1))); do
+            subnet=$(config ".subnets[$index]")
             if run_instance "$label" "$market" "$subnet" "$image"; then
                 return 0
             fi
-            echo "Could not launch $market in $subnet" >&2
+            echo "Could not launch $market in subnet $((index + 1)) of $count" >&2
         done
     done
     echo "No instance could be launched" >&2
@@ -185,8 +223,8 @@ launch_instance() {
 
 terminate_instance() {
     if [ -n "$1" ]; then
-        aws ec2 terminate-instances --instance-ids "$1" > /dev/null
-        echo "Terminated $1"
+        aws_cli ec2 terminate-instances --instance-ids "$1" > /dev/null
+        echo "Terminated the instance"
     fi
 }
 
@@ -195,6 +233,7 @@ terminate_instance() {
 start() {
     local label="perf-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" version
     undo_on_failure=true
+    assume_role
     load_config
     sign_in
 
@@ -202,25 +241,25 @@ start() {
     version=$(latest_runner_version)
     write_user_data "$version"
     instance_id=$(launch_instance "$label")
-    echo "Launched $instance_id for runner $label"
+    echo "Launched an instance for runner $label"
 
     wait_until_online "$runner_id"
-    printf 'label=%s\ninstance_id=%s\nrunner_id=%s\n' "$label" "$instance_id" "$runner_id" \
-        >> "$GITHUB_OUTPUT"
+    printf 'label=%s\nrunner_id=%s\n' "$label" "$runner_id" >> "$GITHUB_OUTPUT"
 }
 
+# Removes the runner; its instance then shuts itself down.
 stop() {
-    terminate_instance "$1"
+    assume_role
     load_config
     sign_in
-    remove_leftover_runner "$2"
+    remove_leftover_runner "$1"
 }
 
 case ${1:-} in
 start) start ;;
-stop) stop "${2:-}" "${3:-}" ;;
+stop) stop "${2:-}" ;;
 *)
-    echo "Usage: perf_runner.sh start | stop INSTANCE_ID RUNNER_ID" >&2
+    echo "Usage: perf_runner.sh start | stop RUNNER_ID" >&2
     exit 1
     ;;
 esac

@@ -27,6 +27,7 @@ env:
   RUNNER_SCRIPT: .github/scripts/perf_runner.sh
   TIERS: ${{ inputs.tiers || 'tiny,small,medium,large' }}
   BASELINE_REF: ${{ inputs.baseline_ref }}
+  AWS_DEFAULT_REGION: eu-west-2
 
 jobs:
   start-runner:
@@ -37,21 +38,16 @@ jobs:
       id-token: write
     outputs:
       label: ${{ steps.start.outputs.label }}
-      instance_id: ${{ steps.start.outputs.instance_id }}
       runner_id: ${{ steps.start.outputs.runner_id }}
     steps:
       - uses: actions/checkout@v7
         with:
           sparse-checkout: .github/scripts
 
-      - uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ secrets.PERF_RUNNER_ROLE }}
-          aws-region: eu-west-2
-
       - name: Start the runner
         id: start
         env:
+          PERF_RUNNER_ROLE: ${{ secrets.PERF_RUNNER_ROLE }}
           PERF_RUNNER_CONFIG: ${{ secrets.PERF_RUNNER_CONFIG }}
         run: bash "$RUNNER_SCRIPT" start
 
@@ -156,7 +152,7 @@ jobs:
 
   stop-runner:
     needs: [start-runner, benchmark]
-    if: always() && needs.start-runner.outputs.instance_id != ''
+    if: always() && needs.start-runner.outputs.runner_id != ''
     runs-on: ubuntu-latest
     environment: perf
     permissions:
@@ -167,14 +163,9 @@ jobs:
         with:
           sparse-checkout: .github/scripts
 
-      - uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ secrets.PERF_RUNNER_ROLE }}
-          aws-region: eu-west-2
-
       - name: Stop the runner
         env:
+          PERF_RUNNER_ROLE: ${{ secrets.PERF_RUNNER_ROLE }}
           PERF_RUNNER_CONFIG: ${{ secrets.PERF_RUNNER_CONFIG }}
-          INSTANCE_ID: ${{ needs.start-runner.outputs.instance_id }}
           RUNNER_ID: ${{ needs.start-runner.outputs.runner_id }}
-        run: bash "$RUNNER_SCRIPT" stop "$INSTANCE_ID" "$RUNNER_ID"
+        run: bash "$RUNNER_SCRIPT" stop "$RUNNER_ID"
