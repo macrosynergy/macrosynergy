@@ -16,6 +16,5 @@ Submodules
    macrosynergy.download.dataquery
    macrosynergy.download.dataquery_file_api
    macrosynergy.download.jpmaqs
-   macrosynergy.download.fusion_interface
    macrosynergy.download.jpm_oauth
    macrosynergy.download.exceptions
