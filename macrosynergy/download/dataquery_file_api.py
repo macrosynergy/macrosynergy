@@ -195,16 +195,29 @@ import calendar
 import concurrent.futures as cf
 import contextlib
 import datetime
+import functools
 import json
 import logging
 import os
 import shutil
+import threading
 import time
 import traceback as tb
 import uuid
 import warnings
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Tuple, Union, overload
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    List,
+    Optional,
+    Sequence,
+    Tuple,
+    TypeVar,
+    Union,
+    overload,
+)
 
 import pandas as pd
 import polars as pl
@@ -217,12 +230,10 @@ from macrosynergy.compat import (
     PYTHON_3_8_POLARS_PIVOT,
 )
 from macrosynergy.download.dataquery import JPMAQS_GROUP_ID, OAUTH_TOKEN_URL
-from macrosynergy.download.exceptions import DownloadError, InvalidResponseError
-from macrosynergy.download.fusion_interface import (
-    _wait_for_api_call,
-    cache_decorator,
-    request_wrapper,
-    request_wrapper_stream_bytes_to_disk,
+from macrosynergy.download.exceptions import (
+    DownloadError,
+    InvalidResponseError,
+    NoContentError,
 )
 from macrosynergy.download.jpm_oauth import JPMorganOAuth
 from macrosynergy.management.constants import JPMAQS_METRICS
@@ -240,6 +251,9 @@ DQ_FILE_API_DELAY_PARAM: float = 0.04  # =1/25 ; 25 transactions per second
 DQ_FILE_API_DELAY_MARGIN: float = 1.1  # 10% safety margin
 DQ_FILE_API_SEGMENT_SIZE_MB: float = 8.0  # 8 MB
 DQ_FILE_API_STREAM_CHUNK_SIZE: int = 8192  # 8 KB
+DEFAULT_API_DELAY: float = 1.0  # seconds
+LAST_API_CALL: Optional[datetime.datetime] = None
+lock = threading.Lock()
 
 JPMAQS_DATASET_THEME_MAPPING = {
     "Economic surprises": "JPMAQS_ECONOMIC_SURPRISES",
@@ -256,6 +270,237 @@ JPMAQS_DATASET_THEME_MAPPING = {
 JPMAQS_EARLIEST_FILE_DATE = "20230101"
 
 logger = logging.getLogger(__name__)
+
+
+CachedType = TypeVar("CachedType", bound=Callable[..., Any])
+
+
+def cache_decorator(
+    ttl: int = 60, *, maxsize: Optional[int] = None
+) -> Callable[[CachedType], CachedType]:
+    """
+    Decorator to cache the result of a function for up to `ttl` seconds total.
+    Once any call happens at least `ttl` seconds after the last clear, the ENTIRE
+    cache is flushed before proceeding.
+
+    Parameters
+    ----------
+    ttl : int
+        Time-to-live for the cache in seconds. After this time, the cache will be cleared.
+        Default is 60 seconds.
+    maxsize : Optional[int]
+        Maximum size of the cache. If None, the default size is used.
+    """
+
+    def decorator(func: CachedType) -> CachedType:
+        # wrap the function itself in an LRU cache
+        cached_func = functools.lru_cache(maxsize=maxsize)(func)
+        last_clear = time.time()
+
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            nonlocal last_clear
+            now = time.time()
+            # if TTL has expired, clear everything
+            if now - last_clear >= ttl:
+                cached_func.cache_clear()
+                last_clear = now
+            # call the cached version
+            return cached_func(*args, **kwargs)
+
+        # expose cache_clear for manual use if desired
+        wrapper.cache_clear = cached_func.cache_clear  # type: ignore[attr-defined]
+        return wrapper  # type: ignore[return-value]
+
+    return decorator
+
+
+def _wait_for_api_call(api_delay: float = DEFAULT_API_DELAY) -> bool:
+    """
+    Wait for the appropriate time before making an API call to avoid hitting the rate
+    limit. This function checks the time since the last API call and sleeps if necessary
+    to ensure that the next call is made after the defined delay (DEFAULT_API_DELAY).
+    Uses a global variable `LAST_API_CALL` to track the last call time.
+    """
+    global LAST_API_CALL
+    with lock:
+        now = datetime.datetime.now()
+        if LAST_API_CALL is None:
+            LAST_API_CALL = now
+            return True
+        diff = (now - LAST_API_CALL).total_seconds()
+        sleep_for = api_delay - diff
+        if sleep_for > 0:
+            if sleep_for > 1:
+                logger.info(f"Sleeping for {sleep_for:.2f} seconds for API rate limit.")
+            time.sleep(sleep_for)
+        LAST_API_CALL = datetime.datetime.now()
+    return True
+
+
+def request_wrapper(
+    method: str,
+    url: str,
+    headers: Optional[Dict[str, str]] = None,
+    params: Optional[Dict[str, Any]] = None,
+    data: Optional[Any] = None,
+    json_payload: Optional[Dict[str, Any]] = None,
+    proxies: Optional[Dict[str, str]] = None,
+    as_json: Optional[bool] = None,
+    as_bytes: Optional[bool] = None,
+    as_text: Optional[bool] = None,
+    api_delay: float = DEFAULT_API_DELAY,
+    timeout: Optional[float] = None,
+    verify_ssl: bool = True,
+) -> Union[Dict[str, Any], str, bytes]:
+    """
+    A wrapper function for making API requests.
+    """
+    if not isinstance(method, str):
+        raise TypeError("Method must be a string.")
+    if method not in ["GET", "POST", "PUT", "DELETE"]:
+        raise ValueError(
+            f"Invalid method: {method}. Must be one of 'GET', 'POST', 'PUT', 'DELETE'."
+        )
+
+    as_flags = [as_bytes, as_text, as_json]
+    check_flags = sum(map(bool, as_flags))
+    if check_flags > 1:
+        raise ValueError("Only one of `as_json`, `as_bytes`, or `as_text` can be True.")
+    if not check_flags:
+        as_json = True
+    raw_response: Optional[requests.Response] = None
+    try:
+        _wait_for_api_call(api_delay=api_delay)
+        response = requests.request(
+            method=method.upper(),
+            url=url,
+            headers=headers,
+            params=params,
+            data=data,
+            json=json_payload,
+            proxies=proxies,
+            timeout=timeout,
+            verify=verify_ssl,
+        )
+        raw_response = response
+        response.raise_for_status()
+
+        if response.status_code == 204 or not response.content:
+            raise NoContentError(
+                f"No content returned for {method} {url}. Response status code: {response.status_code}"
+            )
+
+        if as_bytes:
+            return response.content
+        if as_text:
+            return response.text
+
+        return response.json()
+
+    except requests.exceptions.HTTPError as e_http:
+        actual_method: str = (
+            e_http.request.method
+            if hasattr(e_http, "request") and e_http.request
+            else method
+        )
+        actual_url: str = (
+            e_http.response.url
+            if hasattr(e_http, "response") and e_http.response
+            else url
+        )
+        error_details = f"API HTTP error for {actual_method} {actual_url}: {e_http}"
+        error_details += f"\nTimestamp (UTC): {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+        if hasattr(e_http, "response") and e_http.response is not None:
+            error_details += f"\nStatus Code: {e_http.response.status_code}\nResponse: {e_http.response.text[:500]}"
+        raise Exception(error_details) from e_http
+
+    except requests.exceptions.RequestException as e_req:
+        error_details = f"API request failed for {method} {url}: {e_req}"
+        error_details += f"\nTimestamp (UTC): {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+
+        if hasattr(e_req, "response") and e_req.response is not None:
+            error_details += f"\nStatus Code: {e_req.response.status_code}\nResponse: {e_req.response.text[:500]}"
+        raise Exception(error_details) from e_req
+
+    except json.JSONDecodeError as e_json:
+        error_details = f"Failed to decode JSON response from {method} {url}: {e_json}"
+        error_details += f"\nTimestamp (UTC): {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+
+        if raw_response:
+            error_details += f"\nResponse text: {raw_response.text[:500]}"
+        raise Exception(error_details) from e_json
+
+
+def request_wrapper_stream_bytes_to_disk(
+    filename: str,
+    url: str,
+    method: str = "GET",
+    headers: Optional[Dict[str, str]] = None,
+    params: Optional[Dict[str, Any]] = None,
+    data: Optional[Any] = None,
+    json_payload: Optional[Dict[str, Any]] = None,
+    proxies: Optional[Dict[str, str]] = None,
+    chunk_size: int = None,
+    api_delay: float = DEFAULT_API_DELAY,
+    timeout: Optional[float] = None,
+    verify_ssl: bool = True,
+) -> None:
+    """
+    Stream a request's response bytes directly to disk, chunk by chunk.
+
+    Parameters
+    ----------
+    filename : str
+        The file path to write the streamed bytes to.
+    url : str
+        The URL to request.
+    method : str
+        HTTP method. Only GET is allowed for streaming to disk.
+    headers : dict, optional
+        HTTP headers.
+    params : dict, optional
+        Query parameters.
+    data : any, optional
+        Data to send in the body.
+    json_payload : dict, optional
+        JSON data to send in the body.
+    proxies : dict, optional
+        Proxies to use for the request.
+    chunk_size : int
+        Size of each chunk to write (default 8192).
+    api_delay : float
+        Delay between API calls (defaults to 1.0 seconds).
+    timeout : float, optional
+        Timeout for the request (defaults to None).
+    verify_ssl : bool
+        Whether to verify SSL certificates (defaults to True).
+    """
+    if not isinstance(method, str):
+        raise TypeError("Method must be a string.")
+    if method.upper() != "GET":
+        raise ValueError(
+            f"Invalid method: {method}. Must be 'GET' for streaming to disk."
+        )
+    _wait_for_api_call(api_delay=api_delay)
+    with requests.request(
+        method=method.upper(),
+        url=url,
+        headers=headers,
+        params=params,
+        data=data,
+        json=json_payload,
+        proxies=proxies,
+        stream=True,
+        timeout=timeout,
+        verify=verify_ssl,
+    ) as response:
+        response.raise_for_status()
+        os.makedirs(os.path.dirname(filename), exist_ok=True)
+        with open(filename, "wb") as f:
+            for chunk in response.iter_content(chunk_size=chunk_size):
+                if chunk:
+                    f.write(chunk)
 
 
 def _abbreviate_tickers_list(items: List[str], limit: int = 10) -> str:
@@ -372,7 +617,7 @@ class DataQueryFileAPIClient:
     """
     A client for accessing JPMaQS product files via the JPMorgan DataQuery File API.
 
-    This client provides an alternative distribution channel to the Fusion API for JPMaQS
+    This client provides a distribution channel for JPMaQS
     data. It is designed to list and download JPMaQS data files, which are
     available as full snapshots, daily deltas, and metadata files. The client handles
     authentication, API requests, and file downloads, including large file downloads
