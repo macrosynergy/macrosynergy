@@ -11,7 +11,7 @@ from macrosynergy.download.exceptions import AuthenticationError
 class JPMorganOAuth(object):
     """
     A lightweight helper for OAuth 2.0 (Client Credentials) authentication used by the
-    JPMorgan DataQuery API, DataQuery File API, and JPMorgan Fusion API.
+    JPMorgan DataQuery API and DataQuery File API.
 
     This class retrieves and manages access tokens for API requests and supports
     loading credentials from a JSON file or a dictionary.
