@@ -108,9 +108,9 @@ class GlobalLocalRegression(BaseEstimator, RegressorMixin):
     are merged by agglomerative hierarchical clustering with the chosen linkage
     until at most n_clusters groups remain.
 
-    When relative_returns is True, each target is first replaced by its deviation
-    from the equally weighted mean of the cross-sections observed on the same date,
-    so moves common to the whole panel do not drive the clustering.
+    When cluster_on_relative_returns is True, each target is first replaced by its
+    deviation from the equally weighted mean of the cross-sections observed on the
+    same date, so moves common to the whole panel do not drive the clustering.
     """
 
     def __init__(
@@ -125,7 +125,7 @@ class GlobalLocalRegression(BaseEstimator, RegressorMixin):
         n_clusters=2,
         linkage="average",
         min_overlap=36,
-        relative_returns=False,
+        cluster_on_relative_returns=False,
     ):
         # Attributes
         self.local_lambda = local_lambda
@@ -138,7 +138,7 @@ class GlobalLocalRegression(BaseEstimator, RegressorMixin):
         self.n_clusters = n_clusters
         self.linkage = linkage
         self.min_overlap = min_overlap
-        self.relative_returns = relative_returns
+        self.cluster_on_relative_returns = cluster_on_relative_returns
 
     def fit(self, X, y, sample_weight=None):
         """
@@ -391,8 +391,8 @@ class GlobalLocalRegression(BaseEstimator, RegressorMixin):
             raise TypeError("n_clusters must be an integer")
         if not isinstance(self.min_overlap, (int, np.integer)):
             raise TypeError("min_overlap must be an integer")
-        if not isinstance(self.relative_returns, (bool, np.bool_)):
-            raise TypeError("relative_returns must be a boolean")
+        if not isinstance(self.cluster_on_relative_returns, (bool, np.bool_)):
+            raise TypeError("cluster_on_relative_returns must be a boolean")
         if self.n_clusters < 1:
             raise ValueError("n_clusters must be at least 1")
 
@@ -425,7 +425,7 @@ class GlobalLocalRegression(BaseEstimator, RegressorMixin):
             n_clusters=n_clusters,
             min_overlap=self.min_overlap,
             linkage=self.linkage,
-            relative_returns=self.relative_returns,
+            relative_returns=self.cluster_on_relative_returns,
         )
 
         self.clusters_ = clusters
