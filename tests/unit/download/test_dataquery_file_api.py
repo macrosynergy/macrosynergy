@@ -10,6 +10,7 @@ from unittest.mock import patch, MagicMock
 import functools
 import logging
 import tempfile
+import time
 from macrosynergy.download import dataquery_file_api as dq_file_api
 from macrosynergy.download.dataquery_file_api import (
     validate_dq_timestamp,
@@ -2701,6 +2702,222 @@ class TestDownloadForwardsLoadOptions(unittest.TestCase):
         self.assertFalse(snapshot_kwargs["show_progress"])
         # 0 means "keep only the latest snapshot" - the default prunes older files
         self.assertEqual(snapshot_kwargs["keep_n_days_old_files"], 0)
+
+
+class TestRequestWrapper(unittest.TestCase):
+    URL = "https://example.com/api"
+    HDRS = {"Authorization": "Bearer test"}
+
+    def _make_response(
+        self,
+        *,
+        status=200,
+        content=b"",
+        text="",
+        response=None,
+        json_data=None,
+        raise_exc=None,
+    ):
+        """Return a MagicMock imitating `requests.Response`."""
+        r = MagicMock()
+        r.status_code = status
+        r.content = content
+        r.text = text or content.decode(errors="ignore")
+        r.url = self.URL
+        r.request = MagicMock(method="GET")
+        r.request.headers = self.HDRS
+        if response is not None:
+            r.response = response.encode("utf-8")
+
+        if raise_exc:
+            r.raise_for_status.side_effect = raise_exc
+        else:
+            r.raise_for_status.return_value = None
+
+        if json_data is not None:
+            r.json.return_value = json_data
+        else:
+            r.json.side_effect = json.JSONDecodeError("Expecting value", r.text, 0)
+
+        return r
+
+    def _call(self, response, **kwargs):
+        with patch(
+            "macrosynergy.download.dataquery_file_api._wait_for_api_call",
+            return_value=True,
+        ):
+            with patch("requests.request", return_value=response):
+                return dq_file_api.request_wrapper(
+                    "GET", self.URL, headers=self.HDRS, **kwargs
+                )
+
+    def assertRaisesMessage(self, exc_type, msg, func, *args, **kwargs):
+        with self.assertRaises(exc_type) as cm:
+            func(*args, **kwargs)
+        self.assertIn(msg, str(cm.exception))
+
+    def test_http_error(self):
+        error = requests.exceptions.HTTPError("HTTP Error")
+        mock_resp = requests.Response()
+        mock_resp.status_code = 500
+        mock_resp.reason = "Bad Request"
+        mock_resp.url = self.URL
+        error.response = mock_resp
+        resp = self._make_response(
+            status=500,
+            text="Bad Request",
+            raise_exc=error,
+        )
+        self.assertRaisesMessage(Exception, "API HTTP error", self._call, resp)
+
+    def test_request_exception(self):
+        resp = self._make_response(status=500, text="Server Error")
+        with patch(
+            "macrosynergy.download.dataquery_file_api._wait_for_api_call",
+            return_value=True,
+        ):
+            with patch(
+                "requests.request",
+                side_effect=requests.exceptions.RequestException(
+                    "Request failed", response=resp
+                ),
+            ):
+                self.assertRaisesMessage(
+                    Exception,
+                    "API request failed",
+                    dq_file_api.request_wrapper,
+                    "GET",
+                    self.URL,
+                    headers=self.HDRS,
+                )
+
+    def test_json_decode_error(self):
+        resp = self._make_response(content=b"notjson")
+        self.assertRaisesMessage(Exception, "decode JSON", self._call, resp)
+
+    def test_status_204_returns_none(self):
+        with self.assertRaises(dq_file_api.NoContentError):
+            resp = self._make_response(status=204, content=b"")
+            self._call(resp)
+
+    def test_as_bytes(self):
+        resp = self._make_response(content=b"bytesdata")
+        self.assertEqual(self._call(resp, as_bytes=True), b"bytesdata")
+
+    def test_as_text(self):
+        resp = self._make_response(content=b"sometext")
+        self.assertEqual(self._call(resp, as_text=True), "sometext")
+
+    def test_as_json(self):
+        resp = self._make_response(content=b'{"foo": "bar"}', json_data={"foo": "bar"})
+        self.assertEqual(self._call(resp, as_json=True), {"foo": "bar"})
+
+
+class TestWaitSimple(unittest.TestCase):
+    def test_repeated_calls_delay(self):
+        api_delay = 0.5
+        calls = 5
+        start = time.time()
+        for _ in range(calls):
+            dq_file_api._wait_for_api_call(api_delay)
+        elapsed = time.time() - start
+
+        expected = (calls - 1) * api_delay
+        self.assertGreaterEqual(
+            elapsed,
+            expected,
+            f"Elapsed {elapsed:.2f}s should be >= expected {expected:.2f}s",
+        )
+        self.assertLess(
+            abs(elapsed - expected),
+            0.2,
+            f"Test overhead too large: extra {elapsed - expected:.2f}s",
+        )
+
+
+class TestHelperEdgeCases(unittest.TestCase):
+    def test_cache_decorator_expiry_and_manual_clear(self):
+        calls = []
+
+        @dq_file_api.cache_decorator(ttl=1)
+        def f(x):
+            calls.append(x)
+            return x
+
+        f(1)
+        f(1)
+        self.assertEqual(len(calls), 1)
+        f.cache_clear()
+        f(1)
+        self.assertEqual(len(calls), 2)
+
+        time.sleep(1.1)
+        f(1)
+        self.assertEqual(len(calls), 3)
+
+    def test_cache_decorator_maxsize(self):
+        @dq_file_api.cache_decorator(ttl=10, maxsize=2)
+        def f(x):
+            return x
+
+        self.assertEqual(f(1), 1)
+        self.assertEqual(f(2), 2)
+        self.assertEqual(f(3), 3)
+
+    def test_request_wrapper_invalid_method(self):
+        with self.assertRaises(ValueError):
+            dq_file_api.request_wrapper("PATCH", "url")
+
+    def test_request_wrapper_type_error(self):
+        with self.assertRaises(TypeError):
+            dq_file_api.request_wrapper(123, "url")
+
+    def test_request_wrapper_multiple_as_flags(self):
+        with patch("requests.request") as mock_req:
+            with patch(
+                "macrosynergy.download.dataquery_file_api._wait_for_api_call",
+                return_value=True,
+            ):
+                mock_req.return_value = MagicMock(
+                    status_code=200,
+                    content=b"{}",
+                    raise_for_status=lambda: None,
+                    json=lambda: {},
+                )
+                with self.assertRaises(ValueError):
+                    dq_file_api.request_wrapper(
+                        "GET", "http://example.com", as_bytes=True, as_text=True
+                    )
+
+    @patch(
+        "macrosynergy.download.dataquery_file_api._wait_for_api_call", return_value=True
+    )
+    @patch("requests.request")
+    def test_request_wrapper_empty_content(self, mock_req, _):
+        resp = MagicMock()
+        resp.status_code = 200
+        resp.content = b""
+        resp.raise_for_status.return_value = None
+        mock_req.return_value = resp
+        with self.assertRaises(dq_file_api.NoContentError):
+            dq_file_api.request_wrapper("GET", "url")
+
+    @patch(
+        "macrosynergy.download.dataquery_file_api._wait_for_api_call", return_value=True
+    )
+    @patch("requests.request")
+    def test_request_wrapper_json_decode_error_with_raw_response(self, mock_req, _):
+        resp = MagicMock()
+        resp.status_code = 200
+        resp.content = b"notjson"
+        resp.raise_for_status.return_value = None
+        resp.json.side_effect = json.JSONDecodeError("Expecting value", "", 0)
+        resp.text = "notjson"
+        mock_req.return_value = resp
+        with self.assertRaises(Exception) as cm:
+            dq_file_api.request_wrapper("GET", "url")
+        self.assertIn("decode JSON", str(cm.exception))
+        self.assertIn("Response text", str(cm.exception))
 
 
 if __name__ == "__main__":
