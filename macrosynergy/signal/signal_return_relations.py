@@ -243,14 +243,14 @@ class SignalReturnRelations:
             self.freqs = [freqs]
 
         for sig in self.sigs:
-            assert (
-                sig in self.xcats
-            ), "Primary signal must be available in the DataFrame."
+            assert sig in self.xcats, (
+                "Primary signal must be available in the DataFrame."
+            )
 
         for ret in self.rets:
-            assert (
-                ret in self.xcats
-            ), "Target return must be available in the DataFrame."
+            assert ret in self.xcats, (
+                "Target return must be available in the DataFrame."
+            )
 
         if sig_neg is None:
             self.signs = [False for _ in self.sigs]
@@ -776,12 +776,12 @@ class SignalReturnRelations:
             set(dfd.columns.tolist())
             - set(["real_date", "xcat", "cid", "ticker", "last_updated"])
         )
-        # here, the slip is applied to the the first xcat (explanatory variable)
+        # here, the slip is applied to the signals (all xcats except the last, the return)
         dfd: pd.DataFrame = self.apply_slip(
             df=dfd,
             slip=self.slip,
             cids=cids,
-            xcats=[xcats[0]],
+            xcats=xcats[:-1],
             metrics=metric_cols,
         )
 
