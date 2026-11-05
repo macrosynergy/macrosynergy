@@ -131,14 +131,15 @@ beyond ±5%; a case whose workload changed is reported as such rather than compa
 ## Output
 
 The file is a `pytest-benchmark` payload with additions under one `macrosynergy` key, so
-`pytest-benchmark compare` still reads it. `report` only adds keys; it never renames,
-reshapes or drops anything the plugin wrote.
+`pytest-benchmark compare` still reads it. The run leaves out the plugin's host name and
+kernel release; after that, `report` only adds keys and never renames, reshapes or drops
+anything the plugin wrote.
 
 ```json
 {
   "machine_info": {"macrosynergy": {
       "cpu_model": "Intel(R) Core(TM) i7-1185G7 @ 3.00GHz", "usable_cpu_count": 8,
-      "total_ram_gb": 16, "operating_system": "Linux 6.8.0-45-generic",
+      "total_ram_gb": 16, "operating_system": "Linux",
       "python_version": "3.11.9",
       "library_versions": {"numpy": "2.5.1", "pandas": "2.3.3", "scipy": "1.18.0"},
       "blas_name": "scipy-openblas", "blas_thread_count": 8,
@@ -187,7 +188,7 @@ statistic has `_low` and `_high` bootstrap bounds, reproducible from the raw sam
 | Field | Question | Built from | Comparison |
 | --- | --- | --- | --- |
 | `hardware_id` | same machine? | CPU model, usable CPUs, RAM | must match |
-| `software_id` | same runtime? | OS and kernel, Python, BLAS and its threads, numpy, pandas, scipy | may differ; say which moved |
+| `software_id` | same runtime? | OS, Python, BLAS and its threads, numpy, pandas, scipy | may differ; say which moved |
 | `package_version` | which release? | `macrosynergy.__version__` | expected to differ |
 | `commit_sha`, `commit_time` | which code? | the checked-out commit | expected to differ |
 | `package_diff_hash` | uncommitted edits? | `git diff HEAD` plus untracked files, under `macrosynergy/` only | `null` when the package matches the commit |

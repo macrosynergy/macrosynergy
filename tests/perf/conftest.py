@@ -49,7 +49,8 @@ class _MachineProfileStamper:
 
     def pytest_benchmark_update_machine_info(self, config, machine_info):
         """
-        Add the profile and its identifiers under one key of `machine_info`.
+        Add the profile and its identifiers under one key of `machine_info`, and drop the
+        plugin's host name and kernel release, which identify the machine.
 
         Parameters
         ----------
@@ -62,6 +63,8 @@ class _MachineProfileStamper:
         -------
         None
         """
+        machine_info.pop("node", None)
+        machine_info.pop("release", None)
         machine_info["macrosynergy"] = machine_profile().describe()
 
 
