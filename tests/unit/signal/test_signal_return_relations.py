@@ -886,6 +886,21 @@ class TestAll(unittest.TestCase):
         )
         self.assertTrue(mrt.shape == (4, num_of_acc_cols))
 
+        # Slip must be applied to every signal, not just the first one.
+        sigs = ["CRY", "GROWTH", "INFL"]
+        mrt = SignalReturnRelations(
+            df=self.dfd, rets="XR", sigs=sigs, freqs="M", slip=3
+        ).multiple_relations_table()
+        for sig in sigs:
+            srt = SignalReturnRelations(
+                df=self.dfd, rets="XR", sigs=sig, freqs="M", slip=3
+            ).single_relation_table()
+            np.testing.assert_allclose(
+                mrt.xs(sig, level="Signal").to_numpy(dtype=float),
+                srt.to_numpy(dtype=float),
+                atol=1e-5,
+            )
+
     def test_single_statistic_table(self):
         sr = SignalReturnRelations(
             df=self.dfd,
