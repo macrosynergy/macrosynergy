@@ -10,7 +10,7 @@ from typing import List, Tuple, Callable, Optional
 from packaging import version
 
 from macrosynergy.management.simulate import make_qdf
-from macrosynergy.management.utils import reduce_df
+from macrosynergy.management.utils import reduce_df, global_skip_visuals_flag
 from macrosynergy.management.types import QuantamentalDataFrame
 from macrosynergy.visuals.plotter import add_figure_footnote
 
@@ -101,6 +101,8 @@ def view_ranges(
     return_fig : bool
         If True, return the Matplotlib figure object instead of displaying.
     """
+    if global_skip_visuals_flag():
+        return
 
     df = QuantamentalDataFrame(df)
 

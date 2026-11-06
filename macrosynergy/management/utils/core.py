@@ -4,6 +4,7 @@ used across the package.
 """
 
 import datetime
+import os
 import time
 from typing import Dict, Iterable, List, Optional, Union, overload, Tuple
 
@@ -13,7 +14,7 @@ import requests
 import requests.compat
 from packaging import version
 
-from macrosynergy.management.constants import FREQUENCY_MAP
+from macrosynergy.management.constants import FREQUENCY_MAP, SKIP_VISUALS_ENV_VAR
 from macrosynergy.compat import PD_NEW_DATE_FREQ
 
 
@@ -419,3 +420,20 @@ def check_package_version(required_version: str):
         f"Current version {msy_version:s} is less than required {required_version:s}"
         " - please upgrade using `pip install macrosynergy --upgrade`"
     )
+
+
+def global_skip_visuals_flag() -> bool:
+    """
+    Returns whether visualisation functions should be skipped, as set by the
+    `MACROSYNERGY_SKIP_VISUAL_FUNCTIONS` environment variable. Prints a notice if so.
+
+    Returns
+    -------
+    bool
+        True if the environment variable is set to "true" (case-insensitive), False
+        otherwise.
+    """
+    skip: bool = os.environ.get(SKIP_VISUALS_ENV_VAR, "").strip().lower() == "true"
+    if skip:
+        print(f"[{SKIP_VISUALS_ENV_VAR} is set to True, skipping visualisation]")
+    return skip
