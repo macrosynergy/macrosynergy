@@ -735,7 +735,7 @@ def _check_metric_params(
         raise ValueError("y_true must be multi-indexed with two levels")
     if not y_true.index.get_level_values(0).dtype == "object":
         raise ValueError("y_true outer index must be strings")
-    if not y_true.index.get_level_values(1).dtype == "datetime64[ns]":
+    if not pd.api.types.is_datetime64_any_dtype(y_true.index.get_level_values(1).dtype):
         raise ValueError("y_true inner index must be datetime")
 
     # y_pred

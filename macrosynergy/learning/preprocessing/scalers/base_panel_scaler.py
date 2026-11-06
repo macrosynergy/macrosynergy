@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 
 import pandas as pd
+from pandas.core.dtypes.common import is_datetime64_any_dtype
 from sklearn.base import BaseEstimator, TransformerMixin
 
 from macrosynergy.compat import OneToOneFeatureMixin
@@ -175,8 +176,8 @@ class BasePanelScaler(BaseEstimator, TransformerMixin, OneToOneFeatureMixin, ABC
             raise ValueError("The input feature matrix for X must be multi-indexed.")
         if not X.index.get_level_values(0).dtype == "object":
             raise TypeError("The outer index of X must be strings.")
-        if not X.index.get_level_values(1).dtype == "datetime64[ns]":
-            raise TypeError("The inner index of X must be datetime.date.")
+        if not is_datetime64_any_dtype(X.index.get_level_values(1).dtype):
+            raise TypeError("The inner index of X must be datetime.")
 
     def _check_transform_params(self, X):
         """
@@ -205,8 +206,8 @@ class BasePanelScaler(BaseEstimator, TransformerMixin, OneToOneFeatureMixin, ABC
             )
         if not X.index.get_level_values(0).dtype == "object":
             raise TypeError("The outer index of X must be strings.")
-        if not X.index.get_level_values(1).dtype == "datetime64[ns]":
-            raise TypeError("The inner index of X must be datetime.date.")
+        if not is_datetime64_any_dtype(X.index.get_level_values(1).dtype):
+            raise TypeError("The inner index of X must be datetime.")
 
         if X.shape[1] != self.n_features_in_:
             raise ValueError(
