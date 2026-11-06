@@ -255,7 +255,7 @@ class MachineProfile:
     total_ram_gb : Optional[int]
         Total physical memory, in gibibytes.
     operating_system : Optional[str]
-        System name and release.
+        System name, such as "Linux". The kernel release is left out: it names the host.
     python_version : str
         Interpreter version.
     library_versions : Tuple[Tuple[str, str], ...]
@@ -304,7 +304,7 @@ class MachineProfile:
             cpu_model=_cpu_model_name(),
             usable_cpu_count=_usable_cpu_count(),
             total_ram_gb=_total_ram_gb(),
-            operating_system=f"{platform.system()} {platform.release()}",
+            operating_system=platform.system(),
             python_version=platform.python_version(),
             library_versions=tuple(sorted(_library_versions().items())),
             blas_name=_blas_name(),

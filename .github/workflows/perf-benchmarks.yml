@@ -15,6 +15,9 @@ on:
   pull_request:
     types: [opened, synchronize, reopened]
     branches: [test]
+  # TODO: remove once the logs and reports are confirmed clean.
+  push:
+    branches: [feature/perf-testing-framework]
 
 permissions:
   contents: read
@@ -27,7 +30,6 @@ env:
   RUNNER_SCRIPT: .github/scripts/perf_runner.sh
   TIERS: ${{ inputs.tiers || 'tiny,small,medium,large' }}
   BASELINE_REF: ${{ inputs.baseline_ref }}
-  AWS_DEFAULT_REGION: eu-west-2
 
 jobs:
   start-runner:

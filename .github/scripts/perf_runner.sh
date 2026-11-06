@@ -23,6 +23,7 @@ shopt -s inherit_errexit
 
 readonly UBUNTU_IMAGE=/aws/service/canonical/ubuntu/server/24.04/stable/current/amd64/hvm/ebs-gp3/ami-id
 readonly ONLINE_ATTEMPTS=60 # 10 s apart
+export AWS_DEFAULT_REGION=eu-west-2
 
 org=$GITHUB_REPOSITORY_OWNER
 work=$(mktemp -d)
@@ -162,6 +163,8 @@ assume_role() {
 
 # The instance's user data: installs the runner, runs one job, then shuts down. Python
 # goes in /opt/hostedtoolcache, the only place actions/setup-python's Linux builds run from.
+# The host is renamed first: its default name is its private address, which the job log
+# and the results would otherwise show.
 write_user_data() {
     local version=$1
     cat > "$work/user-data" <<EOF
@@ -169,6 +172,7 @@ write_user_data() {
 set -euo pipefail
 trap 'shutdown -h now' EXIT
 shutdown -h +$(config .max_minutes)
+hostnamectl set-hostname perf-runner
 
 echo 'DPkg::Lock::Timeout "600";' > /etc/apt/apt.conf.d/90-wait-for-lock
 mkdir -p /home/ubuntu/runner /opt/hostedtoolcache
