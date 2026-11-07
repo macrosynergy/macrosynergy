@@ -438,7 +438,9 @@ def validate_download_args(
         raise TypeError("`expressions` must be a list of strings.")
 
     for varx, namex in zip([start_date, end_date], ["start_date", "end_date"]):
-        if (varx is None) or not isinstance(varx, str):
+        if varx is None:
+            continue
+        if not isinstance(varx, str):
             raise TypeError(f"`{namex}` must be a string.")
         if not is_valid_iso_date(varx):
             raise ValueError(
@@ -1070,7 +1072,7 @@ class DataQueryInterface(object):
     def download_data(
         self,
         expressions: List[str],
-        start_date: str = "2000-01-01",
+        start_date: str = None,
         end_date: str = None,
         show_progress: bool = False,
         endpoint: str = TIMESERIES_ENDPOINT,
@@ -1166,17 +1168,18 @@ class DataQueryInterface(object):
 
         self.batch_size = batch_size
 
-        if datetime.strptime(end_date, "%Y-%m-%d") < datetime.strptime(
-            start_date, "%Y-%m-%d"
-        ):
-            wStr = "Start date ({}) is after end-date ({}): swapping them!"
-            logger.warning(wStr.format(start_date, end_date))
-            warnings.warn(wStr.format(start_date, end_date), UserWarning)
-            start_date, end_date = end_date, start_date
+        if start_date is not None and end_date is not None:
+            if datetime.strptime(end_date, "%Y-%m-%d") < datetime.strptime(
+                start_date, "%Y-%m-%d"
+            ):
+                wStr = "Start date ({}) is after end-date ({}): swapping them!"
+                logger.warning(wStr.format(start_date, end_date))
+                warnings.warn(wStr.format(start_date, end_date), UserWarning)
+                start_date, end_date = end_date, start_date
 
-        # remove dashes from dates to match DQ format
-        start_date: str = start_date.replace("-", "")
-        end_date: str = end_date.replace("-", "")
+            # remove dashes from dates to match DQ format
+            start_date: str = start_date.replace("-", "")
+            end_date: str = end_date.replace("-", "")
 
         # check heartbeat before each "batch" of requests
         if self._check_connection:
@@ -1190,12 +1193,7 @@ class DataQueryInterface(object):
                 )
             time.sleep(delay_param)
 
-        logger.info(
-            "Download %d expressions from DataQuery from %s to %s",
-            len(expressions),
-            datetime.strptime(start_date, "%Y%m%d").date(),
-            datetime.strptime(end_date, "%Y%m%d").date(),
-        )
+        logger.info("Download %d expressions from DataQuery", len(expressions))
         params_dict: Dict = {
             "format": "JSON",
             "start-date": start_date,
@@ -1206,6 +1204,10 @@ class DataQueryInterface(object):
             "nan_treatment": nan_treatment,
             "data": reference_data,
         }
+        if start_date is None:
+            params_dict.pop("start-date")
+        # if end_date is None:
+            params_dict.pop("end-date")
 
         final_output: List[dict] = self._download(
             expressions=expressions,
@@ -1251,8 +1253,8 @@ if __name__ == "__main__":
 
         data = dq.download_data(
             expressions=expressions,
-            start_date="2024-01-25",
-            end_date="2024-02-05",
+            # start_date="2024-01-25",
+            # end_date="2024-02-05",
             show_progress=True,
         )
 
