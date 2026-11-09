@@ -413,7 +413,7 @@ class TestAll(unittest.TestCase):
 
         min_value = min(arr_acc)
         if min_value < 0.45:
-            self.assertTrue(ylim == min_value)
+            self.assertTrue(ylim == min_value - 0.02)
         else:
             self.assertTrue(ylim == 0.45)
 
@@ -602,6 +602,11 @@ class TestAll(unittest.TestCase):
             srr.accuracy_bars(ret="XR", sigs="CRY")
         except Exception as e:
             self.fail(f"accuracy_bars raised {e} unexpectedly")
+
+        fig = srr.accuracy_bars(y_axis_min=0.3, return_fig=True)
+        self.assertEqual(fig.axes[0].get_ylim()[0], 0.3)
+        with self.assertRaises(ValueError):
+            srr.accuracy_bars(y_axis_min=-0.1)
 
         try:
             srr.correlation_bars(ret="XR", sigs="CRY")
