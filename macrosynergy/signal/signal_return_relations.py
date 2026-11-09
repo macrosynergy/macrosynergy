@@ -347,7 +347,7 @@ class SignalReturnRelations:
         min_value = accuracy_df.min().min()
         # Ensures any accuracy statistics greater than 0.5 are more pronounced given the
         # adjusted scale.
-        y_input = 0.45 if y_axis(min_value) else min_value
+        y_input = 0.45 if y_axis(min_value) else (min_value - 0.02)
 
         return y_input
 
@@ -365,6 +365,7 @@ class SignalReturnRelations:
         x_labels: Dict = None,
         x_labels_rotate: int = 0,
         return_fig: bool = False,
+        y_axis_min: float = None,
         **kwargs,
     ):
         """
@@ -401,7 +402,12 @@ class SignalReturnRelations:
             dictionary of x-axis labels. Default is None.
         x_labels_rotate : int
             rotation of x-axis labels. Default is 0.
+        y_axis_min : float, optional
+            bottom of the y-axis; must be >= 0. Default is None, in which case it is set
+            automatically from the data.
         """
+        if y_axis_min is not None and y_axis_min < 0.0:
+            raise ValueError("`y_axis_min` must be >= 0.0.")
         if "type" in kwargs:
             warnings.warn(
                 "`type` parameter is deprecated; use `view` instead.",
@@ -510,7 +516,7 @@ class SignalReturnRelations:
         y_input = self.__yaxis_lim__(
             accuracy_df=dfx.loc[:, ["accuracy", "bal_accuracy"]]
         )
-        ax.set_ylim(round(y_input, 2))
+        ax.set_ylim(round(y_input, 2) if y_axis_min is None else y_axis_min)
 
         ax.set_title(title, fontsize=title_fontsize)
         ax.legend(loc=legend_pos)
