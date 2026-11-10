@@ -156,11 +156,10 @@ def _get_rebal_dates(df_wide: pd.DataFrame) -> List[pd.Timestamp]:
     # change_index -- where there is any value change across rows
     change_index = df_diff.index[(df_diff.abs() > 0).any(axis=1)]
 
-    # rows where the previous row was all NaN
-    # but the current row has at least one non-NaN value
-    prev_all_na = df_wide.shift(1).isna().all(axis=1)
-    curr_any_value = df_wide.notna().any(axis=1)
-    from_na_to_value_index = df_wide.index[prev_all_na & curr_any_value]
+    # A contract can start or resume while other contracts already have positions.
+    # diff() is NaN at these transitions, so check availability per contract.
+    from_na_to_value = df_wide.shift(1).isna() & df_wide.notna()
+    from_na_to_value_index = df_wide.index[from_na_to_value.any(axis=1)]
 
     # combine indices
     combined_index = change_index.union(from_na_to_value_index)
