@@ -212,26 +212,28 @@ or
 Community Contributions
 -----------------------
 
-For community contributions, the pull requests are reviewed by the
-package maintainers.
+The ``macrosynergy`` package is open source, but not open to external
+contributions. We do not accept pull requests from users outside of the
+Macrosynergy team, and any such pull requests raised against our
+repository will be closed.
 
-The following apply to contributors outside the Macrosynergy team:
+If you have found a bug, please `raise an
+issue <https://github.com/macrosynergy/macrosynergy/issues/new/choose>`__.
 
-1. All contributions must be made under the terms of the `project
-   license <https://github.com/macrosynergy/macrosynergy/blob/main/LICENSE>`__
-   on the package repository.
+If you also have a fix for it:
 
-2. All contributions must be made through pull requests.
+1. Create a public fork of the repository.
 
-3. Contributors may only contribute code that they have authored or have
-   the rights to contribute.
+2. Make your fix in a pull request within your fork (i.e. targeting
+   your fork's own branch, not our repository).
 
-4. Pull requests can only be raised from a fork of the repository.
+3. Raise an issue on our repository describing the problem, and include
+   a link to the pull request in your fork.
 
-5. Contributors may not make any modifications to the unit tests,
-   integration tests, dependencies, or any CI/CD configuration
-   (e.g. GitHub Actions, Codecov, etc.)
+The Macrosynergy team will review your fix and, where appropriate,
+implement it in the package.
 
-6. Contributors may not modify any static files such as the static
-   documentation pages, the ``README.md`` file, and the ``LICENSE``
-   file.
+By sharing a fix with us, you confirm that you authored the code or have
+the rights to share it, and that it is provided under the terms of the
+`project
+license <https://github.com/macrosynergy/macrosynergy/blob/main/LICENSE>`__.
