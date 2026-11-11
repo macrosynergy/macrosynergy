@@ -60,6 +60,21 @@ and title it “Feature Request: [your feature request]”.
 Contributing or creating a pull request
 ---------------------------------------
 
-Currently, we do not allow a pull request to be created by users outside
-of the Macrosynergy team. If you'd like to contribute, please create a
-fork of the repository, and create a pull request from your fork.
+The ``macrosynergy`` package is open source, but not open to external
+contributions. We do not accept pull requests from users outside of the
+Macrosynergy team, and any such pull requests raised against our
+repository will be closed.
+
+If you have found a bug, please `raise an
+issue <https://github.com/macrosynergy/macrosynergy/issues/new/choose>`__.
+
+If you also have a fix for it:
+
+1. Create a public fork of the repository.
+2. Make your fix in a pull request within your fork (i.e. targeting
+   your fork's own branch, not our repository).
+3. Raise an issue on our repository describing the problem, and include
+   a link to the pull request in your fork.
+
+The Macrosynergy team will review your fix and, where appropriate,
+implement it in the package.
