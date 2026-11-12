@@ -17,6 +17,7 @@ from .preprocessing import (
     BasePanelScaler,
     BasePanelSelector,
     PanelPCA,
+    ReturnClusterer,
     KendallSignificanceSelector,
     BaseImputer,
     ConstantImputer,
@@ -120,6 +121,7 @@ __all__ = [
     "PanelStandardScaler",
     "ZnScoreAverager",
     "PanelPCA",
+    "ReturnClusterer",
     "PLSTransformer",
     # imputers
     "BaseImputer",
