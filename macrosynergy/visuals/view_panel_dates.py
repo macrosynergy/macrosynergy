@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from typing import Tuple, List
 from macrosynergy.management import business_day_dif
+from macrosynergy.management.utils import global_skip_visuals_flag
 
 
 def view_panel_dates(
@@ -38,6 +39,8 @@ def view_panel_dates(
     return_fig : bool
         If True, returns the Matplotlib figure object instead of showing it.
     """
+    if global_skip_visuals_flag():
+        return
 
     # DataFrame of official timestamps.
     if all(df.dtypes == object):

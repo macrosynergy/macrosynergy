@@ -9,7 +9,7 @@ import pandas as pd
 from typing import List, Tuple
 
 from macrosynergy.management.simulate import make_qdf
-from macrosynergy.management.utils import reduce_df
+from macrosynergy.management.utils import reduce_df, global_skip_visuals_flag
 from macrosynergy.management.types import QuantamentalDataFrame
 import macrosynergy.visuals as msv
 
@@ -72,6 +72,8 @@ def check_availability(
         simply used for display (not regarded for sorting at all). Default is False (no
         sorting, ordered as provided in `xcats`).
     """
+    if global_skip_visuals_flag():
+        return
 
     for bvar, varname in zip(
         [start_years, missing_recent, sort_labels],

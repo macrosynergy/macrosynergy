@@ -33,3 +33,15 @@ PD_SUBCLASS_SAFE_SELECT_DTYPES: bool = hasattr(pd.DataFrame, "_constructor_from_
 
 # Polars' `LazyFrame.pivot` is not available in the last Python3.8 version (polars==1.8.2)
 PYTHON_3_8_POLARS_PIVOT: bool = not hasattr(pl.LazyFrame, "pivot")
+
+# `scan_parquet(include_file_paths=...)` arrived in polars 1.2.0
+POLARS_SCAN_FILE_PATHS: bool = version.parse(pl.__version__) >= version.parse("1.2.0")
+
+# polars' parquet reader keeps memory across the files it reads in these releases,
+# whatever the engine or batching: 1.0-1.1 leak, 1.15-1.27 creep (measured on JPMaQS
+# delta histories). Long multi-file loads can run out of memory there
+POLARS_PARQUET_READER_RETAINS_MEMORY: bool = version.parse(
+    pl.__version__
+) < version.parse("1.2.0") or (
+    version.parse("1.15.0") <= version.parse(pl.__version__) < version.parse("1.28.0")
+)

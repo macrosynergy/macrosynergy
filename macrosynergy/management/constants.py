@@ -41,6 +41,9 @@ FREQUENCY_MAP = {
 }
 JPMAQS_METRICS: List[str] = ["value", "grading", "eop_lag", "mop_lag", "last_updated"]
 
+# Env var to skip visualisations
+SKIP_VISUALS_ENV_VAR = "MACROSYNERGY_SKIP_VISUAL_FUNCTIONS"
+
 ANNUALIZATION_FACTORS = {
     "A": 1,
     "BA": 1,

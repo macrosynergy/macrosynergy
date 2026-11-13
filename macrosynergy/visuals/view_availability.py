@@ -4,7 +4,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 
 from macrosynergy.management.types import QuantamentalDataFrame
-from macrosynergy.management.utils import qdf_to_ticker_df
+from macrosynergy.management.utils import qdf_to_ticker_df, global_skip_visuals_flag
 
 
 def view_availability(
@@ -56,6 +56,8 @@ def view_availability(
     plt.Figure or None
         The figure object when "return_fig" is True, otherwise None.
     """
+    if global_skip_visuals_flag():
+        return
     if not isinstance(df, QuantamentalDataFrame):
         raise TypeError(
             "`df` must be a standardised QuantamentalDataFrame with columns "
