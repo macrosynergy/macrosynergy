@@ -15,7 +15,7 @@ from typing import Dict, List, Optional, Tuple, Union
 
 import pandas as pd
 
-from macrosynergy.management.utils import reduce_df
+from macrosynergy.management.utils import reduce_df, global_skip_visuals_flag
 from macrosynergy.visuals import FacetPlot, LinePlot
 from numbers import Number
 
@@ -138,6 +138,8 @@ def timelines(
     y_axis_label : str
         The label for the y-axis. Default is None.
     """
+    if global_skip_visuals_flag():
+        return
 
     if not isinstance(df, pd.DataFrame):
         raise TypeError("`df` must be a pandas DataFrame.")

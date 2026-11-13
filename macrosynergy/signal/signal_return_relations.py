@@ -243,14 +243,14 @@ class SignalReturnRelations:
             self.freqs = [freqs]
 
         for sig in self.sigs:
-            assert (
-                sig in self.xcats
-            ), "Primary signal must be available in the DataFrame."
+            assert sig in self.xcats, (
+                "Primary signal must be available in the DataFrame."
+            )
 
         for ret in self.rets:
-            assert (
-                ret in self.xcats
-            ), "Target return must be available in the DataFrame."
+            assert ret in self.xcats, (
+                "Target return must be available in the DataFrame."
+            )
 
         if sig_neg is None:
             self.signs = [False for _ in self.sigs]
@@ -347,7 +347,7 @@ class SignalReturnRelations:
         min_value = accuracy_df.min().min()
         # Ensures any accuracy statistics greater than 0.5 are more pronounced given the
         # adjusted scale.
-        y_input = 0.45 if y_axis(min_value) else min_value
+        y_input = 0.45 if y_axis(min_value) else (min_value - 0.02)
 
         return y_input
 
@@ -365,6 +365,7 @@ class SignalReturnRelations:
         x_labels: Dict = None,
         x_labels_rotate: int = 0,
         return_fig: bool = False,
+        y_axis_min: float = None,
         **kwargs,
     ):
         """
@@ -401,7 +402,12 @@ class SignalReturnRelations:
             dictionary of x-axis labels. Default is None.
         x_labels_rotate : int
             rotation of x-axis labels. Default is 0.
+        y_axis_min : float, optional
+            bottom of the y-axis; must be >= 0. Default is None, in which case it is set
+            automatically from the data.
         """
+        if y_axis_min is not None and y_axis_min < 0.0:
+            raise ValueError("`y_axis_min` must be >= 0.0.")
         if "type" in kwargs:
             warnings.warn(
                 "`type` parameter is deprecated; use `view` instead.",
@@ -510,7 +516,7 @@ class SignalReturnRelations:
         y_input = self.__yaxis_lim__(
             accuracy_df=dfx.loc[:, ["accuracy", "bal_accuracy"]]
         )
-        ax.set_ylim(round(y_input, 2))
+        ax.set_ylim(round(y_input, 2) if y_axis_min is None else y_axis_min)
 
         ax.set_title(title, fontsize=title_fontsize)
         ax.legend(loc=legend_pos)
@@ -776,12 +782,12 @@ class SignalReturnRelations:
             set(dfd.columns.tolist())
             - set(["real_date", "xcat", "cid", "ticker", "last_updated"])
         )
-        # here, the slip is applied to the the first xcat (explanatory variable)
+        # here, the slip is applied to the signals (all xcats except the last, the return)
         dfd: pd.DataFrame = self.apply_slip(
             df=dfd,
             slip=self.slip,
             cids=cids,
-            xcats=[xcats[0]],
+            xcats=xcats[:-1],
             metrics=metric_cols,
         )
 

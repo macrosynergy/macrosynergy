@@ -413,7 +413,7 @@ class TestAll(unittest.TestCase):
 
         min_value = min(arr_acc)
         if min_value < 0.45:
-            self.assertTrue(ylim == min_value)
+            self.assertTrue(ylim == min_value - 0.02)
         else:
             self.assertTrue(ylim == 0.45)
 
@@ -602,6 +602,11 @@ class TestAll(unittest.TestCase):
             srr.accuracy_bars(ret="XR", sigs="CRY")
         except Exception as e:
             self.fail(f"accuracy_bars raised {e} unexpectedly")
+
+        fig = srr.accuracy_bars(y_axis_min=0.3, return_fig=True)
+        self.assertEqual(fig.axes[0].get_ylim()[0], 0.3)
+        with self.assertRaises(ValueError):
+            srr.accuracy_bars(y_axis_min=-0.1)
 
         try:
             srr.correlation_bars(ret="XR", sigs="CRY")
@@ -885,6 +890,21 @@ class TestAll(unittest.TestCase):
             rets=rets, xcats=xcats, freqs=freqs, agg_sigs=agg_sigs
         )
         self.assertTrue(mrt.shape == (4, num_of_acc_cols))
+
+        # Slip must be applied to every signal, not just the first one.
+        sigs = ["CRY", "GROWTH", "INFL"]
+        mrt = SignalReturnRelations(
+            df=self.dfd, rets="XR", sigs=sigs, freqs="M", slip=3
+        ).multiple_relations_table()
+        for sig in sigs:
+            srt = SignalReturnRelations(
+                df=self.dfd, rets="XR", sigs=sig, freqs="M", slip=3
+            ).single_relation_table()
+            np.testing.assert_allclose(
+                mrt.xs(sig, level="Signal").to_numpy(dtype=float),
+                srt.to_numpy(dtype=float),
+                atol=1e-5,
+            )
 
     def test_single_statistic_table(self):
         sr = SignalReturnRelations(
