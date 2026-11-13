@@ -5,12 +5,39 @@ from sklearn.base import BaseEstimator, RegressorMixin, clone
 from sklearn.model_selection import GridSearchCV
 from sklearn.metrics import r2_score, make_scorer, check_scoring
 from sklearn.pipeline import Pipeline
-from sklearn.utils.validation import check_X_y, check_array, check_is_fitted
+from sklearn.utils.validation import check_is_fitted
 from sklearn.model_selection import BaseCrossValidator
 
 from macrosynergy.learning import ExpandingKFoldPanelSplit
 
 import numbers
+
+
+def _get_model_attr(model, attr, features):
+    """
+    Return the attribute `attr` of a fitted model, with one value per feature
+    in `features`. For a pipeline, the attribute is taken from the final step
+    and features dropped by earlier steps are assigned zero. Returns None if
+    the attribute is unavailable or cannot be mapped back to `features`.
+    """
+    kept = features
+    if isinstance(model, Pipeline):
+        if len(model) > 1:
+            try:
+                kept = list(model[-2].get_feature_names_out())
+            except AttributeError:
+                return None
+        model = model[-1]
+
+    values = getattr(model, attr, None)
+    if values is None or not set(kept).issubset(features):
+        return None
+
+    aligned = np.zeros(np.shape(values)[:-1] + (len(features),))
+    aligned[..., [features.index(feature) for feature in kept]] = values
+
+    return aligned
+
 
 class ModelAveragingRegressor(BaseEstimator, RegressorMixin):
     """
@@ -221,70 +248,57 @@ class ModelAveragingRegressor(BaseEstimator, RegressorMixin):
 
     def _set_feature_importances(self, X):
         """
-        Set coef_ and feature_importances_ as the weighted averages of the
-        corresponding attributes of the models. Each attribute is only set
-        when every model provides it.
+        Set coef_ or feature_importances_ as the weighted average over the models
+        with non-zero weight.
+
+        - All models have coef_: set coef_.
+        - All models have feature_importances_: set feature_importances_.
+        - Every model has one of the two: set feature_importances_, using the
+          absolute values of either attribute, normalized to sum to one per model.
+        - Otherwise: set neither.
         """
         # Remove values from a previous fit
         for attr in ["coef_", "feature_importances_"]:
             self.__dict__.pop(attr, None)
 
         if isinstance(X, pd.DataFrame):
-            feature_names = X.columns.tolist()
+            features = X.columns.tolist()
         else:
-            feature_names = [f"x{i}" for i in range(X.shape[1])]
+            features = [f"x{i}" for i in range(X.shape[1])]
 
-        active_models = [name for name in self.model_names_ if self.weights_[name] > 0]
-        if len(active_models) == 0:
+        active = [name for name in self.model_names_ if self.weights_[name] > 0]
+        models = [self.best_estimators_[name] for name in active]
+        weights = [self.weights_[name] for name in active]
+
+        if not models:
             return
 
-        weights = np.array([self.weights_[name] for name in active_models])
+        coefs = [
+            _get_model_attr(model, "coef_", features)
+            for model in models
+        ]
+        fis = [
+            _get_model_attr(model, "feature_importances_", features)
+            for model in models
+        ]
 
-        for attr in ["coef_", "feature_importances_"]:
-            values = [
-                self._get_aligned_attr(self.best_estimators_[name], attr, feature_names)
-                for name in active_models
+        has_coef = np.array([coef is not None for coef in coefs])
+        has_fi = np.array([fi is not None for fi in fis])
+
+        if has_coef.all():
+            self.coef_ = np.average(coefs, axis=0, weights=weights)
+        elif has_fi.all():
+            self.feature_importances_ = np.average(fis, axis=0, weights=weights)
+        elif np.logical_or(has_coef, has_fi).all():
+            importances = [
+                np.abs(fi if coef is None else coef)
+                for coef, fi in zip(coefs, fis)
             ]
-            if any(value is None for value in values):
-                continue
-            if len(set(value.shape for value in values)) > 1:
-                continue
-
-            setattr(self, attr, np.average(np.stack(values), axis=0, weights=weights))
-
-    def _get_aligned_attr(self, estimator, attr, feature_names):
-        """
-        Return the attribute `attr` of a fitted model, aligned to the features the
-        ensemble was fit on. Features dropped within a pipeline are assigned zero.
-        Returns None if the attribute is unavailable or cannot be aligned.
-        """
-        if isinstance(estimator, Pipeline) and len(estimator) > 1:
-            final_estimator = estimator[-1]
-            feature_names_getter = getattr(estimator[-2], "get_feature_names_out", None)
-            if feature_names_getter is None:
-                return None
-            model_features = list(feature_names_getter())
-        elif isinstance(estimator, Pipeline):
-            final_estimator = estimator[-1]
-            model_features = feature_names
-        else:
-            final_estimator = estimator
-            model_features = feature_names
-
-        value = getattr(final_estimator, attr, None)
-        if value is None:
-            return None
-
-        value = np.asarray(value, dtype=float)
-        if value.ndim == 0 or value.shape[-1] != len(model_features):
-            return None
-        if not set(model_features).issubset(feature_names):
-            return None
-
-        aligned = np.zeros(value.shape[:-1] + (len(feature_names),))
-        aligned[..., [feature_names.index(ftr) for ftr in model_features]] = value
-
-        return aligned
+            self.feature_importances_ = np.average(
+                [importance / importance.sum() for importance in importances],
+                axis=0,
+                weights=weights,
+            )
 
     def _check_init_params(
         self,
