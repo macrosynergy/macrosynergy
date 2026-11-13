@@ -74,4 +74,5 @@ Home Page: `macrosynergy.com <https://www.macrosynergy.com/>`_
    usage_examples.md
    release_notes.md
    faqs
+   contribution_guide
 
