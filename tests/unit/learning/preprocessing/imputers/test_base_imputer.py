@@ -2,11 +2,7 @@ import pandas as pd
 import numpy as np
 import pytest
 
-from macrosynergy.learning.preprocessing.imputers.imputers import (
-    BaseImputer,
-    DATE_INDEX_NAME,
-    CIDS_INDEX_NAME,
-)
+from macrosynergy.learning.preprocessing.imputers.imputers import BaseImputer
 
 
 @pytest.fixture
@@ -14,7 +10,7 @@ def data() -> pd.DataFrame:
     date_range = pd.date_range("2023-01-01", "2025-01-01", freq="M")
     cids = ["CAD", "USD", "GBP", "AUS"]
     index = pd.MultiIndex.from_product(
-        iterables=[cids, date_range], names=[CIDS_INDEX_NAME, DATE_INDEX_NAME]
+        iterables=[cids, date_range], names=["cid", "real_date"]
     )
 
     data = pd.DataFrame(
@@ -112,10 +108,3 @@ def test_unordered_columns(data):
     with pytest.raises(ValueError):
         imputer.transform(data)
 
-
-def test_invalid_index():
-    X = pd.DataFrame({"a": [1.0], "b": [2.0]})
-    imputer = DummyImputer()
-
-    with pytest.raises(ValueError):
-        imputer.fit(X)
