@@ -1,10 +1,15 @@
+from typing import Optional, Dict, List, Tuple
+
 import numpy as np
 import pandas as pd
 import warnings
 import datetime
 import numbers
 
+from scipy.cluster import hierarchy
+from scipy.spatial.distance import squareform
 from sklearn.base import BaseEstimator, TransformerMixin
+from sklearn.utils.validation import check_is_fitted
 
 
 class ZnScoreAverager(BaseEstimator, TransformerMixin):
@@ -532,6 +537,338 @@ class PanelPCA(BaseEstimator, TransformerMixin):
                 "feature matrix."
             )
 
+class ReturnClusterer(BaseEstimator, TransformerMixin):
+    def __init__(
+        self,
+        col_name: str,
+        n_clusters: Optional[int] = None,
+        cluster_map: Optional[Dict[str, List[str]]] = None,
+        linkage: str = "average",
+        min_overlap: int = 36,
+        relative_returns: bool = True,
+    ):
+        """
+        Transformer that appends a categorical column holding the group of each
+        cross-section. Groups are either given or learnt by clustering the
+        cross-sections on the correlations of their returns.
+
+        Parameters
+        ----------
+        col_name : str
+            Name of the categorical column appended to the feature matrix.
+        n_clusters : int, default=None
+            Number of groups to form by clustering. Required when `cluster_map` is
+            None and ignored otherwise.
+        cluster_map : Dict[str, List[str]], default=None
+            Mapping of group names to list-likes of cross-sections. If provided, no
+            clustering is performed and every training cross-section must belong to
+            exactly one group.
+        linkage : str, default="average"
+            Linkage method used to merge clusters. One of "average", "complete" or
+            "single".
+        min_overlap : int, default=36
+            Minimum number of dates two cross-sections must share for the correlation
+            of their returns to be estimated. Pairs with less overlap are treated as
+            uncorrelated.
+        relative_returns : bool, default=True
+            Whether to cluster on returns relative to the cross-sectional mean of
+            each date, rather than raw returns.
+
+        Attributes
+        ----------
+        clusters_ : Dict[str, List[str]]
+            Mapping of each group to the list of its cross-sections. Groups are
+            labelled by the keys of `cluster_map`, or by integers starting at zero
+            when formed by clustering.
+        cid_to_group_ : Dict[str, Union[str, int]]
+            Mapping of each cross-section to its group.
+        categories_ : List
+            Sorted groups, used as the categories of the appended column.
+        n_features_in_ : int
+            Number of columns of the feature matrix seen in fit.
+        feature_names_in_ : np.ndarray
+            Columns of the feature matrix seen in fit.
+
+        Notes
+        -----
+        When clustering, the training targets are pivoted to one time series per
+        cross-section and the Pearson correlation of each pair is computed over
+        their common dates. Pairs sharing fewer than `min_overlap` dates, are
+        treated as uncorrelated. The correlations are turned into distances
+        :math:`d_{ij} = \sqrt{0.5 (1 - \rho_{ij})}` and the cross-sections are
+        merged by agglomerative hierarchical clustering with the chosen linkage
+        until at most `n_clusters` groups remain.
+        """
+        self.col_name = col_name
+        self.n_clusters = n_clusters
+        self.cluster_map = cluster_map
+        self.linkage = linkage
+        self.min_overlap = min_overlap
+        self.relative_returns = relative_returns
+
+    def fit(self, X, y=None):
+        """
+        Assign each training cross-section to a group, from `cluster_map` or by
+        clustering the targets.
+
+        Parameters
+        ----------
+        X : pd.DataFrame
+            Input feature matrix, multi-indexed by `cid` and `real_date`.
+        y : pd.Series, pd.DataFrame or np.ndarray, default=None
+            Target vector with one value per row of X. Required when `cluster_map`
+            is None and ignored otherwise.
+
+        Returns
+        -------
+        self
+            Fitted transformer.
+        """
+        self._check_init_params()
+        self._check_X(X)
+
+        self.n_features_in_ = X.shape[1]
+        self.feature_names_in_ = np.array(X.columns)
+
+        cids = sorted(X.index.get_level_values(0).unique())
+
+        if self.cluster_map is not None:
+            _validate_groups(self.cluster_map, cids)
+            self.clusters_ = {
+                group: list(group_cids)
+                for group, group_cids in self.cluster_map.items()
+            }
+            self.cid_to_group_ = {
+                cid: group
+                for group, group_cids in self.clusters_.items()
+                for cid in group_cids
+            }
+        else:
+            self.clusters_, self.cid_to_group_ = self._cluster_groups(X, y, cids)
+
+        self.categories_ = sorted(set(self.cid_to_group_.values()))
+
+        return self
+
+    def transform(self, X):
+        """
+        Append the categorical group column to the feature matrix.
+
+        Parameters
+        ----------
+        X : pd.DataFrame
+            Input feature matrix, multi-indexed by `cid` and `real_date`.
+
+        Returns
+        -------
+        pd.DataFrame
+            Copy of X with the group of each cross-section in column `col_name`.
+        """
+        check_is_fitted(self, "cid_to_group_")
+        self._check_X(X)
+
+        X = X.copy()
+        cids = X.index.get_level_values(0)
+        X[self.col_name] = pd.Categorical(
+            values=cids.map(self.cid_to_group_),
+            categories=self.categories_,
+        )
+
+        return X
+
+    def get_feature_names_out(self, input_features=None):
+        """
+        Get output feature names produced by the transformation.
+
+        Parameters
+        ----------
+        input_features : None
+            This parameter has no effect and is included for compatibility
+            with the scikit-learn API.
+
+        Returns
+        -------
+        np.ndarray
+            Columns of the training feature matrix followed by `col_name`.
+        """
+        check_is_fitted(self, "cid_to_group_")
+
+        return np.array([*self.feature_names_in_, self.col_name], dtype=object)
+
+    def _cluster_groups(self, X, y, cids):
+        """
+        Form groups by hierarchical agglomerative clustering of the training targets.
+
+        Parameters
+        ----------
+        X : pd.DataFrame
+            Input feature matrix, multi-indexed by `cid` and `real_date`.
+        y : pd.Series, pd.DataFrame or np.ndarray
+            Target vector with one value per row of X.
+        cids : list
+            Sorted training cross-sections.
+
+        Returns
+        -------
+        Tuple[dict, dict]
+            Mapping of each group to its cross-sections and mapping of each
+            cross-section to its group.
+        """
+        if self.n_clusters > len(cids):
+            warnings.warn(
+                f"`n_clusters` ({self.n_clusters}) is larger than the number of "
+                f"training cross-sections ({len(cids)}). Falling back to a single "
+                f"cluster.",
+                UserWarning,
+            )
+            n_clusters = 1
+        else:
+            n_clusters = self.n_clusters
+
+        y_vals = np.asarray(y, dtype=float).reshape(len(y))
+        rets = pd.Series(y_vals, index=X.index)
+
+        return _cluster_returns(
+            rets=rets,
+            cids=cids,
+            n_clusters=n_clusters,
+            min_overlap=self.min_overlap,
+            linkage=self.linkage,
+            relative_returns=self.relative_returns,
+        )
+
+    def _check_init_params(self):
+
+        for arg, val, ok_type in [
+            ("col_name", self.col_name, str),
+            ("n_clusters", self.n_clusters, (int, type(None))),
+            ("cluster_map", self.cluster_map, (dict, type(None))),
+            ("linkage", self.linkage, str),
+            ("min_overlap", self.min_overlap, int),
+            ("relative_returns", self.relative_returns, (bool, np.bool_)),
+        ]:
+            if not isinstance(val, ok_type):
+                raise TypeError(f"{arg} must be of type {ok_type}")
+
+        if self.cluster_map is not None:
+            for group, group_cids in self.cluster_map.items():
+                if not isinstance(group, str):
+                    raise TypeError(
+                        f"The cross-sections of group {group} in cluster_map must "
+                        f"be strings."
+                    )
+                if not pd.api.types.is_list_like(group_cids):
+                    raise TypeError(
+                        f"The cross-sections of group {group} in cluster_map must "
+                        f"be a list-like of strings."
+                    )
+        elif self.n_clusters is None:
+            raise ValueError("n_clusters must be provided when cluster_map is None.")
+
+        valid_linkages = ["average", "complete", "single"]
+        if self.linkage not in valid_linkages:
+            raise ValueError(f"linkage must be one of {valid_linkages}")
+
+    def _check_X(self, X):
+        """
+        Checks shared by the fit and transform methods. The values of X are not
+        used, so they may be non-numeric or missing.
+
+        Parameters
+        ----------
+        X : pd.DataFrame
+            The feature matrix.
+        """
+        if not isinstance(X, pd.DataFrame):
+            raise TypeError(
+                "Input feature matrix for the ReturnClusterer must be a pandas "
+                "dataframe."
+            )
+        if not isinstance(X.index, pd.MultiIndex):
+            raise ValueError("The input feature matrix for X must be multi-indexed.")
+        if self.col_name in X.columns:
+            raise ValueError(
+                f"The input feature matrix already has a column named "
+                f"{self.col_name!r}. Choose a different col_name."
+            )
+
+
+# TODO: dont duplicate code
+def _cluster_returns(
+    rets: pd.Series,
+    cids: List[str],
+    n_clusters: int,
+    min_overlap: int,
+    linkage: str,
+    relative_returns: bool = False,
+) -> Tuple[Dict[int, List[str]], Dict[str, int]]:
+    labels = [1]
+    if len(cids) != 1:
+        rets = rets.unstack(level=0).reindex(columns=cids)
+        if relative_returns:
+            rets = rets.sub(rets.mean(axis=1), axis=0)
+        corr = rets.corr(min_periods=min_overlap).to_numpy()
+
+        corr = np.nan_to_num(corr, nan=0.0)
+        np.fill_diagonal(corr, 1)
+
+        dist = np.sqrt(np.clip(0.5 * (1 - corr), 0, None))
+        np.fill_diagonal(dist, 0)
+
+        linkage_matrix = hierarchy.linkage(
+            y=squareform(dist, checks=False), method=linkage
+        )
+        labels = hierarchy.fcluster(
+            Z=linkage_matrix,
+            t=n_clusters,
+            criterion="maxclust",
+        )
+
+    # Label groups
+    relabel = {}
+    for label in labels:
+        relabel.setdefault(label, len(relabel))
+    cid_to_group = {cid: relabel[label] for cid, label in zip(cids, labels)}
+
+    clusters = {
+        group: [cid for cid in cids if cid_to_group[cid] == group]
+        for group in range(len(relabel))
+    }
+
+    return clusters, cid_to_group
+
+
+# TODO: dont duplicate code
+def _validate_groups(
+    groups: Dict[str, List[str]], cids: List[str]
+) -> Dict[str, str]:
+    if not isinstance(groups, dict):
+        raise TypeError(
+            "cluster_map must be a dictionary mapping group names to lists of "
+            "cross-sections"
+        )
+
+    # Each listed cid may belong to one group only
+    listed_cid_to_group = {}
+    for group, group_cids in groups.items():
+        for cid in group_cids:
+            if cid in listed_cid_to_group and listed_cid_to_group[cid] != group:
+                raise ValueError(
+                    f"Cross-section {cid} is assigned to more than one group: "
+                    f"{listed_cid_to_group[cid]} and {group}."
+                )
+            listed_cid_to_group[cid] = group
+
+    # Every training cid must belong to a group
+    missing_cids = [cid for cid in cids if cid not in listed_cid_to_group]
+    if len(missing_cids) > 0:
+        raise ValueError(
+            f"The following cross-sections in the training data are not assigned "
+            f"to any group: {missing_cids}."
+        )
+
+    return {cid: listed_cid_to_group[cid] for cid in cids}
+
 
 if __name__ == "__main__":
     import numpy as np
@@ -599,3 +936,9 @@ if __name__ == "__main__":
     zn = ZnScoreAverager(neutral="mean", use_signs=True)
     zn.fit(X_train, y_train)
     print(zn.transform(X_train))
+
+    # Clustered groups
+    rc = ReturnClusterer(col_name="GROUP", n_clusters=2)
+    rc.fit(X_train, y_train)
+    print(rc.clusters_)
+    print(rc.transform(X_train))

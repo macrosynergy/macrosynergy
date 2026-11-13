@@ -25,6 +25,7 @@ from .scalers import (
 from .transformers import (
     ZnScoreAverager,
     PanelPCA,
+    ReturnClusterer,
 )
 
 __all__ = [
@@ -41,6 +42,7 @@ __all__ = [
     "PanelStandardScaler",
     # transformers
     "PanelPCA",
+    "ReturnClusterer",
     "ZnScoreAverager",
     # imputers
     "BaseImputer",
