@@ -537,6 +537,7 @@ class PanelPCA(BaseEstimator, TransformerMixin):
                 "feature matrix."
             )
 
+
 class ReturnClusterer(BaseEstimator, TransformerMixin):
     def __init__(
         self,
@@ -546,7 +547,7 @@ class ReturnClusterer(BaseEstimator, TransformerMixin):
         linkage: str = "average",
         min_overlap: int = 36,
         relative_returns: bool = True,
-    ):
+    ) -> None:
         """
         Transformer that appends a categorical column holding the group of each
         cross-section. Groups are either given or learnt by clustering the
@@ -606,7 +607,7 @@ class ReturnClusterer(BaseEstimator, TransformerMixin):
         self.min_overlap = min_overlap
         self.relative_returns = relative_returns
 
-    def fit(self, X, y=None):
+    def fit(self, X, y=None) -> "ReturnClusterer":
         """
         Assign each training cross-section to a group, from `cluster_map` or by
         clustering the targets.
@@ -618,11 +619,6 @@ class ReturnClusterer(BaseEstimator, TransformerMixin):
         y : pd.Series, pd.DataFrame or np.ndarray, default=None
             Target vector with one value per row of X. Required when `cluster_map`
             is None and ignored otherwise.
-
-        Returns
-        -------
-        self
-            Fitted transformer.
         """
         self._check_init_params()
         self._check_X(X)
@@ -770,15 +766,6 @@ class ReturnClusterer(BaseEstimator, TransformerMixin):
             raise ValueError(f"linkage must be one of {valid_linkages}")
 
     def _check_X(self, X):
-        """
-        Checks shared by the fit and transform methods. The values of X are not
-        used, so they may be non-numeric or missing.
-
-        Parameters
-        ----------
-        X : pd.DataFrame
-            The feature matrix.
-        """
         if not isinstance(X, pd.DataFrame):
             raise TypeError(
                 "Input feature matrix for the ReturnClusterer must be a pandas "
