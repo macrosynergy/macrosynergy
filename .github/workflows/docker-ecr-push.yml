@@ -3,10 +3,16 @@ name: Build & Push Docker Image to ECR
 on:
   workflow_dispatch:
     inputs:
-      tag:
-        description: "Git tag to build and push (e.g. v1.5.6)"
+      version:
+        description: "Git tag to build and push (e.g. v1.5.6), or latest for the newest v* tag"
         required: true
+        default: "latest"
         type: string
+      develop:
+        description: "Build the develop commit this run is on instead, tagged <version>-develop-<sha> (ignores version)"
+        required: false
+        default: false
+        type: boolean
   workflow_call:
     inputs:
       tag:
@@ -27,7 +33,9 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     outputs:
+      ref: ${{ steps.check-tag.outputs.ref }}
       ms_version: ${{ steps.check-tag.outputs.ms_version }}
+      image_tag: ${{ steps.check-tag.outputs.image_tag }}
       is_latest: ${{ steps.check-tag.outputs.is_latest }}
     steps:
       - uses: actions/checkout@v7
@@ -45,16 +53,46 @@ jobs:
       - name: Verify tag exists and inspect
         id: check-tag
         env:
-          TAG: ${{ inputs.tag }}
+          TAG: ${{ inputs.tag || inputs.version }}
+          DEVELOP: ${{ inputs.develop }}
         run: |
           set -eu
-          if ! git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null; then
+          if [ "${DEVELOP}" = "true" ]; then
+            if [ "${GITHUB_REF}" != "refs/heads/develop" ]; then
+              echo "::error::develop=true builds the develop branch; dispatch it with --ref develop (this run is on '${GITHUB_REF}'). Aborting."
+              exit 1
+            fi
+            if [ "${TAG}" != "latest" ]; then
+              echo "::warning::develop=true ignores version '${TAG}'."
+            fi
+            MS_VERSION=$(python ./setup.py --version 2>/dev/null | tail -n 1)
+            # e.g. 1.8.6.dev0+3ba680c; a Docker tag cannot hold "+", so keep 1.8.6.
+            BASE_VERSION=$(echo "${MS_VERSION}" | sed -E 's/\.?dev.*//; s/\+.*//')
+            SHA=$(git rev-parse HEAD)
+            IMAGE_TAG="${BASE_VERSION}-develop-$(git rev-parse --short=7 HEAD)"
+            echo "Develop commit ${SHA}, MS_VERSION=${MS_VERSION}, image tag ${IMAGE_TAG}"
+            {
+              echo "ref=${SHA}"
+              echo "ms_version=${MS_VERSION}"
+              echo "image_tag=${IMAGE_TAG}"
+              echo "is_latest=false"
+            } >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+
+          LATEST_TAG=$(git tag --list 'v*' --sort=-v:refname | head -n 1)
+          if [ "${TAG}" = "latest" ]; then
+            TAG="${LATEST_TAG}"
+            echo "version 'latest' is tag '${TAG}'."
+          fi
+
+          if ! git show-ref --verify --quiet "refs/tags/${TAG}"; then
             echo "::error::Tag '${TAG}' does not exist in this repository. Aborting."
             exit 1
           fi
           echo "Tag '${TAG}' exists."
+          echo "ref=${TAG}" >> "${GITHUB_OUTPUT}"
 
-          LATEST_TAG=$(git tag --sort=-v:refname | head -n 1)
           echo "Latest tag in repo: ${LATEST_TAG}"
 
           IS_LATEST=false
@@ -68,8 +106,10 @@ jobs:
           MS_VERSION=$(python ./setup.py --version 2>/dev/null | tail -n 1)
           echo "MS_VERSION=${MS_VERSION}"
           echo "ms_version=${MS_VERSION}" >> "${GITHUB_OUTPUT}"
+          echo "image_tag=${MS_VERSION}" >> "${GITHUB_OUTPUT}"
 
       - name: Poll PyPI for macrosynergy
+        if: ${{ !inputs.develop }}
         env:
           MS_VERSION: ${{ steps.check-tag.outputs.ms_version }}
           IS_LATEST: ${{ steps.check-tag.outputs.is_latest }}
@@ -132,7 +172,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ inputs.tag }}
+          ref: ${{ needs.verify.outputs.ref }}
 
       - name: Set up AWS credentials
         uses: aws-actions/configure-aws-credentials@v3
@@ -143,8 +183,18 @@ jobs:
       - name: Build and push Docker image to ECR
         env:
           MS_VERSION: ${{ needs.verify.outputs.ms_version }}
+          IMAGE_TAG: ${{ needs.verify.outputs.image_tag }}
+          IS_LATEST: ${{ needs.verify.outputs.is_latest }}
+          # develop: the Dockerfile's develop stage (macrosynergy from this checkout). A
+          # release builds the default stage, so a tag from before the stages still builds.
+          TARGET: ${{ inputs.develop && 'develop' || '' }}
+          DOCKER_BUILDKIT: 1
         run: |
           aws ecr get-login-password --region eu-west-2 | docker login --username AWS --password-stdin ${{ secrets.ECR_REPOSITORY }}
-          docker build -t ${{ secrets.ECR_REPOSITORY }}:latest -t ${{ secrets.ECR_REPOSITORY }}:${MS_VERSION} . --build-arg MS_VERSION=${MS_VERSION}
-          docker push ${{ secrets.ECR_REPOSITORY }}:latest
-          docker push ${{ secrets.ECR_REPOSITORY }}:${MS_VERSION}
+          docker build ${TARGET:+--target "${TARGET}"} -t "${{ secrets.ECR_REPOSITORY }}:${IMAGE_TAG}" . --build-arg "MS_VERSION=${MS_VERSION}"
+          docker push "${{ secrets.ECR_REPOSITORY }}:${IMAGE_TAG}"
+          # :latest moves only for the newest tag, never for develop.
+          if [ "${IS_LATEST}" = "true" ]; then
+            docker tag "${{ secrets.ECR_REPOSITORY }}:${IMAGE_TAG}" ${{ secrets.ECR_REPOSITORY }}:latest
+            docker push ${{ secrets.ECR_REPOSITORY }}:latest
+          fi
