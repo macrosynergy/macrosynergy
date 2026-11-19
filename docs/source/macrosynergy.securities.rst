@@ -12,5 +12,6 @@ Submodules
 .. toctree::
    :maxdepth: 2
 
+   macrosynergy.securities.dynamic_signal_optimizer
    macrosynergy.securities.index
    macrosynergy.securities.validate

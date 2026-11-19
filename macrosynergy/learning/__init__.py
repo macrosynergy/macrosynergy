@@ -39,7 +39,7 @@ from .model_evaluation import (
     create_panel_metric,
     regression_mcc,
 )
-from .sequential import SignalOptimizer, DynamicSignalOptimizer, BetaEstimator, ReturnForecaster
+from .sequential import SignalOptimizer, BetaEstimator, ReturnForecaster
 
 from .forecasting import (
     LADRegressor,
@@ -142,7 +142,6 @@ __all__ = [
     "regression_mcc",
     # Sequential forecasting
     "SignalOptimizer",
-    "DynamicSignalOptimizer",
     "ReturnForecaster",
     # forecasting
     "NaiveRegressor",
