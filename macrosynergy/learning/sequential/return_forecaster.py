@@ -224,9 +224,9 @@ class ReturnForecaster(BasePanelLearner):
         self,
         name,
         models,
-        hyperparameters,
-        scorers,
-        inner_splitters,
+        hyperparameters = None,
+        scorers = None,
+        inner_splitters = None,
         search_type="grid",
         normalize_fold_results=False,
         cv_summary="mean",
@@ -247,18 +247,21 @@ class ReturnForecaster(BasePanelLearner):
         models : dict
             Dictionary of models to choose from. The keys are model names and the values
             are scikit-learn compatible models.
-        hyperparameters : dict
+        hyperparameters : dict, optional
             Dictionary of hyperparameters to choose from. The keys are model names and
             the values are hyperparameter dictionaries for the corresponding model. The
-            keys must match with those provided in `models`.
-        scorers : dict
-            Dictionary of scoring functions to use in the hyperparameter optimization
-            process. The keys are scorer names and the values are scikit-learn compatible
-            scoring functions.
-        inner_splitters : dict
-            Dictionary of inner splitters to use in the hyperparameter optimization
-            process. The keys are splitter names and the values are scikit-learn compatible
-            cross-validator objects.
+            keys must match with those provided in `models`. If no hyperparameters are 
+            required to be tuned, this parameter can be None. Default is None.
+        scorers : dict, optional
+            Dictionary of scoring functions to use in cross-validation if hyperparameters
+            or models are needed to be selected. The keys are scorer names and the values
+            are scikit-learn compatible scoring functions. If no cross-validation is 
+            required, this parameter can be None. Default is None.
+        inner_splitters : dict, optional
+            Dictionary of inner splitters to use in cross-validation. The keys are
+            splitter names and the values are scikit-learn compatible cross-validator
+            objects. If no cross-validation is required, this parameter can be None.
+            Default is None.
         search_type : str, optional
             Type of hyperparameter optimization to perform. Default is "grid". Options are
             "grid" and "prior".
@@ -328,7 +331,12 @@ class ReturnForecaster(BasePanelLearner):
 
         # Get training and test indices
         train_idx = list(range(len(self.X)))
-        base_splits = self._get_base_splits(inner_splitters)
+        
+        if inner_splitters is not None:
+            base_splits = self._get_base_splits(inner_splitters)
+        else:
+            base_splits = None
+        
 
         optim_results = self._worker(
             name=name,
@@ -1031,13 +1039,13 @@ if __name__ == "__main__":
                 ]
             )
         },
-        hyperparameters={"Ridge": {}},
-        scorers={
-            "sharpe": make_scorer(sharpe_ratio, greater_is_better=True),
-        },
-        inner_splitters={
-            "Expanding": ExpandingKFoldPanelSplit(5),
-        },
+        #hyperparameters={"Ridge": {}},
+        #scorers={
+        #    "sharpe": make_scorer(sharpe_ratio, greater_is_better=True),
+        #},
+        #inner_splitters={
+        #    "Expanding": ExpandingKFoldPanelSplit(5),
+        #},
         cv_summary="mean-std",
         store_correlations=True,
     )
