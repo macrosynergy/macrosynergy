@@ -2439,8 +2439,10 @@ class NaivePnL:
             Section headings and the metrics listed under each, in order,
             e.g. ``{"Performance": ["Return %", "Sharpe Ratio"]}``. Default
             is None, in which case a standard set of performance, risk &
-            drawdown, and robustness metrics is used. Raises ``KeyError``
-            if a requested metric is not one of the rows produced by
+            drawdown, and robustness metrics is used, with probability
+            rows matching ``sr_thresholds`` in the supplied order. An empty
+            threshold list omits these rows. Raises ``KeyError`` if a
+            requested metric is not one of the rows produced by
             ``evaluate_pnls()``.
         order : dict of {section title: [metric names in desired order]}, optional
             Override just the row order within a section from ``groups``,
@@ -2532,21 +2534,6 @@ class NaivePnL:
                 f"benchmark(s)), got {len(bench_labels)} label(s)."
             )
 
-        using_default_groups = groups is None
-        groups = groups if groups is not None else DEFAULT_PNL_METRIC_GROUPS
-        order = order or {}
-
-        resolved = {}
-        for section, metrics in groups.items():
-            if section in order:
-                if set(order[section]) != set(metrics):
-                    raise ValueError(
-                        f"order[{section!r}] must contain exactly {metrics}"
-                    )
-                resolved[section] = order[section]
-            else:
-                resolved[section] = metrics
-
         # A bench entry is either a real PnL category (goes through
         # evaluate_pnls() as usual) or a raw bms ticker defaulted-in above
         # (not a registered PnL, so it can't go through evaluate_pnls()'s
@@ -2587,6 +2574,33 @@ class NaivePnL:
             )
             dd_recovery_ongoing.update(ongoing_bm)
             tbr = pd.concat([tbr, stats_bm], axis=1)
+
+        using_default_groups = groups is None
+        if using_default_groups:
+            # Derive probability rows from the computed statistics before
+            # validating order, without mutating the shared default layout.
+            sr_prefix = "Prob. Sharpe Ratio > "
+            groups = {
+                section: [m for m in metrics if not m.startswith(sr_prefix)]
+                for section, metrics in DEFAULT_PNL_METRIC_GROUPS.items()
+            }
+            robustness = groups["Robustness"]
+            sr_position = robustness.index("Sharpe Stability Ratio") + 1
+            robustness[sr_position:sr_position] = [
+                m for m in tbr.index if m.startswith(sr_prefix)
+            ]
+        order = order or {}
+
+        resolved = {}
+        for section, metrics in groups.items():
+            if section in order:
+                if set(order[section]) != set(metrics):
+                    raise ValueError(
+                        f"order[{section!r}] must contain exactly {metrics}"
+                    )
+                resolved[section] = order[section]
+            else:
+                resolved[section] = metrics
 
         recovery_row_label = "Max Draw Recovery (months)"
 
