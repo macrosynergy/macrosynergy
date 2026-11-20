@@ -546,9 +546,9 @@ class ReturnClusterer(BaseEstimator, TransformerMixin):
         cluster_map: Optional[Dict[str, List[str]]] = None,
         linkage: str = "average",
         min_overlap: int = 36,
-        relative_returns: bool = True,
+        relative_returns: bool = False,
     ) -> None:
-        """
+        r"""
         Transformer that appends a categorical column holding the group of each
         cross-section. Groups are either given or learnt by clustering the
         cross-sections on the correlations of their returns.
@@ -571,7 +571,7 @@ class ReturnClusterer(BaseEstimator, TransformerMixin):
             Minimum number of dates two cross-sections must share for the correlation
             of their returns to be estimated. Pairs with less overlap are treated as
             uncorrelated.
-        relative_returns : bool, default=True
+        relative_returns : bool, default=False
             Whether to cluster on returns relative to the cross-sectional mean of
             each date, rather than raw returns.
 
@@ -640,6 +640,7 @@ class ReturnClusterer(BaseEstimator, TransformerMixin):
                 for cid in group_cids
             }
         else:
+            self._check_y(X, y)
             self.clusters_, self.cid_to_group_ = self._cluster_groups(X, y, cids)
 
         self.categories_ = sorted(set(self.cid_to_group_.values()))
@@ -662,6 +663,11 @@ class ReturnClusterer(BaseEstimator, TransformerMixin):
         """
         check_is_fitted(self, "cid_to_group_")
         self._check_X(X)
+        if not np.array_equal(X.columns, self.feature_names_in_):
+            raise ValueError(
+                "The columns of the input feature matrix must match those seen in "
+                f"fit: {list(self.feature_names_in_)}."
+            )
 
         X = X.copy()
         cids = X.index.get_level_values(0)
@@ -737,21 +743,25 @@ class ReturnClusterer(BaseEstimator, TransformerMixin):
 
         for arg, val, ok_type in [
             ("col_name", self.col_name, str),
-            ("n_clusters", self.n_clusters, (int, type(None))),
+            ("n_clusters", self.n_clusters, (int, np.integer, type(None))),
             ("cluster_map", self.cluster_map, (dict, type(None))),
             ("linkage", self.linkage, str),
-            ("min_overlap", self.min_overlap, int),
+            ("min_overlap", self.min_overlap, (int, np.integer)),
             ("relative_returns", self.relative_returns, (bool, np.bool_)),
         ]:
             if not isinstance(val, ok_type):
                 raise TypeError(f"{arg} must be of type {ok_type}")
 
+        if self.n_clusters is not None and self.n_clusters < 1:
+            raise ValueError(f"n_clusters must be at least 1, got {self.n_clusters}.")
+        if self.min_overlap < 2:
+            raise ValueError(f"min_overlap must be at least 2, got {self.min_overlap}.")
+
         if self.cluster_map is not None:
             for group, group_cids in self.cluster_map.items():
                 if not isinstance(group, str):
                     raise TypeError(
-                        f"The cross-sections of group {group} in cluster_map must "
-                        f"be strings."
+                        f"The group names in cluster_map must be strings, got {group!r}."
                     )
                 if not pd.api.types.is_list_like(group_cids):
                     raise TypeError(
@@ -778,6 +788,17 @@ class ReturnClusterer(BaseEstimator, TransformerMixin):
                 f"The input feature matrix already has a column named "
                 f"{self.col_name!r}. Choose a different col_name."
             )
+
+    def _check_y(self, X, y):
+        if y is None:
+            raise ValueError("y must be provided when cluster_map is None.")
+        if np.shape(y) not in [(len(X),), (len(X), 1)]:
+            raise ValueError(
+                "y must be a single target with one value per row of X, got shape "
+                f"{np.shape(y)} for {len(X)} rows."
+            )
+        if not np.issubdtype(np.asarray(y).dtype, np.number):
+            raise ValueError("y must be numeric.")
 
 
 # TODO: dont duplicate code

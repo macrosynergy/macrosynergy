@@ -51,7 +51,7 @@ class GlobalLocalRegression(BaseEstimator, RegressorMixin):
         Minimum number of dates two cross-sections must share for the correlation of
         their returns to be estimated when groups is "cluster". Pairs with less
         overlap are treated as uncorrelated. Default is 36.
-    relative_returns : bool, default=False
+    cluster_on_relative_returns : bool, default=False
         Whether to cluster on returns relative to the cross-sectional mean of each
         date, rather than raw returns, when groups is "cluster". Default is False.
 
