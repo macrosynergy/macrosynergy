@@ -512,8 +512,16 @@ class BasePanelLearner(ABC):
             optim_score = np.ubyte(0) # For memory efficiency
             optim_params = {}
             if store_additional_data is not None:
+                def get_additional_attr(estimator, key):
+                    if isinstance(estimator, Pipeline) and "__" in key:
+                        step, attr = key.split("__", 1)
+                        estimator = estimator.named_steps[step]
+                        return getattr(estimator, attr, None)
+
+                    return getattr(estimator, key, None)
+
                 optim_additional_data = {
-                    attr: getattr(optim_model, attr, None)
+                    attr: get_additional_attr(optim_model, attr)
                     for attr in store_additional_data
                 }
             else:

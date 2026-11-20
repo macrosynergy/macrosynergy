@@ -4,12 +4,40 @@ import pandas as pd
 from sklearn.base import BaseEstimator, RegressorMixin, clone 
 from sklearn.model_selection import GridSearchCV
 from sklearn.metrics import r2_score, make_scorer, check_scoring
-from sklearn.utils.validation import check_X_y, check_array, check_is_fitted
+from sklearn.pipeline import Pipeline
+from sklearn.utils.validation import check_is_fitted
 from sklearn.model_selection import BaseCrossValidator
 
 from macrosynergy.learning import ExpandingKFoldPanelSplit
 
 import numbers
+
+
+def _get_model_attr(model, attr, features):
+    """
+    Return the attribute `attr` of a fitted model, with one value per feature
+    in `features`. For a pipeline, the attribute is taken from the final step
+    and features dropped by earlier steps are assigned zero. Returns None if
+    the attribute is unavailable or cannot be mapped back to `features`.
+    """
+    kept = features
+    if isinstance(model, Pipeline):
+        if len(model) > 1:
+            try:
+                kept = list(model[-2].get_feature_names_out())
+            except AttributeError:
+                return None
+        model = model[-1]
+
+    values = getattr(model, attr, None)
+    if values is None or not set(kept).issubset(features):
+        return None
+
+    aligned = np.zeros(np.shape(values)[:-1] + (len(features),))
+    aligned[..., [features.index(feature) for feature in kept]] = values
+
+    return aligned
+
 
 class ModelAveragingRegressor(BaseEstimator, RegressorMixin):
     """
@@ -59,7 +87,7 @@ class ModelAveragingRegressor(BaseEstimator, RegressorMixin):
     detrimental trading signals, simply by flickering between similar models across time 
     periods, even if those models have very similar out-of-sample performance. The dynamics
     caused by this model selection overfitting impacts the stability of the trading signal,
-    not to mention transaction costs. 
+    not to mention transaction costs.
     """
     def __init__(
         self,
@@ -126,7 +154,8 @@ class ModelAveragingRegressor(BaseEstimator, RegressorMixin):
             self.multi_output_ = False
             self.targets_ = None
 
-        # TODO: feature importances should be the weighted average of the feature importances of each model, if available. 
+        # Coefficients and feature importances are weighted averages over the models
+        self._set_feature_importances(X)
 
         return self
     
@@ -216,7 +245,61 @@ class ModelAveragingRegressor(BaseEstimator, RegressorMixin):
             adjusted_weights = weights
 
         return dict(zip(self.model_names_, adjusted_weights))
-    
+
+    def _set_feature_importances(self, X):
+        """
+        Set coef_ or feature_importances_ as the weighted average over the models
+        with non-zero weight.
+
+        - All models have coef_: set coef_.
+        - All models have feature_importances_: set feature_importances_.
+        - Every model has one of the two: set feature_importances_, using the
+          absolute values of either attribute, normalized to sum to one per model.
+        - Otherwise: set neither.
+        """
+        # Remove values from a previous fit
+        for attr in ["coef_", "feature_importances_"]:
+            self.__dict__.pop(attr, None)
+
+        if isinstance(X, pd.DataFrame):
+            features = X.columns.tolist()
+        else:
+            features = [f"x{i}" for i in range(X.shape[1])]
+
+        active = [name for name in self.model_names_ if self.weights_[name] > 0]
+        models = [self.best_estimators_[name] for name in active]
+        weights = [self.weights_[name] for name in active]
+
+        if not models:
+            return
+
+        coefs = [
+            _get_model_attr(model, "coef_", features)
+            for model in models
+        ]
+        fis = [
+            _get_model_attr(model, "feature_importances_", features)
+            for model in models
+        ]
+
+        has_coef = np.array([coef is not None for coef in coefs])
+        has_fi = np.array([fi is not None for fi in fis])
+
+        if has_coef.all():
+            self.coef_ = np.average(coefs, axis=0, weights=weights)
+        elif has_fi.all():
+            self.feature_importances_ = np.average(fis, axis=0, weights=weights)
+        elif np.logical_or(has_coef, has_fi).all():
+            importances = [
+                np.abs(fi if coef is None else coef)
+                for coef, fi in zip(coefs, fis)
+            ]
+            self.feature_importances_ = np.average(
+                [importance / importance.sum() for importance in importances],
+                axis=0,
+                weights=weights,
+            )
+
     def _check_init_params(
         self,
         estimators,
@@ -256,8 +339,9 @@ class ModelAveragingRegressor(BaseEstimator, RegressorMixin):
                     "hyperparameters for GridSearchCV. Got {} instead.".format(type(param_grid))
                 )
             # check param_grid keys are valid for the estimator
-            for param in param_grid.keys():
-                if not hasattr(estimator, param):
+            valid_params = estimator.get_params(deep=True)
+            for param in param_grid:
+                if param not in valid_params:
                     raise ValueError(
                         "The hyperparameter '{}' is not valid for the estimator '{}'. "
                         "Check the estimator's documentation.".format(param, name)
