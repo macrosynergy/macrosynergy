@@ -126,6 +126,27 @@ def test_start_date_retains_underlying_meaning():
     assert_signals(dynamic.preds, ordinary.preds)
 
 
+@pytest.mark.parametrize("options,expected", [({}, 36), ({"min_periods": 6}, 6)])
+def test_min_periods_default_and_override_reach_child(options, expected):
+    df, _ = make_panel()
+    optimizer = DynamicSignalOptimizer(df, ["F1", "Y"], freq="D")
+    with patch.object(SignalOptimizer, "calculate_predictions") as predict:
+        optimizer.calculate_predictions(
+            "signal", models={"lr": LinearRegression()}, show_tqdm=False, **options
+        )
+    assert predict.call_args.kwargs["min_periods"] == expected
+
+
+@pytest.mark.parametrize("value", [None, 0])
+def test_invalid_min_periods_fails_before_workers_start(value):
+    df, _ = make_panel()
+    optimizer = DynamicSignalOptimizer(df, ["F1", "Y"], freq="D")
+    with patch(f"{MODULE}._fit_vintage") as fit:
+        with pytest.raises(ValidationError):
+            calculate(optimizer, min_periods=value)
+        fit.assert_not_called()
+
+
 @pytest.mark.parametrize("value", [0, -2, True, 1.5])
 def test_invalid_worker_counts_fail_before_fitting(value):
     df, _ = make_panel()

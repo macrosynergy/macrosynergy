@@ -310,13 +310,16 @@ class DynamicSignalOptimizer:
             )
         if self.config.regimes is not None and "start_date" in kwargs:
             raise TypeError("start_date is derived from each regime; remove it.")
-        execution = _ExecutionConfig(
-            n_jobs_vintages=n_jobs_vintages,
-            show_tqdm=show_tqdm,
-            min_periods=kwargs.get("min_periods", 36),
-        )
+        execution_options = {
+            "n_jobs_vintages": n_jobs_vintages,
+            "show_tqdm": show_tqdm,
+        }
+        if "min_periods" in kwargs:
+            execution_options["min_periods"] = kwargs["min_periods"]
+        execution = _ExecutionConfig(**execution_options)
+        run_options = {**kwargs, "min_periods": execution.min_periods}
         results = self._fit_periods(
-            name=name, models=models, run_options=kwargs, execution=execution
+            name=name, models=models, run_options=run_options, execution=execution
         )
         tables = self._collect_results(results, name)
         self._store_results(
@@ -565,7 +568,6 @@ class DynamicSignalOptimizer:
             ) as parallel, tqdm(
                 total=len(regimes),
                 desc="Vintages",
-                unit="vintage",
                 disable=not execution.show_tqdm,
             ) as progress:
                 results = parallel(
@@ -857,7 +859,7 @@ def _fit_vintage(
         if not result.targets:
             result.skip_reason = "no_targets"
             return result
-        if result.history_months < run_options.get("min_periods", 36):
+        if result.history_months < run_options["min_periods"]:
             result.skip_reason = "insufficient_history"
             return result
         cutoff = min(end, pd.Timestamp(regime.end_return))
