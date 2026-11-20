@@ -19,12 +19,20 @@ from .priors import (
 from .quadrature import QuadraturePosterior
 from .posterior import Posterior
 from .diagnostics import prior_predictive_sample, posterior_predictive_check
+from .variants import BayesianPnLVariants
+from .funnel import MetricFunnel, simulate_metric_funnel, bridge_metric_funnel
+from .mixture import BayesianPnLMixture
 
 __all__ = [
     "Posterior",
     "prior_predictive_sample",
     "posterior_predictive_check",
     "BayesianPnL",
+    "BayesianPnLVariants",
+    "BayesianPnLMixture",
+    "MetricFunnel",
+    "simulate_metric_funnel",
+    "bridge_metric_funnel",
     "QuadraturePosterior",
     "GridPosterior",
     "GridSpec",

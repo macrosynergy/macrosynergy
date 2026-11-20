@@ -11,7 +11,11 @@ Daily PnL is cut into non-overlapping three-year blocks. A normal likelihood
 over their Sharpe ratios updates a configurable prior on expected performance
 and its dispersion. The parameter posterior differs from the next-period
 predictive distribution: the latter also includes future performance variation.
-Related constructions are fitted separately, not pooled as independent history.
+Related constructions are also fitted jointly, retaining one vector per period.
+Their correlation is an explicit sensitivity assumption, not inferred precisely
+from seven observations. Research-choice weights select one implementation;
+they are not portfolio allocations. A fourth chart projects arithmetic PnL at
+three-year endpoints using a separate joint annual-return fit.
 """
 
 import argparse
@@ -63,14 +67,39 @@ def main():
     parser.add_argument(
         "--method", choices=("auto", "quadrature", "grid"), default="auto"
     )
+    parser.add_argument(
+        "--variant-rho",
+        type=float,
+        default=0.8,
+        help="Assumed common correlation of period outcomes; not an estimate.",
+    )
+    parser.add_argument(
+        "--paths", type=int, help="Paths; default 20000 (2000 for daily resolution)."
+    )
+    parser.add_argument("--future-periods", type=int, default=5)
+    parser.add_argument(
+        "--funnel-frequency", choices=("period", "monthly", "daily"), default="monthly"
+    )
+    parser.add_argument(
+        "--funnel-vol",
+        type=float,
+        default=10.0,
+        help="Explicit annual PnL volatility for the bridge approximation, in input units.",
+    )
     args = parser.parse_args()
+    if args.paths is None:
+        args.paths = 2000 if args.funnel_frequency == "daily" else 20000
+    if not 0 <= args.variant_rho < 1:
+        parser.error("--variant-rho must be at least zero and below one.")
+    if args.paths < 1 or args.future_periods < 1:
+        parser.error("--paths and --future-periods must be positive.")
 
     import matplotlib
 
     if args.no_show:
         matplotlib.use("Agg")
     import matplotlib.pyplot as plt
-    from macrosynergy.pnl import BayesianPnL
+    from macrosynergy.pnl import BayesianPnL, BayesianPnLVariants, BayesianPnLMixture
     from macrosynergy.pnl.bayes_pnl import (
         IndependentPrior,
         NormalPrior,
@@ -82,6 +111,8 @@ def main():
         plot_bayesian_posterior,
         plot_bayesian_predictive,
         plot_bayesian_prior_posterior,
+        plot_bayesian_funnel,
+        plot_bayesian_variants,
     )
 
     pnl = synthetic_pnls()
@@ -127,6 +158,83 @@ def main():
         "These comparisons do not estimate selection-adjusted or independent family evidence."
     )
 
+    # Research choices fixed before looking at performance. The likelihood does
+    # not use these weights: it uses each aligned period vector once.
+    research_weights = {"baseline": 0.5, "equal_weight": 0.25, "concentrated": 0.25}
+    separate_mixture = BayesianPnLMixture(fits, weights=research_weights)
+    print("\nDeclared mixture of separate fits (no cross-strategy learning):")
+    print(
+        "P(no long-term value) = {:.1%}; P(negative next period) = {:.1%}.".format(
+            separate_mixture.prob_mean_below(), separate_mixture.predictive_cdf(0)[0]
+        )
+    )
+
+    def period_correlation(rho):
+        return (1 - rho) * np.eye(len(pnl.columns)) + rho * np.ones(
+            (len(pnl.columns), len(pnl.columns))
+        )
+
+    joint = BayesianPnLVariants.from_pnl(
+        pnl,
+        correlation=period_correlation(args.variant_rho),
+        weights=research_weights,
+        prior=prior,
+        tau_scale=0.5,
+    )
+    print("\nJoint three-year Sharpe model: one market-period vector per row.")
+    print(
+        "{} shared periods, {} distinct implementations.".format(
+            joint.n_periods, joint.n_variants
+        )
+    )
+    print("Declared research-choice weights: {}".format(research_weights))
+    print("Assumed shared period correlation: {:.2f}.".format(args.variant_rho))
+    print(
+        "'draw' selects one implementation; 'family' averages metrics, not invested PnLs."
+    )
+    print(joint.summary().to_string())
+    correlation_sensitivity = []
+    for rho in sorted(set([0.5, args.variant_rho, 0.95])):
+        changed = (
+            joint
+            if rho == args.variant_rho
+            else BayesianPnLVariants.from_pnl(
+                pnl,
+                correlation=period_correlation(rho),
+                weights=research_weights,
+                prior=prior,
+                tau_scale=0.5,
+            )
+        )
+        correlation_sensitivity.append(
+            dict(
+                assumed_correlation=rho,
+                prob_no_long_term_value=changed.prob_mean_below(),
+                prob_negative_next_period=changed.predictive_cdf(0)[0],
+            )
+        )
+    print("\nSensitivity to assumed period correlation (covariance is not known):")
+    print(pd.DataFrame(correlation_sensitivity).round(3).to_string(index=False))
+
+    # Returns have their own fitted likelihood. No conversion from a sampled
+    # Sharpe into PnL, or daily interpolation of a three-year observation.
+    joint_returns = BayesianPnLVariants.from_pnl(
+        pnl,
+        metric="ann_ret",
+        correlation=period_correlation(args.variant_rho),
+        weights=research_weights,
+        prior=IndependentPrior(
+            NormalPrior(10 * args.prior_mean, 10 * args.prior_sd), SDPrior(10, 15)
+        ),
+        tau_scale=5.0,
+    )
+    print(
+        "\nThe funnel selects one implementation per full simulated path. "
+        "This benchmark assumes conditionally independent future three-year "
+        "blocks. Monthly/daily curves are an explicitly assumed Brownian bridge, "
+        "preserving those forecasts, not estimated daily dynamics."
+    )
+
     if args.checks:
         print("\nPrior-predictive 5%, 50%, 95% period Sharpe:")
         print(
@@ -167,6 +275,19 @@ def main():
         "posterior": plot_bayesian_posterior(baseline),
         "predictive": plot_bayesian_predictive(baseline).figure,
         "prior_posterior": plot_bayesian_prior_posterior(baseline),
+        "funnel": plot_bayesian_funnel(
+            joint_returns,
+            n_periods=args.future_periods,
+            n_paths=args.paths,
+            rng=7,
+            title="A plausible implementation: cumulative PnL funnel",
+            frequency=args.funnel_frequency,
+            annual_volatility=args.funnel_vol,
+            baseline_name="baseline",
+        ),
+        "variants": plot_bayesian_variants(
+            joint, baseline=baseline, baseline_name="baseline"
+        ),
     }
     if args.output_dir is not None:
         args.output_dir.mkdir(parents=True, exist_ok=True)

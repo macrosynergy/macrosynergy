@@ -22,7 +22,9 @@ from .bayes_pnl import (
     plot_bayesian_posterior,
     plot_bayesian_predictive,
     plot_bayesian_prior_posterior,
+    plot_bayesian_funnel,
 )
+from .bayes_pnl_variants import plot_bayesian_variants
 
 __all__ = [
     "view_correlation",
@@ -49,4 +51,6 @@ __all__ = [
     "plot_bayesian_posterior",
     "plot_bayesian_predictive",
     "plot_bayesian_prior_posterior",
+    "plot_bayesian_funnel",
+    "plot_bayesian_variants",
 ]

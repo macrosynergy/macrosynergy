@@ -9,6 +9,7 @@ import numpy as np
 import pandas as pd
 from matplotlib.colors import LinearSegmentedColormap
 from matplotlib.patches import Rectangle
+from matplotlib.ticker import PercentFormatter
 
 from macrosynergy.pnl.bayes_pnl.grid import _cell_widths
 
@@ -648,4 +649,415 @@ def plot_bayesian_prior_posterior(post, title: Optional[str] = None, figsize=(12
             )
         fig.tight_layout()
     fig.diagnostics = pd.DataFrame(rows).T
+    return fig
+
+
+def plot_bayesian_funnel(
+    fit,
+    n_periods: int = 5,
+    n_paths: int = 10000,
+    levels=(0.5, 0.8, 0.95),
+    rng=None,
+    threshold: float = 0.0,
+    quantity: str = "auto",
+    title: Optional[str] = None,
+    figsize=(10.8, 8.0),
+    frequency: str = "period",
+    annual_volatility: Optional[float] = None,
+    baseline_name: Optional[str] = None,
+):
+    """Plot future cumulative arithmetic PnL or running-average period metrics.
+
+    The input is a fitted BayesianPnL, a compatible posterior, or an already
+    simulated MetricFunnel. With quantity="auto", annual-return fits show
+    cumulative arithmetic PnL and other metrics show their running average.
+    Cumulative PnL requires an annual-return model; each simulated block return
+    is multiplied by its duration in years, then summed. This is arithmetic
+    PnL under the annualisation convention, not a compounded wealth forecast.
+    For a three-year Sharpe fit, predictions appear at
+    3, 6, 9, ... years and describe the arithmetic average of annualised period
+    Sharpes. They are neither cumulative PnL nor the Sharpe of concatenated
+    returns. With frequency='monthly' or 'daily', explicit annual_volatility
+    supplies an assumed Gaussian Brownian bridge between those forecasts,
+    preserving their original endpoints. This is a scenario interpolation,
+    not inference of fine-scale dynamics. Sharpe fits then convert to PnL under
+    the declared constant-volatility approximation. Annualised Sharpe itself
+    is not multiplied by sqrt(h); the holding-period return-to-risk signal is.
+
+    Coloured columns (or interpolated bands) show pointwise predictive intervals, not a
+    simultaneous path envelope. When conditional expected trajectories are
+    available, the hatched band separately shows their 90% posterior interval.
+    With iid blocks, expected cumulative PnL is long-term expectation times years.
+    The lower panel reports the probability that the chosen
+    realised quantity is at or below threshold.
+
+    Intervals and probabilities use Monte Carlo paths, with a fixed parameter
+    draw per path. Pass rng for reproducibility, or supply a MetricFunnel to
+    reuse simulated paths. With a precomputed funnel, n_periods, n_paths and
+    rng are unused. Returns a Matplotlib Figure without calling show().
+    """
+    from macrosynergy.pnl.bayes_pnl.funnel import (
+        MetricFunnel,
+        simulate_metric_funnel,
+        bridge_metric_funnel,
+    )
+
+    probabilities = np.atleast_1d(np.asarray(levels, dtype=float))
+    if (
+        probabilities.ndim != 1
+        or probabilities.size == 0
+        or not np.isfinite(probabilities).all()
+        or ((probabilities <= 0) | (probabilities >= 1)).any()
+    ):
+        raise ValueError(
+            "levels must be a nonempty vector strictly between zero and one."
+        )
+    if not np.isscalar(threshold) or not np.isfinite(threshold):
+        raise ValueError("threshold must be a finite scalar.")
+    if quantity not in ("auto", "running_mean", "cumulative_return"):
+        raise ValueError(
+            "quantity must be 'auto', 'running_mean' or 'cumulative_return'."
+        )
+    if frequency not in ("period", "monthly", "daily"):
+        raise ValueError("frequency must be 'period', 'monthly' or 'daily'.")
+    if frequency != "period" and annual_volatility is None:
+        raise ValueError(
+            "Monthly/daily interpolation requires explicit annual_volatility."
+        )
+    generator = np.random.default_rng(rng)
+    funnel = (
+        fit
+        if isinstance(fit, MetricFunnel)
+        else simulate_metric_funnel(
+            fit, n_paths=n_paths, n_periods=n_periods, rng=generator
+        )
+    )
+    if frequency != "period":
+        if funnel.metadata.get("approximation") == "Gaussian Brownian bridge":
+            if funnel.metadata.get("frequency") != frequency:
+                raise ValueError(
+                    "Resample from the original period forecast, not an existing bridge."
+                )
+        else:
+            funnel = bridge_metric_funnel(
+                funnel, annual_volatility, frequency, rng=generator
+            )
+    interpolated = funnel.metadata.get("approximation") == "Gaussian Brownian bridge"
+    construction = funnel.metadata.get("construction") or {}
+    years = np.asarray(funnel.years, dtype=float)
+    period = float(funnel.period_years)
+    quantity = (
+        ("cumulative_return" if funnel.metric == "ann_ret" else "running_mean")
+        if quantity == "auto"
+        else quantity
+    )
+    cumulative = quantity == "cumulative_return"
+    if cumulative and funnel.metric != "ann_ret":
+        raise ValueError("Cumulative arithmetic PnL requires metric='ann_ret'.")
+    outcomes = funnel.cumulative_return if cumulative else funnel.running_mean
+    expected_draws = funnel.expected_path_draws(quantity)
+    expected_path = (
+        funnel.expected_cumulative_return
+        if cumulative
+        else funnel.expected_running_mean
+    )
+    expected = float(np.mean(funnel.parameter_means))
+    constant_expectation = (
+        funnel.expected_period_metrics is not None
+        and np.array_equal(
+            funnel.expected_period_metrics,
+            np.broadcast_to(funnel.parameter_means[:, None], outcomes.shape),
+        )
+    )
+    # Use an exact posterior mean only when the supplied dynamics actually have
+    # constant conditional expectations. Daily/state models may have a varying
+    # expected trajectory even when their long-term mean is known.
+    if constant_expectation and not isinstance(fit, MetricFunnel):
+        from macrosynergy.pnl.bayes_pnl.posterior import Posterior
+
+        posterior = getattr(fit, "posterior", fit)
+        if isinstance(posterior, Posterior):
+            expected = float(posterior.expectation("mean"))
+        elif callable(getattr(fit, "expectation", None)):
+            expected = float(fit.expectation())
+        expected *= float(funnel.metadata.get("source_metric_conversion", 1.0))
+        expected_path = (
+            years * expected if cumulative else np.full(len(years), expected)
+        )
+    expected_bounds = (
+        np.quantile(expected_draws, [0.05, 0.95], axis=0)
+        if expected_draws is not None
+        else None
+    )
+    risk = np.mean(outcomes <= threshold, axis=0)
+    long_term_risk = float(np.mean(funnel.parameter_means <= threshold))
+    unit = "" if funnel.metric == "sharpe" else " (PnL units)"
+    metric = _NAMES.get(funnel.metric, (funnel.metric, ""))[0]
+    colors = [
+        DENSITY_CMAP(value)
+        for value in np.linspace(0.22, 0.63, len(set(probabilities)))
+    ]
+    plot_years = np.r_[0.0, years] if interpolated and cumulative else years
+
+    def at_origin(values):
+        return np.r_[0.0, values] if interpolated and cumulative else values
+
+    with plt.rc_context(_RC):
+        fig, (axis, risk_axis) = plt.subplots(
+            2,
+            1,
+            sharex=True,
+            figsize=figsize,
+            gridspec_kw={"height_ratios": (3.4, 1.25)},
+        )
+        fig.subplots_adjust(left=0.10, right=0.97, top=0.82, bottom=0.19, hspace=0.16)
+        _style_ax(axis)
+        _style_ax(risk_axis)
+        width = 0.60 * period
+        if interpolated and expected_bounds is not None:
+            axis.fill_between(
+                plot_years,
+                *[at_origin(row) for row in expected_bounds],
+                facecolor="none",
+                edgecolor=INK_3,
+                alpha=0.55,
+                hatch="///",
+                linewidth=0.5,
+                label="90% uncertainty in expected path",
+                zorder=3,
+            )
+        elif expected_bounds is not None and (cumulative or not constant_expectation):
+            for index, (year, low, high) in enumerate(zip(years, *expected_bounds)):
+                axis.add_patch(
+                    Rectangle(
+                        (year - 0.43 * period, low),
+                        0.86 * period,
+                        high - low,
+                        facecolor=GRID,
+                        edgecolor=INK_3,
+                        alpha=0.55,
+                        hatch="///",
+                        linewidth=0.6,
+                        label=(
+                            "90% uncertainty in expected path" if index == 0 else None
+                        ),
+                        zorder=1,
+                    )
+                )
+        elif expected_bounds is not None:
+            axis.axhspan(
+                expected_bounds[0, 0],
+                expected_bounds[1, 0],
+                facecolor=GRID,
+                edgecolor=INK_3,
+                alpha=0.45,
+                hatch="///",
+                linewidth=0,
+                label="90% uncertainty in long-term expectation",
+                zorder=0.5,
+            )
+        for level, color in zip(sorted(set(probabilities), reverse=True), colors):
+            tail = (1 - level) / 2
+            lower, upper = np.quantile(outcomes, [tail, 1 - tail], axis=0)
+            if interpolated:
+                axis.fill_between(
+                    plot_years,
+                    at_origin(lower),
+                    at_origin(upper),
+                    color=color,
+                    lw=0,
+                    label="{:.0%} predictive interval".format(level),
+                    zorder=2,
+                )
+                continue
+            for index, (year, low, high) in enumerate(zip(years, lower, upper)):
+                axis.add_patch(
+                    Rectangle(
+                        (year - width / 2, low),
+                        width,
+                        high - low,
+                        facecolor=color,
+                        edgecolor="none",
+                        label=(
+                            "{:.0%} predictive interval".format(level)
+                            if index == 0
+                            else None
+                        ),
+                        zorder=2,
+                    )
+                )
+        if cumulative or not constant_expectation:
+            axis.plot(
+                plot_years if interpolated else years,
+                at_origin(expected_path) if interpolated else expected_path,
+                "-" if interpolated else "o",
+                color=ACCENT,
+                ms=5,
+                zorder=4,
+                label=(
+                    "Expected cumulative PnL"
+                    if cumulative
+                    else "Expected average performance"
+                ),
+            )
+        else:
+            axis.axhline(
+                expected,
+                color=ACCENT,
+                lw=1.8,
+                label="Posterior expected value {:.2f}".format(expected),
+                zorder=4,
+            )
+        axis.axhline(threshold, color=LOSS, lw=0.9, ls="--", zorder=3)
+        axis.set_ylabel(
+            "Cumulative arithmetic PnL (input units)"
+            if cumulative
+            else "Running average of {}-year {}{}".format(
+                "{:g}".format(period), _PLURAL.get(metric, metric + "s"), unit
+            )
+        )
+        axis.autoscale_view(scalex=False)
+        axis.margins(y=0.10)
+        axis.tick_params(axis="x", bottom=False)
+
+        if interpolated:
+            risk_axis.plot(years, risk, color=LOSS, lw=1.8, zorder=3)
+            risk_axis.fill_between(years, 0, risk, color=LOSS, alpha=0.18, zorder=2)
+        else:
+            risk_axis.bar(years, risk, width=width, color=LOSS, alpha=0.78, zorder=3)
+        if not cumulative or threshold == 0:
+            risk_axis.axhline(
+                long_term_risk,
+                color=INK_2,
+                lw=1.1,
+                ls="--",
+                label="P(long-term expectation ≤ {:g}) = {:.0%}".format(
+                    threshold, long_term_risk
+                ),
+            )
+        label_indices = (
+            np.linspace(0, len(years) - 1, min(5, len(years)), dtype=int)
+            if interpolated
+            else np.arange(len(years))
+        )
+        for index in label_indices:
+            year, probability = years[index], risk[index]
+            edge_label = interpolated and index in (0, len(years) - 1)
+            risk_axis.annotate(
+                "{:.0%}".format(probability),
+                (year, probability),
+                xytext=(
+                    (6 if index == 0 else -6) if edge_label else 0,
+                    4 if probability < 0.85 else -12,
+                ),
+                textcoords="offset points",
+                ha=("left" if index == 0 else "right") if edge_label else "center",
+                va="bottom",
+                fontsize=8.5,
+                color=INK_2,
+            )
+        risk_axis.set_ylim(0, 1)
+        risk_axis.set_yticks([0, 0.5, 1])
+        risk_axis.yaxis.set_major_formatter(PercentFormatter(1))
+        risk_axis.set_ylabel(
+            "P({}\n≤ {:g})".format(
+                "cumulative PnL" if cumulative else "running average", threshold
+            )
+        )
+        risk_axis.set_xlabel(
+            "Years ahead ({} approximation)".format(funnel.metadata["frequency"])
+            if interpolated
+            else "Years ahead (completed {}-year periods)".format("{:g}".format(period))
+        )
+        risk_axis.set_xticks(np.linspace(0, years[-1], 6) if interpolated else years)
+        risk_axis.set_xlim(
+            0 if interpolated else years[0] - 0.65 * period,
+            years[-1] if interpolated else years[-1] + 0.65 * period,
+        )
+        if not cumulative or threshold == 0:
+            risk_axis.legend(loc="lower center", bbox_to_anchor=(0.5, 1.01), fontsize=8)
+        handles, labels = axis.get_legend_handles_labels()
+        fig.legend(
+            handles,
+            labels,
+            loc="upper center",
+            bbox_to_anchor=(0.535, 0.915),
+            ncol=3,
+            fontsize=8,
+        )
+        count = construction.get("n_distinct_implementations")
+        if count is not None:
+            description = "{} fitted implementation{}".format(
+                count, "s" if count != 1 else ""
+            )
+            q = construction.get("research_weights", {})
+            if baseline_name is not None:
+                if baseline_name not in q:
+                    raise ValueError(
+                        "baseline_name must identify a declared implementation."
+                    )
+                description += " (baseline + {} alternatives)".format(count - 1)
+            weighted = construction.get("n_positive_weight_implementations", count)
+            if weighted != count:
+                description += "; {} with positive research weight".format(weighted)
+            observed = construction.get("n_shared_periods")
+            if observed is not None:
+                source_duration = funnel.metadata.get("source_period_years", period)
+                description += " · {} shared {:g}-year observations".format(
+                    observed, source_duration
+                )
+            if q:
+                description += "\nResearch weights: " + ", ".join(
+                    "{} {:.0%}".format(name, value) for name, value in q.items()
+                )
+            fig.text(0.10, 0.85, description, va="top", fontsize=8, color=INK_2)
+        _title(
+            fig,
+            title
+            or (
+                "Future cumulative PnL: predictive funnel"
+                if cumulative
+                else "Future average performance: predictive funnel"
+            ),
+            (
+                "Expected path, uncertainty about that expectation, and variation in realised outcomes"
+                if cumulative
+                else "Future performance variation and uncertainty about expected performance"
+            ),
+            x=0.10,
+            y=0.985,
+        )
+        interpretation = (
+            "Nominal block-end PnL = block duration × cumulative sum of simulated annual returns; no compounding."
+            if cumulative
+            else (
+                "Mean of annualised block Sharpes; neither the Sharpe of concatenated returns nor cumulative PnL."
+                if funnel.metric == "sharpe"
+                else "Arithmetic average of future period metrics; not cumulative PnL."
+            )
+        )
+        if interpolated:
+            interpretation = "Arithmetic PnL; Gaussian Brownian-bridge approximation with assumed annual volatility {:g} input units.".format(
+                funnel.metadata["annual_volatility"]
+            )
+        fig.text(
+            0.10,
+            0.065,
+            interpretation
+            + (
+                "\nOriginal three-year endpoint forecasts are preserved; fine dynamics are assumed. Bands are pointwise, not pathwise limits."
+                if interpolated
+                else "\nColumns mark block endpoints only; no daily-path coverage. Bands are pointwise, not simultaneous limits."
+            )
+            + (
+                "\nFuture blocks are conditionally independent; persistent regimes are not modelled."
+                if funnel.conditional_observations == "independent successive periods"
+                else "\nFuture-block dependence follows the supplied model's path sampler."
+            ),
+            ha="left",
+            va="top",
+            fontsize=8,
+            color=INK_2,
+        )
+        fig.funnel_metadata = dict(funnel.metadata)
     return fig
