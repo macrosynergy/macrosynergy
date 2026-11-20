@@ -109,6 +109,9 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
     patience : int, optional
         Number of epochs to wait for improvement before early stopping. If None, 
         early stopping is disabled. Default is 1000.
+    min_delta : float, optional
+        Minimum change in the validation loss to qualify as an improvement for early stopping.
+        Default is 0.
     train_splitter : float or BaseCrossValidator, optional
         If a float, it is the fraction of samples used for training (remainder used for
         validation). If a BaseCrossValidator, it is used to split the data into training
@@ -273,6 +276,7 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         drop_last = False,
         epochs = 10000, # NOTE: when a scheduler is used, the epochs default is way too high unless the patience is high
         patience = 1000,
+        min_delta = 0.0,
         train_splitter = 0.7,
         x_scaler = StandardScaler(with_mean=False),
         y_scaler = StandardScaler(with_mean=False), 
@@ -307,6 +311,7 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
             drop_last = drop_last,
             epochs = epochs,
             patience = patience,
+            min_delta = min_delta,
             train_splitter = train_splitter,
             x_scaler = x_scaler,
             y_scaler = y_scaler,
@@ -341,6 +346,7 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         self.drop_last = drop_last
         self.epochs = epochs
         self.patience = patience
+        self.min_delta = min_delta
         self.train_splitter = train_splitter
         self.x_scaler = x_scaler
         self.y_scaler = y_scaler
@@ -524,6 +530,7 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
                         loss_func = self.loss_func,
                         reg_turnover = self.reg_turnover, 
                         patience = self.patience, 
+                        min_delta = self.min_delta,
                         verbose = self.verbose,
                     )
 
@@ -586,6 +593,7 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
                             loss_func = self.loss_func,
                             reg_turnover = self.reg_turnover,
                             patience = self.patience,
+                            min_delta = self.min_delta,
                             verbose = self.verbose,
                         )
 
@@ -666,6 +674,7 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
                             loss_func = self.loss_func,
                             reg_turnover = self.reg_turnover, 
                             patience = None, 
+                            min_delta = 0.0, # Due to no patience
                             verbose = self.verbose,
                         )
 
@@ -1009,6 +1018,7 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         loss_func,
         reg_turnover,
         patience,
+        min_delta,
         verbose,
     ):
         best_state = None
@@ -1052,7 +1062,7 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
                 early_stopping_trace["improvement_path"].append(best_score - valid_loss)
 
                 best_score_new, best_state, counter = self.update_es_stats(
-                    model, train_loss, valid_loss, best_score, best_state, counter, patience
+                    model, train_loss, valid_loss, best_score, best_state, counter, patience, min_delta,
                 )
                 early_stopping_trace["patience_counter_path"].append(counter)
 
@@ -1121,8 +1131,8 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
 
         return avg_loss    
     
-    def update_es_stats(self, model, train_loss, valid_loss, best_score, best_state, counter, patience):
-        if valid_loss < best_score:
+    def update_es_stats(self, model, train_loss, valid_loss, best_score, best_state, counter, patience, min_delta):
+        if valid_loss < best_score - min_delta:
             best_score = valid_loss
             best_state = deepcopy(model.state_dict())
             counter = 0
@@ -1270,6 +1280,7 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         drop_last,
         epochs,
         patience,
+        min_delta,
         train_splitter,
         x_scaler,
         y_scaler,
@@ -1474,6 +1485,12 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
                 raise TypeError("patience must be an integer.")
             if patience < 1:
                 raise ValueError("patience must be at least 1.")
+
+        # min_delta
+        if not isinstance(min_delta, numbers.Real):
+            raise TypeError("min_delta must be a real number.")
+        if min_delta < 0:
+            raise ValueError("min_delta must be non-negative.")
         
         # train_splitter
         if not isinstance(train_splitter, (numbers.Real, BaseCrossValidator)):
@@ -1649,6 +1666,7 @@ if __name__ == "__main__":
         drop_last=False,
         epochs = 100,
         patience = 10, 
+        min_delta = 1e-3,
         refit = False,
         train_splitter=RollingKFoldPanelSplit(n_splits=5),
         x_scaler = None,
@@ -1657,7 +1675,7 @@ if __name__ == "__main__":
         ##train_pct = 0.7,
         #x_scaler = StandardScaler(with_mean=False),
         #y_scaler = StandardScaler(with_mean=False),
-        #verbose = False, 
+        verbose = True, 
         random_state = 42,
         inverse_transform_preds = False,
         min_samples = 36,
