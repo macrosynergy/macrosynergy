@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 import pytest
 from scipy.optimize import approx_fprime
+from sklearn.base import clone
 from sklearn.linear_model import LinearRegression, Ridge
 
 from macrosynergy.learning import GlobalLocalRegression
@@ -469,6 +470,25 @@ class TestGlobalLocalRegression:
             model = GlobalLocalRegression(groups="cluster", n_clusters=10).fit(X, y)
 
         assert model.n_groups_ == 1
+
+    @pytest.mark.parametrize(
+        "first, second",
+        [
+            ({"groups": GROUPS}, {"groups": None}),
+            ({"groups": "cluster"}, {"groups": GROUPS}),
+            ({"shrink_to_global": True}, {"shrink_to_global": False}),
+        ],
+    )
+    def test_refit_matches_fresh_fit(self, panel, first, second):
+        X, y = panel
+        model = GlobalLocalRegression(**first).fit(X, y)
+
+        model.set_params(**second).fit(X, y)
+        fresh = clone(model).fit(X, y)
+
+        assert vars(model).keys() == vars(fresh).keys()
+        for cid in CIDS:
+            np.testing.assert_allclose(model.cid_coefs_[cid], fresh.cid_coefs_[cid])
 
     @pytest.mark.parametrize(
         "params, error",
