@@ -9,6 +9,11 @@ from macrosynergy.pnl.transaction_costs import TransactionCosts
 from macrosynergy.pnl.proxy_pnl import ProxyPnL
 from macrosynergy.pnl.sharpe_stability_ratio import sharpe_stability_ratio
 from macrosynergy.pnl.pnl_evaluation import evaluate_pnl
+from macrosynergy.pnl.bayes_pnl import (
+    BayesianPnL,
+    BayesianPnLVariants,
+    BayesianPnLMixture,
+)
 
 __all__ = [
     "NaivePnL",
@@ -22,4 +27,7 @@ __all__ = [
     "ProxyPnL",
     "sharpe_stability_ratio",
     "evaluate_pnl",
+    "BayesianPnL",
+    "BayesianPnLVariants",
+    "BayesianPnLMixture",
 ]
