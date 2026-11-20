@@ -32,10 +32,10 @@ _RegimeInput = Dict[_RegimeId, Dict[str, Any]]
 
 class DynamicSignalOptimizer:
     """
-    Sequential signal optimization over explicit constituent regimes.
+    Sequential signal optimization over constituent regimes.
 
-    Wraps a separate SignalOptimizer for each supplied regime, also called a
-    vintage. Features and cross-sections remain fixed.
+    Wraps a separate SignalOptimizer for each supplied regime. Features and
+    cross-sections remain fixed.
 
     Parameters
     ----------
@@ -44,15 +44,26 @@ class DynamicSignalOptimizer:
         `xcat`, `real_date` and `value`. Must contain all features.
         Candidate targets without records in a regime
         are reported and excluded from that run.
-    xcats : list of str
-        Feature categories followed by the `n_targets` candidate target
-        categories. Names must be unique and leave at least one feature.
+    features : list of str
+        Ordered feature categories used in every regime. Must contain at least
+        one category, with no duplicates or overlap with any target category.
+        Candidate targets are derived from `regimes`.
+    regimes : dict
+        Required, nonempty mapping from string or integer regime IDs to
+        dictionaries with `start`, `end`, `end_return` and `targets`. Dates
+        are ISO date strings or dates; `targets` is an ordered list of target
+        category names in `df`.
+        IDs are retained and regimes are processed by start date.
+        Output intervals must not overlap. An empty target list skips a regime.
+
+        `start` and `end` define the output interval, inclusive and exclusive
+        respectively, after rolling weekends back to the previous business day.
+        `end_return` caps input observations inclusively. The history check uses
+        target records through `end`, before this second cutoff. Global `start`
+        and `end` still restrict the available input history.
     cids : list of str, optional
         Cross-sections considered in every vintage. Default is None, which
         considers all cross-sections in `df`.
-    n_targets : int, optional
-        Number of candidate targets at the end of `xcats`, rather than the
-        number active in each vintage. Default is 1.
     start : str, optional
         Start date for considered data in ISO 8601 format. Default is None,
         which uses the earliest available date.
@@ -79,25 +90,14 @@ class DynamicSignalOptimizer:
         with any missing values; "X" or "y" drops rows with missing features
         or targets respectively. False keeps remaining missing values. Rows
         with all features missing are always dropped. Default is True.
-    regimes : dict, optional
-        Mapping from string or integer regime IDs to dictionaries with `start`,
-        `end`, `end_return` and `targets`. Dates are ISO date strings or dates;
-        `targets` is an ordered list drawn from the final `n_targets` entries
-        in `xcats`. IDs are retained and regimes are processed by start date.
-        Output intervals must not overlap. An empty target list skips a regime.
-
-        `start` and `end` define the output interval, inclusive and exclusive
-        respectively, after rolling weekends back to the previous business day.
-        `end_return` caps input observations inclusively. The history check uses
-        target records through `end`, before this second cutoff. Global `start`
-        and `end` still restrict the available input history.
-
-        Default is None, which runs one ordinary SignalOptimizer with all
-        candidates and no regime slicing, under regime ID 0. This supports
-        fixed-target baseline comparisons. An empty mapping is not accepted.
 
     Attributes
     ----------
+    features : list of str
+        Feature categories in their supplied order.
+    targets : list of str
+        Unique candidate targets, in order of first appearance across the
+        chronologically sorted regimes.
     optimizers : dict
         Process names mapped to dictionaries of fitted SignalOptimizer objects,
         keyed by the original regime IDs. Skipped regimes have no child entry.
@@ -117,6 +117,10 @@ class DynamicSignalOptimizer:
     values. It does not require that history length for each target separately.
     The threshold is `min_periods` from `calculate_predictions`, even when the
     analysis frequency is not monthly.
+
+    Each child receives `xcats=features + available_targets` and
+    `n_targets=len(available_targets)`. The target count can change between regimes;
+    callers do not supply a separate candidate list or target count.
 
     Both features and returns are then capped at the earlier of `end` and
     `end_return`. The child derives its learning dates after aggregation,
@@ -139,7 +143,7 @@ class DynamicSignalOptimizer:
 
     >>> from sklearn.linear_model import LinearRegression
     >>> optimizer = DynamicSignalOptimizer(
-    ...     df, xcats=["F1", "F2", "Y", "Z"], n_targets=2,
+    ...     df, features=["F1", "F2"],
     ...     regimes={
     ...         "Q1": {"start": "2018-12-31", "end": "2019-03-31",
     ...                "end_return": "2019-03-29", "targets": ["Y"]},
@@ -167,9 +171,9 @@ class DynamicSignalOptimizer:
     def __init__(
         self,
         df: pd.DataFrame,
-        xcats: List[str],
+        features: List[str],
+        regimes: _RegimeInput,
         cids: Optional[List[str]] = None,
-        n_targets: int = 1,
         start: Optional[str] = None,
         end: Optional[str] = None,
         blacklist: Optional[Dict[str, Any]] = None,
@@ -178,11 +182,8 @@ class DynamicSignalOptimizer:
         xcat_aggs: Optional[List[str]] = None,
         generate_labels: Optional[Callable] = None,
         drop_nas: Union[bool, str] = True,
-        regimes: Optional[_RegimeInput] = None,
     ) -> None:
-        self.config = _InputConfig(
-            xcats=xcats, n_targets=n_targets, cids=cids, regimes=regimes
-        )
+        self.config = _InputConfig(features=features, cids=cids, regimes=regimes)
         self._optimizer_options = {
             "start": start,
             "end": end,
@@ -198,18 +199,17 @@ class DynamicSignalOptimizer:
         if "value" not in df.columns:
             raise ValueError("df must contain a value column.")
         self.df = QuantamentalDataFrame(df)
-        self.xcats = self.config.xcats
-        self.n_targets = self.config.n_targets
+        self.features = self.config.features
+        self.targets = self.config.candidate_targets
         self.cids = self.config.cids
-        required = self.xcats if regimes is None else self.config.features
-        for column, requested in (("xcat", required), ("cid", self.cids)):
+        for column, requested in (("xcat", self.features), ("cid", self.cids)):
             if requested is not None:
                 missing = set(requested) - set(self.df[column])
                 if missing:
                     raise ValueError(f"Unknown {column} values: {sorted(missing)}")
         data_window = reduce_df(
             self.df,
-            xcats=self.xcats,
+            xcats=self.features + self.targets,
             cids=self.cids,
             start=start,
             end=end,
@@ -219,8 +219,6 @@ class DynamicSignalOptimizer:
             raise ValueError(
                 "No data remains after selecting categories, cids and dates."
             )
-        self._data_start = data_window["real_date"].min()
-        self._data_end = data_window["real_date"].max()
         for table, frame in _empty_result_tables(self.config.features).items():
             setattr(self, table, frame)
         self.store_correlations = False
@@ -267,12 +265,11 @@ class DynamicSignalOptimizer:
             `min_periods`, `test_size`, `max_periods`,
             `multi_target_fill`, `store_additional_data` and
             `store_correlations`. See that method for the complete options.
-            `n_jobs_outer` and `n_jobs_inner` must not be supplied. With explicit
-            regimes, `start_date` is derived by the wrapper and must be omitted.
+            `n_jobs_outer` and `n_jobs_inner` must not be supplied.
+            `start_date` is derived by the wrapper and must be omitted.
             `min_periods` defaults to 36 and must be a positive integer. It is
             also the minimum number of distinct calendar months of target data
-            required before applying `end_return`. With `regimes=None`, it has
-            only its ordinary SignalOptimizer meaning.
+            required before applying `end_return`.
 
         Returns
         -------
@@ -284,17 +281,15 @@ class DynamicSignalOptimizer:
         pydantic.ValidationError
             If the worker count, progress-bar option or min_periods is invalid.
         TypeError
-            If `n_jobs_outer` or `n_jobs_inner` is supplied, or `start_date`
-            is supplied with explicit regimes.
+            If `n_jobs_outer`, `n_jobs_inner` or `start_date` is supplied.
         ValueError
             If process and output names collide with those of another stored process.
 
         Notes
         -----
-        Each explicit regime derives its own `start_date` from the child's
+        Each regime derives its own `start_date` from the child's
         processed learning dates. Other options apply to every child, including
         `test_size` for retraining intervals and `max_periods` for rolling windows.
-        `regimes=None` permits an explicit `start_date` for baseline comparisons.
         If all regimes are skipped, the process stores empty result tables and
         a report explaining each skipped regime.
 
@@ -308,7 +303,7 @@ class DynamicSignalOptimizer:
                 "n_jobs_outer and n_jobs_inner are fixed at 1; "
                 "remove them and use n_jobs_vintages instead."
             )
-        if self.config.regimes is not None and "start_date" in kwargs:
+        if "start_date" in kwargs:
             raise TypeError("start_date is derived from each regime; remove it.")
         execution_options = {
             "n_jobs_vintages": n_jobs_vintages,
@@ -346,7 +341,6 @@ class DynamicSignalOptimizer:
             process also includes `available_targets`, `missing_targets`,
             `history_months`, `first_prediction`, `status` and `skip_reason`.
             Dates in the plan are the supplied dates, before business-day rollback.
-            For `regimes=None`, the single baseline run has ID 0 and an open end.
 
         Raises
         ------
@@ -357,27 +351,16 @@ class DynamicSignalOptimizer:
             if name not in self.regime_results:
                 raise ValueError(f"No regime results stored for {name!r}.")
             return self.regime_results[name].copy()
-        if self.config.regimes is None:
-            records = [
-                dict(
-                    regime_id=0,
-                    start=self._data_start,
-                    end=pd.NaT,
-                    end_return=self._data_end,
-                    targets=tuple(self.config.targets),
-                )
-            ]
-        else:
-            records = [
-                dict(
-                    regime_id=key,
-                    start=pd.Timestamp(regime.start),
-                    end=pd.Timestamp(regime.end),
-                    end_return=pd.Timestamp(regime.end_return),
-                    targets=tuple(regime.targets),
-                )
-                for key, regime in self.config.regimes.items()
-            ]
+        records = [
+            dict(
+                regime_id=key,
+                start=pd.Timestamp(regime.start),
+                end=pd.Timestamp(regime.end),
+                end_return=pd.Timestamp(regime.end_return),
+                targets=tuple(regime.targets),
+            )
+            for key, regime in self.config.regimes.items()
+        ]
         return pd.DataFrame(records).set_index("regime_id")
 
     def get_optimized_signals(
@@ -398,8 +381,9 @@ class DynamicSignalOptimizer:
         pd.DataFrame
             Copy of the predictions in JPMaQS format, with columns `cid`,
             `xcat`, `real_date` and `value`. Output categories are the
-            process name when `n_targets=1`, otherwise `<target>_<name>`,
-            including vintages in which only one candidate target is active.
+            process name when there is one candidate target, otherwise
+            `<target>_<name>`, including vintages in which only one candidate
+            target is active.
             Only predictions dated within each vintage are retained.
 
         Raises
@@ -560,7 +544,7 @@ class DynamicSignalOptimizer:
         """Collect fitted and skipped regimes in date order, with one progress bar."""
         # QDF's original-dtype flag is not preserved by process serialization.
         worker_df = pd.DataFrame(self.df)
-        regimes = self.config.regimes if self.config.regimes is not None else {0: None}
+        regimes = self.config.regimes
         outcomes = {}
         with parallel_config(backend="loky", inner_max_num_threads=1):
             with Parallel(
@@ -573,9 +557,8 @@ class DynamicSignalOptimizer:
                 results = parallel(
                     delayed(_fit_vintage)(
                         df=worker_df,
-                        xcats=self.xcats,
+                        features=self.features,
                         cids=self.cids,
-                        n_targets=self.n_targets,
                         regime=regime,
                         init_options=self._optimizer_options,
                         name=name,
@@ -602,21 +585,19 @@ class DynamicSignalOptimizer:
         for key, result in results.items():
             if result.optimizer is None:
                 continue
-            regime = (
-                self.config.regimes[key] if self.config.regimes is not None else None
-            )
+            regime = self.config.regimes[key]
             for table in self._RESULT_TABLES:
                 frame = getattr(result.optimizer, table)
-                if regime is not None:
-                    within = frame["real_date"].ge(
-                        bday.rollback(pd.Timestamp(regime.start))
-                    )
-                    within &= frame["real_date"].lt(
-                        bday.rollback(pd.Timestamp(regime.end))
-                    )
-                    frame = frame.loc[within]
-                frame = frame.copy()
-                if table == "preds" and self.n_targets > 1 and len(result.targets) == 1:
+                within = frame["real_date"].ge(
+                    bday.rollback(pd.Timestamp(regime.start))
+                )
+                within &= frame["real_date"].lt(bday.rollback(pd.Timestamp(regime.end)))
+                frame = frame.loc[within].copy()
+                if (
+                    table == "preds"
+                    and len(self.targets) > 1
+                    and len(result.targets) == 1
+                ):
                     frame["xcat"] = frame["xcat"].cat.rename_categories(
                         {name: f"{result.targets[0]}_{name}"}
                     )
@@ -747,40 +728,35 @@ class _InputConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    xcats: List[StrictStr] = Field(min_length=2)
-    n_targets: int = Field(default=1, strict=True, ge=1)
+    features: List[StrictStr] = Field(min_length=1)
     cids: Optional[List[StrictStr]] = None
-    regimes: Optional[Dict[Union[StrictStr, StrictInt], _RegimeConfig]] = None
+    regimes: Dict[Union[StrictStr, StrictInt], _RegimeConfig] = Field(min_length=1)
 
     @property
-    def features(self) -> List[str]:
-        return self.xcats[: -self.n_targets]
-
-    @property
-    def targets(self) -> List[str]:
-        return self.xcats[-self.n_targets :]
+    def candidate_targets(self) -> List[str]:
+        return list(
+            dict.fromkeys(
+                target for regime in self.regimes.values() for target in regime.targets
+            )
+        )
 
     @model_validator(mode="after")
     def check_members(self) -> _InputConfig:
-        if self.n_targets >= len(self.xcats):
-            raise ValueError("n_targets must leave at least one feature.")
-        if len(set(self.xcats)) != len(self.xcats):
-            raise ValueError("xcats must not contain duplicates.")
-        if self.regimes is None:
-            return self
-        if not self.regimes:
-            raise ValueError("regimes must be a nonempty mapping, or None.")
+        if len(set(self.features)) != len(self.features):
+            raise ValueError("features must not contain duplicates.")
         self.regimes = dict(
             sorted(self.regimes.items(), key=lambda item: item[1].start)
         )
         previous_end = None
         for regime in self.regimes.values():
-            unknown = set(regime.targets) - set(self.targets)
-            if unknown:
-                raise ValueError(f"Unknown targets: {sorted(unknown)}")
             if previous_end is not None and regime.start < previous_end:
                 raise ValueError("Regime output intervals must not overlap.")
             previous_end = regime.end
+        overlap = set(self.features).intersection(self.candidate_targets)
+        if overlap:
+            raise ValueError(
+                f"Features and targets must not overlap: {sorted(overlap)}"
+            )
         return self
 
 
@@ -821,53 +797,50 @@ class _ExecutionConfig(BaseModel):
 def _fit_vintage(
     *,
     df: pd.DataFrame,
-    xcats: List[str],
+    features: List[str],
+    regime: _RegimeConfig,
     cids: Optional[List[str]],
-    n_targets: int,
     init_options: Dict[str, Any],
     name: str,
     models: Dict[str, BaseEstimator],
     run_options: Dict[str, Any],
-    regime: Optional[_RegimeConfig] = None,
 ) -> _RegimeResult:
     """Apply the notebook's preparation, history check and prediction clock."""
-    features = xcats[:-n_targets]
-    targets = tuple(regime.targets if regime is not None else xcats[-n_targets:])
-    result = _RegimeResult(targets=targets)
+    targets = regime.targets
+    result = _RegimeResult(targets=tuple(targets))
     options = init_options.copy()
     run_options = deepcopy(run_options)
-    if regime is not None:
-        end = pd.Timestamp(regime.end)
-        if options.get("end") is not None:
-            end = min(end, pd.Timestamp(options["end"]))
-        df = reduce_df(
-            df,
-            xcats=features + list(targets),
-            cids=cids,
-            start=options.get("start"),
-            end=end.strftime("%Y-%m-%d"),
-            blacklist=options.get("blacklist"),
-        )
-        returns = df.loc[df["xcat"].isin(targets)]
-        available = set(returns["xcat"])
-        result.targets = tuple(target for target in targets if target in available)
-        result.missing_targets = tuple(
-            target for target in targets if target not in available
-        )
-        # Match the notebook: count union months before applying end_return.
-        result.history_months = returns["real_date"].dt.to_period("M").nunique()
-        if not result.targets:
-            result.skip_reason = "no_targets"
-            return result
-        if result.history_months < run_options["min_periods"]:
-            result.skip_reason = "insufficient_history"
-            return result
-        cutoff = min(end, pd.Timestamp(regime.end_return))
-        df = df.loc[df["real_date"].le(cutoff)]
-        if df.empty:
-            result.skip_reason = "no_input_data"
-            return result
-        options["end"] = cutoff.strftime("%Y-%m-%d")
+    end = pd.Timestamp(regime.end)
+    if options.get("end") is not None:
+        end = min(end, pd.Timestamp(options["end"]))
+    df = reduce_df(
+        df,
+        xcats=features + targets,
+        cids=cids,
+        start=options.get("start"),
+        end=end.strftime("%Y-%m-%d"),
+        blacklist=options.get("blacklist"),
+    )
+    returns = df.loc[df["xcat"].isin(targets)]
+    available = set(returns["xcat"])
+    result.targets = tuple(target for target in targets if target in available)
+    result.missing_targets = tuple(
+        target for target in targets if target not in available
+    )
+    # Match the notebook: count union months before applying end_return.
+    result.history_months = returns["real_date"].dt.to_period("M").nunique()
+    if not result.targets:
+        result.skip_reason = "no_targets"
+        return result
+    if result.history_months < run_options["min_periods"]:
+        result.skip_reason = "insufficient_history"
+        return result
+    cutoff = min(end, pd.Timestamp(regime.end_return))
+    df = df.loc[df["real_date"].le(cutoff)]
+    if df.empty:
+        result.skip_reason = "no_input_data"
+        return result
+    options["end"] = cutoff.strftime("%Y-%m-%d")
 
     optimizer = SignalOptimizer(
         df,
@@ -876,14 +849,13 @@ def _fit_vintage(
         n_targets=len(result.targets),
         **options,
     )
-    if regime is not None:
-        dates = optimizer.y.index.get_level_values(1).unique().sort_values()
-        eligible = dates[dates <= pd.Timestamp(regime.start)]
-        if eligible.empty or eligible[-1] >= dates.max():
-            result.skip_reason = "no_prediction_periods"
-            return result
-        result.first_prediction = eligible[-1]
-        run_options["start_date"] = result.first_prediction.strftime("%Y-%m-%d")
+    dates = optimizer.y.index.get_level_values(1).unique().sort_values()
+    eligible = dates[dates <= pd.Timestamp(regime.start)]
+    if eligible.empty or eligible[-1] >= dates.max():
+        result.skip_reason = "no_prediction_periods"
+        return result
+    result.first_prediction = eligible[-1]
+    run_options["start_date"] = result.first_prediction.strftime("%Y-%m-%d")
     optimizer.calculate_predictions(
         name,
         deepcopy(models),
@@ -959,9 +931,8 @@ if __name__ == "__main__":
     # Use earlier observations for training; each quarter has its own fit clock.
     optimizer = DynamicSignalOptimizer(
         df,
-        xcats=xcats,
+        features=["CRY", "GROWTH"],
         cids=cids,
-        n_targets=2,
         freq="M",
         regimes={
             "2019-Q1": {

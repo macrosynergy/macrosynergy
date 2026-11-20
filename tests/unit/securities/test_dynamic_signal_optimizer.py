@@ -48,6 +48,25 @@ def make_panel(freq="D"):
     return pd.concat(frames, ignore_index=True), dates
 
 
+def make_single_regime(targets=("Y",)):
+    return {
+        0: {
+            "start": "2018-06-30",
+            "end": "2018-09-30",
+            "end_return": "2018-09-28",
+            "targets": list(targets),
+        }
+    }
+
+
+def within_regime(frame, details):
+    bday = pd.offsets.BDay()
+    return frame.loc[
+        (frame.real_date >= bday.rollback(pd.Timestamp(details["start"])))
+        & (frame.real_date < bday.rollback(pd.Timestamp(details["end"])))
+    ].reset_index(drop=True)
+
+
 def calculate(optimizer, name="signal", **kwargs):
     options = dict(
         models={"lr": LinearRegression()},
@@ -75,13 +94,18 @@ def assert_signals(left, right):
 @pytest.mark.parametrize("freq", ["D", "M"])
 @pytest.mark.parametrize("lag", [0, 1, 2])
 @pytest.mark.parametrize("max_periods", [None, 8])
-def test_fixed_specification_matches_signal_optimizer(freq, lag, max_periods):
-    df, _ = make_panel(freq)
-    init = dict(df=df, xcats=["F1", "F2", "Y"], freq=freq, lag=lag)
-    options = dict(test_size=3, max_periods=max_periods, min_cids=2)
-    dynamic = calculate(DynamicSignalOptimizer(**init), **options)
-    ordinary = calculate(SignalOptimizer(**init), **options)
-    assert_signals(dynamic.preds, ordinary.preds)
+def test_single_regime_matches_signal_optimizer(freq, lag, max_periods):
+    df, _ = make_panel("M")
+    regimes = make_single_regime()
+    options = dict(test_size=3, max_periods=max_periods)
+    dynamic = calculate(
+        DynamicSignalOptimizer(
+            df, features=["F1", "F2"], regimes=regimes, cids=["A"], freq=freq, lag=lag
+        ),
+        **options,
+    )
+    ordinary = manual_notebook_run(df, regimes[0], freq=freq, lag=lag, **options)
+    assert_signals(dynamic.preds, within_regime(ordinary.preds, regimes[0]))
     for table in [
         "feature_importances",
         "selected_ftrs",
@@ -90,7 +114,7 @@ def test_fixed_specification_matches_signal_optimizer(freq, lag, max_periods):
     ]:
         pd.testing.assert_frame_equal(
             getattr(dynamic, table).reset_index(drop=True),
-            getattr(ordinary, table).reset_index(drop=True),
+            within_regime(getattr(ordinary, table), regimes[0]),
             check_dtype=False,
             check_categorical=False,
         )
@@ -98,7 +122,7 @@ def test_fixed_specification_matches_signal_optimizer(freq, lag, max_periods):
 
 
 def test_cv_controls_are_delegated_and_inputs_are_not_mutated():
-    df, _ = make_panel()
+    df, _ = make_panel("M")
     model = Ridge()
     cv = ExpandingKFoldPanelSplit(n_splits=2)
     kwargs = dict(
@@ -108,28 +132,32 @@ def test_cv_controls_are_delegated_and_inputs_are_not_mutated():
         scorers={"mse": make_scorer(mean_squared_error, greater_is_better=False)},
         split_functions={"cv": lambda n: n / 20},
         test_size=10,
-        min_periods=10,
+        min_periods=5,
     )
-    dynamic = calculate(DynamicSignalOptimizer(df, ["F1", "Y"], freq="D"), **kwargs)
+    regimes = make_single_regime()
+    dynamic = calculate(
+        DynamicSignalOptimizer(
+            df, features=["F1", "F2"], regimes=regimes, cids=["A"], freq="D"
+        ),
+        **kwargs,
+    )
     assert cv.n_splits == 2
     assert not hasattr(model, "coef_")
-    ordinary = calculate(SignalOptimizer(df, ["F1", "Y"], freq="D"), **kwargs)
-    assert_signals(dynamic.preds, ordinary.preds)
-    pd.testing.assert_frame_equal(dynamic.chosen_models, ordinary.chosen_models)
-
-
-def test_start_date_retains_underlying_meaning():
-    df, dates = make_panel()
-    opts = dict(start_date=str(dates[20].date()))
-    dynamic = calculate(DynamicSignalOptimizer(df, ["F1", "Y"], freq="D"), **opts)
-    ordinary = calculate(SignalOptimizer(df, ["F1", "Y"], freq="D"), **opts)
-    assert_signals(dynamic.preds, ordinary.preds)
+    ordinary = manual_notebook_run(df, regimes[0], freq="D", **kwargs)
+    assert_signals(dynamic.preds, within_regime(ordinary.preds, regimes[0]))
+    pd.testing.assert_frame_equal(
+        dynamic.chosen_models, within_regime(ordinary.chosen_models, regimes[0])
+    )
 
 
 @pytest.mark.parametrize("options,expected", [({}, 36), ({"min_periods": 6}, 6)])
 def test_min_periods_default_and_override_reach_child(options, expected):
-    df, _ = make_panel()
-    optimizer = DynamicSignalOptimizer(df, ["F1", "Y"], freq="D")
+    df, _ = make_panel("M")
+    earlier = df.assign(real_date=df.real_date - pd.DateOffset(years=2))
+    df = pd.concat([earlier, df], ignore_index=True)
+    regimes = make_single_regime()
+    regimes[0].update(start="2019-06-30", end="2019-12-31", end_return="2019-12-30")
+    optimizer = DynamicSignalOptimizer(df, features=["F1"], regimes=regimes)
     with patch.object(SignalOptimizer, "calculate_predictions") as predict:
         optimizer.calculate_predictions(
             "signal", models={"lr": LinearRegression()}, show_tqdm=False, **options
@@ -139,8 +167,10 @@ def test_min_periods_default_and_override_reach_child(options, expected):
 
 @pytest.mark.parametrize("value", [None, 0])
 def test_invalid_min_periods_fails_before_workers_start(value):
-    df, _ = make_panel()
-    optimizer = DynamicSignalOptimizer(df, ["F1", "Y"], freq="D")
+    df, _ = make_panel("M")
+    optimizer = DynamicSignalOptimizer(
+        df, features=["F1"], regimes=make_single_regime(), freq="D"
+    )
     with patch(f"{MODULE}._fit_vintage") as fit:
         with pytest.raises(ValidationError):
             calculate(optimizer, min_periods=value)
@@ -149,8 +179,10 @@ def test_invalid_min_periods_fails_before_workers_start(value):
 
 @pytest.mark.parametrize("value", [0, -2, True, 1.5])
 def test_invalid_worker_counts_fail_before_fitting(value):
-    df, _ = make_panel()
-    optimizer = DynamicSignalOptimizer(df, ["F1", "Y"], freq="D")
+    df, _ = make_panel("M")
+    optimizer = DynamicSignalOptimizer(
+        df, features=["F1"], regimes=make_single_regime(), freq="D"
+    )
     with patch(f"{MODULE}._fit_vintage") as fit:
         with pytest.raises(ValidationError):
             calculate(optimizer, n_jobs_vintages=value)
@@ -158,8 +190,10 @@ def test_invalid_worker_counts_fail_before_fitting(value):
 
 
 def test_vintage_workers_cannot_exceed_available_cores():
-    df, _ = make_panel()
-    optimizer = DynamicSignalOptimizer(df, ["F1", "Y"], freq="D")
+    df, _ = make_panel("M")
+    optimizer = DynamicSignalOptimizer(
+        df, features=["F1"], regimes=make_single_regime(), freq="D"
+    )
     with patch(f"{MODULE}.cpu_count", return_value=8), patch(
         f"{MODULE}._fit_vintage"
     ) as fit:
@@ -181,8 +215,10 @@ def test_core_budget_accepts_equality_and_resolves_all_cores(jobs):
 
 @pytest.mark.parametrize("field", ["n_jobs_outer", "n_jobs_inner"])
 def test_nested_worker_options_are_not_exposed(field):
-    df, _ = make_panel()
-    optimizer = DynamicSignalOptimizer(df, ["F1", "Y"], freq="D")
+    df, _ = make_panel("M")
+    optimizer = DynamicSignalOptimizer(
+        df, features=["F1"], regimes=make_single_regime(), freq="D"
+    )
     with patch(f"{MODULE}._fit_vintage") as fit:
         with pytest.raises(TypeError, match="fixed at 1"):
             calculate(optimizer, **{field: 2})
@@ -190,31 +226,38 @@ def test_nested_worker_options_are_not_exposed(field):
 
 
 def test_child_parallelism_and_progress_are_hard_coded():
-    from macrosynergy.securities.dynamic_signal_optimizer import _fit_vintage
+    from macrosynergy.securities.dynamic_signal_optimizer import (
+        _fit_vintage,
+        _RegimeConfig,
+    )
 
     with patch.object(SignalOptimizer, "calculate_predictions") as predict:
-        df, _ = make_panel()
+        df, _ = make_panel("M")
         _fit_vintage(
             df=df,
-            xcats=["F1", "Y"],
+            features=["F1"],
+            regime=_RegimeConfig(**make_single_regime()[0]),
             cids=None,
-            n_targets=1,
             init_options={"freq": "D"},
             name="signal",
             models={"lr": LinearRegression()},
-            run_options={"test_size": 3},
+            run_options={"test_size": 3, "min_periods": 5},
         )
     assert predict.call_args.kwargs == {
         "n_jobs_outer": 1,
         "n_jobs_inner": 1,
         "show_tqdm": False,
         "test_size": 3,
+        "min_periods": 5,
+        "start_date": "2018-06-29",
     }
 
 
 def test_rerunning_one_process_preserves_other_process_results():
-    df, _ = make_panel()
-    optimizer = DynamicSignalOptimizer(df, ["F1", "Y", "Z"], n_targets=2, freq="D")
+    df, _ = make_panel("M")
+    optimizer = DynamicSignalOptimizer(
+        df, features=["F1"], regimes=make_single_regime(["Y", "Z"]), freq="D"
+    )
     calculate(optimizer, name="first", test_size=20)
     calculate(optimizer, name="second", test_size=20)
     second_signals = optimizer.get_optimized_signals("second").copy(deep=True)
@@ -238,8 +281,10 @@ def test_rerunning_one_process_preserves_other_process_results():
 def test_storage_failure_preserves_all_published_state(failure):
     from macrosynergy.management.utils import concat_categorical
 
-    df, _ = make_panel()
-    optimizer = DynamicSignalOptimizer(df, ["F1", "Y", "Z"], n_targets=2, freq="D")
+    df, _ = make_panel("M")
+    optimizer = DynamicSignalOptimizer(
+        df, features=["F1"], regimes=make_single_regime(["Y", "Z"]), freq="D"
+    )
     calculate(optimizer, test_size=20)
     original_tables = {
         key: getattr(optimizer, key).copy(deep=True) for key in optimizer._RESULT_TABLES
@@ -275,8 +320,10 @@ def test_storage_failure_preserves_all_published_state(failure):
 
 @pytest.mark.parametrize("name", [123, ["signal", 1], {"signal": None}])
 def test_signal_getter_rejects_invalid_name_types(name):
-    df, _ = make_panel()
-    optimizer = DynamicSignalOptimizer(df, ["F1", "Y"], freq="D")
+    df, _ = make_panel("M")
+    optimizer = DynamicSignalOptimizer(
+        df, features=["F1"], regimes=make_single_regime(), freq="D"
+    )
     with pytest.raises(TypeError, match="string or a list of strings"):
         optimizer.get_optimized_signals(name)
 
@@ -296,18 +343,23 @@ def test_combined_result_getters_match_native_optimizer(method):
     from sklearn.pipeline import make_pipeline
     from sklearn.preprocessing import StandardScaler
 
-    df, _ = make_panel()
-    init = dict(df=df, xcats=["F1", "F2", "Y"], freq="D")
+    df, _ = make_panel("M")
+    regimes = make_single_regime()
     options = dict(
         models={"pipeline": make_pipeline(StandardScaler(), LinearRegression())},
         store_correlations=True,
         test_size=20,
     )
-    dynamic = calculate(DynamicSignalOptimizer(**init), **options)
-    ordinary = calculate(SignalOptimizer(**init), **options)
+    dynamic = calculate(
+        DynamicSignalOptimizer(
+            df, features=["F1", "F2"], regimes=regimes, cids=["A"], freq="D"
+        ),
+        **options,
+    )
+    ordinary = manual_notebook_run(df, regimes[0], freq="D", **options)
     for name in (None, "signal", ["signal"]):
         actual = getattr(dynamic, method)(name)
-        expected = getattr(ordinary, method)(name)
+        expected = within_regime(getattr(ordinary, method)(name), regimes[0])
         pd.testing.assert_frame_equal(actual, expected)
     with pytest.raises(ValueError):
         getattr(dynamic, method)("missing")
@@ -319,13 +371,13 @@ def test_combined_result_getters_match_native_optimizer(method):
     "kwargs",
     [
         {"cids": ["unknown"]},
-        {"xcats": ["F1", "unknown"]},
+        {"features": ["unknown"]},
         {"start": "2099-01-01"},
     ],
 )
 def test_invalid_input_selection_is_rejected_without_a_learner(kwargs):
-    df, _ = make_panel()
-    options = dict(xcats=["F1", "Y"], freq="D")
+    df, _ = make_panel("M")
+    options = dict(features=["F1"], regimes=make_single_regime(), freq="D")
     options.update(kwargs)
     with patch(
         f"{MODULE}.SignalOptimizer", side_effect=AssertionError("Unexpected learner")
@@ -354,8 +406,7 @@ def make_regimes():
 def make_dynamic(df, regimes=None, **kwargs):
     return DynamicSignalOptimizer(
         df,
-        ["F1", "F2", "Y", "Z", "MISSING"],
-        n_targets=3,
+        features=["F1", "F2"],
         cids=["A"],
         freq="M",
         regimes=make_regimes() if regimes is None else regimes,
@@ -363,7 +414,66 @@ def make_dynamic(df, regimes=None, **kwargs):
     )
 
 
-def manual_notebook_run(df, details, *, lag=1, test_size=3):
+def test_targets_are_derived_from_regimes_and_counted_after_filtering():
+    df, _ = make_panel("M")
+    regimes = make_regimes()
+    regimes["summer"]["targets"] = ["Z"]
+    regimes[17]["targets"] = ["Y", "Z", "MISSING"]
+    regimes = {17: regimes[17], "summer": regimes["summer"]}
+    optimizer = DynamicSignalOptimizer(
+        df, features=["F2"], regimes=regimes, cids=["A"], freq="M"
+    )
+    assert optimizer.features == ["F2"]
+    assert optimizer.targets == ["Z", "Y", "MISSING"]
+
+    calculate(optimizer, test_size=3)
+    first = optimizer.optimizers["signal"]["summer"]
+    second = optimizer.optimizers["signal"][17]
+    assert first.xcats == ["F2", "Z"]
+    assert first.n_targets == 1
+    assert second.xcats == ["F2", "Y", "Z"]
+    assert second.n_targets == 2
+    assert optimizer.get_regimes("signal").loc[17, "missing_targets"] == ("MISSING",)
+    assert set(optimizer.get_optimized_signals("signal").xcat) == {
+        "Y_signal",
+        "Z_signal",
+    }
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"features": []},
+        {"features": ["F1", "F1"]},
+        {"features": [1]},
+        {"features": "F1"},
+    ],
+)
+def test_invalid_features_are_rejected_before_fitting(kwargs):
+    df, _ = make_panel("M")
+    options = {"regimes": make_regimes(), **kwargs}
+    with patch(
+        f"{MODULE}.SignalOptimizer", side_effect=AssertionError("Unexpected learner")
+    ):
+        with pytest.raises(ValidationError):
+            DynamicSignalOptimizer(df, **options)
+
+
+def test_regimes_cannot_be_omitted():
+    df, _ = make_panel("M")
+    with pytest.raises(TypeError, match="regimes"):
+        DynamicSignalOptimizer(df, features=["F1"])
+
+
+def test_standalone_targets_are_not_accepted():
+    df, _ = make_panel("M")
+    with pytest.raises(TypeError, match="targets"):
+        DynamicSignalOptimizer(
+            df, features=["F1"], regimes=make_regimes(), targets=["Y"]
+        )
+
+
+def manual_notebook_run(df, details, *, freq="M", lag=1, test_size=3, **kwargs):
     """Reproduce the notebook's preparation and fitting independently of the wrapper."""
     regime_data = df.loc[(df.cid == "A") & (df.real_date <= details["end"])]
     returns = regime_data.loc[regime_data.xcat.isin(details["targets"])]
@@ -378,7 +488,7 @@ def manual_notebook_run(df, details, *, lag=1, test_size=3):
         ["F1", "F2"] + targets,
         cids=["A"],
         n_targets=len(targets),
-        freq="M",
+        freq=freq,
         lag=lag,
     )
     dates = child.y.index.get_level_values(1).unique().sort_values()
@@ -386,7 +496,10 @@ def manual_notebook_run(df, details, *, lag=1, test_size=3):
     if first_prediction >= dates.max():
         return None
     calculate(
-        child, start_date=first_prediction.strftime("%Y-%m-%d"), test_size=test_size
+        child,
+        start_date=first_prediction.strftime("%Y-%m-%d"),
+        test_size=test_size,
+        **kwargs,
     )
     return child
 
@@ -476,6 +589,7 @@ def test_plan_preserves_ids_target_order_and_separate_identical_regimes():
 @pytest.mark.parametrize(
     "bad",
     [
+        None,
         {},
         {"a": {"start": "2018-06-30", "end": "2018-09-30", "targets": ["Y"]}},
         {
@@ -535,7 +649,7 @@ def test_invalid_regimes_fail_before_a_learner_is_created(bad):
         f"{MODULE}.SignalOptimizer", side_effect=AssertionError("Unexpected learner")
     ):
         with pytest.raises(ValidationError):
-            make_dynamic(df, bad)
+            DynamicSignalOptimizer(df, features=["F1", "F2"], regimes=bad)
 
 
 def test_overlapping_regimes_are_rejected():
@@ -546,11 +660,12 @@ def test_overlapping_regimes_are_rejected():
         make_dynamic(df, regimes)
 
 
-def test_regime_start_date_cannot_be_overridden():
+@pytest.mark.parametrize("start_date", [None, "2018-01-31"])
+def test_regime_start_date_cannot_be_overridden(start_date):
     df, _ = make_panel("M")
     with patch(f"{MODULE}._fit_vintage") as fit:
         with pytest.raises(TypeError, match="derived"):
-            calculate(make_dynamic(df), start_date="2018-01-31")
+            calculate(make_dynamic(df), start_date=start_date)
         fit.assert_not_called()
 
 
@@ -713,9 +828,7 @@ def test_one_progress_bar_covers_fitted_and_skipped_regimes(show):
         side_effect=lambda iterable, **kwargs: iterable,
     ) as child_progress:
         calculate(make_dynamic(df, regimes), show_tqdm=show)
-    progress.assert_called_once_with(
-        total=3, desc="Vintages", unit="vintage", disable=not show
-    )
+    progress.assert_called_once_with(total=3, desc="Vintages", disable=not show)
     assert progress.return_value.__enter__.return_value.update.call_count == 3
     assert child_progress.call_count == 2
     assert all(call.kwargs["disable"] for call in child_progress.call_args_list)
@@ -808,8 +921,7 @@ def test_portfolio_network_with_changing_target_counts(n_jobs_vintages):
         optimizer = calculate(
             DynamicSignalOptimizer(
                 df,
-                ["F1", "F2", "Y", "Z", "W", "MISSING"],
-                n_targets=4,
+                features=["F1", "F2"],
                 cids=["A"],
                 freq="M",
                 drop_nas="X",

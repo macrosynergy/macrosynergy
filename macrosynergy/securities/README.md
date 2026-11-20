@@ -7,7 +7,9 @@ optimization across changing constituent regimes.
 
 `DynamicSignalOptimizer` wraps one `SignalOptimizer` per explicit regime. Supply a
 single JPMaQS dataframe containing the fixed features and all available target
-histories, plus a mapping of regime IDs to dates and target names. The wrapper
+histories, a list of feature categories, and a mapping of regime IDs to dates and
+target names. The regime mapping is required and must be nonempty. The wrapper
+derives the candidate targets from that mapping and
 handles per-regime input preparation, history checks, prediction starts and output
 slicing. Pydantic validates the inputs; a dataclass carries each run's outcome.
 
@@ -31,17 +33,13 @@ regimes = {
     }
     for regime_id, details in compressed_index_summary.items()
 }
-candidate_targets = sorted({
-    target for regime in regimes.values() for target in regime["targets"]
-})
 
 # df_inputs contains macro features and the rotated stock return categories
 # under the same cross-section. Stock rotation and output renaming stay outside
 # the wrapper, using the notebook's existing conventions.
 optimizer = DynamicSignalOptimizer(
     df=df_inputs,
-    xcats=features_xcats + candidate_targets,
-    n_targets=len(candidate_targets),
+    features=features_xcats,
     cids=cidx,
     start=_ANALYSIS_START,
     freq=forecast_frequency,
@@ -70,8 +68,10 @@ print(report[["status", "missing_targets", "skip_reason"]])
 
 Each regime preserves its ID and its supplied target order. Regimes are sorted by
 start date, must not overlap, and remain separate even when their target lists are
-identical. Gaps between regimes produce no signals. This `regimes` mapping replaces
-the earlier date-to-list `target_schedule` interface.
+identical. Gaps between regimes produce no signals. Each child receives the fixed
+features followed by that regime's available targets, with `n_targets` set to the
+number of available targets. No separate candidate list or target count is needed.
+This `regimes` mapping replaces the earlier date-to-list `target_schedule` interface.
 
 The execution sequence follows the notebook:
 
@@ -91,7 +91,7 @@ The execution sequence follows the notebook:
 The regime's `start` controls its prediction clock, not the beginning of training
 history. Global constructor `start` and `end` filter history for every regime.
 `freq` controls analysis frequency; `test_size` controls retraining intervals in
-those periods. Do not pass `start_date` with explicit regimes: the wrapper derives
+those periods. Do not pass `start_date`: the wrapper derives
 it separately for each child.
 
 Use `n_jobs_vintages` for parallel regimes: a positive integer up to
@@ -123,10 +123,10 @@ Skipped regimes have no child entry. Retaining fitted children keeps their train
 data and full outputs in memory. The wrapper uses composition and exposes no
 inherited `run`, `X`, `y` or plotting methods.
 
-For fixed-target comparisons, `regimes=None` runs one ordinary optimizer without
-regime filtering or the extra monthly history check. Its child has ID 0 and accepts
-an explicit calculation `start_date`. Dynamic features and cross-sections remain
-outside this version.
+For ordinary fixed-target fits, use `SignalOptimizer` directly. This wrapper
+always derives targets from `regimes`; omitting it, passing None or supplying an
+empty mapping raises an error. Dynamic features and cross-sections remain outside
+this version.
 
 A self-contained example with seeded synthetic data is available at the bottom of
 `dynamic_signal_optimizer.py` under `if __name__ == "__main__":`.
