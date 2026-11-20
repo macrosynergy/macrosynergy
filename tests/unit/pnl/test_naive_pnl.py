@@ -1225,6 +1225,75 @@ class TestAll(unittest.TestCase):
         self.assertNotIn("USD_DUXR correl", no_bm_result.data)
         self.assertIsNone(re.search(r" correl</td>", no_bm_result.data))
 
+    def test_evaluate_pnls_html_sr_thresholds(self):
+        pnl = NaivePnL(
+            self.dfd,
+            ret="EQXR",
+            sigs=["INFL"],
+            cids=self.cids,
+            bms=["USD_DUXR"],
+        )
+        pnl.make_pnl(
+            sig="INFL",
+            sig_op="raw",
+            vol_scale=None,
+            pnl_name="PNL_HEAD",
+        )
+        pnl.make_long_pnl(vol_scale=None, label="PNL_BENCH")
+
+        # Both PnL and raw-ticker benchmarks must use the requested rows.
+        # Check defaults last to catch mutation of the shared default groups.
+        cases = [
+            ([0.5, 1], ["Prob. Sharpe Ratio > 0.5", "Prob. Sharpe Ratio > 1"]),
+            ([], []),
+            ([1, 0.1], ["Prob. Sharpe Ratio > 1", "Prob. Sharpe Ratio > 0.1"]),
+            (
+                None,
+                [
+                    "Prob. Sharpe Ratio > 0.25",
+                    "Prob. Sharpe Ratio > 0.5",
+                    "Prob. Sharpe Ratio > 0.75",
+                ],
+            ),
+        ]
+        for bench in ("PNL_BENCH", None):
+            for thresholds, expected in cases:
+                with self.subTest(bench=bench, sr_thresholds=thresholds):
+                    result = pnl.evaluate_pnls_html(
+                        headline="PNL_HEAD", bench=bench, sr_thresholds=thresholds
+                    )
+                    probability_rows = re.findall(
+                        r'<td class="pnl-label">(Prob\. Sharpe Ratio > [^<]+)</td>',
+                        result.data,
+                    )
+                    self.assertEqual(probability_rows, expected)
+
+        # Ordering is validated against the customized threshold rows.
+        ordered_rows = [
+            "Traded Months",
+            "Prob. Sharpe Ratio > 1",
+            "Prob. Sharpe Ratio > 0.5",
+            "Sharpe Stability Ratio",
+            "Top 5% Monthly PnL Share",
+        ]
+        result = pnl.evaluate_pnls_html(
+            headline="PNL_HEAD",
+            bench="PNL_BENCH",
+            sr_thresholds=[0.5, 1],
+            order={"Robustness": ordered_rows},
+        )
+        rows = re.findall(r'<td class="pnl-label">([^<]+)</td>', result.data)
+        self.assertEqual(rows[-len(ordered_rows) :], ordered_rows)
+
+        # Explicit groups must still reject thresholds that were not calculated.
+        with self.assertRaisesRegex(KeyError, "Unknown metric"):
+            pnl.evaluate_pnls_html(
+                headline="PNL_HEAD",
+                bench="PNL_BENCH",
+                sr_thresholds=[0.5, 1],
+                groups={"Robustness": ["Prob. Sharpe Ratio > 0.25"]},
+            )
+
     def test_evaluate_pnls_pretty_ongoing_drawdown(self):
         # Up for half the sample, then straight down with no recovery: the
         # "Max Draw Recovery (months)" cell should read "+2" (an open
