@@ -50,5 +50,7 @@ jobs:
           ECR_IMAGE: ${{ secrets.ECR_IMAGE }}
           ECS_CLUSTER_NAME: ${{ secrets.ECS_CLUSTER_NAME }}
           SUBNET_IDS: ${{ secrets.SUBNET_IDS }}
-          EXECUTION_ROLE_ARN: ${{ secrets.EXECUTION_ROLE_ARN }} 
+          EXECUTION_ROLE_ARN: ${{ secrets.EXECUTION_ROLE_ARN }}
+          NOTEBOOK_RUNNER_LOG_BUCKET: ${{ secrets.NOTEBOOK_RUNNER_LOG_BUCKET }}
+          NOTEBOOK_RUNNER_LOG_GROUP: ${{ secrets.NOTEBOOK_RUNNER_LOG_GROUP }}
 

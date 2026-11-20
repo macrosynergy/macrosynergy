@@ -10,6 +10,9 @@ ECR_IMAGE = os.getenv("ECR_IMAGE", None)
 ECS_CLUSTER_NAME = os.getenv("ECS_CLUSTER_NAME", None)
 SUBNET_IDS = os.getenv("SUBNET_IDS", None).split(" ")
 EXECUTION_ROLE_ARN = os.getenv("EXECUTION_ROLE_ARN", None)
+# No defaults: the job fails here if either secret is unset.
+LOG_BUCKET = os.environ["NOTEBOOK_RUNNER_LOG_BUCKET"]
+LOG_GROUP = os.environ["NOTEBOOK_RUNNER_LOG_GROUP"]
 
 start_time = time.time()
 
@@ -70,7 +73,7 @@ def run_task(
                     },
                     {
                         "name": "LOG_BUCKET",
-                        "value": "nb-runner-logs-prod",
+                        "value": LOG_BUCKET,
                     },
                 ],
                 "logConfiguration": {
@@ -131,7 +134,7 @@ for notebook in notebooks:
                 ecs_client=ecs_client,
                 nb_name=notebook,
                 bucket_name=AWS_BUCKET_NAME,
-                log_group_name="/ecs/nb-runner-package-logs-prod/",
+                log_group_name=LOG_GROUP,
                 region_name=REGION_NAME,
                 ecs_cluster_name=ECS_CLUSTER_NAME,
                 subnet_ids=SUBNET_IDS,
