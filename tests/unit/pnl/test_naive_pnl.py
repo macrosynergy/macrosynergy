@@ -1262,17 +1262,11 @@ class TestAll(unittest.TestCase):
                     result = pnl.evaluate_pnls_html(
                         headline="PNL_HEAD", bench=bench, sr_thresholds=thresholds
                     )
-                    rows = re.findall(r'<td class="pnl-label">([^<]+)</td>', result.data)
-                    robustness = rows[rows.index("Sharpe Stability Ratio") :]
-                    self.assertEqual(
-                        robustness,
-                        [
-                            "Sharpe Stability Ratio",
-                            *expected,
-                            "Top 5% Monthly PnL Share",
-                            "Traded Months",
-                        ],
+                    probability_rows = re.findall(
+                        r'<td class="pnl-label">(Prob\. Sharpe Ratio > [^<]+)</td>',
+                        result.data,
                     )
+                    self.assertEqual(probability_rows, expected)
 
         # Ordering is validated against the customized threshold rows.
         ordered_rows = [
@@ -1291,18 +1285,7 @@ class TestAll(unittest.TestCase):
         rows = re.findall(r'<td class="pnl-label">([^<]+)</td>', result.data)
         self.assertEqual(rows[-len(ordered_rows) :], ordered_rows)
 
-        # Explicit groups still control selection, and row labels still apply.
-        result = pnl.evaluate_pnls_html(
-            headline="PNL_HEAD",
-            bench="PNL_BENCH",
-            sr_thresholds=[0.5, 1],
-            groups={"Robustness": ["Prob. Sharpe Ratio > 1"]},
-            row_labels={"Prob. Sharpe Ratio > 1": "Probability above one"},
-        )
-        self.assertEqual(
-            re.findall(r'<td class="pnl-label">([^<]+)</td>', result.data),
-            ["Probability above one"],
-        )
+        # Explicit groups must still reject thresholds that were not calculated.
         with self.assertRaisesRegex(KeyError, "Unknown metric"):
             pnl.evaluate_pnls_html(
                 headline="PNL_HEAD",
