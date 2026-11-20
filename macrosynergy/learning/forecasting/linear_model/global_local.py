@@ -31,6 +31,9 @@ class GlobalLocalRegression(BaseEstimator, RegressorMixin):
         Whether to constrain all coefficients to be positive. Default is False.
     fit_intercept : bool, default=True
         Whether to fit an intercept term. Default is True.
+    min_xs_samples : int, default=36
+        Minimum number of samples required in each group for the group to be considered
+        a contribution to the mean squared error component of the loss function.
     groups : Union[Dict, str], default=None
         Mapping of group names to list-likes of cross-sections. If "cluster", the
         groups are instead formed at fit time by hierarchical agglomerative clustering
@@ -117,10 +120,11 @@ class GlobalLocalRegression(BaseEstimator, RegressorMixin):
         self,
         local_lambda=1,
         global_lambda=1,
-        group_lambda=1,
         positive=False,
         fit_intercept=True,
+        min_xs_samples=36,
         groups=None,
+        group_lambda=1,
         shrink_to_global=True,
         n_clusters=2,
         linkage="average",
@@ -130,10 +134,11 @@ class GlobalLocalRegression(BaseEstimator, RegressorMixin):
         # Attributes
         self.local_lambda = local_lambda
         self.global_lambda = global_lambda
-        self.group_lambda = group_lambda
         self.positive = positive
         self.fit_intercept = fit_intercept
+        self.min_xs_samples = min_xs_samples
         self.groups = groups
+        self.group_lambda = group_lambda
         self.shrink_to_global = shrink_to_global
         self.n_clusters = n_clusters
         self.linkage = linkage
@@ -161,6 +166,18 @@ class GlobalLocalRegression(BaseEstimator, RegressorMixin):
         self
             Fitted estimator.
         """
+        # Remove attributes that only some settings set, so none survive a refit
+        for attr in [
+            "coef_",
+            "intercept_",
+            "groups_",
+            "n_groups_",
+            "cid_to_group_",
+            "clusters_",
+            "group_coefs_",
+        ]:
+            self.__dict__.pop(attr, None)
+
         # Fit
         if self.fit_intercept:
             X = X.copy()
