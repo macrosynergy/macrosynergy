@@ -2,28 +2,26 @@
 
 from __future__ import annotations
 
+from typing import Optional, Tuple
+
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from matplotlib import font_manager
 from matplotlib.colors import LinearSegmentedColormap
 from matplotlib.patches import Rectangle
 
-from typing import Optional, Tuple
-
-
-def _cell_widths(x):
-    return np.gradient(x)
+from macrosynergy.pnl.bayes_pnl.grid import _cell_widths
 
 
 def _get_posterior(fit):
-    from macrosynergy.pnl.bayes_pnl import BayesianPnL, GridPosterior
+    from macrosynergy.pnl.bayes_pnl import BayesianPnL
+    from macrosynergy.pnl.bayes_pnl.posterior import Posterior
 
     if isinstance(fit, BayesianPnL):
         return fit.posterior
-    if isinstance(fit, GridPosterior):
+    if isinstance(fit, Posterior):
         return fit
-    raise TypeError("Expected a BayesianPnL fit or GridPosterior.")
+    raise TypeError("Expected a BayesianPnL fit or Posterior.")
 
 
 # ------------------------------------------------------------------- style tokens
@@ -38,13 +36,9 @@ BLUE = {
     200: "#9ec5f4",
     250: "#86b6ef",
     300: "#6da7ec",
-    350: "#5598e7",
     400: "#3987e5",
-    450: "#2a78d6",
     500: "#256abf",
-    550: "#1c5cab",
     600: "#184f95",
-    650: "#104281",
     700: "#0d366b",
 }
 ACCENT = "#eb6834"  # posterior mean lines
@@ -63,14 +57,7 @@ DENSITY_CMAP = LinearSegmentedColormap.from_list(
     ],
 )
 
-_FONT = next(
-    (
-        f
-        for f in ("Segoe UI", "Inter", "Helvetica Neue", "Arial")
-        if any(f == x.name for x in font_manager.fontManager.ttflist)
-    ),
-    "DejaVu Sans",
-)
+_FONT = "DejaVu Sans"
 _RC = {
     "figure.facecolor": SURFACE,
     "axes.facecolor": SURFACE,
@@ -85,7 +72,7 @@ _RC = {
     "axes.labelsize": 9.5,
     "axes.titlecolor": INK,
     "axes.titlesize": 12,
-    "axes.titleweight": "semibold",
+    "axes.titleweight": "bold",
     "axes.titlelocation": "left",
     "axes.grid": True,
     "axes.axisbelow": True,
@@ -169,7 +156,7 @@ def _title(
             ha="left",
             va="top",
             fontsize=13,
-            fontweight="semibold",
+            fontweight="bold",
             color=INK,
             transform=fig_or_ax.transFigure,
         )
@@ -201,14 +188,94 @@ def _title(
             )
 
 
-def _zoom(post, dens: np.ndarray, mass_level: float = 0.995, pad: float = 0.12):
+def _zoom(grid, dens: np.ndarray, mass_level: float = 0.995, pad: float = 0.12):
     """Bounding box (mean, sd) of the highest-density region holding ``mass_level`` of the mass."""
-    thr = post.hdr_thresholds((mass_level,))[mass_level]
+    thr = grid.hdr_thresholds((mass_level,))[mass_level]
     i, j = np.nonzero(dens >= thr)
-    mlo, mhi = post.mu[i.min()], post.mu[i.max()]
-    slo, shi = post.sd[j.min()], post.sd[j.max()]
-    pm, ps = pad * (mhi - mlo), pad * (shi - slo)
+    mlo, mhi = grid.mu[i.min()], grid.mu[i.max()]
+    slo, shi = grid.sd[j.min()], grid.sd[j.max()]
+    pm = max(pad * (mhi - mlo), 0.5 * _cell_widths(grid.mu)[i].max())
+    ps = max(pad * (shi - slo), 0.5 * _cell_widths(grid.sd)[j].max())
     return (mlo - pm, mhi + pm), (max(slo - ps, 0.0), shi + ps)
+
+
+def _marginal_density(post, grid, param):
+    """Evaluate inference densities on explicitly selected plotting coordinates."""
+    coordinates = grid.mu if param == "mean" else grid.sd
+    return pd.Series(
+        post.density(param, coordinates),
+        index=pd.Index(coordinates, name=param),
+        name="density",
+    )
+
+
+def _no_value_label(probability):
+    return "No positive long-term value\nP(expectation <= 0 | data) = {:.1%}".format(
+        probability
+    )
+
+
+def _shade_nonpositive(ax, coordinates, density, *, horizontal=False, label=None):
+    """Shade a parameter-density tail, interpolating its boundary at zero."""
+    tail = coordinates[coordinates <= 0]
+    if coordinates[0] < 0 < coordinates[-1]:
+        tail = np.append(tail, 0.0)
+    fill = ax.fill_betweenx if horizontal else ax.fill_between
+    return fill(
+        tail,
+        np.interp(tail, coordinates, density),
+        color=LOSS,
+        alpha=0.45,
+        lw=0,
+        label=label,
+    )
+
+
+def _plot_joint_density(ax, grid, density, hdr_levels):
+    """Draw finite-grid regions, combining labels when regions share a threshold."""
+    levels = np.asarray(hdr_levels, dtype=float)
+    if (
+        levels.ndim != 1
+        or not np.isfinite(levels).all()
+        or ((levels <= 0) | (levels >= 1)).any()
+    ):
+        raise ValueError(
+            "hdr_levels must be a one-dimensional sequence between 0 and 1."
+        )
+    thresholds = grid.hdr_thresholds((0.995,) + tuple(levels))
+    lower, upper = thresholds[0.995], float(density.max())
+    if lower < upper:
+        ax.contourf(
+            grid.sd,
+            grid.mu,
+            density,
+            levels=np.linspace(lower, upper, 14),
+            cmap=DENSITY_CMAP,
+        )
+    else:
+        # A valid coarse or flat grid may contain only one distinct density.
+        ax.pcolormesh(grid.sd, grid.mu, density, shading="nearest", cmap=DENSITY_CMAP)
+    labels = {}
+    for level in levels:
+        threshold = thresholds[level]
+        if density.min() < threshold < upper:
+            labels.setdefault(threshold, []).append("{:.0%}".format(level))
+    if labels:
+        contours = ax.contour(
+            grid.sd,
+            grid.mu,
+            density,
+            levels=sorted(labels),
+            colors=INK_2,
+            linewidths=0.8,
+        )
+        ax.clabel(
+            contours,
+            fmt={key: " / ".join(value) for key, value in labels.items()},
+            fontsize=7.5,
+            colors=INK_2,
+            inline_spacing=2,
+        )
 
 
 # ------------------------------------------------------------------ joint posterior
@@ -231,15 +298,17 @@ def plot_bayesian_posterior(
     (ticks along the mean margin). Axes are zoomed to the 99.5% highest-density region.
     ``truth=(mean, sd)`` marks known values (simulations).
 
-    Accepts BayesianPnL or GridPosterior and returns a Matplotlib Figure.
+    Accepts BayesianPnL or Posterior and returns a Matplotlib Figure.
     Return/volatility values retain the input PnL units; no percent conversion
-    is applied. The plot does not call show().
+    is applied. The plot does not call show(). Joint contours use the explicit
+    finite-grid adapter; marginal densities and annotations use the fitted backend.
     For Sharpe/return metrics, transparent hatching marks non-positive long-term
     expectation, with matching posterior-tail shading on the mean marginal.
     """
     post = _get_posterior(post)
-    dens = post.mass / np.outer(_cell_widths(post.mu), _cell_widths(post.sd))
-    (ylo, yhi), (xlo, xhi) = _zoom(post, dens)
+    grid = post.to_grid()
+    dens = grid.mass / np.outer(_cell_widths(grid.mu), _cell_widths(grid.sd))
+    (ylo, yhi), (xlo, xhi) = _zoom(grid, dens)
     label = _metric_label(post)
     em, es = post.expectation("mean"), post.expectation("sd")
     m_lo, m_hi = post.interval("mean", 0.9, "hdi")
@@ -262,28 +331,7 @@ def plot_bayesian_posterior(
         ax_top = fig.add_subplot(gs[0, 0], sharex=ax)
         ax_right = fig.add_subplot(gs[1, 1], sharey=ax)
 
-        thr = post.hdr_thresholds((0.995,) + tuple(hdr_levels))
-        fill_levels = np.linspace(thr[0.995], dens.max(), 14)
-        ax.contourf(
-            post.sd,
-            post.mu,
-            dens,
-            levels=fill_levels,
-            cmap=DENSITY_CMAP,
-            extend="neither",
-        )
-        levels = sorted(thr[k] for k in hdr_levels)
-        cs = ax.contour(
-            post.sd, post.mu, dens, levels=levels, colors=INK_2, linewidths=0.8
-        )
-        names = {thr[k]: f"{k:.0%}" for k in hdr_levels}
-        ax.clabel(
-            cs,
-            fmt=lambda v: names.get(v, ""),
-            fontsize=7.5,
-            colors=INK_2,
-            inline_spacing=2,
-        )
+        _plot_joint_density(ax, grid, dens, hdr_levels)
         no_value_region = post.metric != "ann_vol" and ylo < 0
         if no_value_region:
             ax.add_patch(
@@ -297,10 +345,7 @@ def plot_bayesian_posterior(
                     hatch="///",
                     linewidth=0,
                     zorder=1.5,
-                    label=(
-                        "No positive long-term value\n"
-                        f"P(expectation ≤ 0 | data) = {post.prob_mean_below(0):.1%}"
-                    ),
+                    label=_no_value_label(post.prob_mean_below(0)),
                 )
             )
             ax.axhline(0, color=LOSS, lw=1, ls="--", zorder=3)
@@ -326,7 +371,8 @@ def plot_bayesian_posterior(
         )
         ax.set_ylabel(f"Long-term expected {label}")
 
-        mx, my = post.marginal_density("sd"), post.marginal_density("mean")
+        mx = _marginal_density(post, grid, "sd")
+        my = _marginal_density(post, grid, "mean")
         for a, m, lo, hi, vertical in (
             (ax_top, mx, s_lo, s_hi, True),
             (ax_right, my, m_lo, m_hi, False),
@@ -343,12 +389,7 @@ def plot_bayesian_posterior(
                 a.fill_betweenx(x, d, color=BLUE[100], lw=0)
                 a.fill_betweenx(x, d, where=inside, color=BLUE[250], lw=0)
                 if post.metric != "ann_vol":
-                    tail_x = x[x <= 0]
-                    if x[0] < 0 < x[-1]:
-                        tail_x = np.append(tail_x, 0.0)
-                    a.fill_betweenx(
-                        tail_x, np.interp(tail_x, x, d), color=LOSS, alpha=0.45, lw=0
-                    )
+                    _shade_nonpositive(a, x, d, horizontal=True)
                     a.axhline(0, color=LOSS, lw=1, ls="--")
                 a.plot(d, x, color=BLUE[500], lw=1.6)
                 a.axhline(em, color=ACCENT, lw=1.6, label="posterior mean", zorder=5)
@@ -427,11 +468,14 @@ def plot_bayesian_predictive(
 ):
     """Plot next-period realised performance, integrating parameter uncertainty.
 
-    Accepts a BayesianPnL or GridPosterior and returns a Matplotlib Axes.
+    Accepts a BayesianPnL or Posterior and returns a Matplotlib Axes.
     Predictions refer to the same duration as the fitted observations.
     Return/volatility values retain the input PnL units.
     """
     post = _get_posterior(post)
+    thresholds = np.asarray(thresholds, dtype=float)
+    if thresholds.ndim != 1 or not np.isfinite(thresholds).all():
+        raise ValueError("thresholds must be a one-dimensional finite sequence.")
     with plt.rc_context(_RC):
         if ax is None:
             _, ax = plt.subplots(figsize=(8, 4.2))
@@ -440,7 +484,7 @@ def plot_bayesian_predictive(
         xs = np.linspace(lo, hi, 500)
         pdf = post.predictive_pdf(xs)
         q05, q50, q95 = post.predictive_quantile([0.05, 0.5, 0.95])
-        t0 = min(thresholds) if thresholds else -np.inf
+        t0 = min(thresholds) if len(thresholds) else -np.inf
         ax.fill_between(
             xs, pdf, where=xs >= t0, color=BLUE[150], lw=0, interpolate=True
         )
@@ -503,7 +547,7 @@ def plot_bayesian_prior_posterior(post, title: Optional[str] = None, figsize=(12
     Shift = (posterior mean - prior mean) / prior sd (large: data and prior
     disagree; check the prior). Needs an ``IndependentPrior``.
 
-    Accepts BayesianPnL or GridPosterior and returns a Matplotlib Figure with
+    Accepts BayesianPnL or Posterior and returns a Matplotlib Figure with
     a diagnostics DataFrame attribute. Values retain the input PnL units.
     For Sharpe and return metrics, red shading marks posterior probability of
     a non-positive long-term expectation, not a negative next-period outcome
@@ -517,11 +561,12 @@ def plot_bayesian_prior_posterior(post, title: Optional[str] = None, figsize=(12
         raise TypeError(
             "plot_bayesian_prior_posterior needs an IndependentPrior (mean prior and sd prior)."
         )
+    grid = post.to_grid()
     rows = {}
     with plt.rc_context(_RC):
         fig, axes = plt.subplots(1, 2, figsize=figsize)
         for ax, param, pr in ((axes[0], "mean", prior.mean), (axes[1], "sd", prior.sd)):
-            m = post.marginal_density(param)
+            m = _marginal_density(post, grid, param)
             x_post, d_post = m.index.to_numpy(), m.to_numpy()
             # x range: the prior's central 90% and the posterior's 99.8% (prior tails would dominate otherwise)
             q = np.atleast_1d(pr.ppf([0.05, 0.95]))
@@ -555,20 +600,8 @@ def plot_bayesian_prior_posterior(post, title: Optional[str] = None, figsize=(12
                 if post.metric != "ann_vol":
                     probability = post.prob_mean_below(0)
                     rows[param]["prob_mean_nonpositive"] = probability
-                    tail_x = x_post[x_post <= 0]
-                    if x_post[0] < 0 < x_post[-1]:
-                        tail_x = np.append(tail_x, 0.0)
-                    tail_density = np.interp(tail_x, x_post, d_post)
-                    ax.fill_between(
-                        tail_x,
-                        tail_density,
-                        color=LOSS,
-                        alpha=0.45,
-                        lw=0,
-                        label=(
-                            "No positive long-term value\n"
-                            f"P(expectation ≤ 0 | data) = {probability:.1%}"
-                        ),
+                    _shade_nonpositive(
+                        ax, x_post, d_post, label=_no_value_label(probability)
                     )
                     ax.axvline(0, color=INK_2, lw=0.9, ls="--")
                 for v in post.data:
@@ -611,7 +644,7 @@ def plot_bayesian_prior_posterior(post, title: Optional[str] = None, figsize=(12
             )
         if title:
             fig.suptitle(
-                title, x=0.01, ha="left", fontsize=13, fontweight="semibold", color=INK
+                title, x=0.01, ha="left", fontsize=13, fontweight="bold", color=INK
             )
         fig.tight_layout()
     fig.diagnostics = pd.DataFrame(rows).T

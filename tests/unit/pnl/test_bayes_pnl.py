@@ -251,9 +251,9 @@ def test_expected_performance_prior_defaults_are_centered_at_zero(metric):
 
 @pytest.mark.parametrize("factor", [252, 260])
 def test_daily_periods_match_direct_calculation_and_preserve_scale(daily_pnl, factor):
-    periods = period_metrics(daily_pnl, 36, annualization_factor=factor)
+    periods = period_metrics(daily_pnl, annualization_factor=factor)
     assert len(periods) == 3
-    assert periods.period_start.min() == pd.Timestamp("2002-01-31")
+    assert periods.period_start.min() == pd.Timestamp("2002-01-01")
     assert periods.period_end.max() == pd.Timestamp("2010-12-31")
     block = daily_pnl.loc["2008-01-01":]
     final = periods.iloc[-1]
@@ -262,7 +262,7 @@ def test_daily_periods_match_direct_calculation_and_preserve_scale(daily_pnl, fa
     assert final.sharpe == pytest.approx(
         np.sqrt(factor) * block.mean() / block.std(ddof=1)
     )
-    scaled = period_metrics(10 * daily_pnl, 36, annualization_factor=factor)
+    scaled = period_metrics(10 * daily_pnl, annualization_factor=factor)
     np.testing.assert_allclose(scaled.sharpe, periods.sharpe)
     np.testing.assert_allclose(scaled.ann_vol, 10 * periods.ann_vol)
 
@@ -280,12 +280,12 @@ def test_from_pnl_retains_periods_and_matches_vector_fit(daily_pnl):
     assert frame_fit.expectation("mean") == pytest.approx(fit.expectation("mean"))
 
 
-def test_from_pnl_custom_annualization_and_period_length(daily_pnl):
+def test_from_pnl_custom_annualization_and_partition_anchor(daily_pnl):
     fit = BayesianPnL.from_pnl(
-        daily_pnl, period_months=24, metric="ann_ret", annualization_factor=260
+        daily_pnl, end_year=2009, metric="ann_ret", annualization_factor=260
     )
-    assert fit.posterior.period_years == 2.0
-    last = daily_pnl.loc["2009-01-01":]
+    assert fit.posterior.period_years == 3.0
+    last = daily_pnl.loc["2007-01-01":"2009-12-31"]
     assert fit.periods.iloc[-1].ann_ret == pytest.approx(260 * last.mean())
 
 
@@ -303,7 +303,7 @@ def test_wholly_absent_daily_month_invalidates_calendar_block(daily_pnl):
     with pytest.warns(UserWarning):
         periods = period_metrics(missing)
     assert len(periods) == 2
-    assert periods.period_start.min() == pd.Timestamp("2002-01-31")
+    assert periods.period_start.min() == pd.Timestamp("2002-01-01")
     assert periods.period_end.max() == pd.Timestamp("2007-12-31")
 
 
@@ -354,7 +354,15 @@ def test_from_pnl_rejects_invalid_daily_annualization(daily_pnl, factor):
         BayesianPnL.from_pnl(daily_pnl, annualization_factor=factor)
 
 
-@pytest.mark.parametrize("legacy_option", [{"freq_in": "M"}, {"metric_freq": "M"}])
+@pytest.mark.parametrize(
+    "legacy_option",
+    [
+        {"freq_in": "M"},
+        {"metric_freq": "M"},
+        {"period_months": 36},
+        {"step_months": 12},
+    ],
+)
 def test_daily_only_api_rejects_removed_frequency_options(daily_pnl, legacy_option):
     with pytest.raises(TypeError):
         BayesianPnL.from_pnl(daily_pnl, **legacy_option)
@@ -492,8 +500,9 @@ def test_complex_metrics_and_pnl_are_rejected(daily_pnl):
 
 
 def test_all_missing_history_cannot_be_fitted(daily_pnl):
-    with pytest.raises(ValueError):
-        BayesianPnL.from_pnl(daily_pnl * np.nan)
+    with pytest.warns(UserWarning, match="missing values"):
+        with pytest.raises(ValueError):
+            BayesianPnL.from_pnl(daily_pnl * np.nan)
 
 
 def test_zero_volatility_blocks_have_no_defined_sharpe(daily_pnl):
@@ -533,6 +542,75 @@ def test_fit_keeps_snapshot_of_supplied_metrics():
 
 
 def test_intraday_observations_are_not_annualized_as_daily(daily_pnl):
-    extra = pd.Series([0.1], index=[daily_pnl.index[-1] + pd.Timedelta(hours=1)])
+    extra = pd.Series([0.1], index=[daily_pnl.index[-1] + pd.Timedelta(1, unit="h")])
     with pytest.raises(ValueError, match="one observation per calendar day"):
         BayesianPnL.from_pnl(pd.concat([daily_pnl, extra]))
+
+
+@pytest.mark.parametrize("date", ["2008-01-01", "2010-12-31"])
+def test_missing_boundary_values_invalidate_full_block(daily_pnl, date):
+    broken = daily_pnl.copy()
+    broken.loc[date] = np.nan
+    with pytest.warns(UserWarning, match="missing values"):
+        periods = period_metrics(broken)
+    assert len(periods) == 2
+    assert periods.period_end.max() == pd.Timestamp("2007-12-31")
+
+
+def test_partial_final_year_is_excluded(daily_pnl):
+    truncated = daily_pnl.loc[:"2010-12-01"]
+    periods = period_metrics(truncated)
+    assert periods.period_end.max() == pd.Timestamp("2009-12-31")
+    final = truncated.loc["2007-01-01":"2009-12-31"]
+    assert periods.iloc[-1].ann_ret == pytest.approx(252 * final.mean())
+
+
+def test_partial_initial_year_is_excluded(daily_pnl):
+    periods = period_metrics(daily_pnl.loc["2002-01-29":])
+    assert len(periods) == 2
+    assert periods.period_start.min() == pd.Timestamp("2005-01-01")
+
+
+def test_holiday_boundary_tolerance_accepts_daily_history(daily_pnl):
+    periods = period_metrics(daily_pnl.loc["2002-01-02":"2010-12-30"])
+    assert len(periods) == 3
+    assert periods.iloc[-1].period_end == pd.Timestamp("2010-12-31")
+    assert (periods.period_years == 3).all()
+    assert periods.n_observations.sum() == len(daily_pnl.loc["2002-01-02":"2010-12-30"])
+
+
+def test_two_days_across_month_boundary_are_not_full_period():
+    pnl = pd.Series([0.1, 1.1], index=pd.to_datetime(["2024-01-31", "2024-02-01"]))
+    assert period_metrics(pnl).empty
+    with pytest.raises(ValueError, match="No complete periods"):
+        BayesianPnL.from_pnl(pnl)
+
+
+@pytest.mark.parametrize("end_year", [True, 2009.5, 2011, 2000, 0])
+def test_period_anchor_must_be_a_covered_calendar_year(daily_pnl, end_year):
+    with pytest.raises(ValueError, match="end_year"):
+        period_metrics(daily_pnl, end_year=end_year)
+
+
+def test_week_long_hole_invalidates_block_without_monthly_aggregation(daily_pnl):
+    missing = daily_pnl.drop(daily_pnl.loc["2009-04-01":"2009-04-10"].index)
+    with pytest.warns(UserWarning, match="incomplete daily coverage"):
+        periods = period_metrics(missing)
+    assert len(periods) == 2
+
+
+def test_multiple_columns_keep_identical_calendar_partitions(daily_pnl):
+    frame = pd.concat([daily_pnl.rename("one"), daily_pnl.rename("two")], axis=1)
+    frame.loc["2009-04-01", "one"] = np.nan
+    with pytest.warns(UserWarning):
+        periods = period_metrics(frame)
+    assert len(periods.loc[periods.variant == "one"]) == 2
+    assert len(periods.loc[periods.variant == "two"]) == 3
+
+
+@pytest.mark.parametrize("frequency", ["2D", "3D", "2B"])
+def test_coarser_than_daily_streams_are_rejected(frequency):
+    index = pd.date_range("2021-01-01", "2023-12-31", freq=frequency)
+    pnl = pd.Series(np.random.default_rng(7).normal(size=len(index)), index=index)
+    with pytest.raises(ValueError, match="Supply daily PnL"):
+        period_metrics(pnl)

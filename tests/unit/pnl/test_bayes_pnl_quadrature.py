@@ -10,7 +10,7 @@ from scipy import integrate, special, stats
 
 from macrosynergy.pnl import BayesianPnL
 from macrosynergy.pnl.bayes_pnl import (
-    GridPosterior,
+    Posterior,
     GridSpec,
     GridTruncationWarning,
     IndependentPrior,
@@ -99,7 +99,7 @@ def test_quadrature_matches_direct_joint_integration(
 ):
     fit, expected = quadrature_fit, direct_two_dimensional_reference
     assert fit.method == "quadrature"
-    assert isinstance(fit.posterior, GridPosterior)
+    assert isinstance(fit.posterior, Posterior)
     assert fit.expectation("mean") == pytest.approx(expected["mean"], abs=2e-7)
     assert fit.expectation("sd") == pytest.approx(expected["sd"], abs=2e-7)
     assert fit.posterior.std("mean") == pytest.approx(expected["mean_sd"], abs=2e-7)

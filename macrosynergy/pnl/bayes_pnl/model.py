@@ -1,6 +1,6 @@
 """Public single-strategy interface to the period-metric grid benchmark."""
 
-from typing import Union
+from typing import Optional, Union
 
 import numpy as np
 import pandas as pd
@@ -8,7 +8,8 @@ import pandas as pd
 from .grid import GridSpec, posterior_grid
 from .periods import period_metrics
 from .priors import default_prior
-from .quadrature import QuadraturePosterior, supports_quadrature
+from .quadrature import QuadraturePosterior
+from .inputs import supports_quadrature
 
 
 class BayesianPnL:
@@ -19,23 +20,26 @@ class BayesianPnL:
     data : one-dimensional array-like
         Finite precomputed period metrics for one strategy, such as seven
         annualised Sharpe ratios from non-overlapping three-year periods.
-        At least one observation is required. The normal likelihood assumes
-        conditionally independent period metrics; it does not estimate regimes
-        or a research-selection correction.
+        At least one observation is required. Sharpe/return metrics have a normal
+        likelihood; strictly positive volatility metrics have a Gamma likelihood.
+        Period metrics are conditionally independent. Neither observation model
+        estimates regimes or a research-selection correction.
     metric : {"sharpe", "ann_ret", "ann_vol"}
         Metric label and default-prior choice. Return and volatility use the
         same units as the PnL supplied to :meth:`from_pnl`.
     prior : object, optional
         Vectorised logpdf(mean, sd). Defaults to an IndependentPrior with a
-        normal mean and inverse-gamma variance prior, correctly transformed to
-        the sd axis. A normalised=True attribute permits ordinary evidence for
+        normal mean for Sharpe/return or positive log-normal mean for volatility,
+        and inverse-gamma variance prior transformed to the sd axis.
+        A normalised=True attribute permits ordinary evidence for
         an untempered fit. Custom priors without quantiles may require an
         explicit GridSpec and careful boundary checks.
     grid : GridSpec or "auto"
         Finite grid for explicit grid inference or lazy quadrature figures.
     method : {"auto", "quadrature", "grid"}
-        Auto uses adaptive integration for an independent normal-mean prior;
-        custom joint priors retain grid inference. Quadrature eliminates the
+        Auto uses adaptive integration for normal likelihoods with an independent
+        normal-mean prior; volatility and custom joint priors use grid inference.
+        Quadrature eliminates the
         mean analytically and its summaries do not depend on the plotting grid.
     period_years : float
         Duration represented by each observation; default three years.
@@ -53,8 +57,10 @@ class BayesianPnL:
     The predictive distribution integrates both parameters and includes future
     performance variation. Neither treats additional strategy variants as
     independent historical periods. Expected period Sharpe is not necessarily
-    the Sharpe of the concatenated return history. A normal approximation to
-    volatility may assign negative values; assess its suitability.
+    the Sharpe of the concatenated return history. For volatility, both the
+    default mean prior and the Gamma observation model have positive support.
+    The dispersion prior describes variation between measured period metrics,
+    combining sampling noise and genuine variation; it is not a regime model.
 
     Examples
     --------
@@ -77,7 +83,11 @@ class BayesianPnL:
         if method not in ("auto", "quadrature", "grid"):
             raise ValueError("method must be 'auto', 'quadrature' or 'grid'.")
         selected_method = (
-            ("quadrature" if supports_quadrature(selected_prior) else "grid")
+            (
+                "quadrature"
+                if metric != "ann_vol" and supports_quadrature(selected_prior)
+                else "grid"
+            )
             if method == "auto"
             else method
         )
@@ -99,7 +109,6 @@ class BayesianPnL:
     def from_pnl(
         cls,
         pnl: Union[pd.Series, pd.DataFrame],
-        period_months: int = 36,
         metric: str = "sharpe",
         annualization_factor: float = 252,
         prior=None,
@@ -107,11 +116,14 @@ class BayesianPnL:
         likelihood_weight: float = 1.0,
         vol_target: float = 10.0,
         method: str = "auto",
+        *,
+        end_year: Optional[int] = None,
     ):
-        """Fit one dated PnL stream using non-overlapping calendar-month blocks.
+        """Fit daily PnL in complete, non-overlapping three-calendar-year blocks.
 
         Daily observations are annualised with annualization_factor, without
         monthly aggregation. Metrics use arithmetic mean and sample sd.
+        end_year optionally selects an earlier calendar-year partition anchor.
         See :func:`period_metrics` for input units and missing-data rules.
         Supply separate fits for strategy variants rather than pooling columns.
         """
@@ -121,7 +133,7 @@ class BayesianPnL:
             raise ValueError("metric must be 'sharpe', 'ann_ret' or 'ann_vol'.")
         periods = period_metrics(
             pnl,
-            period_months=period_months,
+            end_year=end_year,
             annualization_factor=annualization_factor,
         )
         if periods.empty:
@@ -137,7 +149,7 @@ class BayesianPnL:
             metric=metric,
             prior=prior,
             grid=grid,
-            period_years=period_months / 12.0,
+            period_years=3.0,
             likelihood_weight=likelihood_weight,
             vol_target=vol_target,
             method=method,

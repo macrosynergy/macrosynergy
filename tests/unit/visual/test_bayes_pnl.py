@@ -15,6 +15,18 @@ from macrosynergy.visuals import (
 )
 
 
+def test_predictive_accepts_numpy_thresholds(fit):
+    ax = plot_bayesian_predictive(fit, thresholds=np.array([0.0, 1.0]))
+    ax.figure.canvas.draw()
+    plt.close(ax.figure)
+
+
+@pytest.mark.parametrize("thresholds", [[np.nan], [[0]], [np.inf]])
+def test_predictive_validates_thresholds(fit, thresholds):
+    with pytest.raises(ValueError, match="thresholds"):
+        plot_bayesian_predictive(fit, thresholds=thresholds)
+
+
 @pytest.fixture(scope="module")
 def fit():
     return BayesianPnL([0.3, 0.9, -0.2, 0.5, 0.7])
@@ -140,3 +152,51 @@ def test_decimal_volatility_is_not_mislabeled_as_percent():
 def test_plots_reject_unrelated_inputs(plot):
     with pytest.raises(TypeError):
         plot([0.3, 0.4])
+
+
+@pytest.mark.parametrize("flat", [False, True])
+def test_coarse_joint_grid_handles_tied_or_constant_density_levels(flat):
+    from macrosynergy.pnl.bayes_pnl import (
+        GridPosterior,
+        GridSpec,
+        GridTruncationWarning,
+    )
+
+    if flat:
+        posterior = GridPosterior(
+            mu=np.array([-1.0, 1.0]),
+            sd=np.array([0.1, 2.0]),
+            log_post=np.zeros((2, 2)),
+            mass=np.full((2, 2), 0.25),
+            data=np.array([0.3]),
+            prior=None,
+        )
+    else:
+        with pytest.warns(GridTruncationWarning):
+            posterior = BayesianPnL(
+                [0.2, 0.4, 0.5],
+                grid=GridSpec((-1, 1), (0.1, 2), 2, 2),
+                method="grid",
+            ).posterior
+    figure = plot_bayesian_posterior(posterior)
+    figure.canvas.draw()
+    assert figure.axes[0].collections
+    assert all(np.diff(axis.get_xlim())[0] > 0 for axis in figure.axes)
+    plt.close(figure)
+
+
+@pytest.mark.parametrize("levels", [[0], [1], [np.nan], [[0.5]]])
+def test_joint_plot_rejects_invalid_hdr_levels(fit, levels):
+    with pytest.raises(ValueError, match="hdr_levels"):
+        plot_bayesian_posterior(fit, hdr_levels=levels)
+    plt.close("all")
+
+
+def test_predictive_plot_does_not_construct_visualization_grid(monkeypatch):
+    posterior = BayesianPnL([0.3, 0.9, -0.2, 0.5, 0.7]).posterior
+    monkeypatch.setattr(
+        posterior, "to_grid", lambda: pytest.fail("Predictive plots need no grid.")
+    )
+    axis = plot_bayesian_predictive(posterior)
+    axis.figure.canvas.draw()
+    plt.close(axis.figure)

@@ -11,29 +11,19 @@ import numpy as np
 import pandas as pd
 from scipy import integrate, interpolate, optimize, special
 
-from .grid import (
-    GridPosterior,
-    GridSpec,
-    _observations,
-    _probabilities,
-    _sample_size,
-    posterior_grid,
+from .grid import GridSpec, posterior_grid
+from .inputs import (
+    ModelInputs,
+    probabilities as _probabilities,
+    sample_size as _sample_size,
+    evaluation_points,
+    parameter_values,
+    supports_quadrature,
 )
-from .priors import IndependentPrior, METRICS, NormalPrior, SDPrior
+from .posterior import Posterior, bracketed_quantile
 
 
-def supports_quadrature(prior):
-    """Whether the prior permits the implemented analytic mean elimination."""
-    # An overriding subclass can define a different density even when it keeps
-    # the same attributes. Never silently eliminate that user's mean prior.
-    return (
-        type(prior) is IndependentPrior
-        and type(prior.mean) is NormalPrior
-        and type(prior.sd) is SDPrior
-    )
-
-
-class QuadraturePosterior(GridPosterior):
+class QuadraturePosterior(Posterior):
     """Adaptive posterior with a lazy, explicitly separate visualization grid.
 
     Ordinary inference uses adaptive QUADPACK integration, with normal mean
@@ -57,34 +47,29 @@ class QuadraturePosterior(GridPosterior):
         period_years=3.0,
         metric="sharpe",
     ):
+        if metric == "ann_vol":
+            raise ValueError(
+                "Volatility uses a Gamma likelihood; select method='grid' or 'auto'."
+            )
         if not supports_quadrature(prior):
             raise TypeError(
                 "Quadrature requires IndependentPrior(NormalPrior, SDPrior)."
             )
-        if metric not in METRICS:
-            raise ValueError("Unknown metric {!r}.".format(metric))
-        if not np.isfinite(likelihood_weight) or likelihood_weight <= 0:
-            raise ValueError("likelihood_weight must be positive and finite.")
-        if not np.isfinite(period_years) or period_years <= 0:
-            raise ValueError("period_years must be positive and finite.")
+        inputs = ModelInputs.validate(
+            data, prior, metric, period_years, likelihood_weight
+        )
         if not isinstance(grid, GridSpec) and not (
             isinstance(grid, str) and grid == "auto"
         ):
             raise TypeError("grid must be a GridSpec or 'auto'.")
-        self.data = _observations(data)
+        self.data = inputs.data
         self.prior, self.metric = prior, metric
         self.period_years, self.likelihood_weight = period_years, likelihood_weight
         self._grid_spec, self._plot_grid = grid, None
         self._location, self._scale = float(prior.mean.mean), float(prior.sd.mean)
-        x = (self.data - self._location) / self._scale
-        identical = bool(np.all(self.data == self.data[0]))
-        self._average = float(x[0] if identical else x[0] + (x - x[0]).mean())
-        self._n = float(likelihood_weight * len(x))
-        self._scatter = (
-            0.0
-            if identical
-            else float(likelihood_weight * np.square(x - self._average).sum())
-        )
+        self._average = (inputs.average - self._location) / self._scale
+        self._n = inputs.weighted_n
+        self._scatter = inputs.likelihood_weight * inputs.scatter / self._scale**2
         self._s0 = float(prior.mean.sd / self._scale)
         if (
             not np.isfinite([self._average, self._scatter, self._s0]).all()
@@ -96,11 +81,6 @@ class QuadraturePosterior(GridPosterior):
         self._log_s0 = math.log(self._s0)
         self._log_kappa = math.log(self._n) + 2 * self._log_s0
         self._prior_params = prior.sd.params
-        if prior.sd.kind == "gamma_sd" and self._scatter == 0:
-            if self._prior_params["shape"] <= self._n - 1:
-                raise ValueError(
-                    "Improper posterior: identical data require gamma sd shape > weighted n - 1."
-                )
         self._cache, self._inverse = {}, None
         self._mode_t, self._width, self._height, self._peaks = (
             self._integration_geometry()
@@ -133,14 +113,40 @@ class QuadraturePosterior(GridPosterior):
         p, kind = self._prior_params, self.prior.sd.kind
         if kind == "invgamma_var":
             log_beta = math.log(p["beta"]) - 2 * math.log(self._scale)
-            penalty = self._exp(log_beta - 2 * t)
-            return (
-                math.log(2.0)
-                + p["alpha"] * log_beta
-                - special.gammaln(p["alpha"])
-                - (2 * p["alpha"] + 1) * t
-                - penalty
-            )
+            alpha = p["alpha"]
+            log_alpha = math.log(alpha)
+            # Center at the log-SD prior mode. The usual inverse-gamma formula
+            # subtracts terms of order alpha*log(alpha), losing the shape of a
+            # concentrated density. This equivalent form keeps its deviation
+            # from the peak separate from the normalized peak height.
+            z = -2 * (t - 0.5 * (log_beta - log_alpha))
+            if z > 709:
+                return -np.inf
+            if abs(z) < 1e-3:
+                remainder = (
+                    -z
+                    * z
+                    * (0.5 + z * (1 / 6 + z * (1 / 24 + z * (1 / 120 + z / 720))))
+                )
+            else:
+                remainder = z - math.expm1(z)
+            if alpha >= 32:
+                inverse = 1 / alpha
+                correction = inverse * (
+                    1 / 12
+                    + inverse**2
+                    * (-1 / 360 + inverse**2 * (1 / 1260 - inverse**2 / 1680))
+                )
+                peak = (
+                    math.log(2.0)
+                    + 0.5 * (log_alpha - math.log(2 * math.pi))
+                    - correction
+                )
+            else:
+                peak = (
+                    math.log(2.0) + alpha * log_alpha - special.gammaln(alpha) - alpha
+                )
+            return peak - t + alpha * remainder
         if kind == "gamma_sd":
             log_rate = math.log(p["rate"]) + math.log(self._scale)
             return (
@@ -250,7 +256,9 @@ class QuadraturePosterior(GridPosterior):
         )
         return mode, width, height, candidates
 
-    def _integral(self, function, lower=-np.inf, upper=np.inf, normalized=True):
+    def _integral(
+        self, function, lower=-np.inf, upper=np.inf, normalized=True, log_function=False
+    ):
         lo, hi = (lower - self._mode_t) / self._width, (
             upper - self._mode_t
         ) / self._width
@@ -269,7 +277,12 @@ class QuadraturePosterior(GridPosterior):
         def integrand(u):
             t = self._mode_t + self._width * u
             log_weight = self._log_kernel(t) - self._height
-            if log_weight < -745 or not np.isfinite(log_weight):
+            if not np.isfinite(log_weight):
+                return 0.0
+            if log_function:
+                log_weight += function(t)
+                return self._exp(log_weight) if log_weight > -745 else 0.0
+            if log_weight < -745:
                 return 0.0
             return math.exp(log_weight) * function(t)
 
@@ -303,7 +316,7 @@ class QuadraturePosterior(GridPosterior):
                     lambda t: self._conditional(t)[0]
                 )
             else:
-                result = self._scale * self._expect(lambda t: self._exp(t))
+                result = self._scale * self._integral(lambda t: t, log_function=True)[0]
             self._cache["expectation", param] = result
         return self._cache["expectation", param]
 
@@ -326,14 +339,18 @@ class QuadraturePosterior(GridPosterior):
                     m, log_sd = self._conditional(t)
                     return self._exp(2 * log_sd) + (m - center) ** 2
 
+                moment = self._expect(variance)
             else:
+                log_center = math.log(center)
 
-                def variance(t):
-                    return (self._exp(t) - center) ** 2
+                def log_variance(t):
+                    distance = abs(t - log_center)
+                    if distance == 0:
+                        return -np.inf
+                    return 2 * (max(t, log_center) + math.log(-math.expm1(-distance)))
 
-            self._cache["std", param] = self._scale * math.sqrt(
-                max(0.0, self._expect(variance))
-            )
+                moment = self._integral(log_variance, log_function=True)[0]
+            self._cache["std", param] = self._scale * math.sqrt(max(0.0, moment))
         return self._cache["std", param]
 
     def _normal_value(self, value, t, predictive=False, density=False):
@@ -370,9 +387,7 @@ class QuadraturePosterior(GridPosterior):
 
     def cdf(self, param, value):
         self._axis_name(param)
-        values = np.asarray(value, dtype=float)
-        if np.isnan(values).any():
-            raise ValueError("CDF values must not contain NaNs.")
+        values = parameter_values(value)
         results = []
         for v in values.ravel():
             if np.isinf(v):
@@ -395,19 +410,7 @@ class QuadraturePosterior(GridPosterior):
             center = (self.expectation("mean") - self._location) / self._scale
             width = max(self.std("mean") / self._scale, np.finfo(float).eps)
             function = lambda x: self.cdf("mean", self._location + self._scale * x) - q
-        lo, hi = center - 8 * width, center + 8 * width
-        for _ in range(50):
-            if function(lo) <= 0 and function(hi) >= 0:
-                break
-            width *= 2
-            lo, hi = center - 8 * width, center + 8 * width
-        else:
-            raise ValueError(
-                "Could not bracket posterior quantile within finite precision."
-            )
-        root = optimize.brentq(
-            function, lo, hi, xtol=max(1e-12 * width, np.finfo(float).tiny), rtol=1e-12
-        )
+        root = bracketed_quantile(function, center, width)
         return (
             self._scale * self._exp(root)
             if param == "sd"
@@ -427,11 +430,7 @@ class QuadraturePosterior(GridPosterior):
         return self._predictive(x, True)
 
     def _predictive(self, x, density):
-        values = np.atleast_1d(np.asarray(x, dtype=float))
-        if values.ndim != 1 or np.isnan(values).any():
-            raise ValueError(
-                "x must be a scalar or one-dimensional array without NaNs."
-            )
+        values = evaluation_points(x)
         result = []
         for value in values:
             if np.isinf(value):
@@ -451,31 +450,6 @@ class QuadraturePosterior(GridPosterior):
             and self._prior_params["shape"] <= self._n
             and value == self.data[0]
         )
-
-    def predictive_quantile(self, q):
-        result = []
-        for p in _probabilities(q):
-            if p in (0, 1):
-                result.append(-np.inf if p == 0 else np.inf)
-                continue
-            center = (self.expectation("mean") - self._location) / self._scale
-            width = max(
-                self.expectation("sd") / self._scale, self.std("mean") / self._scale
-            )
-            function = (
-                lambda z: self.predictive_cdf(self._location + self._scale * z)[0] - p
-            )
-            lo, hi = center - 8 * width, center + 8 * width
-            for _ in range(50):
-                if function(lo) <= 0 and function(hi) >= 0:
-                    break
-                width *= 2
-                lo, hi = center - 8 * width, center + 8 * width
-            else:
-                raise ValueError("Could not bracket predictive quantile.")
-            root = optimize.brentq(function, lo, hi, xtol=1e-12 * width, rtol=1e-12)
-            result.append(self._location + self._scale * root)
-        return np.asarray(result)
 
     def interval(self, param, level=0.9, kind="eti"):
         """Equal-tailed or shortest contiguous credible interval.
@@ -508,7 +482,8 @@ class QuadraturePosterior(GridPosterior):
             self._cache[key] = (float(bounds[0]), float(bounds[1]))
         return self._cache[key]
 
-    def _ensure_grid(self):
+    def to_grid(self):
+        """Construct/cache a finite plotting approximation, explicitly on request."""
         if self._plot_grid is None:
             spec = self._grid_spec
             if isinstance(spec, str):
@@ -532,38 +507,9 @@ class QuadraturePosterior(GridPosterior):
             )
         return self._plot_grid
 
-    @property
-    def mu(self):
-        return self._ensure_grid().mu
-
-    @property
-    def sd(self):
-        return self._ensure_grid().sd
-
-    @property
-    def mass(self):
-        return self._ensure_grid().mass
-
-    @property
-    def log_post(self):
-        return self._ensure_grid().log_post
-
-    def marginal(self, param):
-        """Visualization-only marginal masses on the lazy plotting grid."""
-        return self._ensure_grid().marginal(param)
-
-    def marginal_density(self, param):
-        """Continuous marginal density evaluated on visualization coordinates."""
-        coordinates = self.mu if param == "mean" else self.sd
-        return pd.Series(
-            self.density(param, coordinates),
-            index=pd.Index(coordinates, name=param),
-            name="density",
-        )
-
     def density(self, param, values):
         self._axis_name(param)
-        values = np.atleast_1d(np.asarray(values, dtype=float))
+        values = evaluation_points(values)
         result = []
         for value in values:
             if param == "sd":
@@ -587,14 +533,6 @@ class QuadraturePosterior(GridPosterior):
                     self._expect(lambda t: self._normal_value(value, t, density=True))
                 )
         return np.asarray(result)
-
-    def hdr_thresholds(self, levels=(0.5, 0.8, 0.95)):
-        """Approximate visualization contours, separate from adaptive inference."""
-        return self._ensure_grid().hdr_thresholds(levels)
-
-    def edge_mass(self, frac=0.02):
-        """Plot-grid diagnostic only; not a quadrature truncation measure."""
-        return self._ensure_grid().edge_mass(frac)
 
     def mode(self):
         if (
@@ -653,41 +591,14 @@ class QuadraturePosterior(GridPosterior):
         m = self._conditional(t)[0]
         return self._location + self._scale * m, self._scale * math.exp(t)
 
-    def summary(
-        self,
-        level=0.9,
-        thresholds=(0.0,),
-        predictive_q=(0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95),
-    ):
-        # Do not call GridPosterior.summary, whose final edge diagnostic would
-        # construct a plotting grid and make inference depend on its bounds.
-        rows = {}
-        for p in ("mean", "sd"):
-            rows[p + ": posterior mean"] = self.expectation(p)
-            rows[p + ": posterior median"] = float(self.quantile(p, 0.5))
-            rows[p + ": posterior sd"] = self.std(p)
-            for kind in ("eti", "hdi"):
-                lo, hi = self.interval(p, level, kind)
-                rows["{}: {:.0%} {}".format(p, level, kind.upper())] = (
-                    "[{:.3f}, {:.3f}]".format(lo, hi)
-                )
-        m, s = self.mode()
-        rows["joint mode (mean, sd)"] = (
-            "({:.3f}, {:.3f})".format(m, s)
-            if s > 0
-            else "boundary limit ({:.3f}, 0)".format(m)
-        )
-        for t in thresholds:
-            rows["Pr(mean < {:g})".format(t)] = self.prob_mean_below(t)
-            rows["Pr(next period < {:g})".format(t)] = float(self.predictive_cdf(t)[0])
-        for q, value in zip(predictive_q, self.predictive_quantile(predictive_q)):
-            rows["predictive q{:02d}".format(int(round(q * 100)))] = float(value)
-        rows["integration relative error"] = self.diagnostics[
-            "normalization_relative_error"
-        ]
-        return pd.Series(rows, name="value").to_frame()
+    def _summary_diagnostics(self):
+        return {
+            "integration relative error": self.diagnostics[
+                "normalization_relative_error"
+            ]
+        }
 
-    def sample(self, n, rng=None, jitter=True):
+    def sample(self, n, rng=None):
         """Conditional-normal draws using a refined numerical inverse sd CDF."""
         _sample_size(n)
         rng = np.random.default_rng(rng)
@@ -731,9 +642,3 @@ class QuadraturePosterior(GridPosterior):
                 self.diagnostics["sampling_checked_cdf_error"] = error
                 return
         raise ValueError("Numerical inverse sd CDF did not reach sampling tolerance.")
-
-    def predictive_sample(self, n, rng=None):
-        _sample_size(n)
-        rng = np.random.default_rng(rng)
-        draws = self.sample(n, rng, jitter=False)
-        return rng.normal(draws["mean"].to_numpy(), draws["sd"].to_numpy())

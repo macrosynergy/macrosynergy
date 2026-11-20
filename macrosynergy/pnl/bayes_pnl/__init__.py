@@ -1,4 +1,4 @@
-"""Bayesian grid estimates of period-performance metrics for a single strategy."""
+"""Bayesian inference for daily PnL and observed three-year performance metrics."""
 
 from .model import BayesianPnL
 from .grid import (
@@ -9,10 +9,21 @@ from .grid import (
     posterior_grid,
 )
 from .periods import period_metrics
-from .priors import IndependentPrior, NormalPrior, SDPrior, default_prior
+from .priors import (
+    IndependentPrior,
+    NormalPrior,
+    LogNormalPrior,
+    SDPrior,
+    default_prior,
+)
 from .quadrature import QuadraturePosterior
+from .posterior import Posterior
+from .diagnostics import prior_predictive_sample, posterior_predictive_check
 
 __all__ = [
+    "Posterior",
+    "prior_predictive_sample",
+    "posterior_predictive_check",
     "BayesianPnL",
     "QuadraturePosterior",
     "GridPosterior",
@@ -23,6 +34,7 @@ __all__ = [
     "period_metrics",
     "IndependentPrior",
     "NormalPrior",
+    "LogNormalPrior",
     "SDPrior",
     "default_prior",
 ]

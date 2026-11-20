@@ -12,14 +12,15 @@ Default priors per metric
 ``default_prior(metric, vol_target)`` gives weakly informative priors for the
 three period metrics, scaled consistently: a long-term Sharpe prior N(0, 1) with
 sd ~ (1.0, 1.5) becomes, for annualised returns in % at ``vol_target``% vol,
-N(0, V) with sd ~ (V, 1.5 V); realised annual volatility gets N(V, 0.5 V)
-with sd ~ (0.2 V, 0.2 V).
+N(0, V) with sd ~ (V, 1.5 V). Annual volatility has a positive log-normal
+mean prior with arithmetic mean V and sd 0.5 V, and a positive dispersion
+prior with arithmetic mean 0.2 V and sd 0.2 V.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Dict
+from typing import Dict, Union
 
 import numpy as np
 from scipy import optimize, special, stats
@@ -27,6 +28,24 @@ from scipy import optimize, special, stats
 METRICS = ("sharpe", "ann_ret", "ann_vol")
 
 SDKind = str
+
+
+def _log_sd_moment_ratio(shape_minus_one: float) -> float:
+    """Log of E[SD]**2 / E[SD**2] for inverse-gamma variance.
+
+    Expressing the shape as ``b = alpha - 1`` avoids cancellation near one.
+    For large b, the log-gamma ratio has a Stirling expansion whose leading
+    term is -1/(4*b); subtracting two gammaln values loses that small term.
+    """
+    b = shape_minus_one
+    if b >= 32:
+        inverse = 1.0 / b
+        return inverse * (
+            -0.25
+            + inverse**2
+            * (1.0 / 96 + inverse**2 * (-1.0 / 320 + inverse**2 * 17 / 7168))
+        )
+    return float(2 * (special.gammaln(b + 0.5) - special.gammaln(b)) - np.log(b))
 
 
 def _invgamma_alpha_for_sd_moments(E: float, s: float) -> float:
@@ -37,14 +56,40 @@ def _invgamma_alpha_for_sd_moments(E: float, s: float) -> float:
     For V ~ IG(alpha, beta): E[sqrt V] = sqrt(beta) G(alpha - 1/2) / G(alpha) and
     E[V] = beta / (alpha - 1), so E[sd]^2 / E[sd^2] depends on alpha only.
     """
-    target = E**2 / (E**2 + s**2)
+    log_cv = np.log(s) - np.log(E)
+    target = float(np.logaddexp(0.0, 2 * log_cv))
+    if target == 0:
+        raise ValueError("SDPrior moments exceed finite numerical precision.")
 
-    def f(a):
-        return (a - 1.0) * np.exp(
-            2 * (special.gammaln(a - 0.5) - special.gammaln(a))
-        ) - target
+    def f(log_b):
+        return _log_sd_moment_ratio(float(np.exp(log_b))) + target
 
-    return float(optimize.brentq(f, 1.0 + 1e-12, 1e9))
+    # Solve on a logarithmic shape axis, starting from the concentrated-prior
+    # approximation and widening the bracket only as needed.
+    minimum = float(np.log(np.nextafter(1.0, np.inf) - 1.0))
+    maximum = float(np.log(np.finfo(float).max))
+    center = float(np.clip(-2 * log_cv - np.log(4.0), minimum, maximum))
+    radius = 1.0
+    while True:
+        lower, upper = max(minimum, center - radius), min(maximum, center + radius)
+        if f(lower) <= 0 <= f(upper):
+            break
+        if lower == minimum and upper == maximum:
+            raise ValueError("SDPrior moments exceed finite numerical precision.")
+        radius *= 2
+    log_b = optimize.brentq(f, lower, upper, xtol=1e-13, rtol=1e-14)
+    alpha = float(1.0 + np.exp(log_b))
+    if abs(_log_sd_moment_ratio(alpha - 1.0) + target) > 1e-6:
+        raise ValueError("SDPrior moments exceed finite numerical precision.")
+    return alpha
+
+
+def _lognormal_parameters(mean: float, sd: float):
+    """Convert arithmetic moments to the location and scale of log values."""
+    variance = float(np.logaddexp(0.0, 2 * (np.log(sd) - np.log(mean))))
+    if variance == 0:
+        raise ValueError("Log-normal moments exceed finite numerical precision.")
+    return float(np.log(mean) - variance / 2), float(np.sqrt(variance))
 
 
 @dataclass(frozen=True)
@@ -53,6 +98,8 @@ class NormalPrior:
 
     mean: float
     sd: float
+
+    normalised = True
 
     def __post_init__(self):
         if not np.isfinite(self.mean) or not np.isfinite(self.sd) or not self.sd > 0:
@@ -71,17 +118,60 @@ class NormalPrior:
 
 
 @dataclass(frozen=True)
+class LogNormalPrior:
+    """Positive mean prior, specified by its arithmetic mean and sd.
+
+    ``mean`` and ``sd`` use the metric's original units, rather than the
+    parameters of the logarithm. This keeps prior diagnostics and changes of
+    PnL units consistent with NormalPrior.
+    """
+
+    mean: float
+    sd: float
+    _log_location: float = field(init=False, repr=False)
+    _log_scale: float = field(init=False, repr=False)
+
+    normalised = True
+
+    def __post_init__(self):
+        if not np.isfinite([self.mean, self.sd]).all() or not (
+            self.mean > 0 and self.sd > 0
+        ):
+            raise ValueError("LogNormalPrior mean and sd must be positive and finite.")
+        location, scale = _lognormal_parameters(self.mean, self.sd)
+        object.__setattr__(self, "_log_location", location)
+        object.__setattr__(self, "_log_scale", scale)
+
+    def logpdf(self, mu):
+        return stats.lognorm.logpdf(
+            mu, s=self._log_scale, scale=np.exp(self._log_location)
+        )
+
+    def ppf(self, q):
+        return stats.lognorm.ppf(q, s=self._log_scale, scale=np.exp(self._log_location))
+
+    def cdf(self, mu):
+        return stats.lognorm.cdf(
+            mu, s=self._log_scale, scale=np.exp(self._log_location)
+        )
+
+
+@dataclass(frozen=True)
 class SDPrior:
     """
     Prior on the standard deviation (dispersion) of the period metric,
     parameterised by the prior mean ``mean`` and prior sd ``sd`` *of the SD*.
 
-    kind
-        ``"invgamma_var"`` inverse-gamma on the variance (= gamma on precision with a
-                           *rate*), moment-matched so that the SD has the requested
-                           mean and sd; Jacobian applied. Default.
-        ``"gamma_sd"``     gamma directly on the SD (shape E^2/s^2, rate E/s^2).
-        ``"lognormal_sd"`` log-normal on the SD with matching mean and sd.
+    Parameters
+    ----------
+    mean : float
+        Positive arithmetic mean of the dispersion, in metric units.
+    sd : float
+        Positive standard deviation of the dispersion, in metric units.
+    kind : {"invgamma_var", "gamma_sd", "lognormal_sd"}
+        The default inverse-gamma variance prior is moment-matched to the
+        requested SD moments and includes the variance-to-SD Jacobian.
+        Alternatives put a gamma or log-normal prior directly on SD.
     """
 
     mean: float
@@ -95,17 +185,26 @@ class SDPrior:
         ):
             raise ValueError("SDPrior mean and sd must be positive and finite.")
         E, s = self.mean, self.sd
+        log_mean, log_sd = np.log(E), np.log(s)
         p = self._params
-        if self.kind == "invgamma_var":
-            a = _invgamma_alpha_for_sd_moments(E, s)
-            p["alpha"], p["beta"] = a, (E**2 + s**2) * (a - 1.0)
-        elif self.kind == "gamma_sd":
-            p["shape"], p["rate"] = E**2 / s**2, E / s**2
-        elif self.kind == "lognormal_sd":
-            v = np.log1p(s**2 / E**2)
-            p["mu"], p["sigma"] = np.log(E) - v / 2, np.sqrt(v)
-        else:
-            raise ValueError(f"Unknown SDPrior kind {self.kind!r}")
+        with np.errstate(over="ignore", under="ignore"):
+            if self.kind == "invgamma_var":
+                a = _invgamma_alpha_for_sd_moments(E, s)
+                p["alpha"] = a
+                p["beta"] = np.exp(
+                    np.logaddexp(2 * log_mean, 2 * log_sd) + np.log(a - 1.0)
+                )
+            elif self.kind == "gamma_sd":
+                p["shape"] = np.exp(2 * (log_mean - log_sd))
+                p["rate"] = np.exp(log_mean - 2 * log_sd)
+            elif self.kind == "lognormal_sd":
+                p["mu"], p["sigma"] = _lognormal_parameters(E, s)
+            else:
+                raise ValueError(f"Unknown SDPrior kind {self.kind!r}")
+        if not np.isfinite(list(p.values())).all() or any(
+            value <= 0 for key, value in p.items() if key != "mu"
+        ):
+            raise ValueError("SDPrior moments exceed finite numerical precision.")
 
     @property
     def params(self) -> Dict[str, float]:
@@ -141,7 +240,7 @@ class SDPrior:
 class IndependentPrior:
     """p(mean, sd) = p(mean) p(sd)."""
 
-    mean: NormalPrior
+    mean: Union[NormalPrior, LogNormalPrior]
     sd: SDPrior
 
     def logpdf(self, mu, sd):
@@ -149,7 +248,10 @@ class IndependentPrior:
 
     @property
     def normalised(self) -> bool:
-        return self.sd.normalised
+        return bool(
+            getattr(self.mean, "normalised", False)
+            and getattr(self.sd, "normalised", False)
+        )
 
 
 def default_prior(metric: str = "sharpe", vol_target: float = 10.0) -> IndependentPrior:
@@ -159,9 +261,14 @@ def default_prior(metric: str = "sharpe", vol_target: float = 10.0) -> Independe
     Sharpe and return expectation priors are centred at zero (no expected
     value). This is a continuous prior, not a point mass at zero.
 
-    metric : "sharpe" (annualised Sharpe ratio), "ann_ret" (annualised return,
-        % of AUM) or "ann_vol" (annualised volatility, %).
-    vol_target : the strategy's annual volatility in % (scales "ann_ret" and "ann_vol").
+    Parameters
+    ----------
+    metric : {"sharpe", "ann_ret", "ann_vol"}
+        Annualised Sharpe ratio, return or volatility. Return and volatility
+        retain the PnL units.
+    vol_target : float
+        Annual volatility reference in PnL units (10 for percent, 0.10 for
+        decimal returns). Scales return and volatility priors.
     """
     V = float(vol_target)
     if not np.isfinite(V) or V <= 0:
@@ -173,5 +280,5 @@ def default_prior(metric: str = "sharpe", vol_target: float = 10.0) -> Independe
     if metric == "ann_ret":
         return IndependentPrior(NormalPrior(0.0, V), SDPrior(V, 1.5 * V))
     if metric == "ann_vol":
-        return IndependentPrior(NormalPrior(V, 0.5 * V), SDPrior(0.2 * V, 0.2 * V))
+        return IndependentPrior(LogNormalPrior(V, 0.5 * V), SDPrior(0.2 * V, 0.2 * V))
     raise ValueError(f"Unknown metric {metric!r}; choose from {METRICS}.")

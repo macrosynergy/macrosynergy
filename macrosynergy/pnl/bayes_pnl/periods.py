@@ -20,61 +20,63 @@ def _wide(pnl):
         raise ValueError("pnl must have observations and unique column names.")
     if not all(pd.api.types.is_numeric_dtype(dtype) for dtype in pnl.dtypes):
         raise TypeError("PnL values must be numeric.")
-    if np.iscomplexobj(pnl.to_numpy()) or np.isinf(pnl.to_numpy(dtype=float)).any():
+    if (
+        np.iscomplexobj(pnl.to_numpy())
+        or np.isinf(pnl.to_numpy(dtype=float, na_value=np.nan)).any()
+    ):
         raise ValueError("PnL values must be real, without infinities.")
     return pnl.sort_index()
 
 
+def _year_boundary(year, last=False, tz=None):
+    return pd.Timestamp(
+        year=year, month=12 if last else 1, day=31 if last else 1, tz=tz
+    )
+
+
 def period_metrics(
     pnl: Union[pd.Series, pd.DataFrame],
-    period_months: int = 36,
-    step_months: Optional[int] = None,
     *,
     annualization_factor: float = 252,
+    end_year: Optional[int] = None,
 ) -> pd.DataFrame:
-    """Estimate annual return, volatility and Sharpe in end-anchored blocks.
+    """Calculate annualised metrics from daily PnL in full three-year blocks.
 
     Parameters
     ----------
     pnl : pandas.Series or pandas.DataFrame
-        Daily arithmetic PnL, with one column per strategy.
-        Return/volatility output uses the input's units. For percentage PnL,
-        volatility 10 means 10 percent per year; decimal input instead uses 0.10.
-        Sharpe assumes the PnL already represents excess returns over the desired
-        benchmark. Constant positive scaling preserves Sharpe.
-        Supply daily observations: weekly or coarser dated streams are rejected.
-        Missing individual dates are not reconstructed against a holiday calendar.
-    period_months : int
-        Calendar months per block; default 36. The initial remainder is dropped.
-    step_months : int, optional
-        Distance between blocks. Defaults to period_months. Overlap warns because
-        metrics cannot then be treated as independent without further modelling.
+        Daily arithmetic excess PnL, one column per strategy. Return and
+        volatility preserve input units; Sharpe is invariant to positive scaling.
+        Timestamps must be unique, with at most one observation per calendar day.
+        Coarser-than-daily observations are rejected.
     annualization_factor : float
-        Daily observations per year, default 252. Return is the daily mean
-        multiplied by this factor; volatility is the daily sample standard
-        deviation multiplied by its square root. No monthly aggregation is used.
+        Daily observations per year, default 252. Return is daily mean times
+        this factor; volatility is daily sample sd times its square root.
+        These conventional annualisations do not correct serial dependence.
+    end_year : int, optional
+        Final calendar year of the latest three-year block. Defaults to the
+        latest covered year. Earlier anchors support partition sensitivity.
+        Blocks are non-overlapping and any initial remainder is discarded.
 
     Returns
     -------
     pandas.DataFrame
-        variant, period_start, period_end, n_months, ann_ret, ann_vol and sharpe.
-        Dates label the first/last calendar month ends, not individual trade dates.
-        Blocks with absent months or explicit missing daily values are skipped
-        with a warning. No serial-dependence correction is estimated here.
+        Columns: variant, period_start, period_end, period_years, n_observations,
+        ann_ret, ann_vol, sharpe. Boundaries are January 1 and December 31;
+        period_years is always three. No monthly aggregation is performed.
+
+    Notes
+    -----
+    Calendar coverage is a declared heuristic, not exchange-calendar validation:
+    observations must reach within seven calendar days of each block boundary,
+    and gaps of seven days or more invalidate a block. This tolerates weekends
+    and short holiday closures while rejecting materially incomplete history.
+    An ending year whose final observation precedes December 25 is incomplete.
+    Explicit NaNs, including those at either edge, invalidate their whole block
+    with a warning; they never shift boundaries. Different exchange calendars
+    may require preparation upstream. All columns use the same dated span and
+    anchor, so comparisons refer to the same periods.
     """
-    step = period_months if step_months is None else step_months
-    for name, value, minimum in (
-        ("period_months", period_months, 2),
-        ("step_months", step, 1),
-    ):
-        if (
-            isinstance(value, bool)
-            or not isinstance(value, (int, np.integer))
-            or value < minimum
-        ):
-            raise ValueError(
-                "{} must be an integer of at least {}.".format(name, minimum)
-            )
     if not np.isfinite(annualization_factor) or annualization_factor <= 0:
         raise ValueError("annualization_factor must be positive and finite.")
     wide = _wide(pnl)
@@ -82,51 +84,59 @@ def period_metrics(
         raise ValueError(
             "Daily input must have at most one observation per calendar day."
         )
-    factor = float(annualization_factor)
-    rows = []
-    for name in wide:
-        series = wide[name]
-        first, last = series.first_valid_index(), series.last_valid_index()
-        if first is None:
-            continue
-        series = series.loc[first:last]
-        if len(series) > 1 and (
-            series.index[1:] - series.index[:-1]
-        ).median() >= pd.Timedelta(days=7):
+    if len(wide) > 1:
+        gaps = wide.index[1:] - wide.index[:-1]
+        if np.median(gaps.asi8) > pd.Timedelta(1, unit="D").value:
             raise ValueError(
-                "Supply daily PnL observations; weekly or coarser input cannot "
+                "Supply daily PnL observations; coarser input cannot "
                 "be annualised as daily data."
             )
-        observation_months = series.index.to_period("M")
-        calendar = pd.period_range(
-            observation_months[0], observation_months[-1], freq="M"
+    first, last = wide.index[0].normalize(), wide.index[-1].normalize()
+    latest_year = last.year if last.month == 12 and last.day >= 25 else last.year - 1
+    if end_year is None:
+        end_year = latest_year
+    elif (
+        isinstance(end_year, bool)
+        or not isinstance(end_year, (int, np.integer))
+        or not first.year <= end_year <= latest_year
+    ):
+        raise ValueError("end_year must be an integer covered by the daily history.")
+    factor, rows = float(annualization_factor), []
+    for final_year in range(end_year, first.year + 1, -3):
+        start = _year_boundary(final_year - 2, tz=wide.index.tz)
+        end = _year_boundary(final_year, last=True, tz=wide.index.tz)
+        # The partial initial remainder is excluded rather than promoted to a block.
+        if first > start + pd.Timedelta(6, unit="D"):
+            continue
+        block = wide.loc[
+            (wide.index >= start) & (wide.index < end + pd.Timedelta(1, unit="D"))
+        ]
+        covered = (
+            len(block) >= 2
+            and block.index[0].normalize() <= start + pd.Timedelta(6, unit="D")
+            and block.index[-1].normalize() >= end - pd.Timedelta(6, unit="D")
+            and ((block.index[1:] - block.index[:-1]) < pd.Timedelta(7, unit="D")).all()
         )
-        # Counts check calendar coverage only; metrics always use daily values.
-        groups = series.groupby(observation_months)
-        complete = (groups.count() == groups.size()).reindex(calendar, fill_value=False)
-        for end in range(len(calendar), period_months - 1, -step):
-            block = calendar[end - period_months : end]
-            if not complete.iloc[end - period_months : end].all():
+        for name in wide:
+            values = block[name].to_numpy(dtype=float, na_value=np.nan)
+            if not covered or not np.isfinite(values).all():
                 warnings.warn(
-                    "{}: block ending {} has missing months or daily values; skipped.".format(
-                        name, block[-1].to_timestamp("M").date()
+                    "{}: block ending {} has incomplete daily coverage or missing values; skipped.".format(
+                        name, end.date()
                     ),
                     UserWarning,
                     stacklevel=2,
                 )
-                continue
-            mask = (observation_months >= block[0]) & (observation_months <= block[-1])
-            values = series.loc[mask].to_numpy(dtype=float)
-            if len(values) < 2:
                 continue
             ret = factor * values.mean()
             vol = np.sqrt(factor) * values.std(ddof=1)
             rows.append(
                 dict(
                     variant=name,
-                    period_start=block[0].to_timestamp("M"),
-                    period_end=block[-1].to_timestamp("M"),
-                    n_months=period_months,
+                    period_start=start,
+                    period_end=end,
+                    period_years=3,
+                    n_observations=len(values),
                     ann_ret=ret,
                     ann_vol=vol,
                     sharpe=ret / vol if vol > 0 else np.nan,
@@ -136,7 +146,8 @@ def period_metrics(
         "variant",
         "period_start",
         "period_end",
-        "n_months",
+        "period_years",
+        "n_observations",
         "ann_ret",
         "ann_vol",
         "sharpe",
@@ -144,15 +155,5 @@ def period_metrics(
     result = pd.DataFrame(rows, columns=columns)
     if not result.empty:
         result = result.sort_values(["variant", "period_end"]).reset_index(drop=True)
-    if step < period_months:
-        warnings.warn(
-            "Overlapping periods are dependent; do not treat them as independent observations.",
-            UserWarning,
-            stacklevel=2,
-        )
-    result.attrs.update(
-        overlapping=step < period_months,
-        metric_freq="D",
-        periods_per_year=factor,
-    )
+    result.attrs.update(metric_freq="D", periods_per_year=factor, end_year=end_year)
     return result

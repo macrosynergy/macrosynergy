@@ -56,6 +56,11 @@ def main():
     parser.add_argument("--prior-mean", type=float, default=0.0)
     parser.add_argument("--prior-sd", type=float, default=1.0)
     parser.add_argument(
+        "--checks",
+        action="store_true",
+        help="Print predictive checks and sensitivity to priors/calendar partitions.",
+    )
+    parser.add_argument(
         "--method", choices=("auto", "quadrature", "grid"), default="auto"
     )
     args = parser.parse_args()
@@ -66,7 +71,13 @@ def main():
         matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     from macrosynergy.pnl import BayesianPnL
-    from macrosynergy.pnl.bayes_pnl import IndependentPrior, NormalPrior, SDPrior
+    from macrosynergy.pnl.bayes_pnl import (
+        IndependentPrior,
+        NormalPrior,
+        SDPrior,
+        prior_predictive_sample,
+        posterior_predictive_check,
+    )
     from macrosynergy.visuals import (
         plot_bayesian_posterior,
         plot_bayesian_predictive,
@@ -115,6 +126,42 @@ def main():
     print(
         "These comparisons do not estimate selection-adjusted or independent family evidence."
     )
+
+    if args.checks:
+        print("\nPrior-predictive 5%, 50%, 95% period Sharpe:")
+        print(
+            np.quantile(prior_predictive_sample(prior, 50000, rng=7), [0.05, 0.5, 0.95])
+        )
+        print(
+            "\nPosterior predictive discrepancies (descriptive, not calibrated p-values):"
+        )
+        print(posterior_predictive_check(baseline, rng=7).round(3).to_string())
+        sensitivity = []
+        for width in (0.5, 1.0, 2.0):
+            for end_year in (2022, 2023, 2024):
+                changed_prior = IndependentPrior(
+                    NormalPrior(args.prior_mean, args.prior_sd * width),
+                    SDPrior(1.0, 1.5),
+                )
+                changed = BayesianPnL.from_pnl(
+                    pnl["baseline"],
+                    prior=changed_prior,
+                    method=args.method,
+                    end_year=end_year,
+                )
+                sensitivity.append(
+                    dict(
+                        prior_mean_sd=args.prior_sd * width,
+                        end_year=end_year,
+                        n_periods=len(changed.periods),
+                        expected_sharpe=changed.expectation(),
+                        prob_mean_negative=changed.prob_mean_below(),
+                    )
+                )
+        print(
+            "\nPrior/partition sensitivity (anchors can change retained sample size):"
+        )
+        print(pd.DataFrame(sensitivity).round(3).to_string(index=False))
 
     figures = {
         "posterior": plot_bayesian_posterior(baseline),
