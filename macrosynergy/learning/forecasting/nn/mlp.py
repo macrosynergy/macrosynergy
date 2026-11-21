@@ -363,7 +363,8 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         # Fit checks 
         sample_weight_strategy = self._check_fit_params(X, y, sample_weight) # Returns a string indicating how to deal with sample weights
         self.sample_weight_strategy = sample_weight_strategy
-        sw = pd.Series(sample_weight, index=X.index) if sample_weight is not None else None
+        sw = pd.Series(sample_weight / sample_weight.mean(), index=X.index) if sample_weight is not None else None
+
 
         # Copy data and initialize empty list of models to be trained, with diagnostic
         # dictionaries
@@ -1609,8 +1610,8 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
                 raise TypeError("sample_weight must be a numpy array or None.")
             if not all(isinstance(x, numbers.Real) for x in sample_weight):
                 raise TypeError("All elements in sample_weight must be real numbers.")
-            if not all(x >= 0 for x in sample_weight):
-                raise ValueError("All elements in sample_weight must be non-negative.")
+            if not all(x > 0 for x in sample_weight):
+                raise ValueError("All elements in sample_weight must be positive.")
             if sample_weight.ndim != 1:
                 raise ValueError("sample_weight must be a 1D array.")
             if len(sample_weight) != len(X):
