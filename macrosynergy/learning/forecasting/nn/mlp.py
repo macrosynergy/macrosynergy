@@ -359,9 +359,11 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         self.optimizers = [self.optimizer] if not isinstance(self.optimizer, list) else self.optimizer
         self.random_states = [self.random_state] if not isinstance(self.random_state, list) else self.random_state
 
-    def fit(self, X, y):
+    def fit(self, X, y, sample_weight = None):
         # Fit checks 
-        self._check_fit_params(X, y)
+        sample_weight_strategy = self._check_fit_params(X, y, sample_weight) # Returns a string indicating how to deal with sample weights
+        self.sample_weight_strategy = sample_weight_strategy
+        sw = pd.Series(sample_weight, index=X.index) if sample_weight is not None else None
 
         # Copy data and initialize empty list of models to be trained, with diagnostic
         # dictionaries
@@ -376,7 +378,6 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         # Data checks
         # TODO: if torch_model is provided, check it has the right structure 
         # to be trained by this class by passing a batch through it
-        self._check_fit_params(X, y)
 
         # Filter assets with insufficient samples to have a head in the network
         target_counts = y.count()
@@ -394,9 +395,13 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
                 x_scaler = self.x_scaler,
                 y_scaler = self.y_scaler,
             )
+            # Get relevant sample weights
+            sw_trains = [sw.to_numpy()] if sw is not None else None
+
             train_datasets, _ = self.make_tensor_datasets_(
                 X_trains_s = X_s,
                 y_trains_s = y_s,
+                sample_weights = sw_trains
             )
         else:
             # Then we are training multiple models on different train/validation splits.
@@ -408,12 +413,16 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
             # Scale training and validation splits for each fold 
             X_trains_s, y_trains_s, X_valids_s, y_valids_s, x_scalers, y_scalers = self.scale_data_(X_trains, y_trains, self.x_scaler, self.y_scaler, X_valids, y_valids)
 
+            # Get relevant sample weights
+            sw_trains = [sw.loc[X_t.index].to_numpy() for X_t in X_trains] if sw is not None else None
+
             # Make tensor datasets for each fold 
             train_datasets, valid_datasets = self.make_tensor_datasets_(
                 X_trains_s = X_trains_s,
                 y_trains_s = y_trains_s,
                 X_valids_s = X_valids_s,
-                y_valids_s = y_valids_s
+                y_valids_s = y_valids_s,
+                sample_weights = sw_trains,
             )
             
         # Iterate through random states
@@ -623,9 +632,11 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
                             x_scaler = self.x_scaler,
                             y_scaler = self.y_scaler,
                         )
+                        sw_trains = [sw.to_numpy()] if sw is not None else None
                         train_datasets, _ = self.make_tensor_datasets_(
                             X_trains_s = X_s,
-                            y_trains_s = y_s
+                            y_trains_s = y_s,
+                            sample_weights = sw_trains,
                         )
                         train_loader, _, _ = self.make_dataloaders_(
                             train_dataset = train_datasets[0],
@@ -881,15 +892,18 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         y_trains_s,
         X_valids_s = None,
         y_valids_s = None,
+        sample_weights = None,
     ):
         train_datasets = []
         valid_datasets = []
 
         for i in range(len(X_trains_s)):
-            train_dataset = torch.utils.data.TensorDataset(
-                torch.Tensor(X_trains_s[i]),
-                torch.Tensor(y_trains_s[i]),
-            )
+            train_tensors = [torch.Tensor(X_trains_s[i]), torch.Tensor(y_trains_s[i])]
+            if sample_weights is not None:
+                train_tensors.append(torch.Tensor(sample_weights[i]))
+
+            train_dataset = torch.utils.data.TensorDataset(*train_tensors)
+
             if X_valids_s is not None:
                 valid_dataset = torch.utils.data.TensorDataset(
                     torch.Tensor(X_valids_s[i]),
@@ -1042,11 +1056,12 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         
         for epoch in range(epochs):
             model.train()
-            for X_i, y_i in train_loader:
+            for X_i, y_i, *sw_i in train_loader:
                 model = self._fit_one_batch(
                     model = model,
                     X_i = X_i,
                     y_i = y_i,
+                    sample_weight_i = sw_i[0] if sw_i else None,
                     optimizer = optimizer,
                     scheduler = scheduler,
                     loss_func = loss_func,
@@ -1097,6 +1112,7 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         model,
         X_i,
         y_i,
+        sample_weight_i,
         optimizer,
         scheduler,
         loss_func,
@@ -1105,7 +1121,12 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         optimizer.zero_grad()
         preds = model(X_i)
         
-        loss = loss_func(preds, y_i)
+        loss = self._compute_loss(
+            loss_func=loss_func,
+            preds = preds,
+            y = y_i,
+            sample_weight = sample_weight_i
+        )
 
         if reg_turnover > 0:
             pweight_changes = preds[1:] - preds[:-1]
@@ -1119,14 +1140,25 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
             scheduler.step()
 
         return model
+
+    def _compute_loss(self, loss_func, preds, y, sample_weight = None):
+        if sample_weight is None:
+            loss = loss_func(preds, y)
+            return loss.mean() if self.sample_weight_strategy == "reduction_none" else loss
+        if self.sample_weight_strategy == "native":
+            return loss_func(preds, y, sample_weight)
+
+        loss = loss_func(preds, y)
+        sample_weights = sample_weight.view(-1, *([1] * (loss.dim() - 1)))
+        return (loss * sample_weights).mean()
     
     def _eval_loss(self, model, loader, loss_func):
         model.eval()
         total_loss = 0.0
         with torch.no_grad():
-            for X_i, y_i in loader:
+            for X_i, y_i, *_ in loader:
                 preds = model(X_i)
-                total_loss += loss_func(preds, y_i).item()
+                total_loss += loss_func(preds, y_i).mean().item() # Mean required for reduction = None losses
             avg_loss = total_loss / len(loader)
 
         return avg_loss    
@@ -1149,7 +1181,7 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
 
         # Forward pass
         preds = model(X_eval)
-        eval_loss = self.loss_func(preds, y_eval)
+        eval_loss = self.loss_func(preds, y_eval).mean() # Mean needed due to possible reduction = None setting in some losses
 
         eval_loss.backward(retain_graph = True)
 
@@ -1184,7 +1216,7 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
 
         # Forward pass
         preds = model(X_eval)
-        eval_loss = self.loss_func(preds, y_eval)
+        eval_loss = self.loss_func(preds, y_eval).mean() # Mean needed due to possible reduction = None setting
 
         # Calculate derivatives
         eval_loss.backward()
@@ -1542,7 +1574,7 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         if min_samples < 1:
             raise ValueError("min_samples must be at least 1.")
         
-    def _check_fit_params(self, X, y):
+    def _check_fit_params(self, X, y, sample_weight):
         # X 
         if not isinstance(X, pd.DataFrame):
             raise TypeError("X must be a pandas DataFrame.")
@@ -1570,6 +1602,45 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
             raise TypeError("The inner index of y must be datetime.date.")
         if not X.index.equals(y.index):
             raise ValueError("X and y must have the same multi-index.")
+
+        # sample_weight
+        if sample_weight is not None:
+            if not isinstance(sample_weight, np.ndarray):
+                raise TypeError("sample_weight must be a numpy array or None.")
+            if not all(isinstance(x, numbers.Real) for x in sample_weight):
+                raise TypeError("All elements in sample_weight must be real numbers.")
+            if not all(x >= 0 for x in sample_weight):
+                raise ValueError("All elements in sample_weight must be non-negative.")
+            if sample_weight.ndim != 1:
+                raise ValueError("sample_weight must be a 1D array.")
+            if len(sample_weight) != len(X):
+                raise ValueError("Length of sample_weight must match number of samples in X.")
+            
+            # Check compatibility with loss function
+            # sample_weights can be used with an option in the forward method. If this is present, this method is prioritised.
+            # If not present, the loss constructor needs a "reduction" option which should be set to 'none'. 
+            sig_forward = inspect.signature(self.loss_func.forward)
+            sig_constructor = inspect.signature(self.loss_func.__init__)
+            if "sample_weight" not in sig_forward.parameters:
+                if "reduction" not in sig_constructor.parameters:
+                    raise ValueError(
+                        "Sample weights are not supported by the specified loss function. The loss function must either accept a `sample_weight` tensor in its forward method or have a `reduction` parameter in its constructor."
+                    )
+                else:
+                    if self.loss_func.reduction == "none":
+                        return "reduction_none"
+                    else:
+                        raise ValueError(
+                            "When the loss function does not accept a `sample_weight` tensor in its forward method but has a `reduction` parameter in its constructor, the `reduction` must be set to 'none' to support sample weights."
+                        )
+            else:
+                return "native" 
+        else:
+            if getattr(self.loss_func, "reduction", None) == "none":
+                raise ValueError(
+                    "Loss functions with reduction='none' are only supported when sample weights are provided."
+                )
+            return None
 
 if __name__ == "__main__":
     from macrosynergy.learning import (
