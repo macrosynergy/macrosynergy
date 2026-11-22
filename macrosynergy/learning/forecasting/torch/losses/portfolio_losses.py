@@ -35,7 +35,7 @@ class PortfolioLoss(nn.Module, BaseEstimator):
         self.reg_concentration = reg_concentration
         self.skip_validation = skip_validation
 
-    def forward(self, y_pred, y_true):
+    def forward(self, y_pred, y_true, sample_weight = None):
         """
         Calculate loss.
 
@@ -45,9 +45,12 @@ class PortfolioLoss(nn.Module, BaseEstimator):
             Predicted portfolio weights. Dimension: (batch_size, n_assets)
         y_true : torch.Tensor
             True asset returns. Dimension: (batch_size, n_assets)
+        sample_weight : torch.Tensor, optional
+            Weight contributions of each sample in the batch to the loss over the batch. 
+            Dimension: (batch_size,).
         """
         if not self.skip_validation:
-            self._forward_checks(y_pred, y_true)
+            self._forward_checks(y_pred, y_true, sample_weight)
 
         mask = torch.isfinite(y_true)
         y_true_masked = torch.where(mask, y_true, torch.zeros_like(y_true))
@@ -55,8 +58,8 @@ class PortfolioLoss(nn.Module, BaseEstimator):
         returns = y_pred * y_true_masked
         portfolio_returns = torch.sum(returns, dim=1)
 
-        portfolio_loss = self._portfolio_loss(portfolio_returns)
-        portfolio_loss = self._apply_reg_concentration(portfolio_loss, y_pred)
+        portfolio_loss = self._portfolio_loss(portfolio_returns, sample_weight)
+        portfolio_loss = self._apply_reg_concentration(portfolio_loss, y_pred) # Should sample weights be applied here?
 
         return portfolio_loss
 
@@ -77,7 +80,30 @@ class PortfolioLoss(nn.Module, BaseEstimator):
 
         return loss
 
-    def _portfolio_loss(self, portfolio_returns):
+    def _weighted_mean(self, x, normalized_weight):
+        return torch.sum(normalized_weight * x)
+
+    def _weighted_variance(self, x, normalized_weight, unbiased = True):
+        mean = self._weighted_mean(x, normalized_weight)
+
+        variance = torch.sum(normalized_weight * (x - mean)**2)
+
+        if unbiased:
+            correction = 1 - torch.sum(normalized_weight ** 2)
+            variance = variance / correction
+
+        return variance
+
+    def _weighted_skewness(self, x, normalized_weight):
+        mean = self._weighted_mean(x, normalized_weight)
+        variance = self._weighted_variance(x, normalized_weight)
+
+        third_moment = torch.sum(normalized_weight * (x - mean)**3)
+        skewness = third_moment / (variance ** 1.5)
+
+        return skewness
+
+    def _portfolio_loss(self, portfolio_returns, sample_weight):
         """
         Calculate the portfolio loss based on the portfolio returns.
 
@@ -85,10 +111,13 @@ class PortfolioLoss(nn.Module, BaseEstimator):
         ----------
         portfolio_returns : torch.Tensor
             Portfolio returns. Dimension: (batch_size,)
+        sample_weight : torch.Tensor, optional
+            Weight contributions of each sample in the batch to the loss over the batch. 
+            Dimension: (batch_size, 1).
         """
         raise NotImplementedError("Subclasses should implement this method.")
 
-    def _forward_checks(self, y_pred, y_true):
+    def _forward_checks(self, y_pred, y_true, sample_weight):
         """
         Perform input validation checks for the forward method.
 
@@ -98,6 +127,9 @@ class PortfolioLoss(nn.Module, BaseEstimator):
             Predicted portfolio weights. Dimension: (batch_size, n_assets)
         y_true : torch.Tensor
             True asset returns. Dimension: (batch_size, n_assets)
+        sample_weight : torch.Tensor, optional
+            Weight contributions of each sample in the batch to the loss over the batch.
+            Dimension: (batch_size,)
         """
         if not isinstance(y_pred, torch.Tensor):
             raise TypeError("y_pred must be a torch.Tensor.")
@@ -105,6 +137,11 @@ class PortfolioLoss(nn.Module, BaseEstimator):
             raise TypeError("y_true must be a torch.Tensor.")
         if y_pred.shape != y_true.shape:
             raise ValueError("y_pred and y_true must have the same shape.")
+        if sample_weight is not None:
+            if not isinstance(sample_weight, torch.Tensor):
+                raise TypeError("sample_weight must be a torch.Tensor.")
+            if not all(sample_weight > 0):
+                raise ValueError("sample_weights must be positive.")
 
 class NegMeanPortfolioReturn(PortfolioLoss):
     """
@@ -121,7 +158,7 @@ class NegMeanPortfolioReturn(PortfolioLoss):
     This loss function is designed for portfolio optimization tasks, meaning that it 
     expects the model to output quantities interpretable as portfolio weights or signals. 
     """
-    def _portfolio_loss(self, portfolio_returns):
+    def _portfolio_loss(self, portfolio_returns, sample_weight):
         """
         Calculate the negative mean return of the portfolio.
 
@@ -129,8 +166,21 @@ class NegMeanPortfolioReturn(PortfolioLoss):
         ----------
         portfolio_returns : torch.Tensor
             Portfolio returns. Dimension: (batch_size,)
+        sample_weight : torch.Tensor, optional
+            Weight contributions of each sample in the batch to the loss over the batch. 
+            Dimension: (batch_size,).
         """
-        return - torch.mean(portfolio_returns)
+        if sample_weight is None:
+            return - torch.mean(portfolio_returns)
+
+        weights = sample_weight / sample_weight.sum()
+        mean = self._weighted_mean(
+            x = portfolio_returns,
+            normalized_weight = weights
+        )
+        batch_importance = sample_weight.mean()
+
+        return - mean * batch_importance
     
 class PortfolioVariance(PortfolioLoss):
     """
@@ -146,7 +196,7 @@ class PortfolioVariance(PortfolioLoss):
     This loss function is designed for portfolio optimization tasks, meaning that it 
     expects the model to output quantities interpretable as portfolio weights or signals. 
     """
-    def _portfolio_loss(self, portfolio_returns):
+    def _portfolio_loss(self, portfolio_returns, sample_weight):
         """
         Calculate the variance of the portfolio.
 
@@ -154,8 +204,22 @@ class PortfolioVariance(PortfolioLoss):
         ----------
         portfolio_returns : torch.Tensor
             Portfolio returns. Dimension: (batch_size,)
+        sample_weight : torch.Tensor, optional
+            Weight contributions of each sample in the batch to the loss over the batch. 
+            Dimension: (batch_size,).
         """
-        return torch.var(portfolio_returns)
+        if sample_weight is None:
+            return torch.var(portfolio_returns)
+
+        normalized_weights = sample_weight / sample_weight.sum()
+        variance = self._weighted_variance(
+            x = portfolio_returns,
+            normalized_weight=normalized_weights
+        )
+
+        batch_importance = sample_weight.mean()
+
+        return batch_importance * variance
     
 class NegMeanVarianceUtility(PortfolioLoss):
     """
@@ -180,7 +244,7 @@ class NegMeanVarianceUtility(PortfolioLoss):
         super().__init__(reg_concentration = reg_concentration, skip_validation = skip_validation)
         self.alpha = alpha
 
-    def _portfolio_loss(self, portfolio_returns):
+    def _portfolio_loss(self, portfolio_returns, sample_weight):
         """
         Calculate the negative mean-variance utility of the portfolio.
 
@@ -188,12 +252,34 @@ class NegMeanVarianceUtility(PortfolioLoss):
         ----------
         portfolio_returns : torch.Tensor
             Portfolio returns. Dimension: (batch_size,)
-        """
-        mean_return = torch.mean(portfolio_returns)
-        variance = torch.var(portfolio_returns)
-        utility = mean_return - 0.5 * self.alpha * variance
+        sample_weight : torch.Tensor, optional
+            Weight contributions of each sample in the batch to the loss over the batch. 
+            Dimension: (batch_size,).
 
-        return -utility
+        """
+        if sample_weight is None:
+            mean_return = torch.mean(portfolio_returns)
+            variance = torch.var(portfolio_returns)
+            utility = mean_return - 0.5 * self.alpha * variance
+
+            return -utility
+
+        normalized_weight = sample_weight / sample_weight.sum()
+
+        mean = self._weighted_mean(
+            x = portfolio_returns,
+            normalized_weight=normalized_weight
+        )
+        variance = self._weighted_variance(
+            x = portfolio_returns,
+            normalized_weight = normalized_weight
+        )
+        utility = mean - 0.5 * self.alpha * variance
+
+        batch_importance = sample_weight.mean()
+
+        return - utility * batch_importance
+
 
 class NegMeanVarianceSkewnessUtility(PortfolioLoss):
     """
@@ -218,7 +304,7 @@ class NegMeanVarianceSkewnessUtility(PortfolioLoss):
         super().__init__(reg_concentration = reg_concentration, skip_validation = skip_validation)
         self.alpha = alpha
 
-    def _portfolio_loss(self, portfolio_returns):
+    def _portfolio_loss(self, portfolio_returns, sample_weight):
         """
         Calculate the negative mean-variance-skewness utility of the portfolio.
 
@@ -226,14 +312,37 @@ class NegMeanVarianceSkewnessUtility(PortfolioLoss):
         ----------
         portfolio_returns : torch.Tensor
             Portfolio returns. Dimension: (batch_size,)
+        sample_weight : torch.Tensor, optional
+            Weight contributions of each sample in the batch to the loss over the batch. 
+            Dimension: (batch_size,).
         """
-        mean_return = torch.mean(portfolio_returns)
-        variance = torch.var(portfolio_returns)
-        skewness = torch.mean((portfolio_returns - mean_return) ** 3) / (torch.std(portfolio_returns) ** 3 + 1e-8)
+        if sample_weight is None:
+            mean_return = torch.mean(portfolio_returns)
+            variance = torch.var(portfolio_returns)
+            skewness = torch.mean((portfolio_returns - mean_return) ** 3) / (torch.std(portfolio_returns) ** 3 + 1e-8)
 
-        utility = mean_return - 0.5 * self.alpha * variance + (1/6) * self.alpha * skewness
+            utility = mean_return - 0.5 * self.alpha * variance + (1/6) * self.alpha * skewness
 
-        return -utility
+            return -utility
+        else:
+            normalized_weight = sample_weight / sample_weight.sum()
+
+            mean = self._weighted_mean(
+                x = portfolio_returns,
+                normalized_weight=normalized_weight
+            )
+            variance = self._weighted_variance(
+                x = portfolio_returns,
+                normalized_weight=normalized_weight,
+            )
+            skew = self._weighted_skewness(
+                x = portfolio_returns,
+                normalized_weight=normalized_weight,
+            )
+            utility = mean - 0.5 * self.alpha * variance + (1/6) * self.alpha * skew
+            batch_importance = sample_weight.mean()
+
+            return - utility * batch_importance
     
 class NegSharpeRatio(PortfolioLoss):
     """

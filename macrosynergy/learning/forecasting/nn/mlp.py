@@ -1648,6 +1648,7 @@ if __name__ == "__main__":
         SignalOptimizer,
         NegSharpeRatio,
         RollingKFoldPanelSplit,
+        TimeWeightedWrapper
     )
     from macrosynergy.management.simulate import make_qdf
     import pandas as pd
@@ -1716,17 +1717,17 @@ if __name__ == "__main__":
     #         out = self.head(z)
     #         return out
 
-    mlp = MLPRegressor(
+    mlp = TimeWeightedWrapper(MLPRegressor(
         n_latent = [64,32], 
         fit_encoder_intercept = True,
         fit_head_intercept = True,
         encoder_activation = "tanh",
         head_activation="identity",
         dropout_p = 0.1,
-        signal_modifier=nn.Softmax(dim=1),
+        #signal_modifier=nn.Softmax(dim=1),
         normalization = "layer",
         #torch_model = BasicMLP(n_inputs=X.shape[1], n_latent=16, n_outputs=y.shape[1]),
-        loss_func=NegSharpeRatio(),
+        loss_func=nn.MSELoss(reduction="none"),
         optimizer = "AdamW",
         scheduler = None, 
         batch_size = 16,
@@ -1751,10 +1752,10 @@ if __name__ == "__main__":
         random_state = 42,
         inverse_transform_preds = False,
         min_samples = 36,
-    ).fit(X,y)
-    print(mlp.early_stopping_dynamics[(0,0)])
-    print(mlp.early_stopping_inference[(0,0)])
-    print(mlp.predict(X))
+    ), half_life = 36).fit(X,y)
+    print(mlp.model.early_stopping_dynamics[(0,0)])
+    print(mlp.model.early_stopping_inference[(0,0)])
+    print(mlp.model.predict(X))
 
     # so.calculate_predictions(
     #     name = "MLP",
