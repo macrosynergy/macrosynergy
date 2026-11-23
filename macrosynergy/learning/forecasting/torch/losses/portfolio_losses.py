@@ -94,14 +94,12 @@ class PortfolioLoss(nn.Module, BaseEstimator):
 
         return variance
 
-    def _weighted_skewness(self, x, normalized_weight):
+    def _weighted_moment3(self, x, normalized_weight):
         mean = self._weighted_mean(x, normalized_weight)
-        variance = self._weighted_variance(x, normalized_weight)
 
-        third_moment = torch.sum(normalized_weight * (x - mean)**3)
-        skewness = third_moment / (variance ** 1.5)
+        moment3 = torch.sum(normalized_weight * (x - mean)**3)
 
-        return skewness
+        return moment3
 
     def _portfolio_loss(self, portfolio_returns, sample_weight):
         """
@@ -113,7 +111,7 @@ class PortfolioLoss(nn.Module, BaseEstimator):
             Portfolio returns. Dimension: (batch_size,)
         sample_weight : torch.Tensor, optional
             Weight contributions of each sample in the batch to the loss over the batch. 
-            Dimension: (batch_size, 1).
+            Dimension: (batch_size,).
         """
         raise NotImplementedError("Subclasses should implement this method.")
 
@@ -289,7 +287,7 @@ class NegMeanVarianceSkewnessUtility(PortfolioLoss):
     Parameters
     ----------
     alpha : float, optional
-        Risk aversion parameter for variance. Default is 1.
+        Risk aversion parameter for variance and skewness. Default is 1.
     reg_concentration : float, optional
         Regularization parameter for concentration penalty. Default is 0 (no penalty).
     skip_validation : bool, optional
@@ -319,7 +317,7 @@ class NegMeanVarianceSkewnessUtility(PortfolioLoss):
         if sample_weight is None:
             mean_return = torch.mean(portfolio_returns)
             variance = torch.var(portfolio_returns)
-            skewness = torch.mean((portfolio_returns - mean_return) ** 3) / (torch.std(portfolio_returns) ** 3 + 1e-8)
+            skewness = torch.mean((portfolio_returns - mean_return) ** 3)
 
             utility = mean_return - 0.5 * self.alpha * variance + (1/6) * self.alpha * skewness
 
@@ -335,7 +333,7 @@ class NegMeanVarianceSkewnessUtility(PortfolioLoss):
                 x = portfolio_returns,
                 normalized_weight=normalized_weight,
             )
-            skew = self._weighted_skewness(
+            skew = self._weighted_moment3(
                 x = portfolio_returns,
                 normalized_weight=normalized_weight,
             )
@@ -373,7 +371,7 @@ class NegSharpeRatio(PortfolioLoss):
         self.unbiased = unbiased
         self.eps = eps
 
-    def _portfolio_loss(self, portfolio_returns):
+    def _portfolio_loss(self, portfolio_returns, sample_weight):
         """
         Calculate loss.
 
@@ -381,12 +379,34 @@ class NegSharpeRatio(PortfolioLoss):
         ----------
         portfolio_returns : torch.Tensor
             Portfolio returns. Dimension: (batch_size,)
+        sample_weight : torch.Tensor
+            Sample weights for each portfolio return. Dimension: (batch_size,)
         """
-        mean_return = torch.mean(portfolio_returns)
-        std_return = torch.std(portfolio_returns, unbiased=self.unbiased)
+        if sample_weight is None:
+            mean_return = torch.mean(portfolio_returns)
+            std_return = torch.std(portfolio_returns, unbiased=self.unbiased)
 
-        sharpe_ratio = mean_return / (std_return + self.eps)
+            sharpe_ratio = mean_return / (std_return + self.eps)
 
-        loss = -sharpe_ratio
+            loss = -sharpe_ratio
 
-        return loss
+            return loss
+        else:
+            normalized_weight = sample_weight / sample_weight.sum()
+            mean = self._weighted_mean(
+                x = portfolio_returns,
+                normalized_weight = normalized_weight
+            )
+            variance = self._weighted_variance(
+                x = portfolio_returns,
+                normalized_weight = normalized_weight,
+                unbiased = self.unbiased
+            )
+            std = torch.sqrt(variance)
+
+            sharpe_ratio = mean / (std + self.eps)
+            loss = -sharpe_ratio
+
+            batch_importance = sample_weight.mean()
+
+            return loss * batch_importance
