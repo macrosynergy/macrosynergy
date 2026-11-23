@@ -15,13 +15,16 @@ class PortfolioLoss(nn.Module, BaseEstimator):
         Regularization parameter for concentration penalty. Default is 0 (no penalty).
     skip_validation : bool, optional
         Whether to skip input validation checks for the `forward` method. Default is True.
+    apply_reg_sw : bool, optional
+        Whether to apply sample weights to the regularization terms defined in the loss.
+        Default is False.
 
     Notes
     -----
     This is a base class for loss functions based on portfolio optimization. It
     expects the model to output quantities interpretable as portfolio weights or signals. 
     """
-    def __init__(self, reg_concentration = 0, skip_validation = True):
+    def __init__(self, reg_concentration = 0, skip_validation = True, apply_reg_sw = False):
         super().__init__()
 
         # Checks
@@ -31,9 +34,12 @@ class PortfolioLoss(nn.Module, BaseEstimator):
             raise ValueError("reg_concentration must be non-negative.")
         if not isinstance(skip_validation, bool):
             raise TypeError("skip_validation must be a boolean.")
+        if not isinstance(apply_reg_sw, bool):
+            raise TypeError("apply_reg_sw must be a boolean.")
         
         self.reg_concentration = reg_concentration
         self.skip_validation = skip_validation
+        self.apply_reg_sw = apply_reg_sw
 
     def forward(self, y_pred, y_true, sample_weight = None):
         """
@@ -59,11 +65,11 @@ class PortfolioLoss(nn.Module, BaseEstimator):
         portfolio_returns = torch.sum(returns, dim=1)
 
         portfolio_loss = self._portfolio_loss(portfolio_returns, sample_weight)
-        portfolio_loss = self._apply_reg_concentration(portfolio_loss, y_pred) # Should sample weights be applied here?
+        portfolio_loss = self._apply_reg_concentration(portfolio_loss, y_pred, sample_weight)
 
         return portfolio_loss
 
-    def _apply_reg_concentration(self, loss, y_pred):
+    def _apply_reg_concentration(self, loss, y_pred, sample_weight):
         """
         Apply concentration regularization to the loss.
 
@@ -73,10 +79,18 @@ class PortfolioLoss(nn.Module, BaseEstimator):
             The original loss value.
         y_pred : torch.Tensor
             Predicted portfolio weights. Dimension: (batch_size, n_assets)
+        sample_weight : torch.Tensor, optional
+            Weight contributions of each sample in the batch to the regularization term.
+            Dimension: (batch_size,)
         """
         if self.reg_concentration > 0:
-            concentration = torch.mean(torch.sum(y_pred ** 2, dim=1))
-            loss += self.reg_concentration * concentration
+            if self.apply_reg_sw and sample_weight is not None:
+                normalized_weight = sample_weight / torch.sum(sample_weight)
+                concentration = self._weighted_mean(torch.sum(y_pred ** 2, dim=1), normalized_weight) * torch.mean(sample_weight)
+            else:
+                concentration = torch.mean(torch.sum(y_pred ** 2, dim=1))
+
+            loss = loss + self.reg_concentration * concentration
 
         return loss
 
@@ -232,14 +246,16 @@ class NegMeanVarianceUtility(PortfolioLoss):
         Regularization parameter for concentration penalty. Default is 0 (no penalty).
     skip_validation : bool, optional
         Whether to skip input validation checks for the `forward` method. Default is True.
+    apply_reg_sw : bool, optional
+        Whether to apply sample weights to the regularization term. Default is False.
 
     Notes
     -----
     This loss function is designed for portfolio optimization tasks, meaning that it 
     expects the model to output quantities interpretable as portfolio weights or signals. 
     """
-    def __init__(self, alpha = 1, reg_concentration = 0, skip_validation = True):
-        super().__init__(reg_concentration = reg_concentration, skip_validation = skip_validation)
+    def __init__(self, alpha = 1, reg_concentration = 0, skip_validation = True, apply_reg_sw = False):
+        super().__init__(reg_concentration = reg_concentration, skip_validation = skip_validation, apply_reg_sw = apply_reg_sw)
         self.alpha = alpha
 
     def _portfolio_loss(self, portfolio_returns, sample_weight):
@@ -292,14 +308,16 @@ class NegMeanVarianceSkewnessUtility(PortfolioLoss):
         Regularization parameter for concentration penalty. Default is 0 (no penalty).
     skip_validation : bool, optional
         Whether to skip input validation checks for the `forward` method. Default is True.
+    apply_reg_sw : bool, optional
+        Whether to apply sample weights to the regularization term. Default is False.
 
     Notes
     -----
     This loss function is designed for portfolio optimization tasks, meaning that it 
     expects the model to output quantities interpretable as portfolio weights or signals. 
     """
-    def __init__(self, alpha = 1, reg_concentration = 0, skip_validation = True):
-        super().__init__(reg_concentration = reg_concentration, skip_validation = skip_validation)
+    def __init__(self, alpha = 1, reg_concentration = 0, skip_validation = True, apply_reg_sw = False):
+        super().__init__(reg_concentration = reg_concentration, skip_validation = skip_validation, apply_reg_sw = apply_reg_sw)
         self.alpha = alpha
 
     def _portfolio_loss(self, portfolio_returns, sample_weight):
@@ -357,6 +375,8 @@ class NegSharpeRatio(PortfolioLoss):
         Small value to avoid division by zero. Default is 1e-8.
     skip_validation : bool, optional
         Whether to skip input validation checks for the `forward` method. Default is True.
+    apply_reg_sw : bool, optional
+        Whether to apply sample weights to the regularization term. Default is False.
 
     Notes
     -----
@@ -365,8 +385,8 @@ class NegSharpeRatio(PortfolioLoss):
 
     For simplicity, we leave out the risk free rate in the Sharpe ratio calculation.
     """
-    def __init__(self, unbiased=True, reg_concentration=0, eps=1e-8, skip_validation=True):
-        super().__init__(reg_concentration = reg_concentration, skip_validation = skip_validation)
+    def __init__(self, unbiased=True, reg_concentration=0, eps=1e-8, skip_validation=True, apply_reg_sw=False):
+        super().__init__(reg_concentration = reg_concentration, skip_validation = skip_validation, apply_reg_sw = apply_reg_sw)
         
         self.unbiased = unbiased
         self.eps = eps
