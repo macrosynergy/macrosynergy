@@ -47,9 +47,8 @@ class DynamicSignalOptimizer:
     features : list of str
         Ordered feature categories used in every regime. Must contain at least
         one category, with no duplicates or overlap with any target category.
-        Candidate targets are derived from `regimes`.
     regimes : dict
-        Required, nonempty mapping from string or integer regime IDs to
+        Mapping from string or integer regime IDs to
         dictionaries with `start`, `end`, `end_return` and `targets`. Dates
         are ISO date strings or dates; `targets` is an ordered list of target
         category names in `df`.
@@ -59,8 +58,7 @@ class DynamicSignalOptimizer:
         `start` and `end` define the output interval, inclusive and exclusive
         respectively, after rolling weekends back to the previous business day.
         `end_return` caps input observations inclusively. The history check uses
-        target records through `end`, before this second cutoff. Global `start`
-        and `end` still restrict the available input history.
+        target records through `end`, before this second cutoff.
     cids : list of str, optional
         Cross-sections considered in every vintage. Default is None, which
         considers all cross-sections in `df`.
@@ -90,23 +88,6 @@ class DynamicSignalOptimizer:
         with any missing values; "X" or "y" drops rows with missing features
         or targets respectively. False keeps remaining missing values. Rows
         with all features missing are always dropped. Default is True.
-
-    Attributes
-    ----------
-    features : list of str
-        Feature categories in their supplied order.
-    targets : list of str
-        Unique candidate targets, in order of first appearance across the
-        chronologically sorted regimes.
-    optimizers : dict
-        Process names mapped to dictionaries of fitted SignalOptimizer objects,
-        keyed by the original regime IDs. Skipped regimes have no child entry.
-        Children retain their input data, training matrices and full diagnostics.
-    regime_results : dict
-        Process names mapped to regime reports. Use `get_regimes(name)` to
-        retrieve a copy, including missing targets and reasons for skipping.
-    regimes : pd.DataFrame
-        Report from the most recent successful calculation. Empty beforehand.
 
     Notes
     -----
@@ -457,7 +438,7 @@ class DynamicSignalOptimizer:
         self, name: Optional[Union[str, List[str]]] = None
     ) -> pd.DataFrame:
         """
-        Return feature importances or coefficients across vintages.
+        Return feature importances or coefficients across vintages.000
 
         Parameters
         ----------
