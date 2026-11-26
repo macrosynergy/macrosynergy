@@ -13,4 +13,4 @@ selection methods, cross-validation classes and performance metrics.
 The panel format of our quantamental dataframes renders many of the common classes and 
 functions in scikit-learn either impossible or difficult to use, either conceptually or
 practically. We provide custom scikit-learn estimators, transformers, metrics, wrappers
-and classes to build a bridge between tradable economics and machine learning. 
+and classes to build a bridge between tradable economics and machine learning.
