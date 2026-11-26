@@ -634,13 +634,13 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
                             y_scaler = self.y_scaler,
                         )
                         sw_trains = [sw.to_numpy()] if sw is not None else None
-                        train_datasets, _ = self.make_tensor_datasets_(
+                        refit_train_datasets, _ = self.make_tensor_datasets_(
                             X_trains_s = X_s,
                             y_trains_s = y_s,
                             sample_weights = sw_trains,
                         )
                         train_loader, _, _ = self.make_dataloaders_(
-                            train_dataset = train_datasets[0],
+                            train_dataset = refit_train_datasets[0],
                             batch_size = self.batch_size,
                             use_ts_sampler = self.use_ts_sampler,
                             aggregate_last = self.aggregate_last,
