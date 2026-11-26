@@ -152,7 +152,12 @@ class PortfolioLoss(nn.Module, BaseEstimator):
         if sample_weight is not None:
             if not isinstance(sample_weight, torch.Tensor):
                 raise TypeError("sample_weight must be a torch.Tensor.")
-            if not all(sample_weight > 0):
+            # check sample weight has the correct shape
+            if sample_weight.ndim != 1:
+                raise ValueError("sample_weight must be a 1-dimensional tensor.")
+            if sample_weight.shape[0] != y_pred.shape[0]:
+                raise ValueError("sample_weight must have the same batch size as y_pred and y_true.")
+            if not torch.all(sample_weight > 0):
                 raise ValueError("sample_weights must be positive.")
 
 class NegMeanPortfolioReturn(PortfolioLoss):
