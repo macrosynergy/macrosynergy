@@ -93,6 +93,14 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         Weight decay used by the optimizer. Default is 1e-4.
     reg_turnover : float, optional
         L2 regularization strength for the turnover in model outputs. Default is 0.
+    reg_variance : float, optional
+        Variance regularization for encoder outputs. Default is 0.
+    reg_covariance : float, optional
+        Covariance regularization for encoder outputs. Default is 0.
+    vc_std_target : float, optional
+        Standard deviation target for variance-covariance regularization. Default is 1.
+    vc_eps : float, optional
+        Small epsilon added to the variance-covariance regularization to avoid numerical issues. Default is 1e-4.
     use_ts_sampler : bool, optional
         Whether to use a time-series aware batch sampler during training.
         Default is True.
@@ -271,6 +279,10 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         learning_rate = 3e-4,
         weight_decay = 1e-4,
         reg_turnover = 0,
+        reg_variance = 0.0,
+        reg_covariance = 0.0,
+        vc_std_target = 1,
+        vc_eps = 1e-4,
         use_ts_sampler = True, # TODO: turn this into an optional sampler object
         aggregate_last = True,
         drop_last = False,
@@ -306,6 +318,10 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
             learning_rate = learning_rate,
             weight_decay = weight_decay,
             reg_turnover = reg_turnover,
+            reg_variance = reg_variance,
+            reg_covariance = reg_covariance,
+            vc_std_target = vc_std_target,
+            vc_eps = vc_eps,
             use_ts_sampler = use_ts_sampler,
             aggregate_last = aggregate_last,
             drop_last = drop_last,
@@ -340,7 +356,10 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         self.learning_rate = learning_rate
         self.weight_decay = weight_decay
         self.reg_turnover = reg_turnover
-
+        self.reg_variance = reg_variance
+        self.reg_covariance = reg_covariance
+        self.vc_std_target = vc_std_target
+        self.vc_eps = vc_eps
         self.use_ts_sampler = use_ts_sampler
         self.aggregate_last = aggregate_last
         self.drop_last = drop_last
@@ -1119,8 +1138,14 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         loss_func,
         reg_turnover
     ):
+        use_vc = self.reg_variance > 0 or self.reg_covariance > 0
+
         optimizer.zero_grad()
-        preds = model(X_i)
+        if use_vc:
+            latent = model.encoder(X_i)
+            preds = model.head(latent)
+        else:
+            preds = model(X_i)
         
         loss = self._compute_loss(
             loss_func=loss_func,
@@ -1133,6 +1158,10 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
             pweight_changes = preds[1:] - preds[:-1]
             pweight_l2 = torch.mean(torch.sum(pweight_changes ** 2, dim=1))
             loss = loss + reg_turnover * pweight_l2
+
+        if use_vc:
+            variance_loss, covariance_loss = self._vc_penalties(latent)
+            loss = loss + self.reg_variance * variance_loss + self.reg_covariance * covariance_loss
 
         loss.backward()
         optimizer.step()
@@ -1270,6 +1299,37 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         model.zero_grad()
         
         return diagnostics
+
+    def _vc_penalties(self, z):
+        if z.ndim != 2:
+            raise ValueError(
+                "VCReg expects (batch_size, latent_features)."
+            )
+
+        # Sample covariance needs at least two observations.
+        if z.shape[0] < 2:
+            zero = z.sum() * 0.0
+            return zero, zero
+
+        z = z.float()
+        centered = z - z.mean(dim=0, keepdim=True)
+        cov = centered.T @ centered / (z.shape[0] - 1)
+
+        std = torch.sqrt(cov.diagonal() + self.vc_eps)
+        variance_loss = torch.relu(
+            self.vc_std_target - std
+        ).mean()
+
+        width = z.shape[1]
+        if width > 1:
+            mask = ~torch.eye(
+                width, dtype=torch.bool, device=z.device
+            )
+            covariance_loss = cov[mask].square().mean()
+        else:
+            covariance_loss = z.sum() * 0.0
+
+        return variance_loss, covariance_loss
     
     def _check_predict_params(
         self,
@@ -1308,6 +1368,10 @@ class MLPRegressor(BaseEstimator, RegressorMixin):
         learning_rate,
         weight_decay,
         reg_turnover,
+        reg_variance,
+        reg_covariance,
+        vc_std_target,
+        vc_eps,
         use_ts_sampler,
         aggregate_last,
         drop_last,
@@ -1734,6 +1798,8 @@ if __name__ == "__main__":
         learning_rate = 3e-4, 
         weight_decay = 1e-4,
         reg_turnover = 1e-4,
+        reg_variance = 1,
+        reg_covariance = 100000000,
         use_ts_sampler = True,
         aggregate_last=True,
         drop_last=False,
@@ -1756,6 +1822,8 @@ if __name__ == "__main__":
     print(mlp.model.early_stopping_dynamics[(0,0)])
     print(mlp.model.early_stopping_inference[(0,0)])
     print(mlp.model.predict(X))
+
+    print(mlp.model.models[0][0].encoder(torch.Tensor(X.to_numpy())).cov())
 
     # so.calculate_predictions(
     #     name = "MLP",
