@@ -385,7 +385,7 @@ class GlobalLocalRegression(BaseEstimator, RegressorMixin):
         Form groups by hierarchical agglomerative clustering of the training targets.
         Cross-sections are clustered on the pairwise correlations of their targets,
         or of their targets relative to the cross-sectional mean of each date when
-        relative_returns is True.
+        cluster_on_relative_returns is True.
 
         Parameters
         ----------

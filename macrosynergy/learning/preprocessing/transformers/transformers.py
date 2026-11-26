@@ -801,7 +801,7 @@ class ReturnClusterer(BaseEstimator, TransformerMixin):
             raise ValueError("y must be numeric.")
 
 
-# TODO: dont duplicate code
+# TODO: move to a central location ?
 def _cluster_returns(
     rets: pd.Series,
     cids: List[str],
@@ -846,7 +846,7 @@ def _cluster_returns(
     return clusters, cid_to_group
 
 
-# TODO: dont duplicate code
+# TODO: move to a central location ?
 def _validate_groups(
     groups: Dict[str, List[str]], cids: List[str]
 ) -> Dict[str, str]:
