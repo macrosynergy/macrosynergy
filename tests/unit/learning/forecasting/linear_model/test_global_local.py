@@ -269,17 +269,28 @@ class TestClusterReturns:
 
 class TestCoefHierarchy:
     @pytest.mark.parametrize(
-        "groups, shrink_to_global, expected_parents, expected_lambdas",
+        "groups, shrink_to_global, scale, expected_parents, expected_lambdas",
         [
-            (None, True, [3, 3, 3, -1], [1, 1, 1, 3]),
-            (None, False, [-1, -1, -1], [1, 1, 1]),
-            (["G1", "G2"], True, [3, 4, 3, 5, 5, -1], [1, 1, 1, 2, 2, 3]),
-            (["G1", "G2"], False, [3, 4, 3, -1, -1], [1, 1, 1, 2, 2]),
+            (None, True, False, [3, 3, 3, -1], [1, 1, 1, 3]),
+            (None, False, False, [-1, -1, -1], [1, 1, 1]),
+            (["G1", "G2"], True, False, [3, 4, 3, 5, 5, -1], [1, 1, 1, 2, 2, 3]),
+            (["G1", "G2"], False, False, [3, 4, 3, -1, -1], [1, 1, 1, 2, 2]),
+            (None, True, True, [3, 3, 3, -1], [1, 1, 1, 3]),
+            (["G1", "G2"], True, True, [3, 4, 3, 5, 5, -1], [1, 1, 1, 1, 1, 3]),
+            (["G1", "G2"], False, True, [3, 4, 3, -1, -1], [1, 1, 1, 1, 1]),
         ],
-        ids=["local-global", "local", "local-group-global", "local-group"],
+        ids=[
+            "local-global",
+            "local",
+            "local-group-global",
+            "local-group",
+            "local-global-scaled",
+            "local-group-global-scaled",
+            "local-group-scaled",
+        ],
     )
     def test_parents_and_lambdas(
-        self, groups, shrink_to_global, expected_parents, expected_lambdas
+        self, groups, shrink_to_global, scale, expected_parents, expected_lambdas
     ):
         parents, lambdas = _coef_hierarchy(
             cids=["AUD", "CAD", "GBP"],
@@ -289,6 +300,7 @@ class TestCoefHierarchy:
             groups=groups,
             cid_to_group={"AUD": "G1", "CAD": "G2", "GBP": "G1"},
             shrink_to_global=shrink_to_global,
+            scale_group_lambda=scale,
         )
 
         np.testing.assert_array_equal(parents, expected_parents)
@@ -440,14 +452,29 @@ class TestGlobalLocalRegression:
                     model.cid_coefs_[cid], group_coefs, atol=1e-2
                 )
 
-    def test_positive_constrains_slopes_but_not_intercepts(self, panel):
+    @pytest.mark.parametrize("shrink_to_global", [True, False])
+    def test_scale_group_lambda_divides_by_number_of_groups(
+        self, panel, shrink_to_global
+    ):
         X, y = panel
+        params = {"groups": GROUPS, "shrink_to_global": shrink_to_global}
+        scaled = GlobalLocalRegression(
+            group_lambda=2 * len(GROUPS), scale_group_lambda=True, **params
+        ).fit(X, y)
+        unscaled = GlobalLocalRegression(group_lambda=2, **params).fit(X, y)
+        for group in GROUPS:
+            np.testing.assert_allclose(
+                scaled.group_coefs_[group], unscaled.group_coefs_[group], atol=1e-6
+            )
 
-        model = GlobalLocalRegression(positive=True).fit(X, y)
+    def test_positive_constrains_slopes_but_not_intercepts(self, panel):
+            X, y = panel
 
-        assert np.all(model.coef_ >= 0)
-        assert all(np.all(coefs[1:] >= 0) for coefs in model.cid_coefs_.values())
-        assert model.cid_coefs_["GBP"][0] < 0
+            model = GlobalLocalRegression(positive=True).fit(X, y)
+
+            assert np.all(model.coef_ >= 0)
+            assert all(np.all(coefs[1:] >= 0) for coefs in model.cid_coefs_.values())
+            assert model.cid_coefs_["GBP"][0] < 0
 
     def test_predict_uses_cid_coefficients(self, panel):
         X, y = panel
@@ -500,6 +527,7 @@ class TestGlobalLocalRegression:
             ({"groups": "cluster", "n_clusters": 0}, ValueError),
             ({"groups": "cluster", "linkage": "invalid"}, ValueError),
             ({"groups": "cluster", "min_overlap": 1}, ValueError),
+            ({"groups": GROUPS, "scale_group_lambda": 1}, TypeError),
         ],
     )
     def test_invalid_groups_parameters_raise(self, panel, params, error):

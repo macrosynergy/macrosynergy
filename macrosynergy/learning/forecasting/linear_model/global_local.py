@@ -43,6 +43,10 @@ class GlobalLocalRegression(BaseEstimator, RegressorMixin):
         Regularization strength to pull group coefficients towards global coefficients.
         When shrink_to_global=False, group slopes are instead pulled towards zero
         and group intercepts are not penalized. Has no effect when groups is None.
+    scale_group_lambda : bool, default=False
+        Whether to divide group_lambda by the number of groups, so the group
+        penalty is a mean rather than a sum over groups. Has no effect when groups
+        is None. Default is False.
     shrink_to_global : bool, default=True
         Whether to fit global coefficients at the top of the hierarchy. Default is True.
     n_clusters : int, default=2
@@ -93,6 +97,9 @@ class GlobalLocalRegression(BaseEstimator, RegressorMixin):
 
     where :math:`\tilde{\beta}` is :math:`\beta` without its intercept.
 
+    When scale_group_lambda is True, :math:`\lambda_{\text{group}}` is replaced by
+    :math:`\lambda_{\text{group}} / G`.
+
     When groups is None, local coefficients are shrunk directly towards the set of
     global coefficients, whose slopes are themselves shrunk towards 0.
 
@@ -125,6 +132,7 @@ class GlobalLocalRegression(BaseEstimator, RegressorMixin):
         min_xs_samples=36,
         groups=None,
         group_lambda=1,
+        scale_group_lambda=False,
         shrink_to_global=True,
         n_clusters=2,
         linkage="average",
@@ -139,6 +147,7 @@ class GlobalLocalRegression(BaseEstimator, RegressorMixin):
         self.min_xs_samples = min_xs_samples
         self.groups = groups
         self.group_lambda = group_lambda
+        self.scale_group_lambda = scale_group_lambda
         self.shrink_to_global = shrink_to_global
         self.n_clusters = n_clusters
         self.linkage = linkage
@@ -350,6 +359,9 @@ class GlobalLocalRegression(BaseEstimator, RegressorMixin):
         if self.groups is None:
             return
 
+        if not isinstance(self.scale_group_lambda, (bool, np.bool_)):
+            raise TypeError("scale_group_lambda must be a boolean")
+
         if isinstance(self.groups, str):
             self.cid_to_group_ = self._cluster_groups(X, y)
         else:
@@ -378,6 +390,7 @@ class GlobalLocalRegression(BaseEstimator, RegressorMixin):
             groups=getattr(self, "groups_", None),
             cid_to_group=getattr(self, "cid_to_group_", None),
             shrink_to_global=self.shrink_to_global,
+            scale_group_lambda=self.scale_group_lambda,
         )
 
     def _cluster_groups(self, X, y):
@@ -646,6 +659,7 @@ def _coef_hierarchy(
     groups: Optional[List[int]],
     cid_to_group: Optional[Dict[str, int]] = None,
     shrink_to_global: bool = True,
+    scale_group_lambda: bool = False,
 ) -> Tuple[np.ndarray, np.ndarray]:
     n_cids = len(cids)
 
@@ -658,6 +672,8 @@ def _coef_hierarchy(
         group_rows = {group: n_cids + k for k, group in enumerate(groups)}
         parents = [group_rows[cid_to_group[cid]] for cid in cids]
         parents += [-1] * len(groups)
+        if scale_group_lambda:
+            group_lambda = group_lambda / len(groups)
         lambdas += [group_lambda] * len(groups)
 
     # The current roots point at one global row, which becomes the only root

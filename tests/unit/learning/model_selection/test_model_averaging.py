@@ -10,6 +10,7 @@ from sklearn.neighbors import KNeighborsRegressor
 from sklearn.pipeline import Pipeline
 from sklearn.tree import DecisionTreeRegressor
 
+from macrosynergy.compat import PD_NEW_DATE_FREQ
 from macrosynergy.learning import ModelAveragingRegressor
 
 
@@ -18,7 +19,8 @@ class TestModelAveragingFeatureImportances(unittest.TestCase):
     def setUpClass(self):
         rng = np.random.default_rng(0)
         cids = ["AUD", "CAD", "GBP", "USD"]
-        dates = pd.date_range("2010-01-01", periods=60, freq="BME")
+        freq = "BME" if PD_NEW_DATE_FREQ else "BM"
+        dates = pd.date_range("2010-01-01", periods=60, freq=freq)
         index = pd.MultiIndex.from_product([cids, dates], names=["cid", "real_date"])
 
         self.features = ["CPI", "GROWTH", "RIR"]
