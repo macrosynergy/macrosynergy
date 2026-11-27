@@ -342,10 +342,10 @@ class BayesianPnLTrials:
     mean_prior : NormalPrior, optional
         Prior of the common level m, default N(0, 1).
     construction_correlation : None, "noise" or array-like, optional
-        Prior correlation C of the construction effects a. Default None is the
-        identity (exchangeable, independent effects). "noise" sets C = R, so
-        versions whose PnLs are highly correlated also have similar true
-        Sharpes. With the identity, a near-duplicate of an explored version
+        Prior correlation C of the construction effects a. The default "noise"
+        sets C = R, so versions whose PnLs are highly correlated also have
+        similar true Sharpes. None is the identity (exchangeable, independent
+        effects). With the identity, a near-duplicate of an explored version
         counts as a second independent draw of a construction effect that
         happens to coincide with the first: it shrinks tau and moves the
         other versions' posteriors. With C = R a near-duplicate adds almost
@@ -399,7 +399,7 @@ class BayesianPnLTrials:
         n_omega=61,
         tau_grid=None,
         omega_grid=None,
-        construction_correlation=None,
+        construction_correlation="noise",
         observations_per_year=252,
     ):
         if np.iscomplexobj(data):

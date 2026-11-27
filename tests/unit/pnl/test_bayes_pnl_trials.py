@@ -142,6 +142,7 @@ def test_posterior_matches_dense_gaussian_brute_force():
         fit = BayesianPnLTrials(
             DATA3,
             R3,
+            construction_correlation=None,
             period_years=3.0,
             selected="a",
             noise_sd=noise,
@@ -162,7 +163,7 @@ def test_fixed_scale_evidence_and_moments_match_dense_gaussian():
     T, K = x.shape
     fit = BayesianPnLTrials(
         DATA3, R3, period_years=3, noise_sd=0.5, mean_prior=prior,
-        omega_grid=[0.3], tau_grid=[0.2],
+        omega_grid=[0.3], tau_grid=[0.2], construction_correlation=None,
     )
     G = 0.8**2 * np.ones((K, K)) + 0.2**2 * np.eye(K)
     Sw = 0.25 * R3 + 0.09 * np.ones((K, K))
@@ -196,7 +197,8 @@ def test_single_period_works_and_equals_dense_limit():
     x = DATA3.iloc[[0]]
     prior = NormalPrior(0.0, 1.0)
     fit = BayesianPnLTrials(
-        x, R3, period_years=3, noise_sd=0.6, omega_grid=[0.3], tau_grid=[0.4]
+        x, R3, period_years=3, noise_sd=0.6, omega_grid=[0.3], tau_grid=[0.4],
+        construction_correlation=None,
     )
     G = np.ones((3, 3)) + 0.16 * np.eye(3)
     Lam = G + 0.36 * R3 + 0.09 * np.ones((3, 3))
@@ -262,8 +264,9 @@ def test_exchangeable_construction_prior_reads_a_duplicate_as_small_tau():
     construction effects treats the copy as a second independent effect.
     """
     data4, R4, _, _ = near_duplicate_setup()
-    base = BayesianPnLTrials(DATA3, R3, period_years=3, selected="a", noise_sd=0.6)
-    dup = BayesianPnLTrials(data4, R4, period_years=3, selected="a", noise_sd=0.6)
+    independent = dict(period_years=3, selected="a", noise_sd=0.6, construction_correlation=None)
+    base = BayesianPnLTrials(DATA3, R3, **independent)
+    dup = BayesianPnLTrials(data4, R4, **independent)
     tau_base = base.scale_summary().loc["tau", "mean"]
     tau_dup = dup.scale_summary().loc["tau", "mean"]
     assert tau_dup < 0.5 * tau_base
