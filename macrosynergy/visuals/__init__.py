@@ -18,6 +18,13 @@ from .score_visualisers import ScoreVisualisers
 from .acf import plot_acf, plot_pacf
 from .lagged_corr import plot_lagged_correlation
 from .proxy_pnl_visualisers import transaction_cost_heatmap, sensitivity_plot
+from .bayes_pnl import (
+    plot_bayesian_posterior,
+    plot_bayesian_predictive,
+    plot_bayesian_prior_posterior,
+    plot_bayesian_funnel,
+)
+from .bayes_pnl_variants import plot_bayesian_variants
 
 __all__ = [
     "view_correlation",
@@ -41,4 +48,9 @@ __all__ = [
     "plot_lagged_correlation",
     "transaction_cost_heatmap",
     "sensitivity_plot",
+    "plot_bayesian_posterior",
+    "plot_bayesian_predictive",
+    "plot_bayesian_prior_posterior",
+    "plot_bayesian_funnel",
+    "plot_bayesian_variants",
 ]

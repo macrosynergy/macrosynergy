@@ -1,0 +1,1350 @@
+"""Evaluate a selected strategy version conditional on every version explored.
+
+Reporting the best of many explored versions inflates its apparent value when
+the version is assessed on its own. ``BayesianPnLTrials`` models all explored
+versions jointly, with known sampling noise and correlated sampling errors, so
+the posterior of the reported version is conditioned on the whole search. As
+selection is a function of the data, a posterior that conditions on all the data
+needs no further adjustment for the selection itself.
+"""
+
+import warnings
+
+import numpy as np
+import pandas as pd
+from scipy import linalg, optimize, special, stats
+
+from .grid import GridTruncationWarning
+from .inputs import evaluation_points, probabilities
+from .periods import period_metrics
+from .priors import NormalPrior
+from .variants import _axis, _matrix, _widths
+
+RESERVED_TARGETS = ("selected", "idea", "draw")
+_EULER_GAMMA = float(np.euler_gamma)
+_REFINE_TAIL = 1e-9
+
+
+def effective_number_of_trials(correlation):
+    """Effective number of independent versions implied by a correlation matrix.
+
+    Computed as ``K**2 / ||R||_F**2``, where ``||R||_F**2`` is the sum of
+    squared entries of R. It equals K for uncorrelated versions and one for
+    identical versions.
+
+    Parameters
+    ----------
+    correlation : array-like
+        K x K symmetric correlation matrix with unit diagonal.
+
+    Returns
+    -------
+    float
+    """
+    R = np.asarray(correlation, dtype=float)
+    if R.ndim != 2 or R.shape[0] != R.shape[1] or not R.size:
+        raise ValueError("correlation must be a nonempty square matrix.")
+    R = _matrix(R, R.shape[0], "correlation")
+    return float(R.shape[0] ** 2 / np.sum(R**2))
+
+
+CORRELATION_METHODS = ("sample", "ledoit_wolf", "factor")
+_FACTOR_FLOOR = 1e-6
+
+
+def _ledoit_wolf_intensity(y, sample):
+    """Intensity and target of the Ledoit-Wolf (2004) constant-correlation shrinkage.
+
+    ``y`` holds standardised observations (mean zero, population variance one),
+    ``sample`` is ``y'y / T``. Returns (delta, target, pi, rho, gamma).
+    """
+    T, K = y.shape
+    y2 = y**2
+    # pi: sum over (i, j) of the asymptotic variance of sqrt(T) * s_ij.
+    pi_matrix = (y2.T @ y2) / T - sample**2
+    pi_hat = float(pi_matrix.sum())
+    # rho: asymptotic covariance between the sample matrix and the target.
+    off = ~np.eye(K, dtype=bool)
+    rbar = float(sample[off].sum() / (K * (K - 1)))
+    # theta[i, j] = mean_t (y_ti^2 - 1)(y_ti y_tj - s_ij) = mean(y_i^3 y_j) - s_ij
+    theta = ((y2 * y).T @ y) / T - sample
+    rho_hat = float(np.trace(pi_matrix)) + rbar * float(theta[off].sum())
+    target = np.full((K, K), rbar)
+    np.fill_diagonal(target, 1.0)
+    gamma_hat = float(((target - sample) ** 2).sum())
+    if gamma_hat <= 1e-14:
+        delta = 0.0
+    else:
+        delta = float(np.clip((pi_hat - rho_hat) / gamma_hat / T, 0.0, 1.0))
+    return delta, target, pi_hat, rho_hat, gamma_hat, rbar
+
+
+def estimate_correlation(returns, method="ledoit_wolf", n_factors=None):
+    """Estimate a K x K correlation matrix that is safe to invert.
+
+    The sample correlation of K series over T observations has eigenvalues
+    spread out by estimation noise: the smallest are biased toward zero, and
+    the matrix is singular when K >= T. Inverting it, as generalised least
+    squares does, then over-trusts spurious contrasts between series. Both
+    shrunk estimators trade a little bias for a well-conditioned matrix.
+
+    Parameters
+    ----------
+    returns : pandas.DataFrame or two-dimensional array
+        T x K return observations, one column per series. Rows with any NaN
+        are dropped; the remaining values must be finite, T >= 2, and no
+        series may be constant.
+    method : {"ledoit_wolf", "sample", "factor"}
+        ``"sample"``: plain sample correlation.
+
+        ``"ledoit_wolf"``: linear shrinkage ``delta * F + (1 - delta) * S`` of
+        the sample correlation S toward the constant-correlation target F
+        (unit diagonal, every off-diagonal the average sample correlation
+        rbar), after Ledoit and Wolf (2004), "Honey, I shrunk the sample
+        covariance matrix". Returns are standardised first (mean zero,
+        population variance one), so S has an exact unit diagonal and the
+        result is a correlation matrix. With y the standardised data,
+        s_ij = mean(y_i y_j) and f_ij = rbar (i != j), f_ii = 1::
+
+            pi    = sum_ij mean_t (y_ti y_tj - s_ij)^2
+            rho   = sum_i pi_ii
+                    + rbar * sum_{i != j} (mean_t(y_ti^3 y_tj) - s_ij)
+            gamma = sum_ij (f_ij - s_ij)^2
+            delta = clip((pi - rho) / gamma / T, 0, 1)
+
+        This is the paper's estimator with ``s_ii = 1``: its rho off-diagonal
+        term ``(rbar / 2) * (sqrt(s_jj / s_ii) * theta_ii,ij + sqrt(s_ii /
+        s_jj) * theta_jj,ij)`` summed over i != j equals ``rbar`` times the
+        sum of theta_ii,ij over i != j by symmetry. No term is simplified;
+        the only addition is a floor on delta so that the result is positive
+        definite when the sample matrix is singular (K >= T), by
+        ``delta * (1 - rbar) >= 1e-6``.
+
+        ``"factor"``: principal-component factor model. R = V_k (L_k - s2 I)
+        V_k' + D from the top k eigenpairs of S, where s2 is the mean of the
+        discarded eigenvalues (the maximum-likelihood correction of Tipping
+        and Bishop, 1999: without it the kept eigenvalues absorb idiosyncratic
+        variance and the common part is overstated, badly so for small K) and
+        D is diagonal so the diagonal is one; idiosyncratic variances are
+        floored at 1e-6 and the result is rescaled to unit diagonal. ``n_factors=None`` takes k as the number of
+        sample eigenvalues above the Marchenko-Pastur upper edge
+        ``(1 + sqrt(K / T))**2``, bounded to 1 <= k <= K - 1.
+    n_factors : int, optional
+        Number of factors for ``method="factor"``, between 1 and K - 1.
+        Not allowed with the other methods.
+
+    Returns
+    -------
+    (matrix, info) : tuple
+        ``matrix`` is a symmetric K x K numpy array with unit diagonal, or a
+        DataFrame labelled by the columns when ``returns`` is a DataFrame.
+        ``info`` is a dict: ``method``, ``n_observations`` (rows used),
+        ``n_variables``; for ``"ledoit_wolf"`` also ``shrinkage`` (delta),
+        ``shrinkage_unfloored``, ``target_correlation`` (rbar), ``pi``,
+        ``rho``, ``gamma``; for ``"factor"`` also ``n_factors``,
+        ``n_factors_source`` ("mp_edge" or "user"), ``mp_edge``,
+        ``explained_share`` (sum of the kept eigenvalues over K).
+    """
+    if method not in CORRELATION_METHODS:
+        raise ValueError("method must be one of {}.".format(CORRELATION_METHODS))
+    if n_factors is not None and method != "factor":
+        raise ValueError("n_factors applies only to method='factor'.")
+    labels = list(returns.columns) if isinstance(returns, pd.DataFrame) else None
+    if np.iscomplexobj(returns):
+        raise ValueError("returns must be real.")
+    try:
+        x = np.asarray(returns, dtype=float)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("returns must be a numeric T x K matrix.") from exc
+    if x.ndim != 2 or x.shape[1] < 1:
+        raise ValueError("returns must be a two-dimensional T x K matrix.")
+    if np.isinf(x).any():
+        raise ValueError("returns must not contain infinite values.")
+    x = x[~np.isnan(x).any(axis=1)]
+    T, K = x.shape
+    if T < 2:
+        raise ValueError("At least two complete observations are needed.")
+    y = x - x.mean(axis=0)
+    scale = np.sqrt((y**2).mean(axis=0))
+    if (scale <= 1e-12 * np.maximum(np.abs(x).max(axis=0), 1e-300)).any() or (
+        scale == 0
+    ).any():
+        raise ValueError("Correlation is undefined for a constant series.")
+    y = y / scale
+    sample = (y.T @ y) / T
+    sample = (sample + sample.T) / 2
+    np.fill_diagonal(sample, 1.0)
+    info = {"method": method, "n_observations": T, "n_variables": K}
+    if K == 1:
+        result = np.ones((1, 1))
+    elif method == "sample":
+        result = sample
+    elif method == "ledoit_wolf":
+        delta, target, pi_hat, rho_hat, gamma_hat, rbar = _ledoit_wolf_intensity(
+            y, sample
+        )
+        floored = delta
+        if rbar < 1:
+            floored = min(max(delta, 1e-6 / (1 - rbar)), 1.0)
+        result = floored * target + (1 - floored) * sample
+        info.update(
+            shrinkage=float(floored),
+            shrinkage_unfloored=delta,
+            target_correlation=rbar,
+            pi=pi_hat,
+            rho=rho_hat,
+            gamma=gamma_hat,
+        )
+    else:
+        values, vectors = np.linalg.eigh(sample)
+        values, vectors = values[::-1], vectors[:, ::-1]
+        edge = (1 + np.sqrt(K / T)) ** 2
+        if n_factors is None:
+            k = int(np.clip(int((values > edge).sum()), 1, K - 1))
+            source = "mp_edge"
+        else:
+            if (
+                isinstance(n_factors, bool)
+                or not isinstance(n_factors, (int, np.integer))
+                or not 1 <= n_factors <= K - 1
+            ):
+                raise ValueError("n_factors must be an integer from 1 to K - 1.")
+            k, source = int(n_factors), "user"
+        noise_level = float(values[k:].mean()) if k < K else 0.0
+        loadings = vectors[:, :k] * np.sqrt(np.maximum(values[:k] - noise_level, 0.0))
+        common = loadings @ loadings.T
+        idio = np.maximum(1.0 - np.diag(common), _FACTOR_FLOOR)
+        result = common + np.diag(idio)
+        d = 1 / np.sqrt(np.diag(result))
+        result = result * d[:, None] * d[None, :]
+        info.update(
+            n_factors=k,
+            n_factors_source=source,
+            mp_edge=float(edge),
+            explained_share=float(values[:k].sum() / K),
+        )
+    result = (result + result.T) / 2
+    np.fill_diagonal(result, 1.0)
+    if labels is not None:
+        result = pd.DataFrame(result, index=labels, columns=labels)
+    return result, info
+
+
+def expected_maximum_sharpe(sharpes, n_trials=None):
+    """Expected maximum Sharpe ratio of N unskilled trials (deflated-Sharpe benchmark).
+
+    ``sd(sharpes, ddof=1) * ((1 - g) * Phi^-1(1 - 1/N) + g * Phi^-1(1 - 1/(N e)))``
+    with g the Euler-Mascheroni constant (Bailey and Lopez de Prado, 2014).
+
+    Parameters
+    ----------
+    sharpes : array-like
+        Sharpe ratios of the explored trials; their sample sd sets the scale.
+    n_trials : int, optional
+        Number of (effective) independent trials N. Defaults to ``len(sharpes)``.
+
+    Returns
+    -------
+    float
+        Benchmark in the units of ``sharpes``; 0.0 when N <= 1.
+    """
+    values = np.asarray(sharpes, dtype=float).ravel()
+    if not np.isfinite(values).all():
+        raise ValueError("sharpes must be finite.")
+    n = float(values.size if n_trials is None else n_trials)
+    if not np.isfinite(n) or n <= 0:
+        raise ValueError("n_trials must be positive and finite.")
+    if n <= 1:
+        return 0.0
+    if values.size < 2:
+        raise ValueError("At least two Sharpe ratios are needed for their dispersion.")
+    spread = float(np.std(values, ddof=1))
+    return spread * (
+        (1 - _EULER_GAMMA) * stats.norm.ppf(1 - 1 / n)
+        + _EULER_GAMMA * stats.norm.ppf(1 - 1 / (n * np.e))
+    )
+
+
+LEVEL_LEVERAGE_THRESHOLD = 3.0
+GROUP_LEVERAGE_THRESHOLD = 1.5
+RESIDUAL_SHARES = (0.01, 0.02, 0.05, 0.1, 0.25)
+
+
+def _residual_share(value):
+    try:
+        result = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("residual_share must lie in (0, 1].") from exc
+    if not np.isfinite(result) or not 0 < result <= 1:
+        raise ValueError("residual_share must lie in (0, 1].")
+    return result
+
+
+def _validated_design(design):
+    if not isinstance(design, pd.DataFrame):
+        raise TypeError("design must be a DataFrame indexed by version name.")
+    if design.shape[0] < 1 or design.shape[1] < 1:
+        raise ValueError("design needs at least one version and one choice column.")
+    if not design.index.is_unique:
+        raise ValueError("design index (version names) must be unique.")
+    if not design.columns.is_unique:
+        raise ValueError("design choice columns must be unique.")
+    if design.isna().to_numpy().any():
+        raise ValueError("design must not contain missing values.")
+    for column in design.columns:
+        try:
+            pd.factorize(design[column], sort=False)
+        except TypeError as exc:
+            raise ValueError("design levels must be hashable.") from exc
+    return design
+
+
+def _choice_weights(choice_weights, columns):
+    if choice_weights is None:
+        return np.full(len(columns), 1.0 / len(columns))
+    if isinstance(choice_weights, pd.Series):
+        choice_weights = choice_weights.to_dict()
+    if not isinstance(choice_weights, dict) or set(choice_weights) != set(columns):
+        raise ValueError("choice_weights must map every design column exactly once.")
+    try:
+        w = np.array([float(choice_weights[c]) for c in columns])
+    except (TypeError, ValueError) as exc:
+        raise ValueError("choice_weights must be nonnegative numbers.") from exc
+    if not np.isfinite(w).all() or (w < 0).any() or w.sum() <= 0:
+        raise ValueError("choice_weights must be finite, nonnegative and not all zero.")
+    return w / w.sum()
+
+
+def design_correlation(design, residual_share=0.25, choice_weights=None):
+    """Prior correlation of true version Sharpes implied by a declared design.
+
+    Each explored version is a combination of levels of F declared research
+    choices (signal, blend, sizing, ...). Its true Sharpe is modelled as::
+
+        theta_v = m + sum_f alpha_{f, level_f(v)} + e_v
+
+    with independent main effects alpha_{f, l} ~ N(0, tau**2 (1 - lambda) c_f)
+    for every choice f and level l, and a residual e_v ~ N(0, tau**2 lambda)
+    for what the main effects do not explain (interactions). The c_f are the
+    normalised ``choice_weights`` (default 1 / F each). Then
+    Var(theta_v - m) = tau**2 and the correlation of two versions' effects is::
+
+        C = (1 - lambda) * D + lambda * I,   D_ij = sum_f c_f [level_f(i) == level_f(j)]
+
+    With equal weights D_ij is the share of the F choices on which versions i
+    and j agree. D is a weighted average of block (same-level) correlation
+    matrices, so C is a positive-semidefinite correlation matrix, and
+    positive definite for lambda > 0.
+
+    Equal weights say every declared choice is expected to move the true
+    Sharpe by the same amount. When one choice (typically the signal)
+    plausibly matters much more than the others, equal weights force a single
+    tau to fit both large main effects and small interactions, and the fit
+    understates the dominant choice; supply ``choice_weights`` then.
+
+    Parameters
+    ----------
+    design : pandas.DataFrame
+        Indexed by version name (unique), one column per declared choice;
+        levels may be any hashable values; no missing values. Rows that are
+        identical (versions the design does not tell apart) are allowed and
+        get correlation ``1 - lambda``.
+    residual_share : float
+        lambda in (0, 1]: share of the variance of true differences that the
+        main effects do not explain. lambda = 1 gives the identity.
+    choice_weights : dict or pandas.Series, optional
+        Relative prior variance of each choice's main effects, keyed by design
+        column; nonnegative, normalised to sum to one. Default equal.
+
+    Returns
+    -------
+    pandas.DataFrame
+        K x K correlation matrix labelled by the design index.
+    """
+    design = _validated_design(design)
+    share = _residual_share(residual_share)
+    weights = _choice_weights(choice_weights, list(design.columns))
+    K = design.shape[0]
+    agreement = np.zeros((K, K))
+    for weight, column in zip(weights, design.columns):
+        codes = pd.factorize(design[column], sort=False)[0]
+        agreement += weight * (codes[:, None] == codes[None, :])
+    matrix = (1 - share) * agreement + share * np.eye(K)
+    return pd.DataFrame(matrix, index=design.index, columns=design.index)
+
+
+def _positive(value, name):
+    try:
+        result = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("{} must be a positive finite number.".format(name)) from exc
+    if not np.isfinite(result) or result <= 0:
+        raise ValueError("{} must be a positive finite number.".format(name))
+    return result
+
+
+def _count(value, name):
+    if isinstance(value, bool) or not isinstance(value, (int, np.integer)) or value < 2:
+        raise ValueError("{} must be an integer of at least two.".format(name))
+    return int(value)
+
+
+def _mixture_cdf(values, means, sds, weights):
+    positive = sds > 0
+    result = []
+    for value in values:
+        components = np.asarray(value >= means, dtype=float)
+        components[positive] = special.ndtr(
+            (value - means[positive]) / sds[positive]
+        )
+        result.append(float(weights @ components))
+    return np.asarray(result)
+
+
+class BayesianPnLTrials:
+    """Selection-aware hierarchy for the Sharpe ratios of all explored versions.
+
+    Data are a T x K matrix of annualised Sharpe ratios s_tv over T
+    non-overlapping periods of ``period_years`` years for K explored versions::
+
+        s_t | theta, eta_t ~ N_K(theta + eta_t * 1, V),  V = noise_sd**2 * R
+        eta_t ~ N(0, omega**2)          (period effect common to all versions)
+        theta = m * 1 + a,  a ~ N_K(0, tau**2 C),  m ~ N(m0, s0**2)
+        omega ~ half-normal(omega_scale),  tau ~ half-normal(tau_scale)
+
+    V is *known* sampling noise of a period Sharpe ratio: there is no free
+    common dispersion, so dispersion cannot be learned from differences between
+    near-identical versions, and R is the correlation of the versions' sampling
+    errors (in practice their daily PnL correlation), not an assumed correlation
+    of performance. m, a and eta are integrated analytically; (omega, tau) on a
+    two-dimensional grid with trapezoid cell widths.
+
+    Because the posterior conditions on every explored version, selecting the
+    best in-sample version does not inflate its posterior: the selection rule
+    is a function of the data the posterior already conditions on. Near-duplicate
+    versions add almost no information because their sampling errors are
+    almost perfectly correlated.
+
+    Parameters
+    ----------
+    data : pandas.DataFrame or two-dimensional array
+        Finite period Sharpe ratios, one column per explored version (T >= 1).
+    noise_correlation : array-like or pandas.DataFrame, optional
+        K x K positive-definite correlation R of the sampling errors. Required
+        for K > 1. A DataFrame is aligned to the version names.
+    period_years : float
+        Length of each period in years.
+    selected : str, optional
+        Name of the reported version; the default target when given.
+    noise_sd : float, optional
+        Common sd of a period Sharpe's sampling error. Defaults to
+        ``sqrt((1 + g**2 / (2 * observations_per_year)) / period_years)`` with
+        g the grand mean of data: the large-sample variance of an annualised
+        Sharpe ratio estimated from independent returns (Lo, 2002).
+        It is deliberately one number for all versions and periods: with
+        correlated versions, version-specific standard errors that rise with
+        each version's own Sharpe estimate bias the pooled level downward.
+    observations_per_year : float
+        Return observations per year behind each period Sharpe, default 252
+        (daily). Only used for the default ``noise_sd``.
+    mean_prior : NormalPrior, optional
+        Prior of the common level m, default N(0, 1).
+    construction_correlation : None, "noise" or array-like, optional
+        Prior correlation C of the construction effects a. The default "noise"
+        sets C = R, so versions whose PnLs are highly correlated also have
+        similar true Sharpes. None is the identity (exchangeable, independent
+        effects). With the identity, a near-duplicate of an explored version
+        counts as a second independent draw of a construction effect that
+        happens to coincide with the first: it shrinks tau and moves the
+        other versions' posteriors. With C = R a near-duplicate adds almost
+        nothing. An explicit matrix must be a positive-semidefinite
+        correlation matrix (a DataFrame is aligned to the version names).
+        Must be left at its default when ``design`` is given.
+    design : pandas.DataFrame, optional
+        Declared design of the family: indexed by version name, one column
+        per research choice. When given, C is ``design_correlation(design,
+        residual_share, choice_weights)`` instead of R (see "Choosing C" in
+        the Notes).
+    residual_share : float or sequence of float
+        lambda in (0, 1] for ``design``: share of the variance of true
+        differences not explained by the choices' main effects. Only allowed
+        with ``design``. A sequence of distinct values places equal prior
+        weight on each: the fit is the mixture over (lambda, omega, tau)
+        cells, so every result averages the per-lambda fits with weights
+        proportional to their evidence, exposed as
+        ``residual_share_weights`` (and the per-lambda log evidence as
+        ``residual_share_evidence``). The default, None, uses
+        ``RESIDUAL_SHARES`` = (0.01, 0.02, 0.05, 0.1, 0.25), such a sequence. Small values
+        matter: near-clones that differ in no declared choice have almost
+        identical true Sharpes, and a fixed moderate lambda forces tau down
+        to fit them, which shrinks every version toward a level read from
+        contrasts between groups. A single value is a fixed assumption;
+        report the sensitivity to it.
+    choice_weights : dict or pandas.Series, optional
+        Relative prior variance of each design choice's main effects (see
+        ``design_correlation``); default equal. Only allowed with ``design``.
+    tau_scale, omega_scale : float
+        Half-normal scales of the version spread tau and the period effect omega.
+    weights : dict or one-dimensional array, optional
+        Research-choice probabilities of the versions for target "draw";
+        default equal. They never multiply the likelihood.
+    variant_names : sequence of str, optional
+        Names for array data.
+    n_tau, n_omega : int
+        Default grid resolutions.
+    tau_grid, omega_grid : one-dimensional arrays, optional
+        Explicit nonnegative, increasing axes. A singleton axis fixes the
+        parameter (its prior is then not applied).
+
+    Notes
+    -----
+    Default axes run linearly from zero to the larger of the half-normal
+    1 - 1e-5 quantile and a data-based bound. When the posterior occupies only
+    a small part of a default axis, that axis is refitted once on a linear grid
+    spanning the cells with marginal mass above 1e-9 (the zero end is kept
+    unless its mass is negligible). A ``GridTruncationWarning`` flags more than
+    1% of posterior mass on an upper edge.
+
+    Choosing C. C states which *true* differences between versions are plausible a
+    priori, and it determines how the common level m is pooled: the level is
+    a generalised-least-squares average of the versions' mean Sharpes with
+    weights proportional to (tau**2 C + V/T)^-1 1. These are minimum-variance
+    portfolio weights, and they can take large offsetting positions when
+    some combination of versions looks almost noise-free.
+
+    - ``"noise"`` (C = R) suits families of interchangeable near-clones
+      (small parameter perturbations of one rule), where versions with
+      nearly identical PnL plausibly have nearly identical true Sharpes.
+    - ``design`` is required for structured families, built as combinations
+      of discrete declared choices, and for any family in which some
+      versions are blends of others. C = R then asserts that every hedged
+      combination of correlated versions, e.g. ``cyclical + financial -
+      blend``, has a true Sharpe near zero; but Sharpe ratios are not
+      additive (a blend's Sharpe exceeds the average of its parts through
+      diversification), so the level is pooled from a precise estimate of
+      the wrong quantity and can fall outside the range of every group of
+      versions. The design ties true differences to the declared choices,
+      which is what the researcher actually varied.
+    - None (identity) treats near-clones as independent draws and collapses
+      tau when the family has many of them.
+
+    Neither choice is uniformly better, and the data rarely discriminate
+    between them. In simulated factorial families whose true differences did
+    follow the PnL correlation, ``"noise"`` was the better calibrated of the
+    two. Every joint fit, under either choice, is biased downward for a
+    family that contains a blend and its parts; the design roughly halves
+    that bias and does not remove it. Report both where they differ.
+
+    - Equal ``choice_weights`` suit families whose choices are expected to
+      matter about equally. When one choice dominates (e.g. which signal),
+      equal weights make a single tau serve both large main effects and
+      small interactions: tau is pulled down by the precise within-group
+      contrasts and every version is shrunk too hard toward a level read from
+      contrasts between groups. Weight the dominant choice, and compare
+      ``log_evidence`` across a few settings; results that depend strongly on
+      them should be reported as such.
+
+    ``level_weights()`` and ``level_leverage`` show how the level is formed.
+    Without a design, a ``UserWarning`` is issued when the leverage (sum of
+    absolute weights, 1 for nonnegative weights) exceeds
+    ``LEVEL_LEVERAGE_THRESHOLD`` = 3. With a design, offsetting weights
+    within a group are expected (they rest on the declared small
+    interactions), so the warning uses ``group_leverage()``, the leverage of
+    weights summed by each choice's levels, against
+    ``GROUP_LEVERAGE_THRESHOLD`` = 1.5 (a quarter of the weight shorted).
+
+    Predictive distributions for a future period of ``horizon_years`` assume
+    period effects and sampling errors independent across periods, so both
+    variances scale with ``period_years / horizon_years``. The model assumes
+    the true values theta are constant over time and does not integrate
+    uncertainty about R or ``noise_sd``.
+    """
+
+    method = "trials_grid"
+
+    def __init__(
+        self,
+        data,
+        noise_correlation=None,
+        *,
+        period_years,
+        selected=None,
+        noise_sd=None,
+        mean_prior=None,
+        tau_scale=0.5,
+        omega_scale=0.5,
+        weights=None,
+        variant_names=None,
+        n_tau=61,
+        n_omega=61,
+        tau_grid=None,
+        omega_grid=None,
+        construction_correlation="noise",
+        observations_per_year=252,
+        design=None,
+        residual_share=None,
+        choice_weights=None,
+    ):
+        if np.iscomplexobj(data):
+            raise ValueError("Sharpe observations must be real.")
+        try:
+            x = np.asarray(data, dtype=float)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("data must be a numeric period-by-version matrix.") from exc
+        if x.ndim != 2 or not x.size or not np.isfinite(x).all():
+            raise ValueError("Supply a nonempty finite period-by-version matrix.")
+        if isinstance(data, pd.DataFrame):
+            names = list(data.columns)
+        elif variant_names is not None:
+            names = list(variant_names)
+        else:
+            names = ["V{}".format(i) for i in range(x.shape[1])]
+        if (
+            len(names) != x.shape[1]
+            or len(set(names)) != len(names)
+            or any(not isinstance(v, str) for v in names)
+        ):
+            raise ValueError("Version names must be unique strings, one per column.")
+        if any(v in RESERVED_TARGETS for v in names):
+            raise ValueError(
+                "Version names cannot be reserved targets: selected, idea, draw."
+            )
+        k = len(names)
+        if selected is not None and selected not in names:
+            raise ValueError("selected must name one of the versions.")
+        self.period_years = _positive(period_years, "period_years")
+        if noise_correlation is None:
+            if k > 1:
+                raise ValueError(
+                    "Supply noise_correlation (e.g. daily PnL correlation) for multiple versions."
+                )
+            R = np.eye(1)
+        else:
+            R = _matrix(self._aligned(noise_correlation, names), k, "noise_correlation")
+        try:
+            np.linalg.cholesky(R)
+        except np.linalg.LinAlgError as exc:
+            raise ValueError(
+                "noise_correlation must be positive definite; drop duplicate versions."
+            ) from exc
+        if np.linalg.eigvalsh(R)[0] < 1e-10:
+            raise ValueError(
+                "noise_correlation is numerically singular; drop duplicate versions."
+            )
+        shares = self._shares(residual_share, design is not None)
+        if design is not None:
+            if not (
+                isinstance(construction_correlation, str)
+                and construction_correlation == "noise"
+            ):
+                raise ValueError(
+                    "Pass either design or construction_correlation, not both."
+                )
+            _validated_design(design)
+            if len(design.index) != k or set(design.index) != set(names):
+                raise ValueError("design index must match the version names.")
+            design = _validated_design(design).loc[names]
+            constructions = [
+                design_correlation(design, share, choice_weights).to_numpy()
+                for share in shares
+            ]
+            self.design = design.copy()
+            self.choice_weights = pd.Series(
+                _choice_weights(choice_weights, list(design.columns)),
+                index=design.columns,
+                name="choice_weight",
+            )
+        else:
+            if choice_weights is not None:
+                raise ValueError("choice_weights applies only with design.")
+            self.design = self.choice_weights = None
+            if construction_correlation is None:
+                C = np.eye(k)
+            elif isinstance(construction_correlation, str):
+                if construction_correlation != "noise":
+                    raise ValueError(
+                        "construction_correlation must be None, 'noise' or a matrix."
+                    )
+                C = R.copy()
+            else:
+                C = _matrix(
+                    self._aligned(construction_correlation, names),
+                    k,
+                    "construction_correlation",
+                )
+                if np.linalg.eigvalsh(C)[0] < -1e-10:
+                    raise ValueError(
+                        "construction_correlation must be positive semidefinite."
+                    )
+            constructions = [C]
+        self.residual_shares = shares
+        self._constructions = constructions
+        # One matrix (K x K) normally; a stack (L x K x K) for several shares.
+        self.construction_correlation = (
+            constructions[0] if len(constructions) == 1 else np.stack(constructions)
+        )
+        prior = NormalPrior(0.0, 1.0) if mean_prior is None else mean_prior
+        if type(prior) is not NormalPrior:
+            raise TypeError("mean_prior must be a NormalPrior.")
+        self.tau_scale = _positive(tau_scale, "tau_scale")
+        self.omega_scale = _positive(omega_scale, "omega_scale")
+        n_tau, n_omega = _count(n_tau, "n_tau"), _count(n_omega, "n_omega")
+        grand = float(x.mean())
+        per_year = _positive(observations_per_year, "observations_per_year")
+        self.noise_sd = (
+            float(np.sqrt((1 + grand**2 / (2 * per_year)) / self.period_years))
+            if noise_sd is None
+            else _positive(noise_sd, "noise_sd")
+        )
+        self._weights = pd.Series(
+            self._validate_weights(weights, names), index=names, name="research_weight"
+        )
+        self.names, self.selected, self.mean_prior = tuple(names), selected, prior
+        self.data = x.copy()
+        self.data.setflags(write=False)
+        self.n_periods, self.n_variants = x.shape
+        self.noise_correlation = R
+        self.effective_trials = effective_number_of_trials(R)
+        self.periods = None
+        self._prepare()
+        upper_omega = max(
+            float(stats.halfnorm.ppf(1 - 1e-5, scale=self.omega_scale)),
+            4 * float(np.std(x.mean(axis=1), ddof=1)) if self.n_periods > 1 else 0.0,
+        )
+        upper_tau = max(
+            float(stats.halfnorm.ppf(1 - 1e-5, scale=self.tau_scale)),
+            4 * float(np.std(x.mean(axis=0))) + abs(float(x.mean()) - prior.mean),
+        )
+        omega_axis = (
+            np.linspace(0.0, upper_omega, n_omega)
+            if omega_grid is None
+            else _axis(omega_grid, False, "omega_grid")
+        )
+        tau_axis = (
+            np.linspace(0.0, upper_tau, n_tau)
+            if tau_grid is None
+            else _axis(tau_grid, False, "tau_grid")
+        )
+        self._fit(omega_axis, tau_axis)
+        refine_omega, refine_tau = omega_grid is None, tau_grid is None
+        if refine_omega or refine_tau:
+            new_omega = (
+                self._refined(omega_axis, self.mass.sum(axis=1))
+                if refine_omega
+                else omega_axis
+            )
+            new_tau = (
+                self._refined(tau_axis, self.mass.sum(axis=0)) if refine_tau else tau_axis
+            )
+            if new_omega is not omega_axis or new_tau is not tau_axis:
+                self._fit(new_omega, new_tau)
+        edges = self.diagnostics["edge_mass"]
+        if max(edges.values()) > 0.01:
+            warnings.warn(
+                "Trials grid has material edge mass {}; widen the omega/tau axes.".format(
+                    edges
+                ),
+                GridTruncationWarning,
+                stacklevel=2,
+            )
+        if self.design is None and self.level_leverage > LEVEL_LEVERAGE_THRESHOLD:
+            warnings.warn(
+                "The common level rests on offsetting positions in correlated "
+                "versions (level leverage {:.1f} > {:g}): it is pooled from hedged "
+                "combinations whose true Sharpe the construction prior assumes is "
+                "near zero. Supply the family's declared design (design=...) "
+                "unless the versions are interchangeable near-clones; see "
+                "level_weights().".format(self.level_leverage, LEVEL_LEVERAGE_THRESHOLD),
+                UserWarning,
+                stacklevel=2,
+            )
+        elif self.design is not None:
+            group = self.group_leverage()
+            if group.max() > GROUP_LEVERAGE_THRESHOLD:
+                warnings.warn(
+                    "The common level rests on offsetting positions across declared "
+                    "groups (group leverage {:.1f} > {:g} for {!r}): the level is "
+                    "read from contrasts between levels of a choice. The prior "
+                    "spread is probably too small for that choice; review "
+                    "choice_weights and residual_share; see "
+                    "level_weights(by=...).".format(
+                        group.max(), GROUP_LEVERAGE_THRESHOLD, group.idxmax()
+                    ),
+                    UserWarning,
+                    stacklevel=2,
+                )
+
+    # ------------------------------------------------------------------ setup
+
+    @staticmethod
+    def _shares(value, with_design):
+        if not with_design:
+            if value is not None:
+                raise ValueError("residual_share applies only with design.")
+            return None
+        if value is None:
+            value = RESIDUAL_SHARES
+        if np.ndim(value) == 0:
+            return (_residual_share(value),)
+        shares = tuple(_residual_share(v) for v in np.asarray(value, dtype=object).ravel())
+        if not shares or len(set(shares)) != len(shares):
+            raise ValueError("residual_share values must be distinct and nonempty.")
+        return shares
+
+    @staticmethod
+    def _validate_weights(weights, names):
+        k = len(names)
+        if weights is None:
+            return np.full(k, 1.0 / k)
+        if isinstance(weights, dict):
+            if set(weights) != set(names):
+                raise ValueError("Weights must name every version exactly once.")
+            w = np.array([weights[name] for name in names], dtype=float)
+        else:
+            if np.iscomplexobj(weights):
+                raise ValueError("Weights must be real-valued.")
+            w = np.asarray(weights, dtype=float)
+        with np.errstate(over="ignore"):
+            total = float(w.sum()) if w.size else 0.0
+        if (
+            w.shape != (k,)
+            or not np.isfinite(w).all()
+            or (w < 0).any()
+            or not np.isfinite(total)
+            or total <= 0
+        ):
+            raise ValueError(
+                "Weights must be finite, nonnegative and have positive total mass."
+            )
+        return w / total
+
+    @staticmethod
+    def _aligned(matrix, names):
+        if not isinstance(matrix, pd.DataFrame):
+            return matrix
+        if set(matrix.index) != set(names) or set(matrix.columns) != set(names):
+            raise ValueError("Correlation labels must match the version names.")
+        return matrix.loc[names, names].to_numpy()
+
+    @property
+    def weights(self):
+        """Normalised research-choice weights, returned as an independent copy."""
+        return self._weights.copy()
+
+    def _prepare(self):
+        """Data summaries in the basis that diagonalises V and C simultaneously.
+
+        The generalised eigenproblem C w = mu V w gives W with W'VW = I and
+        W'CW = diag(mu), so A = tau**2 C + V/T is diagonal in that basis for
+        every tau: W'AW = diag(tau**2 mu + 1/T). M = W^-1 maps back. Terms that
+        involve only V (W W' = V^-1) are the same for every C.
+        """
+        T, K = self.data.shape
+        mean = self.data.mean(axis=0)
+        residuals = self.data - mean
+        scatter = residuals.T @ residuals
+        V = self.noise_sd**2 * self.noise_correlation
+        self._bases = []
+        for C in self._constructions:
+            mu, W = linalg.eigh(C, V)
+            mu = np.maximum(mu, 0.0)
+            self._bases.append((W, linalg.inv(W), mu, W.sum(axis=0), W.T @ mean))
+        u1 = self._bases[0][3]
+        W = self._bases[0][0]
+        rotated_scatter = W.T @ scatter @ W
+        self._q11 = float(u1 @ u1)
+        self._trace_VS = float(np.trace(rotated_scatter))
+        self._wSw = float(u1 @ rotated_scatter @ u1)
+        self._logdet_V = 2 * float(np.log(np.diag(np.linalg.cholesky(V))).sum())
+
+    @staticmethod
+    def _refined(axis, marginal):
+        if len(axis) < 3:
+            return axis
+        support = np.flatnonzero(marginal > _REFINE_TAIL)
+        if not support.size:
+            return axis
+        low, high = max(support[0] - 1, 0), min(support[-1] + 1, len(axis) - 1)
+        if high - low + 1 >= len(axis) / 3:
+            return axis
+        return np.linspace(axis[low], axis[high], len(axis))
+
+    def _fit_basis(self, basis, omega, tau):
+        """Exact Gaussian integration over m, a and eta at each (omega, tau) cell.
+
+        With A = tau**2 C + V/T (diagonal in the basis of ``_prepare``) and
+        c = s0**2 + omega**2/T, the period mean is s_bar = b 1 + z with
+        b = m + mean(eta) ~ N(m0, c) independent of z = a + mean(e) ~ N(0, A).
+        Lambda = A + c 11' and every quantity follows from Sherman-Morrison.
+        Given (b, z), m depends on b only and a on z only, which yields the
+        posterior moments of theta and m as sums of nonnegative terms.
+        """
+        T, K = self.data.shape
+        W, M, mu, u1, us = basis
+        m0, s0 = self.mean_prior.mean, self.mean_prior.sd
+        ud = us - m0 * u1
+        om2, ta2 = omega**2, tau**2
+        # Residual scatter term (omega only): Sigma_w = V + omega^2 11'.
+        shrink = 1 + om2 * self._q11
+        scatter_term = -0.5 * (T - 1) * (self._logdet_V + np.log(shrink)) - 0.5 * (
+            self._trace_VS - om2 / shrink * self._wSw
+        )
+        # Per-tau summaries of A = tau^2 C + V/T in the joint eigenbasis.
+        lam = ta2[:, None] * mu[None, :] + 1.0 / T
+        a11 = (u1**2 / lam).sum(axis=1)
+        a1d = (u1 * ud / lam).sum(axis=1)
+        add = (ud**2 / lam).sum(axis=1)
+        a1s = (u1 * us / lam).sum(axis=1)
+        logdet_A = self._logdet_V + np.log(lam).sum(axis=1)
+        # GLS weights of the level, A^-1 1 / (1' A^-1 1) = W (u1 / lam) / a11.
+        level_weights = ((u1 / lam) @ W.T) / a11[:, None]
+        # tau^2 C A^-1 x = tau^2 M' diag(mu / lam) W'x; Var(a | z) diagonal.
+        effect_1 = ta2[:, None] * ((mu * u1 / lam) @ M)
+        effect_s = ta2[:, None] * ((mu * us / lam) @ M)
+        a_post_var = (ta2[:, None] * mu / (T * lam)) @ (M**2)
+        # Cells: rows omega, columns tau.
+        c = (s0**2 + om2 / T)[:, None]
+        den = 1 + c * a11[None, :]
+        quad = add[None, :] - c * a1d[None, :] ** 2 / den
+        mean_term = -0.5 * (K * np.log(2 * np.pi) + logdet_A[None, :] + np.log(den) + quad)
+        constant = -0.5 * (T - 1) * K * np.log(2 * np.pi) - 0.5 * K * np.log(T)
+        log_likelihood = constant + scatter_term[:, None] + mean_term
+        vb = c / den
+        b_hat = vb * (m0 / c + a1s[None, :])
+        ratio = s0**2 / c
+        within_m = s0**2 * (om2[:, None] / T) / c
+        idea_mean = m0 + ratio * (b_hat - m0)
+        idea_var = within_m + ratio**2 * vb
+        beta = ratio[:, :, None] - effect_1[None, :, :]
+        alpha = m0 * (1 - ratio)[:, :, None] + effect_s[None]
+        theta_mean = alpha + beta * b_hat[:, :, None]
+        theta_var = within_m[:, :, None] + a_post_var[None] + beta**2 * vb[:, :, None]
+        return dict(
+            log_likelihood=log_likelihood,
+            theta_mean=theta_mean.reshape(-1, K),
+            theta_var=np.maximum(theta_var.reshape(-1, K), 0.0),
+            idea_mean=idea_mean.ravel(),
+            idea_var=idea_var.ravel(),
+            level_weights=level_weights,
+        )
+
+    def _fit(self, omega, tau):
+        """Fit every construction matrix on the same axes and pool the cells.
+
+        With several residual shares, each has prior probability 1/L and the
+        cells of all of them form one mixture, so each share's fit enters with
+        weight proportional to its evidence.
+        """
+        self.omega, self.tau = omega, tau
+        K = self.n_variants
+        parts = [self._fit_basis(basis, omega, tau) for basis in self._bases]
+        n_parts = len(parts)
+        log_mass = np.stack([part["log_likelihood"] for part in parts])
+        omega_cells = np.broadcast_to(omega[:, None], log_mass.shape[1:])
+        tau_cells = np.broadcast_to(tau[None, :], log_mass.shape[1:])
+        if len(omega) > 1:
+            log_mass += stats.halfnorm.logpdf(omega_cells, scale=self.omega_scale)
+        if len(tau) > 1:
+            log_mass += stats.halfnorm.logpdf(tau_cells, scale=self.tau_scale)
+        log_mass += np.log(np.outer(_widths(omega), _widths(tau)))
+        log_mass -= np.log(n_parts)
+        normalizer = special.logsumexp(log_mass)
+        if not np.isfinite(normalizer):
+            raise ValueError("No finite mass on the omega/tau grid.")
+        cell_mass = np.exp(log_mass - normalizer)
+        self._cell_mass = cell_mass.ravel()
+        self.mass = cell_mass.sum(axis=0)
+        self.log_evidence = float(normalizer)
+        self._omega_cells = np.tile(omega_cells.ravel(), n_parts)
+        self._tau_cells = np.tile(tau_cells.ravel(), n_parts)
+        self._theta_mean = np.concatenate([part["theta_mean"] for part in parts])
+        self._theta_var = np.concatenate([part["theta_var"] for part in parts])
+        self._idea_mean = np.concatenate([part["idea_mean"] for part in parts])
+        self._idea_var = np.concatenate([part["idea_var"] for part in parts])
+        # Posterior of (share, tau) averages the level weights (they do not
+        # depend on omega, which only adds a common shift to every version).
+        share_tau = cell_mass.sum(axis=1)
+        weights = np.einsum(
+            "lt,ltk->k", share_tau, np.stack([part["level_weights"] for part in parts])
+        )
+        self._level_weights = weights / weights.sum()
+        if self.residual_shares is not None:
+            per_share = cell_mass.sum(axis=(1, 2))
+            self.residual_share_weights = pd.Series(
+                per_share, index=list(self.residual_shares), name="posterior_weight"
+            ).rename_axis("residual_share")
+            self.residual_share_evidence = pd.Series(
+                [
+                    float(special.logsumexp(log_mass[i]) + np.log(n_parts))
+                    for i in range(n_parts)
+                ],
+                index=list(self.residual_shares),
+                name="log_evidence",
+            ).rename_axis("residual_share")
+        else:
+            self.residual_share_weights = self.residual_share_evidence = None
+        marginal_omega, marginal_tau = self.mass.sum(axis=1), self.mass.sum(axis=0)
+        self.diagnostics = {
+            "edge_mass": {
+                "omega_high": float(marginal_omega[-1]) if len(omega) > 1 else 0.0,
+                "tau_high": float(marginal_tau[-1]) if len(tau) > 1 else 0.0,
+            },
+            "n_periods": self.n_periods,
+            "n_versions": K,
+            "effective_trials": self.effective_trials,
+            "noise_sd": self.noise_sd,
+            "level_leverage": self.level_leverage,
+        }
+
+    # ------------------------------------------------------------- level
+
+    def level_weights(self, by=None):
+        """Weights w with which the common level is pooled from the version means.
+
+        Ignoring the prior on m, the posterior mean of the level (m plus the
+        average period effect) is ``w' s_bar`` with s_bar the versions' mean
+        period Sharpes and ``w = A^-1 1 / (1' A^-1 1)``, A = tau**2 C + V/T:
+        generalised-least-squares, i.e. minimum-variance-portfolio, weights.
+        They sum to one and are averaged over the posterior of tau (and of the
+        residual share). Negative weights mean the level is read partly from
+        hedged combinations of versions; ``level_leverage`` is sum |w|.
+
+        Parameters
+        ----------
+        by : str or pandas.Series, optional
+            Sum the weights within groups: a design column name, or a Series
+            mapping every version name to a group label.
+
+        Returns
+        -------
+        pandas.Series
+            One weight per version (or per group), summing to one.
+        """
+        weights = pd.Series(
+            self._level_weights, index=list(self.names), name="level_weight"
+        )
+        if by is None:
+            return weights
+        if isinstance(by, pd.Series):
+            if set(by.index) != set(self.names):
+                raise ValueError("by must map every version name.")
+            groups = by.loc[list(self.names)]
+        else:
+            if self.design is None or by not in self.design.columns:
+                raise ValueError("by must be a design column or a Series of groups.")
+            groups = self.design[by]
+        return weights.groupby(groups.to_numpy()).sum().rename("level_weight")
+
+    def group_leverage(self):
+        """Sum of |group-summed level weights| for every design column.
+
+        Offsetting positions within a group (between versions that share a
+        level) rely on the design's statement that interactions are small;
+        offsetting positions across a choice's levels mean the level is read
+        from contrasts between declared alternatives, which the design prior
+        treats as uncertain main effects. A value above 1 means some group is
+        shorted. Requires ``design``.
+        """
+        if self.design is None:
+            raise ValueError("group_leverage requires a design.")
+        return pd.Series(
+            {c: float(self.level_weights(by=c).abs().sum()) for c in self.design.columns},
+            name="group_leverage",
+        )
+
+    @property
+    def level_leverage(self):
+        """Sum of absolute level weights: 1 when all are nonnegative."""
+        return float(np.abs(self._level_weights).sum())
+
+    # ------------------------------------------------------------- from_pnl
+
+    @classmethod
+    def from_pnl(
+        cls,
+        pnl,
+        *,
+        period_years=1,
+        annualization_factor=252,
+        end_year=None,
+        selected=None,
+        correlation_method="ledoit_wolf",
+        n_factors=None,
+        **kwargs,
+    ):
+        """Fit from daily PnL, one column per explored version.
+
+        Period Sharpe ratios come from ``period_metrics`` in calendar blocks of
+        ``period_years`` whole years; periods without a finite Sharpe for every
+        version are dropped jointly with a warning. The noise correlation is the
+        correlation of daily PnL on days inside the retained periods where all
+        versions have data, estimated by ``estimate_correlation`` with
+        ``correlation_method`` ("ledoit_wolf" by default, "sample" or
+        "factor") and ``n_factors``. Exact duplicates are detected on the
+        sample correlation before any shrinkage. The method and its info are
+        stored in ``diagnostics["correlation_method"]`` and
+        ``diagnostics["correlation_info"]``. Other keyword arguments, such as
+        ``design``, ``residual_share`` and ``choice_weights``, are passed to
+        the constructor; a ``design`` is indexed by the PnL column names.
+        """
+        if isinstance(pnl, pd.Series):
+            pnl = pnl.to_frame(name=pnl.name if pnl.name is not None else "V0")
+        if not isinstance(pnl, pd.DataFrame):
+            raise TypeError("pnl must be a dated daily Series or DataFrame.")
+        if "noise_correlation" in kwargs:
+            raise TypeError("from_pnl computes noise_correlation from the daily PnL.")
+        periods = period_metrics(
+            pnl,
+            annualization_factor=annualization_factor,
+            end_year=end_year,
+            period_years=period_years,
+        )
+        if periods.empty:
+            raise ValueError("No complete shared periods are available.")
+        matrix = periods.pivot(
+            index="period_end", columns="variant", values="sharpe"
+        ).reindex(columns=pnl.columns)
+        complete = matrix.notna().all(axis=1) & np.isfinite(matrix.to_numpy()).all(
+            axis=1
+        )
+        if not complete.all():
+            warnings.warn(
+                "Periods without finite Sharpe ratios for every version are excluded jointly.",
+                UserWarning,
+                stacklevel=2,
+            )
+        matrix = matrix.loc[complete]
+        if matrix.empty:
+            raise ValueError("No complete shared periods are available.")
+        retained = periods.loc[periods.period_end.isin(matrix.index)]
+        inside = np.zeros(len(pnl), dtype=bool)
+        for start, end in retained[["period_start", "period_end"]].drop_duplicates().itertuples(
+            index=False
+        ):
+            inside |= (pnl.index >= start) & (pnl.index < end + pd.Timedelta(1, unit="D"))
+        daily = pnl.loc[inside].dropna(how="any")
+        if pnl.shape[1] > 1:
+            names = list(pnl.columns)
+            try:
+                sample, _ = estimate_correlation(daily, "sample")
+            except ValueError as exc:
+                raise ValueError(
+                    "Daily PnL correlation is undefined (constant series)."
+                ) from exc
+            sample = sample.to_numpy()
+            for i in range(len(names)):
+                for j in range(i):
+                    if abs(sample[i, j]) > 1 - 1e-10:
+                        raise ValueError(
+                            "Versions {!r} and {!r} have perfectly collinear daily PnL; "
+                            "drop the duplicate.".format(names[j], names[i])
+                        )
+            if (
+                correlation_method == "sample" or len(daily) > len(names)
+            ) and np.linalg.eigvalsh(sample)[0] < 1e-10:
+                raise ValueError(
+                    "Daily PnL of some versions is perfectly collinear; drop duplicate "
+                    "or linearly dependent versions."
+                )
+            correlation, correlation_info = estimate_correlation(
+                daily, correlation_method, n_factors
+            )
+            correlation = correlation.to_numpy()
+            correlation = pd.DataFrame(correlation, index=names, columns=names)
+        else:
+            correlation, correlation_info = None, None
+        kwargs.setdefault("observations_per_year", annualization_factor)
+        result = cls(
+            matrix,
+            correlation,
+            period_years=period_years,
+            selected=selected,
+            **kwargs,
+        )
+        result.periods = retained.copy()
+        result.diagnostics["correlation_method"] = correlation_method
+        result.diagnostics["correlation_info"] = correlation_info
+        return result
+
+    # ------------------------------------------------------------- targets
+
+    def _resolve(self, target):
+        if target is None:
+            return "selected" if self.selected is not None else "draw"
+        if target == "selected":
+            if self.selected is None:
+                raise ValueError("No selected version was declared.")
+            return target
+        if target in ("idea", "draw") or target in self.names:
+            return target
+        raise ValueError(
+            "Unknown target {!r}; use selected, idea, draw or a version name.".format(
+                target
+            )
+        )
+
+    def _horizon(self, horizon_years):
+        return (
+            self.period_years
+            if horizon_years is None
+            else _positive(horizon_years, "horizon_years")
+        )
+
+    def _components(self, target, predictive=False, horizon_years=None):
+        target = self._resolve(target)
+        masses = self._cell_mass
+        noise = (
+            (self._omega_cells**2 + self.noise_sd**2)
+            * self.period_years
+            / self._horizon(horizon_years)
+            if predictive
+            else np.zeros_like(masses)
+        )
+        if target == "idea":
+            if predictive:
+                raise ValueError(
+                    "The common level has no realised-period outcome; use a version target."
+                )
+            return self._idea_mean, self._idea_var, masses
+        if target == "draw":
+            q = self.weights.to_numpy()
+            return (
+                self._theta_mean.ravel(),
+                (self._theta_var + noise[:, None]).ravel(),
+                (masses[:, None] * q).ravel(),
+            )
+        index = self.names.index(self.selected if target == "selected" else target)
+        return self._theta_mean[:, index], self._theta_var[:, index] + noise, masses
+
+    # ------------------------------------------------------------- moments
+
+    def expectation(self, target=None):
+        """Posterior expectation of the long-term Sharpe of the target."""
+        means, _, weights = self._components(target)
+        return float(weights @ means)
+
+    def std(self, target=None):
+        """Posterior sd of the long-term Sharpe of the target."""
+        means, variances, weights = self._components(target)
+        center = weights @ means
+        return float(np.sqrt(weights @ (variances + (means - center) ** 2)))
+
+    def cdf(self, x, target=None):
+        means, variances, weights = self._components(target)
+        return _mixture_cdf(evaluation_points(x), means, np.sqrt(variances), weights)
+
+    def prob_mean_below(self, threshold=0.0, target=None):
+        return float(self.cdf(threshold, target)[0])
+
+    def prob_mean_above(self, threshold=0.0, target=None):
+        return 1.0 - self.prob_mean_below(threshold, target)
+
+    def predictive_cdf(self, x, target=None, horizon_years=None):
+        """CDF of the target's Sharpe over a future period of ``horizon_years``."""
+        means, variances, weights = self._components(target, True, horizon_years)
+        return _mixture_cdf(evaluation_points(x), means, np.sqrt(variances), weights)
+
+    def predictive_prob_above(self, threshold=0.0, target=None, horizon_years=None):
+        return 1.0 - float(self.predictive_cdf(threshold, target, horizon_years)[0])
+
+    def _quantiles(self, q, target, predictive, horizon_years=None):
+        means, variances, weights = self._components(target, predictive, horizon_years)
+        keep = weights > 0
+        means, sds, weights = means[keep], np.sqrt(variances[keep]), weights[keep]
+        center = float(weights @ means)
+        width = max(float(sds.max()), float(np.ptp(means)), 1e-12)
+
+        def function(z):
+            return _mixture_cdf([z], means, sds, weights)[0]
+
+        result = []
+        for probability in probabilities(q):
+            if probability in (0, 1):
+                result.append(-np.inf if probability == 0 else np.inf)
+                continue
+            radius = width * 8
+            for _ in range(30):
+                low, high = center - radius, center + radius
+                if function(low) <= probability <= function(high):
+                    break
+                radius *= 2
+            else:
+                raise ValueError("Unable to bracket mixture quantile.")
+            result.append(
+                optimize.brentq(
+                    lambda z: function(z) - probability,
+                    low,
+                    high,
+                    xtol=max(width * 1e-11, np.finfo(float).tiny),
+                    rtol=1e-12,
+                )
+            )
+        return np.asarray(result)
+
+    def quantile(self, q, target=None):
+        return self._quantiles(q, target, False)
+
+    def interval(self, level=0.9, target=None):
+        if not np.isfinite(level) or not 0 < level < 1:
+            raise ValueError("level must lie strictly between zero and one.")
+        return tuple(self.quantile([(1 - level) / 2, (1 + level) / 2], target))
+
+    def predictive_quantile(self, q, target=None, horizon_years=None):
+        return self._quantiles(q, target, True, horizon_years)
+
+    # ------------------------------------------------------------- summaries
+
+    def scale_summary(self, level=0.9):
+        """Posterior mean and equal-tailed interval of omega and tau."""
+        if not np.isfinite(level) or not 0 < level < 1:
+            raise ValueError("level must lie strictly between zero and one.")
+        rows = []
+        for name, axis, marginal in (
+            ("omega", self.omega, self.mass.sum(axis=1)),
+            ("tau", self.tau, self.mass.sum(axis=0)),
+        ):
+            cumulative = np.cumsum(marginal)
+            bounds = [
+                float(axis[min(np.searchsorted(cumulative, p), len(axis) - 1)])
+                for p in ((1 - level) / 2, (1 + level) / 2)
+            ]
+            rows.append(
+                dict(
+                    parameter=name,
+                    mean=float(marginal @ axis),
+                    lo=bounds[0],
+                    hi=bounds[1],
+                )
+            )
+        return pd.DataFrame(rows).set_index("parameter")
+
+    def summary(self, level=0.9, thresholds=(0.0, 0.5), horizon_years=None):
+        """Posterior and next-period results per target.
+
+        Rows: selected (when declared), idea, draw and every version. Predictive
+        columns are NaN for idea, which has no realised-period outcome.
+        """
+        targets = (("selected",) if self.selected is not None else ()) + (
+            "idea",
+            "draw",
+        ) + self.names
+        rows = []
+        for target in targets:
+            low, high = self.interval(level, target)
+            row = dict(
+                target=target,
+                expectation=self.expectation(target),
+                sd=self.std(target),
+                lo=low,
+                hi=high,
+            )
+            for threshold in thresholds:
+                label = "{:g}".format(threshold)
+                row["prob_mean_above_" + label] = self.prob_mean_above(threshold, target)
+                row["prob_next_above_" + label] = (
+                    np.nan
+                    if target == "idea"
+                    else self.predictive_prob_above(threshold, target, horizon_years)
+                )
+            rows.append(row)
+        return pd.DataFrame(rows).set_index("target")

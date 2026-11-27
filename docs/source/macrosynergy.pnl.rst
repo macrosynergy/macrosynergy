@@ -13,6 +13,7 @@ Submodules
    :maxdepth: 2
 
    macrosynergy.pnl.naive_pnl
+   macrosynergy.pnl.bayes_pnl
    macrosynergy.pnl.multi_pnl
    macrosynergy.pnl.proxy_pnl
    macrosynergy.pnl.proxy_pnl_calc
