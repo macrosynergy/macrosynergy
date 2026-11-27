@@ -13,6 +13,9 @@ from macrosynergy.pnl.bayes_pnl import (
     BayesianPnL,
     BayesianPnLVariants,
     BayesianPnLMixture,
+    BayesianPnLTrials,
+    effective_number_of_trials,
+    expected_maximum_sharpe,
 )
 
 __all__ = [
@@ -30,4 +33,7 @@ __all__ = [
     "BayesianPnL",
     "BayesianPnLVariants",
     "BayesianPnLMixture",
+    "BayesianPnLTrials",
+    "effective_number_of_trials",
+    "expected_maximum_sharpe",
 ]

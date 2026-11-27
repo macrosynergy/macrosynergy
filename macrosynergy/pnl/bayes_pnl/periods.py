@@ -39,8 +39,12 @@ def period_metrics(
     *,
     annualization_factor: float = 252,
     end_year: Optional[int] = None,
+    period_years: int = 3,
 ) -> pd.DataFrame:
-    """Calculate annualised metrics from daily PnL in full three-year blocks.
+    """Calculate annualised metrics from daily PnL in full calendar-year blocks.
+
+    Blocks span three calendar years by default; ``period_years`` selects
+    blocks of one, two or more whole calendar years.
 
     Parameters
     ----------
@@ -54,16 +58,19 @@ def period_metrics(
         this factor; volatility is daily sample sd times its square root.
         These conventional annualisations do not correct serial dependence.
     end_year : int, optional
-        Final calendar year of the latest three-year block. Defaults to the
-        latest covered year. Earlier anchors support partition sensitivity.
-        Blocks are non-overlapping and any initial remainder is discarded.
+        Final calendar year of the latest block. Defaults to the latest
+        covered year. Earlier anchors support partition sensitivity. Blocks
+        are non-overlapping and any initial remainder is discarded.
+    period_years : int
+        Whole calendar years per block, default three. The coverage rules below
+        apply unchanged to every block length.
 
     Returns
     -------
     pandas.DataFrame
         Columns: variant, period_start, period_end, period_years, n_observations,
         ann_ret, ann_vol, sharpe. Boundaries are January 1 and December 31;
-        period_years is always three. No monthly aggregation is performed.
+        period_years equals the requested block length. No monthly aggregation is performed.
 
     Notes
     -----
@@ -79,6 +86,13 @@ def period_metrics(
     """
     if not np.isfinite(annualization_factor) or annualization_factor <= 0:
         raise ValueError("annualization_factor must be positive and finite.")
+    if (
+        isinstance(period_years, bool)
+        or not isinstance(period_years, (int, np.integer))
+        or period_years < 1
+    ):
+        raise ValueError("period_years must be a positive integer.")
+    span = int(period_years)
     wide = _wide(pnl)
     if wide.index.normalize().has_duplicates:
         raise ValueError(
@@ -102,8 +116,8 @@ def period_metrics(
     ):
         raise ValueError("end_year must be an integer covered by the daily history.")
     factor, rows = float(annualization_factor), []
-    for final_year in range(end_year, first.year + 1, -3):
-        start = _year_boundary(final_year - 2, tz=wide.index.tz)
+    for final_year in range(end_year, first.year + span - 2, -span):
+        start = _year_boundary(final_year - span + 1, tz=wide.index.tz)
         end = _year_boundary(final_year, last=True, tz=wide.index.tz)
         # The partial initial remainder is excluded rather than promoted to a block.
         if first > start + pd.Timedelta(6, unit="D"):
@@ -135,7 +149,7 @@ def period_metrics(
                     variant=name,
                     period_start=start,
                     period_end=end,
-                    period_years=3,
+                    period_years=span,
                     n_observations=len(values),
                     ann_ret=ret,
                     ann_vol=vol,

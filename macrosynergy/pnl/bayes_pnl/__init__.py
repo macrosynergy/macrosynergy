@@ -22,6 +22,11 @@ from .diagnostics import prior_predictive_sample, posterior_predictive_check
 from .variants import BayesianPnLVariants
 from .funnel import MetricFunnel, simulate_metric_funnel, bridge_metric_funnel
 from .mixture import BayesianPnLMixture
+from .trials import (
+    BayesianPnLTrials,
+    effective_number_of_trials,
+    expected_maximum_sharpe,
+)
 
 __all__ = [
     "Posterior",
@@ -30,6 +35,9 @@ __all__ = [
     "BayesianPnL",
     "BayesianPnLVariants",
     "BayesianPnLMixture",
+    "BayesianPnLTrials",
+    "effective_number_of_trials",
+    "expected_maximum_sharpe",
     "MetricFunnel",
     "simulate_metric_funnel",
     "bridge_metric_funnel",
