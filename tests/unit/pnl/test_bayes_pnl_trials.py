@@ -1,5 +1,6 @@
 """Independent references and selection calibration for BayesianPnLTrials."""
 
+import itertools
 import warnings
 
 import numpy as np
@@ -8,16 +9,19 @@ import pytest
 from scipy import integrate, special, stats
 
 from macrosynergy.pnl import BayesianPnLTrials as ExportedTrials
+from macrosynergy.pnl import design_correlation as exported_design_correlation
 from macrosynergy.pnl import estimate_correlation as exported_estimate_correlation
 from macrosynergy.pnl.bayes_pnl import (
     BayesianPnLTrials,
     GridTruncationWarning,
     NormalPrior,
+    design_correlation,
     effective_number_of_trials,
     estimate_correlation,
     expected_maximum_sharpe,
     period_metrics,
 )
+from macrosynergy.pnl.bayes_pnl.trials import RESIDUAL_SHARES
 
 R3 = np.array([[1.0, 0.6, 0.3], [0.6, 1.0, 0.5], [0.3, 0.5, 1.0]])
 DATA3 = pd.DataFrame(
@@ -791,6 +795,7 @@ def test_from_pnl_shrinkage_accepts_more_versions_than_observations():
         BayesianPnLTrials.from_pnl(pnl.assign(dup=pnl.v0))
 
 
+@pytest.mark.filterwarnings("ignore:.*common level.*:UserWarning")
 def test_shrunk_correlation_improves_selection_aware_posterior():
     """K = 60 versions, no true value, R estimated from 250 daily observations.
 
@@ -828,3 +833,357 @@ def test_shrunk_correlation_improves_selection_aware_posterior():
     for method in ("ledoit_wolf", "factor"):
         better = np.mean(np.array(probabilities[method]) < np.array(probabilities["sample"]))
         assert better > 0.7
+
+
+# ------------------------------------------------ 10. declared-design prior
+
+
+def factorial(levels):
+    """Full factorial design, indexed by "level|level|..." version names."""
+    rows = list(itertools.product(*levels.values()))
+    return pd.DataFrame(
+        rows, index=["|".join(map(str, r)) for r in rows], columns=list(levels)
+    )
+
+
+def test_design_correlation_hand_checked_factorial():
+    assert exported_design_correlation is design_correlation
+    design = factorial({"a": ["x", "y"], "b": [1, 2]})  # x|1, x|2, y|1, y|2
+    C = design_correlation(design, residual_share=0.25)
+    assert list(C.index) == list(design.index) == list(C.columns)
+    expected = 0.75 * np.array(
+        [
+            [1.0, 0.5, 0.5, 0.0],
+            [0.5, 1.0, 0.0, 0.5],
+            [0.5, 0.0, 1.0, 0.5],
+            [0.0, 0.5, 0.5, 1.0],
+        ]
+    ) + 0.25 * np.eye(4)
+    np.testing.assert_allclose(C.to_numpy(), expected, atol=1e-15)
+    # Unequal main-effect variances: choice a carries three quarters.
+    weighted = design_correlation(design, 0.2, choice_weights={"a": 3, "b": 1})
+    assert weighted.loc["x|1", "x|2"] == pytest.approx(0.8 * 0.75)
+    assert weighted.loc["x|1", "y|1"] == pytest.approx(0.8 * 0.25)
+    assert weighted.loc["x|1", "y|2"] == pytest.approx(0.0)
+    np.testing.assert_allclose(
+        design_correlation(design, 1.0).to_numpy(), np.eye(4), atol=1e-15
+    )
+    # Identical rows are allowed and correlate at 1 - lambda.
+    duplicated = pd.DataFrame(
+        {"a": ["x", "x", "y"], "b": [1, 1, 2]}, index=["p", "q", "r"]
+    )
+    D = design_correlation(duplicated, 0.1)
+    assert D.loc["p", "q"] == pytest.approx(0.9)
+
+
+@pytest.mark.parametrize("lam", [0.01, 0.25, 0.7])
+def test_design_correlation_is_a_valid_correlation_matrix(lam):
+    rng = np.random.default_rng(3)
+    design = pd.DataFrame(
+        {
+            "signal": rng.choice(["s0", "s1", "s2"], 30),
+            "sizing": rng.choice([True, False], 30),
+            "window": rng.choice([21, 63, 252], 30),
+        },
+        index=["v{}".format(i) for i in range(30)],
+    )
+    C = design_correlation(design, lam).to_numpy()
+    np.testing.assert_allclose(np.diag(C), 1.0)
+    np.testing.assert_allclose(C, C.T)
+    assert np.linalg.eigvalsh(C)[0] >= lam - 1e-12  # lambda * I plus a PSD part
+
+
+@pytest.mark.parametrize(
+    "design, kwargs, error",
+    [
+        (np.zeros((2, 2)), {}, TypeError),
+        (pd.DataFrame({"a": ["x", None]}, index=["p", "q"]), {}, ValueError),
+        (pd.DataFrame({"a": ["x", "y"]}, index=["p", "p"]), {}, ValueError),
+        (pd.DataFrame(index=["p", "q"]), {}, ValueError),
+        (pd.DataFrame({"a": ["x", "y"]}, index=["p", "q"]), {"residual_share": 0.0}, ValueError),
+        (pd.DataFrame({"a": ["x", "y"]}, index=["p", "q"]), {"residual_share": 1.5}, ValueError),
+        (pd.DataFrame({"a": ["x", "y"]}, index=["p", "q"]), {"residual_share": "x"}, ValueError),
+        (pd.DataFrame({"a": ["x", "y"]}, index=["p", "q"]), {"choice_weights": {"b": 1}}, ValueError),
+        (pd.DataFrame({"a": ["x", "y"]}, index=["p", "q"]), {"choice_weights": {"a": -1}}, ValueError),
+        (pd.DataFrame({"a": [[1], [2]]}, index=["p", "q"]), {}, ValueError),
+    ],
+)
+def test_design_correlation_rejects_invalid_inputs(design, kwargs, error):
+    with pytest.raises(error):
+        design_correlation(design, **kwargs)
+
+
+def test_design_prior_is_aligned_and_equals_the_explicit_matrix():
+    design = pd.DataFrame(
+        {"signal": ["x", "x", "y"], "sizing": ["p", "b", "p"]}, index=list("abc")
+    )
+    shuffled = design.loc[["c", "a", "b"]]
+    common = dict(period_years=3, noise_sd=0.6, selected="a", n_tau=21, n_omega=21)
+    via_design = BayesianPnLTrials(DATA3, R3, design=shuffled, residual_share=0.3, **common)
+    explicit = BayesianPnLTrials(
+        DATA3, R3, construction_correlation=design_correlation(design, 0.3), **common
+    )
+    assert via_design.log_evidence == pytest.approx(explicit.log_evidence, abs=1e-10)
+    for v in "abc":
+        assert via_design.expectation(v) == pytest.approx(explicit.expectation(v), abs=1e-12)
+    assert list(via_design.design.index) == list("abc")
+    assert via_design.residual_share_weights.to_dict() == {0.3: pytest.approx(1.0)}
+    with pytest.raises(ValueError, match="either design or construction_correlation"):
+        BayesianPnLTrials(DATA3, R3, design=design, construction_correlation=None, **common)
+    with pytest.raises(ValueError, match="only with design"):
+        BayesianPnLTrials(DATA3, R3, residual_share=0.3, **common)
+    with pytest.raises(ValueError, match="only with design"):
+        BayesianPnLTrials(DATA3, R3, choice_weights={"signal": 1}, **common)
+    with pytest.raises(ValueError, match="match the version names"):
+        BayesianPnLTrials(DATA3, R3, design=design.iloc[:2], **common)
+    with pytest.raises(ValueError, match="distinct"):
+        BayesianPnLTrials(DATA3, R3, design=design, residual_share=[0.1, 0.1], **common)
+
+
+def test_several_residual_shares_average_fits_by_evidence():
+    design = pd.DataFrame(
+        {"signal": ["x", "x", "y"], "sizing": ["p", "b", "p"]}, index=list("abc")
+    )
+    grid = dict(omega_grid=np.linspace(0, 2, 31), tau_grid=np.linspace(0, 2, 31))
+    common = dict(period_years=3, noise_sd=0.6, selected="b", design=design, **grid)
+    shares = [0.05, 0.3, 0.8]
+    singles = [BayesianPnLTrials(DATA3, R3, residual_share=s, **common) for s in shares]
+    mixed = BayesianPnLTrials(DATA3, R3, residual_share=shares, **common)
+    evidence = np.array([f.log_evidence for f in singles])
+    weights = np.exp(evidence - special.logsumexp(evidence))
+    np.testing.assert_allclose(mixed.residual_share_weights.to_numpy(), weights, atol=1e-12)
+    np.testing.assert_allclose(mixed.residual_share_evidence.to_numpy(), evidence, atol=1e-10)
+    assert mixed.log_evidence == pytest.approx(
+        special.logsumexp(evidence) - np.log(3), abs=1e-10
+    )
+    for target in ("b", "idea"):
+        assert mixed.expectation(target) == pytest.approx(
+            weights @ [f.expectation(target) for f in singles], abs=1e-12
+        )
+    assert mixed.prob_mean_above(0.2) == pytest.approx(
+        weights @ [f.prob_mean_above(0.2) for f in singles], abs=1e-12
+    )
+    np.testing.assert_allclose(
+        mixed.level_weights().to_numpy(),
+        sum(w * f.level_weights().to_numpy() for w, f in zip(weights, singles)),
+        atol=1e-12,
+    )
+    assert mixed.construction_correlation.shape == (3, 3, 3)
+    assert mixed.mass.shape == (31, 31) and mixed.mass.sum() == pytest.approx(1.0)
+    default = BayesianPnLTrials(DATA3, R3, period_years=3, design=design)
+    assert tuple(default.residual_share_weights.index) == RESIDUAL_SHARES
+
+
+def test_level_weights_are_gls_weights_at_fixed_scales():
+    x = DATA3.to_numpy()
+    T = len(x)
+    C = np.array([[1.0, 0.2, 0.0], [0.2, 1.0, 0.4], [0.0, 0.4, 1.0]])
+    fit = BayesianPnLTrials(
+        DATA3, R3, period_years=3, noise_sd=0.5, omega_grid=[0.3], tau_grid=[0.4],
+        construction_correlation=C, mean_prior=NormalPrior(0.0, 1e4),
+    )
+    A = 0.16 * C + 0.25 * R3 / T
+    w = np.linalg.solve(A, np.ones(3))
+    w /= w.sum()
+    np.testing.assert_allclose(fit.level_weights().to_numpy(), w, atol=1e-12)
+    assert fit.level_leverage == pytest.approx(np.abs(w).sum())
+    assert fit.diagnostics["level_leverage"] == fit.level_leverage
+    # With a flat prior on m the level estimate is the weighted average.
+    assert fit.expectation("idea") == pytest.approx(w @ x.mean(axis=0), abs=1e-6)
+    groups = pd.Series({"a": "g1", "b": "g1", "c": "g2"})
+    np.testing.assert_allclose(
+        fit.level_weights(by=groups).to_numpy(), [w[0] + w[1], w[2]], atol=1e-12
+    )
+    with pytest.raises(ValueError, match="requires a design"):
+        fit.group_leverage()
+    with pytest.raises(ValueError):
+        fit.level_weights(by="signal")
+
+
+def test_balanced_factorial_design_pools_the_level_uniformly():
+    design = factorial({"signal": ["s0", "s1", "s2"], "sizing": ["p", "b"], "rebal": ["q", "m"]})
+    K = len(design)
+    for lam in (0.05, 0.25, 1.0):
+        C = design_correlation(design, lam).to_numpy()
+        product = C @ np.ones(K)
+        np.testing.assert_allclose(product, product[0] * np.ones(K), atol=1e-12)
+    # Clustered noise with near-clones; noise far below tau.
+    sig = design.signal.to_numpy()
+    R = 0.3 + 0.6 * (sig[:, None] == sig[None, :]) + 0.1 * np.eye(K)
+    rng = np.random.default_rng(1)
+    data = pd.DataFrame(rng.standard_normal((4, K)), columns=design.index)
+    fit = BayesianPnLTrials(
+        data, R, period_years=1, noise_sd=0.01, design=design,
+        tau_grid=[1.0], omega_grid=[0.1],
+    )
+    weights = fit.level_weights()
+    assert weights.sum() == pytest.approx(1.0)
+    np.testing.assert_allclose(weights.to_numpy(), 1 / K, atol=0.01 / K)
+    assert fit.group_leverage().max() == pytest.approx(1.0, abs=1e-6)
+
+
+def blend_family(seed, sharpes=(0.6, 0.0, 0.5), rho=0.2, n_clones=3, years=20):
+    """Daily PnL of a structured family in which one signal blends two others.
+
+    Signals: cyc and fin (correlated rho) and an independent bal; mix holds
+    half of cyc and half of fin, so its PnL is a linear combination of theirs
+    and its true Sharpe exceeds their average through diversification. Each
+    signal has ``n_clones`` near-clones (correlation about 0.98).
+    """
+    rng = np.random.default_rng(seed)
+    n, vol = 252 * years, 0.01
+    z = rng.standard_normal((n, 3))
+    raw = {
+        "cyc": z[:, 0],
+        "fin": rho * z[:, 0] + np.sqrt(1 - rho**2) * z[:, 1],
+        "bal": z[:, 2],
+    }
+    base = {
+        name: vol * (sharpe / np.sqrt(252) + raw[name])
+        for name, sharpe in zip(("cyc", "fin", "bal"), sharpes)
+    }
+    base["mix"] = (base["cyc"] + base["fin"]) / 2
+    columns, signals = {}, []
+    for signal, returns in base.items():
+        for clone in range(n_clones):
+            columns["{}{}".format(signal, clone)] = returns + 0.15 * vol * rng.standard_normal(n)
+            signals.append(signal)
+    daily = pd.DataFrame(columns, index=pd.bdate_range("1990-01-01", periods=n))
+    return daily, pd.DataFrame({"signal": signals}, index=list(columns))
+
+
+def test_blended_versions_bias_the_noise_prior_level_but_not_the_design_level():
+    """C = R reads the level from the near-noise-free blend hedge.
+
+    In Sharpe units the hedge h = (k, k, -1) on (cyc, fin, mix), with
+    k = vol(part) / (2 vol(mix)) > 1/2, has almost no noise, and its true
+    value is zero whatever the common level. C = R makes h'a nearly zero a
+    priori, so the model reads h's_bar ~ 0 as (2k - 1) m ~ 0: the pooled level
+    falls below every group. The declared design ties true differences to
+    the signal choice, so the hedge no longer pins the level.
+    """
+    daily, design = blend_family(seed=4)
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        noise = BayesianPnLTrials.from_pnl(daily, period_years=1)
+    assert any("offsetting positions" in str(w.message) for w in caught)
+    group_means = (
+        pd.Series(noise.data.mean(axis=0), index=noise.names).groupby(design.signal).mean()
+    )
+    assert noise.level_leverage > 3
+    assert noise.expectation("idea") < group_means.min()
+    assert (noise.level_weights(by=design.signal) < 0).any()
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", UserWarning)
+        designed = BayesianPnLTrials.from_pnl(daily, period_years=1, design=design)
+    assert group_means.min() < designed.expectation("idea") < group_means.max()
+    assert designed.group_leverage()["signal"] <= 1.5
+    assert designed.level_leverage < noise.level_leverage / 2
+    # A single moderate residual share forces tau down to fit the clones and
+    # pulls the level back toward the hedge; the warning says so.
+    with pytest.warns(UserWarning, match="across declared groups"):
+        fixed = BayesianPnLTrials.from_pnl(
+            daily, period_years=1, design=design, residual_share=0.25
+        )
+    assert fixed.expectation("idea") < designed.expectation("idea")
+
+
+STRUCTURED_LEVELS = {"signal": ["s0", "s1", "s2", "s3"], "sizing": ["p", "b"], "rebal": ["q", "m"]}
+
+
+def structured_noise(design):
+    """Noise correlation with signal clusters; rebalancing variants near-clones."""
+    sig, siz = design.signal.to_numpy(), design.sizing.to_numpy()
+    same_signal = sig[:, None] == sig[None, :]
+    same_cell = same_signal & (siz[:, None] == siz[None, :])
+    return 0.3 + 0.5 * same_signal + 0.15 * same_cell + 0.05 * np.eye(len(design))
+
+
+def test_design_prior_is_calibrated_under_selection_in_structured_worlds():
+    """Worlds drawn from the design model; the best version is reported.
+
+    m ~ N(0, 1), tau and omega half-normal, lambda uniform over the default
+    residual shares, one main effect per choice level and a residual per
+    version. Recorded in the seeded run (1500 worlds): design coverage 0.90
+    and mean gap of P(theta_sel > 0) about +0.01; identity C under-covers
+    (about 0.88); C = R is overconfident (mean gap about +0.03).
+    """
+    design = factorial(STRUCTURED_LEVELS)
+    names, K = list(design.index), len(design)
+    R = structured_noise(design)
+    chol = np.linalg.cholesky(R)
+    codes = [pd.factorize(design[c])[0] for c in design.columns]
+    rng = np.random.default_rng(20261128)
+    T, noise, period, n_worlds = 4, 0.6, 3.0, 1500
+    tau_scale = omega_scale = 0.3
+    omega_grid = np.linspace(0, 4 * omega_scale, 21)
+    tau_grid = np.linspace(0, 4 * tau_scale, 21)
+    common = dict(
+        period_years=period, noise_sd=noise, omega_grid=omega_grid,
+        tau_grid=tau_grid, tau_scale=tau_scale, omega_scale=omega_scale,
+    )
+    specs = {"design": dict(design=design), "identity": dict(construction_correlation=None), "noise": {}}
+    covered = {k: [] for k in specs}
+    probs = {k: [] for k in specs}
+    positive = []
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        while len(positive) < n_worlds:
+            m = rng.standard_normal()
+            omega = abs(omega_scale * rng.standard_normal())
+            tau = abs(tau_scale * rng.standard_normal())
+            lam = RESIDUAL_SHARES[rng.integers(len(RESIDUAL_SHARES))]
+            if omega > omega_grid[-1] or tau > tau_grid[-1]:
+                continue  # prior truncated to the grid support
+            theta = m + np.sqrt(lam) * tau * rng.standard_normal(K)
+            for code in codes:
+                theta += np.sqrt((1 - lam) / len(codes)) * tau * rng.standard_normal(code.max() + 1)[code]
+            data = (
+                theta
+                + omega * rng.standard_normal((T, 1))
+                + noise * rng.standard_normal((T, K)) @ chol.T
+            )
+            best = int(np.argmax(data.mean(axis=0)))
+            frame = pd.DataFrame(data, columns=names)
+            for key, kwargs in specs.items():
+                fit = BayesianPnLTrials(frame, R, selected=names[best], **kwargs, **common)
+                low, high = fit.interval(0.9)
+                covered[key].append(low <= theta[best] <= high)
+                probs[key].append(fit.prob_mean_above(0.0))
+            positive.append(theta[best] > 0)
+    positive = np.asarray(positive)
+    se_cover = np.sqrt(0.09 / n_worlds)
+    summary = {}
+    for key in specs:
+        gap = np.asarray(probs[key]) - positive
+        summary[key] = (np.mean(covered[key]), gap.mean(), gap.std(ddof=1) / np.sqrt(n_worlds))
+    print("coverage, mean gap, se:", summary)
+    coverage, gap, se_gap = summary["design"]
+    assert abs(coverage - 0.9) < 3.5 * se_cover
+    assert abs(gap) < 3.5 * se_gap
+    # C = R in a structured world: P(theta_sel > 0) is too high on average.
+    assert summary["noise"][1] > 3 * summary["noise"][2]
+    assert summary["identity"][0] < coverage
+
+
+def test_no_true_value_in_a_structured_family_rarely_looks_convincing():
+    design = factorial(STRUCTURED_LEVELS)
+    names, K = list(design.index), len(design)
+    R = structured_noise(design)
+    chol = np.linalg.cholesky(R)
+    rng = np.random.default_rng(7)
+    T, noise, period, n_worlds = 5, 1 / np.sqrt(3), 3.0, 300
+    hits = hits_alone = 0
+    for _ in range(n_worlds):
+        data = 0.05 * rng.standard_normal((T, 1)) + noise * rng.standard_normal((T, K)) @ chol.T
+        best = names[int(np.argmax(data.mean(axis=0)))]
+        frame = pd.DataFrame(data, columns=names)
+        fit = BayesianPnLTrials(
+            frame, R, period_years=period, selected=best, design=design,
+            n_omega=21, n_tau=21,
+        )
+        alone = BayesianPnLTrials(frame[[best]], period_years=period, n_omega=21, n_tau=21)
+        hits += fit.prob_mean_above(0.0) > 0.95
+        hits_alone += alone.prob_mean_above(0.0) > 0.95
+    assert hits / n_worlds <= 0.10
+    assert hits_alone > hits

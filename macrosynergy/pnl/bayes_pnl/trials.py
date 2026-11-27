@@ -265,6 +265,114 @@ def expected_maximum_sharpe(sharpes, n_trials=None):
     )
 
 
+LEVEL_LEVERAGE_THRESHOLD = 3.0
+GROUP_LEVERAGE_THRESHOLD = 1.5
+RESIDUAL_SHARES = (0.01, 0.02, 0.05, 0.1, 0.25)
+
+
+def _residual_share(value):
+    try:
+        result = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("residual_share must lie in (0, 1].") from exc
+    if not np.isfinite(result) or not 0 < result <= 1:
+        raise ValueError("residual_share must lie in (0, 1].")
+    return result
+
+
+def _validated_design(design):
+    if not isinstance(design, pd.DataFrame):
+        raise TypeError("design must be a DataFrame indexed by version name.")
+    if design.shape[0] < 1 or design.shape[1] < 1:
+        raise ValueError("design needs at least one version and one choice column.")
+    if not design.index.is_unique:
+        raise ValueError("design index (version names) must be unique.")
+    if not design.columns.is_unique:
+        raise ValueError("design choice columns must be unique.")
+    if design.isna().to_numpy().any():
+        raise ValueError("design must not contain missing values.")
+    for column in design.columns:
+        try:
+            pd.factorize(design[column], sort=False)
+        except TypeError as exc:
+            raise ValueError("design levels must be hashable.") from exc
+    return design
+
+
+def _choice_weights(choice_weights, columns):
+    if choice_weights is None:
+        return np.full(len(columns), 1.0 / len(columns))
+    if isinstance(choice_weights, pd.Series):
+        choice_weights = choice_weights.to_dict()
+    if not isinstance(choice_weights, dict) or set(choice_weights) != set(columns):
+        raise ValueError("choice_weights must map every design column exactly once.")
+    try:
+        w = np.array([float(choice_weights[c]) for c in columns])
+    except (TypeError, ValueError) as exc:
+        raise ValueError("choice_weights must be nonnegative numbers.") from exc
+    if not np.isfinite(w).all() or (w < 0).any() or w.sum() <= 0:
+        raise ValueError("choice_weights must be finite, nonnegative and not all zero.")
+    return w / w.sum()
+
+
+def design_correlation(design, residual_share=0.25, choice_weights=None):
+    """Prior correlation of true version Sharpes implied by a declared design.
+
+    Each explored version is a combination of levels of F declared research
+    choices (signal, blend, sizing, ...). Its true Sharpe is modelled as::
+
+        theta_v = m + sum_f alpha_{f, level_f(v)} + e_v
+
+    with independent main effects alpha_{f, l} ~ N(0, tau**2 (1 - lambda) c_f)
+    for every choice f and level l, and a residual e_v ~ N(0, tau**2 lambda)
+    for what the main effects do not explain (interactions). The c_f are the
+    normalised ``choice_weights`` (default 1 / F each). Then
+    Var(theta_v - m) = tau**2 and the correlation of two versions' effects is::
+
+        C = (1 - lambda) * D + lambda * I,   D_ij = sum_f c_f [level_f(i) == level_f(j)]
+
+    With equal weights D_ij is the share of the F choices on which versions i
+    and j agree. D is a weighted average of block (same-level) correlation
+    matrices, so C is a positive-semidefinite correlation matrix, and
+    positive definite for lambda > 0.
+
+    Equal weights say every declared choice is expected to move the true
+    Sharpe by the same amount. When one choice (typically the signal)
+    plausibly matters much more than the others, equal weights force a single
+    tau to fit both large main effects and small interactions, and the fit
+    understates the dominant choice; supply ``choice_weights`` then.
+
+    Parameters
+    ----------
+    design : pandas.DataFrame
+        Indexed by version name (unique), one column per declared choice;
+        levels may be any hashable values; no missing values. Rows that are
+        identical (versions the design does not tell apart) are allowed and
+        get correlation ``1 - lambda``.
+    residual_share : float
+        lambda in (0, 1]: share of the variance of true differences that the
+        main effects do not explain. lambda = 1 gives the identity.
+    choice_weights : dict or pandas.Series, optional
+        Relative prior variance of each choice's main effects, keyed by design
+        column; nonnegative, normalised to sum to one. Default equal.
+
+    Returns
+    -------
+    pandas.DataFrame
+        K x K correlation matrix labelled by the design index.
+    """
+    design = _validated_design(design)
+    share = _residual_share(residual_share)
+    weights = _choice_weights(choice_weights, list(design.columns))
+    K = design.shape[0]
+    agreement = np.zeros((K, K))
+    for weight, column in zip(weights, design.columns):
+        codes = pd.factorize(design[column], sort=False)[0]
+        agreement += weight * (codes[:, None] == codes[None, :])
+    matrix = (1 - share) * agreement + share * np.eye(K)
+    return pd.DataFrame(matrix, index=design.index, columns=design.index)
+
+
 def _positive(value, name):
     try:
         result = float(value)
@@ -351,6 +459,30 @@ class BayesianPnLTrials:
         other versions' posteriors. With C = R a near-duplicate adds almost
         nothing. An explicit matrix must be a positive-semidefinite
         correlation matrix (a DataFrame is aligned to the version names).
+        Must be left at its default when ``design`` is given.
+    design : pandas.DataFrame, optional
+        Declared design of the family: indexed by version name, one column
+        per research choice. When given, C is ``design_correlation(design,
+        residual_share, choice_weights)`` instead of R (see "Choosing C" in
+        the Notes).
+    residual_share : float or sequence of float
+        lambda in (0, 1] for ``design``: share of the variance of true
+        differences not explained by the choices' main effects. Only allowed
+        with ``design``. A sequence of distinct values places equal prior
+        weight on each: the fit is the mixture over (lambda, omega, tau)
+        cells, so every result averages the per-lambda fits with weights
+        proportional to their evidence, exposed as
+        ``residual_share_weights`` (and the per-lambda log evidence as
+        ``residual_share_evidence``). The default, None, uses
+        ``RESIDUAL_SHARES`` = (0.01, 0.02, 0.05, 0.1, 0.25), such a sequence. Small values
+        matter: near-clones that differ in no declared choice have almost
+        identical true Sharpes, and a fixed moderate lambda forces tau down
+        to fit them, which shrinks every version toward a level read from
+        contrasts between groups. A single value is a fixed assumption;
+        report the sensitivity to it.
+    choice_weights : dict or pandas.Series, optional
+        Relative prior variance of each design choice's main effects (see
+        ``design_correlation``); default equal. Only allowed with ``design``.
     tau_scale, omega_scale : float
         Half-normal scales of the version spread tau and the period effect omega.
     weights : dict or one-dimensional array, optional
@@ -372,6 +504,54 @@ class BayesianPnLTrials:
     spanning the cells with marginal mass above 1e-9 (the zero end is kept
     unless its mass is negligible). A ``GridTruncationWarning`` flags more than
     1% of posterior mass on an upper edge.
+
+    Choosing C. C states which *true* differences between versions are plausible a
+    priori, and it determines how the common level m is pooled: the level is
+    a generalised-least-squares average of the versions' mean Sharpes with
+    weights proportional to (tau**2 C + V/T)^-1 1. These are minimum-variance
+    portfolio weights, and they can take large offsetting positions when
+    some combination of versions looks almost noise-free.
+
+    - ``"noise"`` (C = R) suits families of interchangeable near-clones
+      (small parameter perturbations of one rule), where versions with
+      nearly identical PnL plausibly have nearly identical true Sharpes.
+    - ``design`` is required for structured families, built as combinations
+      of discrete declared choices, and for any family in which some
+      versions are blends of others. C = R then asserts that every hedged
+      combination of correlated versions, e.g. ``cyclical + financial -
+      blend``, has a true Sharpe near zero; but Sharpe ratios are not
+      additive (a blend's Sharpe exceeds the average of its parts through
+      diversification), so the level is pooled from a precise estimate of
+      the wrong quantity and can fall outside the range of every group of
+      versions. The design ties true differences to the declared choices,
+      which is what the researcher actually varied.
+    - None (identity) treats near-clones as independent draws and collapses
+      tau when the family has many of them.
+
+    Neither choice is uniformly better, and the data rarely discriminate
+    between them. In simulated factorial families whose true differences did
+    follow the PnL correlation, ``"noise"`` was the better calibrated of the
+    two. Every joint fit, under either choice, is biased downward for a
+    family that contains a blend and its parts; the design roughly halves
+    that bias and does not remove it. Report both where they differ.
+
+    - Equal ``choice_weights`` suit families whose choices are expected to
+      matter about equally. When one choice dominates (e.g. which signal),
+      equal weights make a single tau serve both large main effects and
+      small interactions: tau is pulled down by the precise within-group
+      contrasts and every version is shrunk too hard toward a level read from
+      contrasts between groups. Weight the dominant choice, and compare
+      ``log_evidence`` across a few settings; results that depend strongly on
+      them should be reported as such.
+
+    ``level_weights()`` and ``level_leverage`` show how the level is formed.
+    Without a design, a ``UserWarning`` is issued when the leverage (sum of
+    absolute weights, 1 for nonnegative weights) exceeds
+    ``LEVEL_LEVERAGE_THRESHOLD`` = 3. With a design, offsetting weights
+    within a group are expected (they rest on the declared small
+    interactions), so the warning uses ``group_leverage()``, the leverage of
+    weights summed by each choice's levels, against
+    ``GROUP_LEVERAGE_THRESHOLD`` = 1.5 (a quarter of the weight shorted).
 
     Predictive distributions for a future period of ``horizon_years`` assume
     period effects and sampling errors independent across periods, so both
@@ -401,6 +581,9 @@ class BayesianPnLTrials:
         omega_grid=None,
         construction_correlation="noise",
         observations_per_year=252,
+        design=None,
+        residual_share=None,
+        choice_weights=None,
     ):
         if np.iscomplexobj(data):
             raise ValueError("Sharpe observations must be real.")
@@ -448,23 +631,58 @@ class BayesianPnLTrials:
             raise ValueError(
                 "noise_correlation is numerically singular; drop duplicate versions."
             )
-        if construction_correlation is None:
-            C = np.eye(k)
-        elif isinstance(construction_correlation, str):
-            if construction_correlation != "noise":
+        shares = self._shares(residual_share, design is not None)
+        if design is not None:
+            if not (
+                isinstance(construction_correlation, str)
+                and construction_correlation == "noise"
+            ):
                 raise ValueError(
-                    "construction_correlation must be None, 'noise' or a matrix."
+                    "Pass either design or construction_correlation, not both."
                 )
-            C = R.copy()
-        else:
-            C = _matrix(
-                self._aligned(construction_correlation, names),
-                k,
-                "construction_correlation",
+            _validated_design(design)
+            if len(design.index) != k or set(design.index) != set(names):
+                raise ValueError("design index must match the version names.")
+            design = _validated_design(design).loc[names]
+            constructions = [
+                design_correlation(design, share, choice_weights).to_numpy()
+                for share in shares
+            ]
+            self.design = design.copy()
+            self.choice_weights = pd.Series(
+                _choice_weights(choice_weights, list(design.columns)),
+                index=design.columns,
+                name="choice_weight",
             )
-            if np.linalg.eigvalsh(C)[0] < -1e-10:
-                raise ValueError("construction_correlation must be positive semidefinite.")
-        self.construction_correlation = C
+        else:
+            if choice_weights is not None:
+                raise ValueError("choice_weights applies only with design.")
+            self.design = self.choice_weights = None
+            if construction_correlation is None:
+                C = np.eye(k)
+            elif isinstance(construction_correlation, str):
+                if construction_correlation != "noise":
+                    raise ValueError(
+                        "construction_correlation must be None, 'noise' or a matrix."
+                    )
+                C = R.copy()
+            else:
+                C = _matrix(
+                    self._aligned(construction_correlation, names),
+                    k,
+                    "construction_correlation",
+                )
+                if np.linalg.eigvalsh(C)[0] < -1e-10:
+                    raise ValueError(
+                        "construction_correlation must be positive semidefinite."
+                    )
+            constructions = [C]
+        self.residual_shares = shares
+        self._constructions = constructions
+        # One matrix (K x K) normally; a stack (L x K x K) for several shares.
+        self.construction_correlation = (
+            constructions[0] if len(constructions) == 1 else np.stack(constructions)
+        )
         prior = NormalPrior(0.0, 1.0) if mean_prior is None else mean_prior
         if type(prior) is not NormalPrior:
             raise TypeError("mean_prior must be a NormalPrior.")
@@ -529,8 +747,49 @@ class BayesianPnLTrials:
                 GridTruncationWarning,
                 stacklevel=2,
             )
+        if self.design is None and self.level_leverage > LEVEL_LEVERAGE_THRESHOLD:
+            warnings.warn(
+                "The common level rests on offsetting positions in correlated "
+                "versions (level leverage {:.1f} > {:g}): it is pooled from hedged "
+                "combinations whose true Sharpe the construction prior assumes is "
+                "near zero. Supply the family's declared design (design=...) "
+                "unless the versions are interchangeable near-clones; see "
+                "level_weights().".format(self.level_leverage, LEVEL_LEVERAGE_THRESHOLD),
+                UserWarning,
+                stacklevel=2,
+            )
+        elif self.design is not None:
+            group = self.group_leverage()
+            if group.max() > GROUP_LEVERAGE_THRESHOLD:
+                warnings.warn(
+                    "The common level rests on offsetting positions across declared "
+                    "groups (group leverage {:.1f} > {:g} for {!r}): the level is "
+                    "read from contrasts between levels of a choice. The prior "
+                    "spread is probably too small for that choice; review "
+                    "choice_weights and residual_share; see "
+                    "level_weights(by=...).".format(
+                        group.max(), GROUP_LEVERAGE_THRESHOLD, group.idxmax()
+                    ),
+                    UserWarning,
+                    stacklevel=2,
+                )
 
     # ------------------------------------------------------------------ setup
+
+    @staticmethod
+    def _shares(value, with_design):
+        if not with_design:
+            if value is not None:
+                raise ValueError("residual_share applies only with design.")
+            return None
+        if value is None:
+            value = RESIDUAL_SHARES
+        if np.ndim(value) == 0:
+            return (_residual_share(value),)
+        shares = tuple(_residual_share(v) for v in np.asarray(value, dtype=object).ravel())
+        if not shares or len(set(shares)) != len(shares):
+            raise ValueError("residual_share values must be distinct and nonempty.")
+        return shares
 
     @staticmethod
     def _validate_weights(weights, names):
@@ -577,18 +836,22 @@ class BayesianPnLTrials:
 
         The generalised eigenproblem C w = mu V w gives W with W'VW = I and
         W'CW = diag(mu), so A = tau**2 C + V/T is diagonal in that basis for
-        every tau: W'AW = diag(tau**2 mu + 1/T). M = W^-1 maps back.
+        every tau: W'AW = diag(tau**2 mu + 1/T). M = W^-1 maps back. Terms that
+        involve only V (W W' = V^-1) are the same for every C.
         """
         T, K = self.data.shape
         mean = self.data.mean(axis=0)
         residuals = self.data - mean
         scatter = residuals.T @ residuals
         V = self.noise_sd**2 * self.noise_correlation
-        mu, W = linalg.eigh(self.construction_correlation, V)
-        mu = np.maximum(mu, 0.0)
-        u1, us = W.sum(axis=0), W.T @ mean
+        self._bases = []
+        for C in self._constructions:
+            mu, W = linalg.eigh(C, V)
+            mu = np.maximum(mu, 0.0)
+            self._bases.append((W, linalg.inv(W), mu, W.sum(axis=0), W.T @ mean))
+        u1 = self._bases[0][3]
+        W = self._bases[0][0]
         rotated_scatter = W.T @ scatter @ W
-        self._W, self._M, self._mu, self._u1, self._us = W, linalg.inv(W), mu, u1, us
         self._q11 = float(u1 @ u1)
         self._trace_VS = float(np.trace(rotated_scatter))
         self._wSw = float(u1 @ rotated_scatter @ u1)
@@ -606,7 +869,7 @@ class BayesianPnLTrials:
             return axis
         return np.linspace(axis[low], axis[high], len(axis))
 
-    def _fit(self, omega, tau):
+    def _fit_basis(self, basis, omega, tau):
         """Exact Gaussian integration over m, a and eta at each (omega, tau) cell.
 
         With A = tau**2 C + V/T (diagonal in the basis of ``_prepare``) and
@@ -616,10 +879,9 @@ class BayesianPnLTrials:
         Given (b, z), m depends on b only and a on z only, which yields the
         posterior moments of theta and m as sums of nonnegative terms.
         """
-        self.omega, self.tau = omega, tau
         T, K = self.data.shape
+        W, M, mu, u1, us = basis
         m0, s0 = self.mean_prior.mean, self.mean_prior.sd
-        mu, u1, us, M = self._mu, self._u1, self._us, self._M
         ud = us - m0 * u1
         om2, ta2 = omega**2, tau**2
         # Residual scatter term (omega only): Sigma_w = V + omega^2 11'.
@@ -634,6 +896,8 @@ class BayesianPnLTrials:
         add = (ud**2 / lam).sum(axis=1)
         a1s = (u1 * us / lam).sum(axis=1)
         logdet_A = self._logdet_V + np.log(lam).sum(axis=1)
+        # GLS weights of the level, A^-1 1 / (1' A^-1 1) = W (u1 / lam) / a11.
+        level_weights = ((u1 / lam) @ W.T) / a11[:, None]
         # tau^2 C A^-1 x = tau^2 M' diag(mu / lam) W'x; Var(a | z) diagonal.
         effect_1 = ta2[:, None] * ((mu * u1 / lam) @ M)
         effect_s = ta2[:, None] * ((mu * us / lam) @ M)
@@ -655,34 +919,143 @@ class BayesianPnLTrials:
         alpha = m0 * (1 - ratio)[:, :, None] + effect_s[None]
         theta_mean = alpha + beta * b_hat[:, :, None]
         theta_var = within_m[:, :, None] + a_post_var[None] + beta**2 * vb[:, :, None]
-        omega_cells = np.broadcast_to(omega[:, None], log_likelihood.shape)
-        tau_cells = np.broadcast_to(tau[None, :], log_likelihood.shape)
-        log_mass = log_likelihood.copy()
+        return dict(
+            log_likelihood=log_likelihood,
+            theta_mean=theta_mean.reshape(-1, K),
+            theta_var=np.maximum(theta_var.reshape(-1, K), 0.0),
+            idea_mean=idea_mean.ravel(),
+            idea_var=idea_var.ravel(),
+            level_weights=level_weights,
+        )
+
+    def _fit(self, omega, tau):
+        """Fit every construction matrix on the same axes and pool the cells.
+
+        With several residual shares, each has prior probability 1/L and the
+        cells of all of them form one mixture, so each share's fit enters with
+        weight proportional to its evidence.
+        """
+        self.omega, self.tau = omega, tau
+        K = self.n_variants
+        parts = [self._fit_basis(basis, omega, tau) for basis in self._bases]
+        n_parts = len(parts)
+        log_mass = np.stack([part["log_likelihood"] for part in parts])
+        omega_cells = np.broadcast_to(omega[:, None], log_mass.shape[1:])
+        tau_cells = np.broadcast_to(tau[None, :], log_mass.shape[1:])
         if len(omega) > 1:
             log_mass += stats.halfnorm.logpdf(omega_cells, scale=self.omega_scale)
         if len(tau) > 1:
             log_mass += stats.halfnorm.logpdf(tau_cells, scale=self.tau_scale)
         log_mass += np.log(np.outer(_widths(omega), _widths(tau)))
+        log_mass -= np.log(n_parts)
         normalizer = special.logsumexp(log_mass)
         if not np.isfinite(normalizer):
             raise ValueError("No finite mass on the omega/tau grid.")
-        self.mass = np.exp(log_mass - normalizer)
+        cell_mass = np.exp(log_mass - normalizer)
+        self._cell_mass = cell_mass.ravel()
+        self.mass = cell_mass.sum(axis=0)
         self.log_evidence = float(normalizer)
-        self._omega_cells, self._tau_cells = omega_cells.ravel(), tau_cells.ravel()
-        self._theta_mean = theta_mean.reshape(-1, K)
-        self._theta_var = np.maximum(theta_var.reshape(-1, K), 0.0)
-        self._idea_mean, self._idea_var = idea_mean.ravel(), idea_var.ravel()
+        self._omega_cells = np.tile(omega_cells.ravel(), n_parts)
+        self._tau_cells = np.tile(tau_cells.ravel(), n_parts)
+        self._theta_mean = np.concatenate([part["theta_mean"] for part in parts])
+        self._theta_var = np.concatenate([part["theta_var"] for part in parts])
+        self._idea_mean = np.concatenate([part["idea_mean"] for part in parts])
+        self._idea_var = np.concatenate([part["idea_var"] for part in parts])
+        # Posterior of (share, tau) averages the level weights (they do not
+        # depend on omega, which only adds a common shift to every version).
+        share_tau = cell_mass.sum(axis=1)
+        weights = np.einsum(
+            "lt,ltk->k", share_tau, np.stack([part["level_weights"] for part in parts])
+        )
+        self._level_weights = weights / weights.sum()
+        if self.residual_shares is not None:
+            per_share = cell_mass.sum(axis=(1, 2))
+            self.residual_share_weights = pd.Series(
+                per_share, index=list(self.residual_shares), name="posterior_weight"
+            ).rename_axis("residual_share")
+            self.residual_share_evidence = pd.Series(
+                [
+                    float(special.logsumexp(log_mass[i]) + np.log(n_parts))
+                    for i in range(n_parts)
+                ],
+                index=list(self.residual_shares),
+                name="log_evidence",
+            ).rename_axis("residual_share")
+        else:
+            self.residual_share_weights = self.residual_share_evidence = None
         marginal_omega, marginal_tau = self.mass.sum(axis=1), self.mass.sum(axis=0)
         self.diagnostics = {
             "edge_mass": {
                 "omega_high": float(marginal_omega[-1]) if len(omega) > 1 else 0.0,
                 "tau_high": float(marginal_tau[-1]) if len(tau) > 1 else 0.0,
             },
-            "n_periods": T,
+            "n_periods": self.n_periods,
             "n_versions": K,
             "effective_trials": self.effective_trials,
             "noise_sd": self.noise_sd,
+            "level_leverage": self.level_leverage,
         }
+
+    # ------------------------------------------------------------- level
+
+    def level_weights(self, by=None):
+        """Weights w with which the common level is pooled from the version means.
+
+        Ignoring the prior on m, the posterior mean of the level (m plus the
+        average period effect) is ``w' s_bar`` with s_bar the versions' mean
+        period Sharpes and ``w = A^-1 1 / (1' A^-1 1)``, A = tau**2 C + V/T:
+        generalised-least-squares, i.e. minimum-variance-portfolio, weights.
+        They sum to one and are averaged over the posterior of tau (and of the
+        residual share). Negative weights mean the level is read partly from
+        hedged combinations of versions; ``level_leverage`` is sum |w|.
+
+        Parameters
+        ----------
+        by : str or pandas.Series, optional
+            Sum the weights within groups: a design column name, or a Series
+            mapping every version name to a group label.
+
+        Returns
+        -------
+        pandas.Series
+            One weight per version (or per group), summing to one.
+        """
+        weights = pd.Series(
+            self._level_weights, index=list(self.names), name="level_weight"
+        )
+        if by is None:
+            return weights
+        if isinstance(by, pd.Series):
+            if set(by.index) != set(self.names):
+                raise ValueError("by must map every version name.")
+            groups = by.loc[list(self.names)]
+        else:
+            if self.design is None or by not in self.design.columns:
+                raise ValueError("by must be a design column or a Series of groups.")
+            groups = self.design[by]
+        return weights.groupby(groups.to_numpy()).sum().rename("level_weight")
+
+    def group_leverage(self):
+        """Sum of |group-summed level weights| for every design column.
+
+        Offsetting positions within a group (between versions that share a
+        level) rely on the design's statement that interactions are small;
+        offsetting positions across a choice's levels mean the level is read
+        from contrasts between declared alternatives, which the design prior
+        treats as uncertain main effects. A value above 1 means some group is
+        shorted. Requires ``design``.
+        """
+        if self.design is None:
+            raise ValueError("group_leverage requires a design.")
+        return pd.Series(
+            {c: float(self.level_weights(by=c).abs().sum()) for c in self.design.columns},
+            name="group_leverage",
+        )
+
+    @property
+    def level_leverage(self):
+        """Sum of absolute level weights: 1 when all are nonnegative."""
+        return float(np.abs(self._level_weights).sum())
 
     # ------------------------------------------------------------- from_pnl
 
@@ -710,7 +1083,9 @@ class BayesianPnLTrials:
         "factor") and ``n_factors``. Exact duplicates are detected on the
         sample correlation before any shrinkage. The method and its info are
         stored in ``diagnostics["correlation_method"]`` and
-        ``diagnostics["correlation_info"]``.
+        ``diagnostics["correlation_info"]``. Other keyword arguments, such as
+        ``design``, ``residual_share`` and ``choice_weights``, are passed to
+        the constructor; a ``design`` is indexed by the PnL column names.
         """
         if isinstance(pnl, pd.Series):
             pnl = pnl.to_frame(name=pnl.name if pnl.name is not None else "V0")
@@ -817,7 +1192,7 @@ class BayesianPnLTrials:
 
     def _components(self, target, predictive=False, horizon_years=None):
         target = self._resolve(target)
-        masses = self.mass.ravel()
+        masses = self._cell_mass
         noise = (
             (self._omega_cells**2 + self.noise_sd**2)
             * self.period_years

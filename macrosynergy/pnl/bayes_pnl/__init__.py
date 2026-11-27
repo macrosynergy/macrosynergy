@@ -24,6 +24,7 @@ from .funnel import MetricFunnel, simulate_metric_funnel, bridge_metric_funnel
 from .mixture import BayesianPnLMixture
 from .trials import (
     BayesianPnLTrials,
+    design_correlation,
     effective_number_of_trials,
     estimate_correlation,
     expected_maximum_sharpe,
@@ -37,6 +38,7 @@ __all__ = [
     "BayesianPnLVariants",
     "BayesianPnLMixture",
     "BayesianPnLTrials",
+    "design_correlation",
     "effective_number_of_trials",
     "estimate_correlation",
     "expected_maximum_sharpe",
