@@ -8,11 +8,13 @@ import pytest
 from scipy import integrate, special, stats
 
 from macrosynergy.pnl import BayesianPnLTrials as ExportedTrials
+from macrosynergy.pnl import estimate_correlation as exported_estimate_correlation
 from macrosynergy.pnl.bayes_pnl import (
     BayesianPnLTrials,
     GridTruncationWarning,
     NormalPrior,
     effective_number_of_trials,
+    estimate_correlation,
     expected_maximum_sharpe,
     period_metrics,
 )
@@ -450,7 +452,13 @@ def test_period_metrics_default_unchanged_and_one_year_blocks(daily_pnl):
 
 
 def test_from_pnl_round_trip(daily_pnl):
-    fit = BayesianPnLTrials.from_pnl(daily_pnl, selected="a", n_omega=21, n_tau=21)
+    fit = BayesianPnLTrials.from_pnl(
+        daily_pnl,
+        selected="a",
+        n_omega=21,
+        n_tau=21,
+        correlation_method="sample",
+    )
     yearly = period_metrics(daily_pnl, period_years=1)
     expected = yearly.pivot(index="period_end", columns="variant", values="sharpe")
     np.testing.assert_allclose(fit.data, expected[["a", "b", "c"]].to_numpy())
@@ -587,3 +595,233 @@ def test_default_grid_reaches_data_far_from_the_mean_prior():
         tau_grid=np.linspace(0, 400, 1601), omega_grid=np.linspace(0, 60, 241),
     )
     assert fit.expectation("a") == pytest.approx(wide.expectation("a"), rel=0.02)
+
+
+# ------------------------------------------------- 9. correlation estimation
+
+METHODS = ("sample", "ledoit_wolf", "factor")
+
+
+def simulate(truth, T, seed):
+    rng = np.random.default_rng(seed)
+    return rng.standard_normal((T, len(truth))) @ np.linalg.cholesky(truth).T
+
+
+def factor_truth(K, n_factors=3, seed=99):
+    rng = np.random.default_rng(seed)
+    loadings = rng.uniform(0.4, 0.8, (K, n_factors)) * rng.choice([-1, 1], (K, n_factors))
+    loadings *= 0.9 / np.sqrt((loadings**2).sum(axis=1) + 0.5)[:, None]
+    truth = loadings @ loadings.T
+    np.fill_diagonal(truth, 1.0)
+    return truth
+
+
+def test_estimate_correlation_export_and_shape():
+    assert exported_estimate_correlation is estimate_correlation
+    x = simulate(equicorrelation(4, 0.3), 200, 0)
+    matrix, info = estimate_correlation(x)
+    assert info["method"] == "ledoit_wolf" and matrix.shape == (4, 4)
+    frame = pd.DataFrame(x, columns=list("wxyz"))
+    labelled, _ = estimate_correlation(frame)
+    assert list(labelled.index) == list("wxyz") and list(labelled.columns) == list("wxyz")
+    np.testing.assert_allclose(labelled.to_numpy(), matrix)
+
+
+@pytest.mark.parametrize("method", METHODS)
+@pytest.mark.parametrize("K,T", [(10, 200), (40, 30)])
+def test_estimate_correlation_is_valid_matrix(method, K, T):
+    if method == "sample" and K > T:
+        pytest.skip("sample correlation is singular when K > T")
+    x = simulate(equicorrelation(K, 0.4), T, 1)
+    x[0, 0] = np.nan  # rows with NaN are dropped
+    matrix, info = estimate_correlation(x, method)
+    assert info["n_observations"] == T - 1 and info["n_variables"] == K
+    np.testing.assert_allclose(matrix, matrix.T, atol=1e-12)
+    np.testing.assert_allclose(np.diag(matrix), 1.0, atol=1e-12)
+    assert np.linalg.eigvalsh(matrix)[0] > 0
+    np.linalg.cholesky(matrix)
+
+
+def test_sample_method_matches_corrcoef():
+    x = simulate(R3, 300, 2)
+    matrix, _ = estimate_correlation(x, "sample")
+    np.testing.assert_allclose(matrix, np.corrcoef(x, rowvar=False), atol=1e-12)
+
+
+def test_estimators_beat_sample_in_known_worlds():
+    cases = {
+        "equi": (equicorrelation(100, 0.5), 252, "ledoit_wolf"),
+        "factor": (factor_truth(60), 250, "factor"),
+    }
+    for truth, T, method in cases.values():
+        inverse = np.linalg.inv(truth)
+        errors = {m: [] for m in ("sample", method)}
+        for seed in range(20):
+            x = simulate(truth, T, seed)
+            for m in errors:
+                R, _ = estimate_correlation(x, m)
+                errors[m].append(
+                    (
+                        np.linalg.norm(R - truth),
+                        np.linalg.norm(np.linalg.inv(R) - inverse),
+                        np.linalg.cond(R),
+                    )
+                )
+        mean_sample = np.mean(errors["sample"], axis=0)
+        mean_method = np.mean(errors[method], axis=0)
+        # inverse error and condition number are clearly smaller (here: >2x, >1.3x)
+        assert mean_method[1] < 0.5 * mean_sample[1]
+        assert mean_method[2] < 0.75 * mean_sample[2]
+        assert mean_method[0] < mean_sample[0]
+
+
+def test_equicorrelated_world_gets_material_shrinkage():
+    x = simulate(equicorrelation(100, 0.5), 252, 0)
+    _, info = estimate_correlation(x, "ledoit_wolf")
+    assert 0.3 < info["shrinkage"] <= 1.0
+    assert info["target_correlation"] == pytest.approx(0.5, abs=0.03)
+    # K / T = 0.4 with structure that is not equicorrelated: partial shrinkage
+    x = simulate(factor_truth(100), 250, 0)
+    _, info = estimate_correlation(x, "ledoit_wolf")
+    assert 0.02 < info["shrinkage"] < 0.5
+
+
+def test_large_sample_limit():
+    truth = equicorrelation(5, 0.5)
+    x = simulate(truth, 50_000, 3)
+    for method in METHODS:
+        matrix, info = estimate_correlation(x, method)
+        assert np.abs(matrix - truth).max() < 0.015
+    # unstructured truth: the Ledoit-Wolf intensity vanishes
+    x = simulate(R3, 50_000, 3)
+    matrix, info = estimate_correlation(x, "ledoit_wolf")
+    assert info["shrinkage_unfloored"] < 0.01
+    assert np.abs(matrix - R3).max() < 0.015
+    matrix, _ = estimate_correlation(x, "sample")
+    assert np.abs(matrix - R3).max() < 0.015
+    # a true factor structure is recovered by the factor model at large T
+    big = factor_truth(8, 2)
+    matrix, info = estimate_correlation(simulate(big, 50_000, 3), "factor")
+    assert info["n_factors"] == 2 and np.abs(matrix - big).max() < 0.05
+
+
+def test_marchenko_pastur_choice_and_overrides():
+    truth = factor_truth(60)
+    chosen = [
+        estimate_correlation(simulate(truth, 250, s), "factor")[1]["n_factors"]
+        for s in range(15)
+    ]
+    assert np.mean(np.array(chosen) == 3) >= 0.8
+    x = simulate(truth, 250, 0)
+    _, info = estimate_correlation(x, "factor", n_factors=5)
+    assert info["n_factors"] == 5 and info["n_factors_source"] == "user"
+    _, info = estimate_correlation(x, "factor")
+    assert info["n_factors_source"] == "mp_edge"
+    # bounds: at least one, at most K - 1
+    _, info = estimate_correlation(simulate(np.eye(8), 100, 0), "factor")
+    assert info["n_factors"] >= 1
+    _, info = estimate_correlation(simulate(equicorrelation(3, 0.99), 5000, 0), "factor")
+    assert 1 <= info["n_factors"] <= 2
+
+
+@pytest.mark.parametrize(
+    "args, kwargs",
+    [
+        ((np.ones((5, 2)),), {}),  # constant series
+        ((np.zeros(5),), {}),  # one-dimensional
+        ((np.random.default_rng(0).normal(size=(1, 3)),), {}),  # one row
+        ((np.random.default_rng(0).normal(size=(9, 3)), "bogus"), {}),
+        ((np.random.default_rng(0).normal(size=(9, 3)), "sample"), {"n_factors": 1}),
+        ((np.random.default_rng(0).normal(size=(9, 3)), "factor"), {"n_factors": 0}),
+        ((np.random.default_rng(0).normal(size=(9, 3)), "factor"), {"n_factors": 3}),
+        ((np.random.default_rng(0).normal(size=(9, 3)), "factor"), {"n_factors": 1.5}),
+        ((np.array([[1.0, np.inf], [2.0, 3.0], [0.5, 1.0]]),), {}),
+        ((np.full((4, 2), np.nan),), {}),
+    ],
+)
+def test_estimate_correlation_rejects_invalid_arguments(args, kwargs):
+    with pytest.raises(ValueError):
+        estimate_correlation(*args, **kwargs)
+
+
+def test_from_pnl_passes_method_and_defaults_to_ledoit_wolf(daily_pnl):
+    kw = dict(selected="a", n_omega=21, n_tau=21)
+    default = BayesianPnLTrials.from_pnl(daily_pnl, **kw)
+    assert default.diagnostics["correlation_method"] == "ledoit_wolf"
+    assert "shrinkage" in default.diagnostics["correlation_info"]
+    sample = BayesianPnLTrials.from_pnl(daily_pnl, correlation_method="sample", **kw)
+    assert sample.diagnostics["correlation_method"] == "sample"
+    factor = BayesianPnLTrials.from_pnl(
+        daily_pnl, correlation_method="factor", n_factors=1, **kw
+    )
+    assert factor.diagnostics["correlation_info"]["n_factors"] == 1
+    expected, _ = estimate_correlation(
+        daily_pnl.loc[
+            default.periods.period_start.min() : default.periods.period_end.max()
+        ],
+        "ledoit_wolf",
+    )
+    np.testing.assert_allclose(default.noise_correlation, expected.to_numpy(), atol=1e-12)
+    # long data, few versions: shrinkage is negligible and the fits agree
+    np.testing.assert_allclose(
+        default.noise_correlation, sample.noise_correlation, atol=0.03
+    )
+    assert default.expectation() == pytest.approx(sample.expectation(), abs=0.03)
+    assert default.prob_mean_above(0.0) == pytest.approx(
+        sample.prob_mean_above(0.0), abs=0.03
+    )
+    with pytest.raises(ValueError):
+        BayesianPnLTrials.from_pnl(daily_pnl, correlation_method="bogus")
+
+
+def test_from_pnl_shrinkage_accepts_more_versions_than_observations():
+    rng = np.random.default_rng(0)
+    index = pd.bdate_range("2020-01-01", "2020-12-31")
+    pnl = pd.DataFrame(
+        rng.standard_normal((len(index), 300)) * 0.01,
+        index=index,
+        columns=["v{}".format(i) for i in range(300)],
+    )
+    fit = BayesianPnLTrials.from_pnl(pnl, n_omega=11, n_tau=11)
+    assert fit.n_variants == 300
+    with pytest.raises(ValueError, match="duplicate"):
+        BayesianPnLTrials.from_pnl(pnl.assign(dup=pnl.v0))
+
+
+def test_shrunk_correlation_improves_selection_aware_posterior():
+    """K = 60 versions, no true value, R estimated from 250 daily observations.
+
+    The best version is selected on 5 yearly Sharpe ratios with true
+    equicorrelation 0.5. P(theta_selected > 0) is below 0.5 + noise only when
+    R is estimated well; the sample R over-trusts spurious contrasts and
+    inflates it.
+    """
+    K, observations, periods, seeds = 60, 250, 5, 30
+    truth = equicorrelation(K, 0.5)
+    factor = np.linalg.cholesky(truth)
+    probabilities = {m: [] for m in METHODS}
+    for seed in range(seeds):
+        rng = np.random.default_rng(seed)
+        sharpes = rng.standard_normal((periods, K)) @ factor.T
+        daily = rng.standard_normal((observations, K)) @ factor.T
+        best = "V{}".format(int(sharpes.mean(axis=0).argmax()))
+        for method in METHODS:
+            R, _ = estimate_correlation(daily, method)
+            fit = BayesianPnLTrials(
+                sharpes,
+                R,
+                period_years=1,
+                noise_sd=1.0,
+                selected=best,
+                construction_correlation="noise",
+                n_tau=31,
+                n_omega=31,
+            )
+            probabilities[method].append(fit.prob_mean_above(0.0))
+    mean = {m: float(np.mean(v)) for m, v in probabilities.items()}
+    print("mean P(theta_selected > 0):", mean)
+    assert mean["ledoit_wolf"] < mean["sample"] - 0.02
+    assert mean["factor"] < mean["sample"] - 0.02
+    for method in ("ledoit_wolf", "factor"):
+        better = np.mean(np.array(probabilities[method]) < np.array(probabilities["sample"]))
+        assert better > 0.7

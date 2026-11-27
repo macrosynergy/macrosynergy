@@ -48,6 +48,188 @@ def effective_number_of_trials(correlation):
     return float(R.shape[0] ** 2 / np.sum(R**2))
 
 
+CORRELATION_METHODS = ("sample", "ledoit_wolf", "factor")
+_FACTOR_FLOOR = 1e-6
+
+
+def _ledoit_wolf_intensity(y, sample):
+    """Intensity and target of the Ledoit-Wolf (2004) constant-correlation shrinkage.
+
+    ``y`` holds standardised observations (mean zero, population variance one),
+    ``sample`` is ``y'y / T``. Returns (delta, target, pi, rho, gamma).
+    """
+    T, K = y.shape
+    y2 = y**2
+    # pi: sum over (i, j) of the asymptotic variance of sqrt(T) * s_ij.
+    pi_matrix = (y2.T @ y2) / T - sample**2
+    pi_hat = float(pi_matrix.sum())
+    # rho: asymptotic covariance between the sample matrix and the target.
+    off = ~np.eye(K, dtype=bool)
+    rbar = float(sample[off].sum() / (K * (K - 1)))
+    # theta[i, j] = mean_t (y_ti^2 - 1)(y_ti y_tj - s_ij) = mean(y_i^3 y_j) - s_ij
+    theta = ((y2 * y).T @ y) / T - sample
+    rho_hat = float(np.trace(pi_matrix)) + rbar * float(theta[off].sum())
+    target = np.full((K, K), rbar)
+    np.fill_diagonal(target, 1.0)
+    gamma_hat = float(((target - sample) ** 2).sum())
+    if gamma_hat <= 1e-14:
+        delta = 0.0
+    else:
+        delta = float(np.clip((pi_hat - rho_hat) / gamma_hat / T, 0.0, 1.0))
+    return delta, target, pi_hat, rho_hat, gamma_hat, rbar
+
+
+def estimate_correlation(returns, method="ledoit_wolf", n_factors=None):
+    """Estimate a K x K correlation matrix that is safe to invert.
+
+    The sample correlation of K series over T observations has eigenvalues
+    spread out by estimation noise: the smallest are biased toward zero, and
+    the matrix is singular when K >= T. Inverting it, as generalised least
+    squares does, then over-trusts spurious contrasts between series. Both
+    shrunk estimators trade a little bias for a well-conditioned matrix.
+
+    Parameters
+    ----------
+    returns : pandas.DataFrame or two-dimensional array
+        T x K return observations, one column per series. Rows with any NaN
+        are dropped; the remaining values must be finite, T >= 2, and no
+        series may be constant.
+    method : {"ledoit_wolf", "sample", "factor"}
+        ``"sample"``: plain sample correlation.
+
+        ``"ledoit_wolf"``: linear shrinkage ``delta * F + (1 - delta) * S`` of
+        the sample correlation S toward the constant-correlation target F
+        (unit diagonal, every off-diagonal the average sample correlation
+        rbar), after Ledoit and Wolf (2004), "Honey, I shrunk the sample
+        covariance matrix". Returns are standardised first (mean zero,
+        population variance one), so S has an exact unit diagonal and the
+        result is a correlation matrix. With y the standardised data,
+        s_ij = mean(y_i y_j) and f_ij = rbar (i != j), f_ii = 1::
+
+            pi    = sum_ij mean_t (y_ti y_tj - s_ij)^2
+            rho   = sum_i pi_ii
+                    + rbar * sum_{i != j} (mean_t(y_ti^3 y_tj) - s_ij)
+            gamma = sum_ij (f_ij - s_ij)^2
+            delta = clip((pi - rho) / gamma / T, 0, 1)
+
+        This is the paper's estimator with ``s_ii = 1``: its rho off-diagonal
+        term ``(rbar / 2) * (sqrt(s_jj / s_ii) * theta_ii,ij + sqrt(s_ii /
+        s_jj) * theta_jj,ij)`` summed over i != j equals ``rbar`` times the
+        sum of theta_ii,ij over i != j by symmetry. No term is simplified;
+        the only addition is a floor on delta so that the result is positive
+        definite when the sample matrix is singular (K >= T), by
+        ``delta * (1 - rbar) >= 1e-6``.
+
+        ``"factor"``: principal-component factor model. R = V_k (L_k - s2 I)
+        V_k' + D from the top k eigenpairs of S, where s2 is the mean of the
+        discarded eigenvalues (the maximum-likelihood correction of Tipping
+        and Bishop, 1999: without it the kept eigenvalues absorb idiosyncratic
+        variance and the common part is overstated, badly so for small K) and
+        D is diagonal so the diagonal is one; idiosyncratic variances are
+        floored at 1e-6 and the result is rescaled to unit diagonal. ``n_factors=None`` takes k as the number of
+        sample eigenvalues above the Marchenko-Pastur upper edge
+        ``(1 + sqrt(K / T))**2``, bounded to 1 <= k <= K - 1.
+    n_factors : int, optional
+        Number of factors for ``method="factor"``, between 1 and K - 1.
+        Not allowed with the other methods.
+
+    Returns
+    -------
+    (matrix, info) : tuple
+        ``matrix`` is a symmetric K x K numpy array with unit diagonal, or a
+        DataFrame labelled by the columns when ``returns`` is a DataFrame.
+        ``info`` is a dict: ``method``, ``n_observations`` (rows used),
+        ``n_variables``; for ``"ledoit_wolf"`` also ``shrinkage`` (delta),
+        ``shrinkage_unfloored``, ``target_correlation`` (rbar), ``pi``,
+        ``rho``, ``gamma``; for ``"factor"`` also ``n_factors``,
+        ``n_factors_source`` ("mp_edge" or "user"), ``mp_edge``,
+        ``explained_share`` (sum of the kept eigenvalues over K).
+    """
+    if method not in CORRELATION_METHODS:
+        raise ValueError("method must be one of {}.".format(CORRELATION_METHODS))
+    if n_factors is not None and method != "factor":
+        raise ValueError("n_factors applies only to method='factor'.")
+    labels = list(returns.columns) if isinstance(returns, pd.DataFrame) else None
+    if np.iscomplexobj(returns):
+        raise ValueError("returns must be real.")
+    try:
+        x = np.asarray(returns, dtype=float)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("returns must be a numeric T x K matrix.") from exc
+    if x.ndim != 2 or x.shape[1] < 1:
+        raise ValueError("returns must be a two-dimensional T x K matrix.")
+    if np.isinf(x).any():
+        raise ValueError("returns must not contain infinite values.")
+    x = x[~np.isnan(x).any(axis=1)]
+    T, K = x.shape
+    if T < 2:
+        raise ValueError("At least two complete observations are needed.")
+    y = x - x.mean(axis=0)
+    scale = np.sqrt((y**2).mean(axis=0))
+    if (scale <= 1e-12 * np.maximum(np.abs(x).max(axis=0), 1e-300)).any() or (
+        scale == 0
+    ).any():
+        raise ValueError("Correlation is undefined for a constant series.")
+    y = y / scale
+    sample = (y.T @ y) / T
+    sample = (sample + sample.T) / 2
+    np.fill_diagonal(sample, 1.0)
+    info = {"method": method, "n_observations": T, "n_variables": K}
+    if K == 1:
+        result = np.ones((1, 1))
+    elif method == "sample":
+        result = sample
+    elif method == "ledoit_wolf":
+        delta, target, pi_hat, rho_hat, gamma_hat, rbar = _ledoit_wolf_intensity(
+            y, sample
+        )
+        floored = delta
+        if rbar < 1:
+            floored = min(max(delta, 1e-6 / (1 - rbar)), 1.0)
+        result = floored * target + (1 - floored) * sample
+        info.update(
+            shrinkage=float(floored),
+            shrinkage_unfloored=delta,
+            target_correlation=rbar,
+            pi=pi_hat,
+            rho=rho_hat,
+            gamma=gamma_hat,
+        )
+    else:
+        values, vectors = np.linalg.eigh(sample)
+        values, vectors = values[::-1], vectors[:, ::-1]
+        edge = (1 + np.sqrt(K / T)) ** 2
+        if n_factors is None:
+            k = int(np.clip(int((values > edge).sum()), 1, K - 1))
+            source = "mp_edge"
+        else:
+            if (
+                isinstance(n_factors, bool)
+                or not isinstance(n_factors, (int, np.integer))
+                or not 1 <= n_factors <= K - 1
+            ):
+                raise ValueError("n_factors must be an integer from 1 to K - 1.")
+            k, source = int(n_factors), "user"
+        noise_level = float(values[k:].mean()) if k < K else 0.0
+        loadings = vectors[:, :k] * np.sqrt(np.maximum(values[:k] - noise_level, 0.0))
+        common = loadings @ loadings.T
+        idio = np.maximum(1.0 - np.diag(common), _FACTOR_FLOOR)
+        result = common + np.diag(idio)
+        d = 1 / np.sqrt(np.diag(result))
+        result = result * d[:, None] * d[None, :]
+        info.update(
+            n_factors=k,
+            n_factors_source=source,
+            mp_edge=float(edge),
+            explained_share=float(values[:k].sum() / K),
+        )
+    result = (result + result.T) / 2
+    np.fill_diagonal(result, 1.0)
+    if labels is not None:
+        result = pd.DataFrame(result, index=labels, columns=labels)
+    return result, info
+
+
 def expected_maximum_sharpe(sharpes, n_trials=None):
     """Expected maximum Sharpe ratio of N unskilled trials (deflated-Sharpe benchmark).
 
@@ -513,6 +695,8 @@ class BayesianPnLTrials:
         annualization_factor=252,
         end_year=None,
         selected=None,
+        correlation_method="ledoit_wolf",
+        n_factors=None,
         **kwargs,
     ):
         """Fit from daily PnL, one column per explored version.
@@ -521,7 +705,12 @@ class BayesianPnLTrials:
         ``period_years`` whole years; periods without a finite Sharpe for every
         version are dropped jointly with a warning. The noise correlation is the
         correlation of daily PnL on days inside the retained periods where all
-        versions have data.
+        versions have data, estimated by ``estimate_correlation`` with
+        ``correlation_method`` ("ledoit_wolf" by default, "sample" or
+        "factor") and ``n_factors``. Exact duplicates are detected on the
+        sample correlation before any shrinkage. The method and its info are
+        stored in ``diagnostics["correlation_method"]`` and
+        ``diagnostics["correlation_info"]``.
         """
         if isinstance(pnl, pd.Series):
             pnl = pnl.to_frame(name=pnl.name if pnl.name is not None else "V0")
@@ -560,27 +749,35 @@ class BayesianPnLTrials:
             inside |= (pnl.index >= start) & (pnl.index < end + pd.Timedelta(1, unit="D"))
         daily = pnl.loc[inside].dropna(how="any")
         if pnl.shape[1] > 1:
-            correlation = np.corrcoef(daily.to_numpy(dtype=float), rowvar=False)
-            if not np.isfinite(correlation).all():
-                raise ValueError("Daily PnL correlation is undefined (constant series).")
-            correlation = (correlation + correlation.T) / 2
-            np.fill_diagonal(correlation, 1.0)
             names = list(pnl.columns)
+            try:
+                sample, _ = estimate_correlation(daily, "sample")
+            except ValueError as exc:
+                raise ValueError(
+                    "Daily PnL correlation is undefined (constant series)."
+                ) from exc
+            sample = sample.to_numpy()
             for i in range(len(names)):
                 for j in range(i):
-                    if abs(correlation[i, j]) > 1 - 1e-10:
+                    if abs(sample[i, j]) > 1 - 1e-10:
                         raise ValueError(
                             "Versions {!r} and {!r} have perfectly collinear daily PnL; "
                             "drop the duplicate.".format(names[j], names[i])
                         )
-            if np.linalg.eigvalsh(correlation)[0] < 1e-10:
+            if (
+                correlation_method == "sample" or len(daily) > len(names)
+            ) and np.linalg.eigvalsh(sample)[0] < 1e-10:
                 raise ValueError(
                     "Daily PnL of some versions is perfectly collinear; drop duplicate "
                     "or linearly dependent versions."
                 )
+            correlation, correlation_info = estimate_correlation(
+                daily, correlation_method, n_factors
+            )
+            correlation = correlation.to_numpy()
             correlation = pd.DataFrame(correlation, index=names, columns=names)
         else:
-            correlation = None
+            correlation, correlation_info = None, None
         kwargs.setdefault("observations_per_year", annualization_factor)
         result = cls(
             matrix,
@@ -590,6 +787,8 @@ class BayesianPnLTrials:
             **kwargs,
         )
         result.periods = retained.copy()
+        result.diagnostics["correlation_method"] = correlation_method
+        result.diagnostics["correlation_info"] = correlation_info
         return result
 
     # ------------------------------------------------------------- targets
