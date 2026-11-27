@@ -218,6 +218,9 @@ class BasePanelLearner(ABC):
         search_type="grid",
         normalize_fold_results=False,
         cv_summary="mean",
+        model_combination="selection",
+        averaging_temperature="max-min",
+        averaging_min_weight=0.0,
         include_train_folds=False,
         n_iter=100,
         split_functions=None,
@@ -256,6 +259,12 @@ class BasePanelLearner(ABC):
             Default is "mean". Options are "mean", "median", "mean-std", "mean/std",
             "mean-std-ge" or a callable function. If no hyperparameter tuning
             is required, this parameter can be disregarded.
+        model_combination : str, optional
+            Method to combine predictions from multiple models. Options are "selection" and "averaging". Default is "selection".
+        averaging_temperature : str or float, optional
+            Temperature parameter for averaging predictions when `model_combination` is "averaging". Options are "max-min" or a float value. Default is "max-min".
+        averaging_min_weight : float, optional
+            Minimum weight to assign to each model when `model_combination` is "averaging". Default is 0.0.
         include_train_folds : bool, optional
             Whether to calculate cross-validation statistics on the training folds in 
             additional to the test folds. If no hyperparameter tuning
@@ -297,6 +306,9 @@ class BasePanelLearner(ABC):
             search_type=search_type,
             normalize_fold_results=normalize_fold_results,
             cv_summary=cv_summary,
+            model_combination=model_combination,
+            averaging_temperature=averaging_temperature,
+            averaging_min_weight=averaging_min_weight,
             include_train_folds=include_train_folds,
             n_iter=n_iter,
             split_functions=split_functions,
@@ -350,6 +362,9 @@ class BasePanelLearner(ABC):
                     hyperparameters=hyperparameters,
                     scorers=scorers,
                     cv_summary=cv_summary,
+                    model_combination=model_combination,
+                    averaging_temperature=averaging_temperature,
+                    averaging_min_weight=averaging_min_weight,
                     include_train_folds=include_train_folds,
                     search_type=search_type,
                     store_additional_data=store_additional_data,
@@ -379,6 +394,9 @@ class BasePanelLearner(ABC):
         hyperparameters,
         scorers,
         cv_summary,
+        model_combination,
+        averaging_temperature,
+        averaging_min_weight,
         include_train_folds,
         search_type,
         normalize_fold_results,
@@ -412,6 +430,13 @@ class BasePanelLearner(ABC):
             Summary function to condense cross-validation scores in each fold to a single
             value, against which different hyperparameter choices can be compared.
             If no hyperparameter tuning is required, this parameter can be disregarded.
+        model_combination : str
+            Method used to combine model predictions. Options are "averaging" 
+            and "selection". 
+        averaging_temperature : float or str, optional
+            Temperature parameter for the averaging method. Must be positive if a number.
+        averaging_min_weight : float or str, optional
+            Minimum weight for the averaging method. Must be non-negative if a number.
         include_train_folds : bool, optional
             Whether to calculate cross-validation statistics on the training folds in 
             additional to the test folds.
@@ -1380,6 +1405,9 @@ class BasePanelLearner(ABC):
         normalize_fold_results,
         search_type,
         cv_summary,
+        model_combination,
+        averaging_temperature,
+        averaging_min_weight,
         include_train_folds,
         n_iter,
         split_functions,
@@ -1389,50 +1417,6 @@ class BasePanelLearner(ABC):
         skip_validation,
         show_tqdm,
     ):
-        """
-        Input parameter checks for the run method.
-
-        Parameters
-        ----------
-        name : str
-            Name of the sequential optimization pipeline.
-        models : dict
-            Compatible `scikit-learn` model objects.
-        outer_splitter : BasePanelSplit
-            Outer splitter for the learning process.
-        inner_splitters : dict
-            Inner splitters for the learning process.
-        hyperparameters : dict
-            Hyperparameter grids.
-        scorers : dict
-            Compatible `scikit-learn` scoring functions.
-        normalize_fold_results : bool
-            Whether to normalize the scores across folds before combining them.
-        search_type : str
-            Search type for hyperparameter optimization.
-        cv_summary : str or callable
-            Summary function to condense cross-validation scores in each fold to a single
-            value, against which different hyperparameter choices can be compared.
-        include_train_folds : bool
-            Whether to calculate cross-validation statistics on the training folds in 
-            additional to the test folds. If True, the cross-validation estimator will be
-            a function of both training data and test data.
-        n_iter : int
-            Number of iterations for random or bayesian hyperparameter optimization.
-        split_functions : dict
-            Dictionary of functions associated with each inner splitter describing how to
-            increase the number of splits as a function of the number of iterations passed.
-        store_additional_data : list, optional
-            List of additional data to store at each retraining date.
-        n_jobs_outer : int
-            Number of jobs to run in parallel for the outer loop.
-        n_jobs_inner : int
-            Number of jobs to run in parallel for the inner loop.
-        skip_validation : bool
-            Whether to skip validation checks. Default is False.
-        show_tqdm : bool
-            Whether to display a tqdm progress bar during the learning process. Default is True.
-        """
         # name
         if not isinstance(name, str):
             raise TypeError("name must be a string.")
@@ -1602,6 +1586,30 @@ class BasePanelLearner(ABC):
                         "cv_summary must be a function that takes a list of scores and returns "
                         "a single value. Check whether the output of cv_summary is a number."
                     )
+
+        # model_combination
+        if not_none_condition:
+            if not isinstance(model_combination, str):
+                raise TypeError("model_combination must be a string.")
+            
+            if model_combination not in ["selection", "averaging"]:
+                raise ValueError(
+                    "model_combination must be either 'selection' or 'averaging'."
+                )
+
+        # averaging_temperature
+        if not_none_condition:
+            if not isinstance(averaging_temperature, (int, float, str)):
+                raise TypeError("averaging_temperature must be a number or a string.")
+            if isinstance(averaging_temperature, (int, float)) and averaging_temperature <= 0:
+                raise ValueError("averaging_temperature must be greater than zero.")
+
+        # averaging_min_weight
+        if not_none_condition:
+            if not isinstance(averaging_min_weight, (int, float, str)):
+                raise TypeError("averaging_min_weight must be a number or a string.")
+            if isinstance(averaging_min_weight, (int, float)) and averaging_min_weight < 0:
+                raise ValueError("averaging_min_weight must be non-negative.")
             
         # include_train_folds
         if not_none_condition:

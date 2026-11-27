@@ -210,6 +210,9 @@ class SignalOptimizer(BasePanelLearner):
         search_type="grid",
         normalize_fold_results=False,
         cv_summary="mean",
+        model_combination = "selection",
+        averaging_temperature = "max-min",
+        averaging_min_weight = 0.0,
         multi_target_fill = "zero",
         include_train_folds=False,
         min_cids=4,
@@ -265,6 +268,13 @@ class SignalOptimizer(BasePanelLearner):
             Default is "mean". Options are "mean", "median", "mean-std", "mean/std",
             "mean-std-ge" or a callable function. If no hyperparameter tuning is required,
             this parameter can be disregarded.
+        model_combination : str, optional
+            Method to combine predictions from multiple models. Options are "selection" and "averaging". Default is "selection".
+        averaging_temperature : str or float, optional
+            Temperature parameter for averaging predictions when `model_combination` is "averaging". 
+            Options are "max-min" or a float value. Default is "max-min". # TODO: fix docs
+        averaging_min_weight : float, optional
+            Minimum weight to assign to each model when `model_combination` is "averaging". Default is 0.0.
         multi_target_fill : str, optional
             Method to use to fill in predictions for targets with poor availability in the
             case of multi-target models. Options are "zero" and "mean". Default is "zero".
@@ -368,6 +378,9 @@ class SignalOptimizer(BasePanelLearner):
             search_type=search_type,
             normalize_fold_results=normalize_fold_results,
             cv_summary=cv_summary,
+            model_combination=model_combination,
+            averaging_temperature=averaging_temperature,
+            averaging_min_weight=averaging_min_weight,
             include_train_folds=include_train_folds,
             split_functions=split_functions,
             store_additional_data=store_additional_data,
